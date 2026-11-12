@@ -51,12 +51,14 @@ One feature is one PR: the checker in `sharp/mago/`, the engine, the standard li
 
 A PR merges when its own required checks pass: `CI_PASSED`, `ci-passed`, `SPEC_GUARD` and `COMPLETES`. A PR that is behind master but has no conflict merges without an update, and master's push run tests the merged tree. The one exception is a release's bump PR, which is updated with master right before it merges, as the release's path says.
 
-A PR's CI skips the jobs that run on the Architect's Mac, so a merge never waits for it: `MACOS` in `sharp.yml`, and `tests (macos-latest)`, `release-build` and `plain-php (macos-latest)` in `mago.yml`. It skips `LINUX_PASSES` too, which never failed without `LINUX` in the runs sampled. Only a release's bump PR still runs them and `LINUX_PASSES`, because its full runs are the ones the tag checks. Master runs one push at a time, and a newer push replaces the one still waiting. A push run runs every job after the merge, the Linux suites again included, on every change since master's last push run that wasn't cancelled. So four kinds of defect now land on master first:
+A PR's CI skips the jobs that run on the Architect's Mac, so a merge never waits for it: `MACOS` in `sharp.yml`, and `tests (macos-latest)`, `release-build` and `plain-php (macos-latest)` in `mago.yml`. It skips `LINUX_PASSES` too, which never failed without `LINUX` in the runs sampled, and `UBUNTU_WERROR` and `ASAN`, which build the engine a second time. Only a release's bump PR still runs them, because its full runs are the ones the tag checks. Master runs one push at a time, and a newer push replaces the one still waiting. A push run runs every job after the merge but `ASAN`, on every change since master's last push run that wasn't cancelled, and `ASAN` runs nightly. The push skips the Linux jobs a PR's run already passed on the same tree, which it has when the PR held the latest master, and runs the Linux suites again otherwise. So six kinds of defect now land on master first:
 
 - one on a disk that ignores case
 - one in the arm64 JIT
 - one in Mago code that only macOS runs, such as the watch mode's FSEvents
 - one that only macOS shows, in a crate the builder didn't edit: the builder's Mac tests only the crates it edits, and the PR tests the whole workspace on Linux alone
+- a compiler warning only Ubuntu's gcc 13 gives
+- a memory error only AddressSanitizer finds
 
 A red push run opens one issue, or comments on the one still open, with the range of commits it tests, and a PR fixes it forward. No one reverts first: a merge commit can't land again cleanly once reverted, a revert hides a PR that merged on top of it, and it would revert healthy merges that failed only on the Mac's load. A red master gets a fix PR first, and other merges continue. A release tags only while master's newest finished push run is green. The bump's own push run may be cancelled by a later merge, and its tag doesn't need it: the tag's gates accept the bump PR's full run, as the release path explains.
 

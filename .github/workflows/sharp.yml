@@ -23,25 +23,29 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX, LINUX_PASSES,
-  # LINUX_ZTS, HOSTS, PHP_EXTENSIONS and MACOS skip a change to documentation alone. docs/spec.md, README.md and
-  # sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples. LINUX_PASSES skips a change
-  # only to Mago, its coverage script sharp/bin/coverage, the Composer plugin, the sharp/hosts, sharp/phpunit and
-  # sharp/bench fixtures, tests or documentation:
+  # LINUX_ZTS, HOSTS, PHP_EXTENSIONS, UBUNTU_WERROR, ASAN and MACOS skip a change to documentation alone. docs/spec.md,
+  # README.md and sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples. LINUX_PASSES
+  # and UBUNTU_WERROR skip a change only to Mago, its coverage script sharp/bin/coverage, the Composer plugin, the
+  # sharp/hosts, sharp/phpunit and sharp/bench fixtures, tests or documentation:
   # a pass that drops a PHP# mark is a bug of the engine, and every pass failure a PHP# test found failed every other
-  # mode with it. Every other path counts as the engine, so an input of the engine's build that no one listed, such as
-  # ext/sharp/src or sharp/bin/build, runs the passes. The full run, nightly, dispatched or a release's bump, runs every
-  # job in every mode, and its `full` output tells each job so.
+  # mode with it, and none of those paths is compiled. Every other path counts as the engine, so an input of the
+  # engine's build that no one listed, such as ext/sharp/src or sharp/bin/build, runs them. The full run, nightly,
+  # dispatched or a release's bump, runs every job in every mode, and its `full` output tells each job so.
   #
-  # A pull request's run that isn't the full run skips MACOS and LINUX_PASSES, so a merge never waits for the Mac, and
-  # the push to master runs them after the merge. In the runs sampled, LINUX_PASSES never failed without LINUX. So a
-  # defect only MACOS finds, of a disk that ignores case or of the arm64 JIT, lands on master first, and its red push
-  # opens an issue, as CI_PASSED does, for a pull request that fixes it forward.
+  # A pull request's run that isn't the full run skips MACOS, LINUX_PASSES and UBUNTU_WERROR, so a merge never waits
+  # for the Mac or for a second build of the engine, and the push to master runs them after the merge. In the runs
+  # sampled, LINUX_PASSES never failed without LINUX. So a defect only MACOS finds, of a disk that ignores case or of
+  # the arm64 JIT, and a warning only Ubuntu's gcc 13 gives, land on master first, and a red push opens an issue, as
+  # CI_PASSED does, for a pull request that fixes it forward. ASAN runs in the full run alone.
   #
   # A tree runs the suites once, as bors's "not rocket science" rule tests the exact tree that lands once. A push to
   # master skips them when a run passed all 8 suites on its tree, as .github/actions/passed-tree explains, and links
-  # that run: only the bump's pull request runs MACOS, so every other push runs them. The nightly run skips a tree a
-  # full run already passed. A tag runs none of them: it publishes only a tree whose full run passed all 9 test jobs,
-  # as release.yml does with Mago CI, so its MACOS never waits for the Mac runners behind the release's Apple builds.
+  # that run: only the bump's pull request runs MACOS. Every other push skips the 7 Linux suites, LINUX, LINUX_ZTS,
+  # HOSTS and PHP_EXTENSIONS, when a pull request's run passed them on its tree, as it does when the pull request held
+  # the latest master, links that run, and runs only MACOS, LINUX_PASSES and UBUNTU_WERROR. A push whose tree no pull
+  # request's run passed runs them all, as the check of the merge. The nightly run skips a tree a full run already
+  # passed. A tag runs none of them: it publishes only a tree whose full run passed all 9 test jobs, as release.yml
+  # does with Mago CI, so its MACOS never waits for the Mac runners behind the release's Apple builds.
   # That run is the bump's own, whose RELEASE_BUMP passed, or a nightly or dispatched one. Another pull request's run
   # isn't enough, because it runs each mode once, and CI_PASSED isn't, because it also passes a change to documentation
   # alone, whose suites skipped. A tag publishes the images its bump's pull request pushed, as IMAGE explains, and
@@ -62,6 +66,7 @@ jobs:
       engine: ${{ steps.diff.outputs.engine }}
       full: ${{ env.FULL }}
       images-run-id: ${{ steps.images.outputs.run-id }}
+      linux-passed: ${{ steps.linux.outputs.run && 'true' || '' }}
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -78,6 +83,23 @@ jobs:
           passed: >-
             [.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS"
             or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))] | length == 8
+      # Those 8 but MACOS. A pull request's run runs them in the modes a push does, and the full run in every mode, so
+      # its pass holds for the push.
+      - name: Find the pull request run that passed every Linux suite on this tree
+        id: linux
+        if: github.event_name == 'push' && github.ref_type == 'branch' && !steps.passed.outputs.run
+        uses: ./.github/actions/passed-tree
+        with:
+          workflow: sharp.yml
+          events: pull_request
+          passed: >-
+            [.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS"
+            or (.name | startswith("PHP_EXTENSIONS"))))] | length == 7
+      - name: The Linux suites don't run again
+        if: steps.linux.outputs.run
+        env:
+          RUN: ${{ steps.linux.outputs.run }}
+        run: echo "::notice::This tree ran and passed every Linux PHP# suite in $RUN, so only MACOS, LINUX_PASSES and UBUNTU_WERROR run."
       # The bump's pull request runs in full, since its title sets `full` as RELEASE_BUMP's does, and its passed
       # RELEASE_BUMP marks it apart from another pull request's run. Its merge commit, the tagged one, has its tree, so
       # the nightly run after a release skips it too. The 9 test jobs: those 8 and LINUX_PASSES, which a full run
@@ -196,7 +218,7 @@ jobs:
           echo "engine=$engine" >> "$GITHUB_OUTPUT"
   LINUX:
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true'
+    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -311,7 +333,7 @@ jobs:
   # since Linux has a thread-safe JIT. The full run adds the file cache and the passes alone.
   LINUX_ZTS:
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true'
+    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -350,7 +372,7 @@ jobs:
   # waits for their tests.
   HOSTS:
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true'
+    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -393,13 +415,14 @@ jobs:
         run: sharp/bin/hosts --linux
   # Each runtime image, with the extensions a typical Laravel app installs on top, installed the way such an app's
   # Dockerfile does. The engine changes PHP's internal structures, so an extension can stop building or loading.
-  # The images are the only -O2 builds, where GCC finds -Wmaybe-uninitialized and libcurl's type checks, and they build
-  # with --enable-werror. So each builds on amd64 and on arm64, as IMAGE builds them for a tag, and a warning one
-  # architecture alone finds fails the pull request instead of the release.
+  # The images are the pull request's only -O2 builds, where GCC finds -Wmaybe-uninitialized and libcurl's type
+  # checks, and they build with --enable-werror. So each builds on amd64 and on arm64, as IMAGE builds them for a tag,
+  # and a warning one architecture alone finds fails the pull request instead of the release. Their compiler is
+  # Debian trixie's gcc 14, and UBUNTU_WERROR builds with Ubuntu's gcc 13 after the merge.
   PHP_EXTENSIONS:
     name: PHP_EXTENSIONS (${{ matrix.host.file }}, ${{ matrix.host.php }}, ${{ matrix.runner }})
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true'
+    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
@@ -430,7 +453,7 @@ jobs:
       - name: Build the image
         run: git archive HEAD | docker build --build-arg REGISTRY --file "${{ matrix.host.file }}" --tag php-sharp -
       # A critical or high CVE that a fixed package resolves fails the build, so it is fixed before a tag, which takes
-      # only a commit whose PHP_EXTENSIONS passed on master, and IMAGE scans what it pushes again.
+      # only a tree whose full run passed PHP_EXTENSIONS, and IMAGE scans what it pushes again.
       # aquasecurity/trivy-action's v0.35.0 and later are immutable releases, made after its tags were rewritten to
       # malware on 2026-03-19, and Trivy's v0.71.1 and later fix GHSA-mcj4-mphf-j9ff.
       - name: Scan the image for fixable critical and high CVEs
@@ -488,6 +511,103 @@ jobs:
             --volume "$PWD:/src" \
             --workdir /src \
             php-sharp-extensions sharp/bin/test --installed --opcache --repeat --passes --jit
+  # The engine at -O2 with --enable-werror, on the runner itself, with Ubuntu 24.04's gcc 13, which warns where the
+  # Debian trixie image's gcc 14 doesn't, as #255 found by hand (2d4ac5f6c7b). It builds sharp/bin/build --release,
+  # then both images' configure lines, sharp/docker/runtime/configure-options's, so the extensions only the images
+  # build, such as ext/readline, where #255's warning was, compile with gcc 13 too. They build out of the tree, as
+  # sharp/bin/build does, with Ubuntu's own CFLAGS, as a source build that sharp/README.md describes runs them. CHANGES
+  # runs it for a change to the engine's own code, as it runs LINUX_PASSES, and the full run runs it. A pull request's
+  # run skips it unless it is the full run, and the push to master runs it, as CHANGES explains.
+  UBUNTU_WERROR:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.engine == 'true' && (github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    # The build's packages, as sharp/docker/Dockerfile installs them, then those the images' options add, as
+    # sharp/docker/runtime/Dockerfile installs them, with dpkg-dev for configure-options's dpkg-architecture.
+    env:
+      PACKAGES: >-
+        autoconf bison pkg-config re2c libcurl4-openssl-dev libicu-dev libonig-dev libpq-dev libsodium-dev libsqlite3-dev
+        libxml2-dev libzip-dev libargon2-dev libreadline-dev libssl-dev dpkg-dev
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: apt
+        run: |
+          sudo apt-get update
+          # shellcheck disable=SC2086 # PACKAGES is a list of packages.
+          sudo apt-get install --yes --no-install-recommends $PACKAGES
+      # Each build prints the CFLAGS its Makefile passes gcc, since make's output is hidden and configure adds -Werror
+      # without a word, so the log shows -O2 and -Werror reach the compiler.
+      - name: Build at -O2 with --enable-werror
+        run: |
+          sharp/bin/build --release
+          grep -E '^CFLAGS(_CLEAN)? =' "sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)-release/Makefile"
+      # sharp/bin/build wrote configure.
+      - name: Build both images' configure lines at -O2 with --enable-werror
+        run: |
+          for image in fpm zts; do
+            options="$(sharp/docker/runtime/configure-options "$image")"
+            mkdir "$RUNNER_TEMP/$image"
+            # shellcheck disable=SC2086 # configure-options prints one option per line.
+            (cd "$RUNNER_TEMP/$image" && "$GITHUB_WORKSPACE/configure" $options && grep -E '^CFLAGS(_CLEAN)? =' Makefile && make -j"$(nproc)" >/dev/null)
+          done
+  # The engine built with AddressSanitizer, so a memory error of the engine fails a test. sharp/bin/build has no flag
+  # for php-src's --enable-address-sanitizer, so it builds as php-src's own CI does: a debug build whose CFLAGS and
+  # LDFLAGS add -fsanitize=address and ZEND_TRACK_ARENA_ALLOC. sharp/docker/run passes no CFLAGS into the image, so it
+  # builds on the runner, with Ubuntu's gcc 13. The tests run with what run-tests.php's --asan sets, which sharp/bin/test
+  # doesn't take: the Zend allocator off, so ASan sees each allocation, and LeakSanitizer with php-src's suppressions.
+  # The PHP# tests run without opcache, through the file cache, in shared memory twice per process, and under both JITs,
+  # the stores a PHP# mark passes through. They leave out --passes, 16 more runs of parts of the optimizer the opcache
+  # runs whole, and the upstream tests, whose baseline lists a build without ASan. The full run alone runs it.
+  ASAN:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.full == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    # The build's packages, as sharp/docker/Dockerfile installs them. sharp/bin/build alone needs no more, so it leaves
+    # out those UBUNTU_WERROR adds for the images' options.
+    env:
+      PACKAGES: >-
+        autoconf bison pkg-config re2c libcurl4-openssl-dev libicu-dev libonig-dev libpq-dev libsodium-dev libsqlite3-dev
+        libxml2-dev libzip-dev
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: apt
+        run: |
+          sudo apt-get update
+          # shellcheck disable=SC2086 # PACKAGES is a list of packages.
+          sudo apt-get install --yes --no-install-recommends $PACKAGES
+      # sharp/bin/test builds mago on the runner, with the crates mago.yml's jobs fetch there.
+      - name: Rust and Mago caches
+        uses: ./.github/actions/mago-cache
+        with:
+          name: SHARP_ASAN
+          rust: MAGO
+          rust-paths: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          save: ${{ needs.CHANGES.outputs.full }}
+      # Only this step's CFLAGS, so mago builds without ASan.
+      - name: Build with AddressSanitizer
+        env:
+          CFLAGS: -fsanitize=address -DZEND_TRACK_ARENA_ALLOC
+          LDFLAGS: -fsanitize=address
+        run: sharp/bin/build
+      - name: Test PHP# with AddressSanitizer
+        env:
+          USE_ZEND_ALLOC: 0
+          USE_TRACKED_ALLOC: 1
+          SKIP_ASAN: 1
+          SKIP_PERF_SENSITIVE: 1
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan-suppressions.txt
+        run: sharp/bin/test --opcache --repeat --jit
   # The checks only macOS can fail: the engine's build, mago compile and the plain run on a disk that ignores case, the
   # census and the differential, and both JITs on arm64. Linux runs every other mode on the same tests, and the full run
   # runs them all here as well. A pull request's run skips it unless it is the full run, so a merge never waits for the
@@ -685,7 +805,8 @@ jobs:
   CI_PASSED:
     if: always()
     needs:
-      [CHANGES, LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS, WORKFLOWS, RELEASE_BUMP, RELEASE_ASSETS, IMAGE]
+      [CHANGES, LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, UBUNTU_WERROR, ASAN, MACOS, WORKFLOWS, RELEASE_BUMP,
+      RELEASE_ASSETS, IMAGE]
     runs-on: ubuntu-24.04
     permissions:
       actions: write
@@ -701,7 +822,9 @@ jobs:
       - name: Every job passed, or skipped a change that doesn't need it
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS, RELEASE_BUMP, RELEASE_ASSETS, IMAGE
+          allowed-skips: >-
+            LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, UBUNTU_WERROR, ASAN, MACOS, RELEASE_BUMP, RELEASE_ASSETS,
+            IMAGE
           jobs: ${{ toJSON(needs) }}
       # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed run on master

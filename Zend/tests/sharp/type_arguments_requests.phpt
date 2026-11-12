@@ -3,6 +3,7 @@ Type texts from unserialize, and type arguments a new spells from this's, last o
 --SKIPIF--
 <?php
 if (getenv('SKIP_SLOW_TESTS')) die('skip slow test');
+if (getenv('SKIP_ASAN')) die('skip ASan: its quarantine holds freed memory, so resident memory grows with every request');
 ?>
 --FILE--
 <?php
