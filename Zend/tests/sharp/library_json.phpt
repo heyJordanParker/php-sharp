@@ -3,6 +3,7 @@ A PHP# class calls Sharp.Encoding.Json: parse gives objects as maps and throws J
 --FILE--
 <?php
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Json.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/JsonValue.sharp';
 require __DIR__ . '/../../../sharp/composer/library/Sharp/InvalidFields.sharp';
 require __DIR__ . '/harness/fixture.inc';
 fixture('JsonCalls');

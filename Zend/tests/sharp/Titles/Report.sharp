@@ -1,0 +1,20 @@
+namespace Titles;
+
+public class Report
+{
+    public List<string> names()
+    {
+        const row = new Counted();
+
+        return [
+            nameof(Counted),
+            nameof(Counted.index),
+            nameof(Counted.total),
+            Class.of(row).name(),
+            typeof(Counted).name(),
+            typeof(List<string>).name(),
+            typeof(Map<string, int>).name(),
+            typeof(int?).name(),
+        ];
+    }
+}

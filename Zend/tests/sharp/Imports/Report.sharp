@@ -1,0 +1,19 @@
+namespace Imports;
+
+public static class Report
+{
+    public static int distance() => Words.between("kitten", "sitting");
+
+    public static List<string> unique() => Words.unique(["a", "b", "a", "c"]);
+
+    public static int position(string word) => Words.positions(["x", "y", "z"]).get(word) ?? -1;
+
+    public static List<string> keys() => Words.keys(["tea": 3, "milk": 1]);
+
+    public static int repeated() => Words.repeated("ab", 2);
+
+    public static void missing()
+    {
+        Words.missing();
+    }
+}

@@ -4,25 +4,35 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
-### Upgrading from 0.6.4
+### Upgrading from 0.6.5
 
-#### Declare a list plain PHP gives as a list
+#### Rename a static named `name`, `properties` or `typeArguments`
 
-`is`, `as` and `match` test plain PHP's array as the type it arrives as, spec section 12, and a bare `array` arrives as a `Map<int|string, Any?>`, whatever keys it holds. In 0.6.4, `box.records as List<Map<string, string?>>` tested the raw array and gave the list, while `const records = box.records;` held the `Map` and gave null, so the same value answered two ways. A `Map` is never a `List`, so a `List` test of it is now a compile error: "This pattern never matches the value it tests, a `Map<int|string, Any?>?`: a `Map` is never a `List`." Read the `Map`'s values as a `List` in PHP#:
+`Class<T>` has the members `name()`, `properties()` and `typeArguments()`, spec section 25, and `Class`'s own members win over a static of the class a value holds. A class that declares a static of one of these names is a compile error where a class value reaches it: "`type.name` on a class value reaches `Class`'s member `name`, never this static. Rename it."
+
+#### Read `Json.parse`'s value through `.value`
+
+`Json.parse` returns a `JsonValue`, spec section 24, which compares by structure with `==`, where it returned the decoded `Any?`. Code that checks or reads the decoded value reads it through `value`:
 
 ```csharp
-List<Any?>? rows = box.records?.values();
-```
-
-Or declare the list in plain PHP, and PHP# reads it as a `List` both ways:
-
-```php
-/** @var list<array<string, ?string>>|null */
-public ?array $records = null;
+Any? payload = Json.parse(body).value;
 ```
 
 ### Added
 
+- A class is an `Iterable<T>` when its header names `Iterable<T>` and it declares `Iterable<T> elements()`, spec section 12. A loop, `toList()`, `filter`, `map` and `take` read `elements()`, and the object passes wherever an `Iterable<T>` is taken. Plain PHP receives it as a `Traversable`: `foreach ($bag as $i => $order)` gives the keys 0, 1, 2, and a `Tally : Iterable<[string, int]>` gives `"tea" => 3` in `foreach` and in `iterator_to_array()`. A class that names `Iterable<T>` and declares no `elements()` is a compile error: "`Crate` is an `Iterable<int>` and declares or inherits no `elements()`, the member a loop reads." A PHP# class whose plain PHP base implements PHP's `IteratorAggregate`, as a subclass of Laravel's `Collection`, declares no `elements()` and loops over its base's `getIterator()`.
+- A `late` instance field or property with storage may stay unset after the constructor, spec section 6, as a PHPUnit test's field set in `setUp()` and an ORM row filled after `new` are: `public late string number { get; set; }`. A read before its first write throws "Error: App.Order.number is read before its first write.", and plain PHP's `ReflectionProperty::isInitialized()` gives false until that write. A `late` static, a `late` member with an initial value, and a `late` computed property are compile errors. Every read of a PHP# property before its first write now throws this error, where it threw "Typed property App\Order::$number must not be accessed before initialization".
+- `nameof` names a method, spec section 6.3: `nameof(OrdersController.index)` gives `"index"`, so a route names its action and a rename breaks the build. A misspelled member and one `nameof` can't reach, as a `private` method of another class, are compile errors. `nameof(Counted)` gives a class's own name, `"Counted"`, and `Class<T>.name()` its full name as PHP# writes it, `"App.Orders.Counted"`, spec section 25.
+- `Class<T>.properties()` gives a `List<Property>` of a class's instance properties and fields, its own first and then those it inherits, and `Class<T>.typeArguments()` a type's type arguments, spec section 25. A `Property` has its `name`, its `type` as a `Class<Any?>`, `nullable` and `attributes<TAttribute : Object>()`. For `[Field] List<string> tags`, `type == typeof(List<string>)` and `type.typeArguments() == [typeof(string)]`.
+- A `string` reads as its bytes, spec section 18: `"école".byteLength()` is 6, `"école".bytes()` is `[195, 169, 99, 111, 108, 101]` and `"école".byteSubstring(0, 2)` is `"é"`. `trim`, `trimStart` and `trimEnd` take the characters to remove, as `"--sku--".trim("-")` gives `"sku"`.
+- `Json.encode` takes `escapeSlashes`, `escapeUnicode` and `keepZeroFraction`, spec section 24, which default to its output without them, so a payload matches the bytes another system signs: all three switched give PHP's `json_encode` default, and `keepZeroFraction: false` alone JavaScript's `JSON.stringify`.
+- `Json.parse` returns a `JsonValue`, which compares by structure at every depth: `Json.parse("{\"a\":[1,2]}") == Json.parse("{ \"a\": [1, 2] }")` is true, spec section 24.
+- A plain PHP class's `__toString()`, its own or inherited, is its `toString()` in PHP# code, spec section 18: `` `To: ${email}` `` and `email.toString()` compile for a plain PHP `Email` that declares `__toString(): string`, and run it. A value that holds an enum beside such a class is a compile error: "`Email|Status` holds an enum and a plain PHP class whose `toString()` is its `__toString()`, and no one call shows both."
+- `Sql.identifier(name, allowed)` gives `name` as a `literal-string` only when it is one of `allowed`, and throws a `ValueError` for any other, spec section 24, so a sort column chosen while the code runs reaches Laravel's `orderByRaw` and `selectRaw`.
+- `[Import("levenshtein")]` from `Sharp.Interop` on a static method without a body makes each call run the PHP function it names, spec section 23: `[Import("levenshtein")] public static int distance(string from, string to);`. Each argument and the result cross as any plain PHP value does and are checked there, so `str_repeat` declared to return `int` throws "TypeError: str_repeat(): Return value must be of type int, string returned". It replaces the plain PHP class a project wrote for a built-in the standard library has no member for. `[Import]` on an instance method or a method with a body, and a second `[Import]` of one function in the project, are compile errors.
+- `extern namespace WordPress for WP_Post;` gives the folder of the namespace-less plain PHP class `WP_Post` the PHP# namespace `WordPress`, spec section 23: its classes and functions are `import WordPress.WP_Post;` and `WordPress.add_action(…)`, and run PHP's `\WP_Post` and `\add_action`, and `extern WordPress.get_post uses Database;` declares a function's effect. A named class that has a namespace or is PHP#'s, two lines that name one folder, one namespace given to two folders, and a namespace a class already has are compile errors.
+- `[Export("auth_redirect")]` from `Sharp.Interop` on a static method makes PHP see the global function `auth_redirect()`, which calls the method with its arguments, named ones included, and returns its result, spec section 23. The Composer plugin writes `vendor/composer/autoload_sharp_exports.php` at each dump, and PHP#'s `autoload.php` declares its functions, so a library that declares its own only when none exists, as WordPress's pluggable functions do, skips it. `[Export]` on an instance method, and a second export of one name in the project, are compile errors.
+- The converter writes a built-in call that leaves out an argument as the standard library member whose default for it is PHP's own: `round($total)` becomes `total.round()` and `mb_trim($name)` becomes `name.trim()`, where both kept the file plain PHP.
 - `mago convert` converts more of plain PHP with its meaning kept, where it kept the file plain PHP:
   - a local or a `catch` variable named outside camel case, as `$line_total`, which takes its camel case name, `lineTotal`, wherever its method names it
   - `__METHOD__`, `__FUNCTION__`, `__NAMESPACE__` and `__TRAIT__`, as the text PHP compiles in their place, and `__CLASS__` as `self::class` converts
@@ -66,6 +76,39 @@ public ?array $records = null;
 - `mago convert` writes `['a', 'b']` as `[0: 'a', 1: 'b']` where a `Map` is declared, at any depth.
 - `mago convert` refuses a PHP# generic class with a type argument other than its bound, as `Page<Order>` under `Page<TItem : Item>`, in a parameter's or a property's type and in the result of a plain PHP call. Plain PHP creates such an object without type arguments, so it holds its bounds, and the converted file threw `TypeError` where PHP went on: "Return value must be of type Page<Order>, Page<Item> returned".
 - `mago convert` names the compile error that keeps a converted file plain, as "mago compile would refuse it once converted: Declaration of … must be compatible with …", where it named none.
+
+- A plain PHP generic whose key type no argument fixes, as `Arr::from` given an object leaves it, no longer stops `mago compile` with "the analyzer refuses a type PHP# can't write, not `array-key`". Plain PHP's `array-key` enters PHP# as `int|string` wherever it reaches PHP# code: a call's type argument, a return value and a property read. A type argument of a call into a project's plain PHP method that PHP# can't write, as `scalar`, is now refused by the checker as it is for a PHP# method, where the compile stopped on it.
+- A plain PHP method whose PHPDoc says `@return $this` returns the object it is called on inside a backed enum's method, where the checker took it for the enum and refused the method's `return` with "expected `Query`, but found `Status`".
+- A lambda's parameter has the type it declares, `Any?` included, where the checker gave it the narrower type the expected `Function` passes, and reported its body's null checks and casts as redundant. The `Function` type only checks that the lambda takes every parameter it passes, spec section 14.1.
+- An untyped plain PHP property with no default, instance or static, reads as `T?` for its `@var T`, since PHP starts it at `null`, where PHP# code's null checks of it were reported as redundant. A typed property, and one with a default, still reads as `T`.
+- `too-wide-member` no longer reports a constant a PHP# class inherits from a plain PHP parent in another file. It reports a member only on the class that declares it.
+- A composed string passed to a plain PHP `literal-string` parameter is refused with "Argument #1 of method `Query.selectRaw` takes a `literal-string`, a string literal or a constant, and this string is composed while the code runs.", and the help to pass each value as a query's binding, where it said "expected `string`, but possibly received `string`".
+- `mago analyze --scan-only` reports each file's parse error as an error, in every reporting format, and exits non-zero, where it only logged a warning and exited 0, so a build that scans the codebase no longer passes over a file that doesn't parse.
+- `mago analyze`, `mago lint` and `mago guard --substitute ORIG=TEMP` check `TEMP` exactly as `ORIG` would be at `ORIG`'s path. It takes `ORIG`'s package, folder namespace and exclusions, wherever `TEMP` lies, and keeps its own dialect, so a PHP# draft kept outside the project gets the folder-namespace error it gets in place, and one in an excluded folder is checked, where it was skipped without a message. Reported issues and baseline entries name `ORIG`'s path with `TEMP`'s extension, where they named `TEMP`.
+- A plain PHP write into a PHP# property already holds the property's type, from a file without `strict_types` too, spec section 12. In 0.6.5, `ReflectionProperty::setValue($order, 5)`, `$order->number = 5` and a write through a reference stored `"5"` in a `string number` property, as PHP's weak mode converts. Each now throws "TypeError: Cannot assign int to property App\Order::$number of type string". An `int` written into a `float` property still becomes a `float`.
+- A loop over an object whose class is no `Iterable`, as `for (const item of this)` in a plain class, is a compile error that names the type, as a loop over any other value that is no `Iterable` is: "The expression provided to a loop is not iterable. It resolved to type `Basket`, which is not iterable." In 0.6.5 it compiled with a warning, and PHP looped over the object's public properties. A loop over an `Object` and over an enum value is the same error.
+
+## [0.6.5] - 2026-11-11
+
+### Upgrading from 0.6.4
+
+#### Declare a list plain PHP gives as a list
+
+`is`, `as` and `match` test plain PHP's array as the type it arrives as, spec section 12, and a bare `array` arrives as a `Map<int|string, Any?>`, whatever keys it holds. In 0.6.4, `box.records as List<Map<string, string?>>` tested the raw array and gave the list, while `const records = box.records;` held the `Map` and gave null, so the same value answered two ways. A `Map` is never a `List`, so a `List` test of it is now a compile error: "This pattern never matches the value it tests, a `Map<int|string, Any?>?`: a `Map` is never a `List`." Read the `Map`'s values as a `List` in PHP#:
+
+```csharp
+List<Any?>? rows = box.records?.values();
+```
+
+Or declare the list in plain PHP, and PHP# reads it as a `List` both ways:
+
+```php
+/** @var list<array<string, ?string>>|null */
+public ?array $records = null;
+```
+
+### Fixed
+
 - On a busy Mac, `mago analyze --watch` checks only the folders FSEvents has not started on, where a watcher FSEvents didn't start in time checked every watched file, `vendor/` included, every half second for the rest of the session. A folder goes back to FSEvents once FSEvents reports a change there, and the watch prints "The file watcher reported a change in …, so this run stops checking the files there." The warning now names those folders: "The file watcher reported no change in … within 30s, so this run checks the files there every 500ms until it does." The checks of the project's files skip the folders the watch's changes skip, as `vendor/` when it is an `includes` root and `node_modules/`, and read only the files of the configured extensions. The checks of `mago.toml`, `composer.json` and `composer.lock` still read every file beside them.
 - On macOS, `mago` no longer hangs when a process of an extension worker's or the law checker's process group never ends, as one the kernel holds on a stalled disk. Mago sent the group SIGKILL until no process of it ran, so it waited forever, and a worker's restart and the end of every run waited too. It now stops after 10 seconds, leaves that process running, and goes on: the worker's error says "process group 4321 still ran 10000 ms after SIGKILL", and the law checker refuses the law as one that "did not finish within … seconds".
 - A plain PHP method that overrides a PHP# class's method, and the test double PHPUnit's `createMock()` or Mockery generates, gives PHP# its PHP array as the `Map` or `Set` the method declares. In 0.6.4, `const status = source.status(); return status.get("status");`, and the same read without the local, threw "ValueError: Sharp\Internal\get(): Argument #1 ($collection) must be a list" when `source` was such a class, since only a PHP# interface's member was read as a value plain PHP may give.
@@ -630,7 +673,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.4...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.5...HEAD
+[0.6.5]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.1...v0.6.2
