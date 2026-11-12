@@ -1,0 +1,13 @@
+namespace Arrivals;
+
+public final class Holder
+{
+    private Map<string, string> held;
+
+    public Holder(Map<string, string> held)
+    {
+        this.held = held;
+    }
+
+    public string? status() => this.held.get("status");
+}

@@ -1,0 +1,85 @@
+namespace Arrivals;
+
+import Lib.Feed;
+import Lib.Folder;
+
+public class Reader
+{
+    public bool records(Folder folder) => folder.records as Map<int|string, Any?> != null;
+
+    public bool heldRecords(Folder folder)
+    {
+        const records = folder.records;
+        return records as Map<int|string, Any?> != null;
+    }
+
+    public bool heldRecordsAfterNull(Folder folder)
+    {
+        const records = folder.records;
+        if (records == null) {
+            return false;
+        }
+        List<Any?> rows = records.values();
+        return rows.count() == 1;
+    }
+
+    public bool recordsMap(Folder folder) => folder.records is Map<int|string, Any?>;
+
+    public bool listed(Folder folder) => folder.listed as List<Map<string, string?>> != null;
+
+    public bool heldListed(Folder folder)
+    {
+        const listed = folder.listed;
+        return listed as List<Map<string, string?>> != null;
+    }
+
+    public string? status(Source source) => source.status().get("status");
+
+    public string? heldStatus(Source source)
+    {
+        const status = source.status();
+        return status.get("status");
+    }
+
+    public string? typedStatus(Source source)
+    {
+        Map<string, string> status = source.status();
+        return status.get("status");
+    }
+
+    public string? argument(Source source) => this.first(source.status());
+
+    public string? constructed(Source source) => new Holder(source.status()).status();
+
+    public string? element(Source source)
+    {
+        List<Map<string, string>> all = [source.status()];
+        return all[0].get("status");
+    }
+
+    public string? spread(Source source)
+    {
+        Map<string, string> all = [...source.status()];
+        return all.get("status");
+    }
+
+    public string? late(Source source) => source.madeBySelf().get("status");
+
+    public string? ofClass(Source source) => Class.of(source).made().get("status");
+
+    public string? maybe(Source? source) => source?.status().get("status");
+
+    public string? fed(Feed feed)
+    {
+        Map<int|string, Any?> payload = [...feed.payload(), "extra": "kept"];
+        return payload.get("status") as string;
+    }
+
+    public int named(Feed feed)
+    {
+        List<string> names = [...feed.names(), "third"];
+        return names.count();
+    }
+
+    private string? first(Map<string, string> status) => status.get("status");
+}

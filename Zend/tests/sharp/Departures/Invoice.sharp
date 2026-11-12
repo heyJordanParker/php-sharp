@@ -1,0 +1,18 @@
+namespace Departures;
+
+import Lib.Caster;
+
+public class Invoice : Caster
+{
+    protected override Map<string, string> casts { get; set; } = ["paid": "bool"];
+
+    protected override Map<string, string> formats { get; set; } = ["total": "%.2f"];
+
+    public string? castOf(string key) => this.casts.get(key);
+
+    public void cast(string key, string type)
+    {
+        this.casts[key] = type;
+        this.formats = ["total": "%.3f"];
+    }
+}

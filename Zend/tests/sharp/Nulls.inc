@@ -82,7 +82,7 @@ class Nulls
     public function called(?\Closure $function, int $value): ?int
     {
         $this->doubler = $function;
-        return ((${'nullsafe#1'} = $this->held()) === null ? null : ${'nullsafe#1'}($value));
+        return ((${'nullsafe#1'} = \Sharp\Internal\returned($this->held(), $this, 'held', 'Function<int(int) uses Sharp.Time.Clock>?', 'Demo.Nulls.held()')) === null ? null : ${'nullsafe#1'}($value));
     }
 
     public function held(): ?\Closure { return $this->doubler; }
