@@ -10,6 +10,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - A law without a body proves case by case over an enum it takes, so `law backoffNeverShrinks(Retry retry, int index)` proves over what every `Retry` case's `backoff()` returns.
 - A law body's `match` with an arm that ends in `return` for each case of an enum is exhaustive, where 0.6.7 refused it with "A `match` needs a `default` arm". So is a method's `match` statement whose every arm returns. Arms that miss a case still name it.
 - A law whose body splits on an enum with a `default` arm proves, where 0.6.7 reported "the checker wrote a proof of it that does not check. This is a bug in the PHP# checker". Its cases spent the proof's whole time budget on the list reads above.
+- A law whose proof runs out of time is refused as not proven, where 0.6.7 reported "the checker wrote a proof of it that does not check. This is a bug in the PHP# checker". The error names the case and says "the proof ran out of time before it finished". Each step of a proof now has a time budget of its own, so the cases after a slow one still run and report their own goals.
+- A method that ends in a `match` statement with an arm that returns for each case of an enum returns on every path, where 0.6.7 reported `missing-return-statement`. A `match` that misses a case still needs a `return` after it.
 
 ## [0.6.7] - 2026-11-12
 
