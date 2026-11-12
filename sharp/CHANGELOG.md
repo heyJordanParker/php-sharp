@@ -4,6 +4,11 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A law reads a `List` by index, spec section 12. The read gives the element, or throws `OutOfRangeException` at an index outside the list, as the engine does, and a throw doesn't break a law. So `law backoffNeverShrinks(Retry r, int i) => i < 0 || i + 1 >= r.backoff().count() || r.backoff()[i] <= r.backoff()[i + 1]` proves through its own guards, where 0.6.6 refused it with "reaches a collection", and a law without the guards proves where the read is in range. A `Map` read by its key is still refused.
+- A law reaches a backed enum's `from` and `tryFrom`, where 0.6.6 reported "the checker left out Status.from, which the law reaches. This is a bug in the PHP# checker". `from` gives the case whose value matches and throws `ValueError` for any other value, as the engine does, and `tryFrom` gives the case or `null`, so `law fromValueGivesTheCase(Status s) => Status.from(s.value) == s` proves.
+
 ## [0.6.6] - 2026-11-12
 
 ### Upgrading from 0.6.5
