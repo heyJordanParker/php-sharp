@@ -91,6 +91,7 @@ runs:
           echo "No cached build, so cargo builds every Mago crate."
         fi
         mkdir -p "$target"
+        # sharp/bin/build-mago reads this file to leave the folder alone, so its 10 GiB bound never deletes this cache.
         mv "$RUNNER_TEMP/sources" "$sources"
     - name: Point CARGO_TARGET_DIR at the target folder
       if: inputs.target-dir-env == 'true'
