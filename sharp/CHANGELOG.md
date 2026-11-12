@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-11-12
+
 ### Fixed
 
 - A law reads a `List` by index, spec section 12. The read gives the element, or throws `OutOfRangeException` at an index outside the list, as the engine does, and a throw doesn't break a law. So `law backoffNeverShrinks(Retry r, int i) => i < 0 || i + 1 >= r.backoff().count() || r.backoff()[i] <= r.backoff()[i + 1]` proves through its own guards, where 0.6.6 refused it with "reaches a collection", and a law without the guards proves where the read is in range. A `Map` read by its key is still refused.
@@ -696,7 +698,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.6...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.7...HEAD
+[0.6.7]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.3...v0.6.4
