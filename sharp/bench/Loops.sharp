@@ -1,8 +1,9 @@
 namespace Bench;
 
 // Each row of sharp/bin/bench: a loop of `n` turns, run once with n = 1M and once with n = 0, so its count is the
-// loop's alone. A row builds what it reads before its loop, so the build is in both runs.
-public class Loops
+// loop's alone. A row builds what it reads before its loop, so the build is in both runs. The rows of plain PHP code
+// are Base's.
+public class Loops : Base
 {
     private List<int> held = [];
 
@@ -13,8 +14,13 @@ public class Loops
     // A plain PHP override may replace it, so each PHP# call reads its result as the method that ran gives it.
     public List<Map<string, int>> maps() => this.rows;
 
-    // The same method in camelCase, which PHP keys in lowercase.
+    // The same method in camelCase, which plain PHP keys in lowercase and PHP# by its exact name.
     public List<Map<string, int>> heldMaps() => this.rows;
+
+    // A method in camelCase that each way of calling a method reaches, Base's plain PHP code included.
+    public override int oneMore() => 1;
+
+    public static int oneStatic() => 1;
 
     public static int listAdd(int n)
     {
@@ -173,6 +179,25 @@ public class Loops
         let total = 0;
         for (let i = 0; i < n; i++) {
             total += loops.heldMaps().count();
+        }
+        return total;
+    }
+
+    public static int sharpCamelCall(int n)
+    {
+        Loops loops = new Loops();
+        let total = 0;
+        for (let i = 0; i < n; i++) {
+            total += loops.oneMore();
+        }
+        return total;
+    }
+
+    public static int sharpStaticCall(int n)
+    {
+        let total = 0;
+        for (let i = 0; i < n; i++) {
+            total += Loops.oneStatic();
         }
         return total;
     }

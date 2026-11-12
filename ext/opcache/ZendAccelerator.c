@@ -3867,9 +3867,7 @@ static zend_result preload_resolve_deps(preload_error *error, const zend_class_e
 	memset(error, 0, sizeof(preload_error));
 
 	if (ce->parent_name) {
-		zend_string *key = zend_string_tolower(ce->parent_name);
-		zend_class_entry *parent = zend_hash_find_ptr(EG(class_table), key);
-		zend_string_release(key);
+		zend_class_entry *parent = zend_class_table_find_ptr(EG(class_table), ce->parent_name, NULL);
 		if (!parent) {
 			error->kind = "Unknown parent ";
 			error->name = ZSTR_VAL(ce->parent_name);
@@ -3879,8 +3877,8 @@ static zend_result preload_resolve_deps(preload_error *error, const zend_class_e
 
 	if (ce->num_interfaces) {
 		for (uint32_t i = 0; i < ce->num_interfaces; i++) {
-			zend_class_entry *interface =
-				zend_hash_find_ptr(EG(class_table), ce->interface_names[i].lc_name);
+			zend_class_entry *interface = zend_class_table_find_ptr(
+				EG(class_table), ce->interface_names[i].name, ce->interface_names[i].lc_name);
 			if (!interface) {
 				error->kind = "Unknown interface ";
 				error->name = ZSTR_VAL(ce->interface_names[i].name);
@@ -3891,8 +3889,8 @@ static zend_result preload_resolve_deps(preload_error *error, const zend_class_e
 
 	if (ce->num_traits) {
 		for (uint32_t i = 0; i < ce->num_traits; i++) {
-			zend_class_entry *trait =
-				zend_hash_find_ptr(EG(class_table), ce->trait_names[i].lc_name);
+			zend_class_entry *trait = zend_class_table_find_ptr(
+				EG(class_table), ce->trait_names[i].name, ce->trait_names[i].lc_name);
 			if (!trait) {
 				error->kind = "Unknown trait ";
 				error->name = ZSTR_VAL(ce->trait_names[i].name);
@@ -4079,7 +4077,8 @@ static void preload_link(void)
 				continue;
 			}
 
-			zend_string *lcname = zend_string_tolower(ce->name);
+			zend_string *lcname = (ce->sharp_flags & SHARP_CLASS_EXACT_KEY)
+				? zend_string_copy(ce->name) : zend_string_tolower(ce->name);
 			if (!(ce->ce_flags & ZEND_ACC_ANON_CLASS)) {
 				if (zend_hash_exists(EG(class_table), lcname)) {
 					zend_string_release(lcname);
@@ -4192,7 +4191,8 @@ static void preload_link(void)
 
 		if ((ce->ce_flags & (ZEND_ACC_TOP_LEVEL|ZEND_ACC_ANON_CLASS))
 				&& !(ce->ce_flags & ZEND_ACC_LINKED)) {
-			zend_string *lcname = zend_string_tolower(ce->name);
+			zend_string *lcname = (ce->sharp_flags & SHARP_CLASS_EXACT_KEY)
+				? zend_string_copy(ce->name) : zend_string_tolower(ce->name);
 			preload_error error;
 			if (!(ce->ce_flags & ZEND_ACC_ANON_CLASS)
 			 && zend_hash_exists(EG(class_table), lcname)) {

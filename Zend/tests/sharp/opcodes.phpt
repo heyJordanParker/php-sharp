@@ -338,18 +338,38 @@ Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Expressions: same opcodes and lines in 8 op arrays, same signatures in 1 classes
 Checkout: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Page: same opcodes and lines in 10 op arrays, same signatures in 1 classes
-Stage: same opcodes and lines in 4 op arrays, same signatures in 1 classes
-Suit: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Rank: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Stage: different opcodes and lines in 4 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Demo\\Stage")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Stage")
+  .php   L0005 0000 DECLARE_CLASS string("demo\\stage")
+  .php   0000 DECLARE_CLASS string("demo\\stage")
+Suit: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Demo\\Suit")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Suit")
+  .php   L0003 0000 DECLARE_CLASS string("demo\\suit")
+  .php   0000 DECLARE_CLASS string("demo\\suit")
+Rank: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Demo\\Rank")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Rank")
+  .php   L0003 0000 DECLARE_CLASS string("demo\\rank")
+  .php   0000 DECLARE_CLASS string("demo\\rank")
 Shipment: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Task: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Shapes/Measured: same opcodes and lines in 2 op arrays, same signatures in 0 classes
 Shapes/Shape: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Shapes/Unit: same opcodes and lines in 1 op arrays, same signatures in 1 classes
 Members: same opcodes and lines in 10 op arrays, same signatures in 1 classes
-Site/Page: same opcodes and lines in 9 op arrays, same signatures in 1 classes
+Site/Page: different opcodes and lines in 9 op arrays, same signatures in 1 classes
+  .sharp L0010 0000 DECLARE_CLASS string("Site\\Page") string("lib\\resource")
+  .sharp 0000 DECLARE_CLASS string("Site\\Page") string("lib\\resource")
+  .php   L0010 0000 DECLARE_CLASS string("site\\page") string("lib\\resource")
+  .php   0000 DECLARE_CLASS string("site\\page") string("lib\\resource")
 Site/Shape: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Site/Square: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Site/Square: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Site\\Square") string("site\\shape")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Site\\Square") string("site\\shape")
+  .php   L0003 0000 DECLARE_CLASS string("site\\square") string("site\\shape")
+  .php   0000 DECLARE_CLASS_DELAYED string("site\\square") string("site\\shape")
 Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in 1 classes
   check  Demo\Cart::fill string("List<Demo.Item>")
   check  Demo\Cart::withPrices string("List<int>, List<int>")
@@ -6131,11 +6151,31 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .php       Property [ public Sharp\Set $tags ]
   .php       Property [ public Sharp\Set $states { get; set; } ]
   .php       Property [ private Sharp\Set $sizes ]
-Store/Order: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-RushOrders/Order: same opcodes and lines in 2 op arrays, same signatures in 1 classes
-RushOrders/RushOrder: same opcodes and lines in 1 op arrays, same signatures in 1 classes
-TypedOrders/Order: same opcodes and lines in 2 op arrays, same signatures in 1 classes
-TypedOrders/RushOrder: same opcodes and lines in 1 op arrays, same signatures in 1 classes
+Store/Order: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Store\\Order") string("lib\\model")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Store\\Order") string("lib\\model")
+  .php   L0005 0000 DECLARE_CLASS string("store\\order") string("lib\\model")
+  .php   0000 DECLARE_CLASS_DELAYED string("store\\order") string("lib\\model")
+RushOrders/Order: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Rush\\Order") string("lib\\model")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Rush\\Order") string("lib\\model")
+  .php   L0005 0000 DECLARE_CLASS string("rush\\order") string("lib\\model")
+  .php   0000 DECLARE_CLASS_DELAYED string("rush\\order") string("lib\\model")
+RushOrders/RushOrder: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Rush\\RushOrder") string("rush\\order")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Rush\\RushOrder") string("rush\\order")
+  .php   L0003 0000 DECLARE_CLASS string("rush\\rushorder") string("rush\\order")
+  .php   0000 DECLARE_CLASS_DELAYED string("rush\\rushorder") string("rush\\order")
+TypedOrders/Order: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Typed\\Order") string("lib\\typedmodel")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Typed\\Order") string("lib\\typedmodel")
+  .php   L0005 0000 DECLARE_CLASS string("typed\\order") string("lib\\typedmodel")
+  .php   0000 DECLARE_CLASS_DELAYED string("typed\\order") string("lib\\typedmodel")
+TypedOrders/RushOrder: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Typed\\RushOrder") string("typed\\order")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Typed\\RushOrder") string("typed\\order")
+  .php   L0003 0000 DECLARE_CLASS string("typed\\rushorder") string("typed\\order")
+  .php   0000 DECLARE_CLASS_DELAYED string("typed\\rushorder") string("typed\\order")
 Permalink: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 Library: different opcodes and lines in 18 op arrays, same signatures in 1 classes
   check  Demo\Library::query string("Map<string, Any?>")
@@ -7309,7 +7349,11 @@ Accessors/Product: different opcodes and lines in 11 op arrays, same signatures 
   .php        3: 0004 - 0015 (loop)
   .php        ; (lines=7, args=1, vars=1, tmps=2)
   .php   0006 RETURN null
-Parcel: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Parcel: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Store\\Parcel") string("lib\\row")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Store\\Parcel") string("lib\\row")
+  .php   L0005 0000 DECLARE_CLASS string("store\\parcel") string("lib\\row")
+  .php   0000 DECLARE_CLASS_DELAYED string("store\\parcel") string("lib\\row")
 Exits: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Positions: same opcodes and lines in 5 op arrays, same signatures in 1 classes
 Deploy: same opcodes and lines in 6 op arrays, same signatures in 1 classes
@@ -7620,17 +7664,33 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .php       /** @param Feed<Order> $feed */
   .php       /** @param Validator<DatabaseEntity> $validator */
 Generics/DatabaseEntity: same opcodes and lines in 2 op arrays, same signatures in 1 classes
-Generics/EntityValidator: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Generics/EntityValidator: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Paging\\EntityValidator")
+  .sharp 0000 DECLARE_CLASS string("Paging\\EntityValidator")
+  .php   L0003 0000 DECLARE_CLASS string("paging\\entityvalidator")
+  .php   0000 DECLARE_CLASS string("paging\\entityvalidator")
 Generics/Feed: different opcodes and lines in 3 op arrays, same signatures in 1 classes
   check  Paging\Feed::__construct string("List<$0>")
   .php       /** @param list<TItem> $items */
   .php       /** @return TItem */
-Generics/Order: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Generics/Order: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Paging\\Order") string("paging\\databaseentity")
+  .sharp 0000 DECLARE_CLASS string("Paging\\Order") string("paging\\databaseentity")
+  .php   L0003 0000 DECLARE_CLASS string("paging\\order") string("paging\\databaseentity")
+  .php   0000 DECLARE_CLASS string("paging\\order") string("paging\\databaseentity")
 Generics/OrderPage: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Paging\\OrderPage") string("paging\\paginatedlist")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Paging\\OrderPage") string("paging\\paginatedlist")
+  .php   L0003 0000 DECLARE_CLASS string("paging\\orderpage") string("paging\\paginatedlist")
+  .php   0000 DECLARE_CLASS_DELAYED string("paging\\orderpage") string("paging\\paginatedlist")
   .php       /** @param list<TItem> $rows */
   .php       /** @return TItem */
 Generics/OrderQuery: different opcodes and lines in 3 op arrays, same signatures in 1 classes
   check  Paging\OrderQuery::__construct string("List<Paging.Order>")
+  .sharp L0003 0000 DECLARE_CLASS string("Paging\\OrderQuery")
+  .sharp 0000 DECLARE_CLASS string("Paging\\OrderQuery")
+  .php   L0003 0000 DECLARE_CLASS string("paging\\orderquery")
+  .php   0000 DECLARE_CLASS string("paging\\orderquery")
   .php       /** @param list<Order> $orders */
 Generics/PaginatedList: different opcodes and lines in 3 op arrays, same signatures in 1 classes
   check  Paging\PaginatedList::__construct string("List<$0>")
@@ -8323,14 +8383,46 @@ Operators/Operators: different opcodes and lines in 48 op arrays, same signature
   .php   0001 CV1($value) = RECV 2
   .php   0002 T2 = CAST (string) CV0($key)
   .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
-Operators/Order: same opcodes and lines in 1 op arrays, same signatures in 1 classes
-Traits/Align: same opcodes and lines in 2 op arrays, same signatures in 1 classes
-Traits/Draft: same opcodes and lines in 1 op arrays, same signatures in 1 classes
-Traits/Essay: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Traits/Guide: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Operators/Order: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Billing\\Order") string("billing\\databaseentity")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Billing\\Order") string("billing\\databaseentity")
+  .php   L0003 0000 DECLARE_CLASS string("billing\\order") string("billing\\databaseentity")
+  .php   0000 DECLARE_CLASS_DELAYED string("billing\\order") string("billing\\databaseentity")
+Traits/Align: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Demo\\Align")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Align")
+  .php   L0005 0000 DECLARE_CLASS string("demo\\align")
+  .php   0000 DECLARE_CLASS string("demo\\align")
+Traits/Draft: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Demo\\Draft")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Draft")
+  .php   L0005 0000 DECLARE_CLASS string("demo\\draft")
+  .php   0000 DECLARE_CLASS string("demo\\draft")
+Traits/Essay: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0006 0000 DECLARE_CLASS string("Demo\\Essay") string("lib\\document")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Essay") string("lib\\document")
+  .php   L0006 0000 DECLARE_CLASS string("demo\\essay") string("lib\\document")
+  .php   0000 DECLARE_CLASS string("demo\\essay") string("lib\\document")
+Traits/Guide: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Demo\\Guide") string("demo\\essay")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Demo\\Guide") string("demo\\essay")
+  .php   L0003 0000 DECLARE_CLASS string("demo\\guide") string("demo\\essay")
+  .php   0000 DECLARE_CLASS_DELAYED string("demo\\guide") string("demo\\essay")
 Traits/Linked: same opcodes and lines in 2 op arrays, same signatures in 0 classes
-Traits/Posting: same opcodes and lines in 1 op arrays, same signatures in 1 classes
-Traits/Shade: same opcodes and lines in 1 op arrays, same signatures in 1 classes
-Traits/Tier: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Traits/Posting: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0007 0000 DECLARE_CLASS string("Demo\\Posting") string("lib\\persisted")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Posting") string("lib\\persisted")
+  .php   L0007 0000 DECLARE_CLASS string("demo\\posting") string("lib\\persisted")
+  .php   0000 DECLARE_CLASS string("demo\\posting") string("lib\\persisted")
+Traits/Shade: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Demo\\Shade")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Shade")
+  .php   L0005 0000 DECLARE_CLASS string("demo\\shade")
+  .php   0000 DECLARE_CLASS string("demo\\shade")
+Traits/Tier: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Demo\\Tier")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Tier")
+  .php   L0005 0000 DECLARE_CLASS string("demo\\tier")
+  .php   0000 DECLARE_CLASS string("demo\\tier")
 a check: same
 a check and another opcode: different

@@ -144,13 +144,16 @@ struct _zend_inheritance_cache_entry {
 	zend_class_entry             *traits_and_interfaces[1];
 };
 
-/* PHP#: PHP#'s own class flags, in sharp_flags of zend_class_entry (unused: 3-7). */
+/* PHP#: PHP#'s own class flags, in sharp_flags of zend_class_entry (unused: 4-7). */
 /* A property of the class, its own or inherited, has ZEND_ACC_SHARP_CROSSING. */
 #define SHARP_CLASS_HAS_CROSSING_PROPS (1 << 0)
 /* A property of the class, its own or inherited, has ZEND_ACC_SHARP_TYPED. */
 #define SHARP_CLASS_HAS_TYPED_PROPS    (1 << 1)
 /* The class or an ancestor of it is declared in a .sharp file, so it keys its methods by exact name. */
 #define SHARP_CLASS_EXACT_NAMES        (1 << 2)
+/* The class is declared in a .sharp file, so the class table keys it by its exact name, as zend_class_table_find()
+ * finds it. */
+#define SHARP_CLASS_EXACT_KEY          (1 << 3)
 
 struct _zend_class_entry {
 	char type;

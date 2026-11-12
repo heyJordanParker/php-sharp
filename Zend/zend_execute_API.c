@@ -1199,10 +1199,37 @@ ZEND_API bool zend_is_valid_class_name(zend_string *name) {
 	return 1;
 }
 
+/* PHP#: the class `name` finds when the lowercase key found none or `folded`, a class whose name differs from it: a
+ * PHP# class, which the class table keys by its exact name, spec section 24, or else `folded`. A plain PHP class whose
+ * name differs from a PHP# class's only in case keeps its lowercase key beside it, so `Order` finds the PHP# class
+ * even then. */
+ZEND_API zend_never_inline zval *zend_class_table_find_exact(
+	const HashTable *class_table, const zend_string *name, zval *folded) /* {{{ */
+{
+	const char *exact = ZSTR_VAL(name);
+	size_t length = ZSTR_LEN(name);
+
+	if (exact[0] == '\\') {
+		exact++;
+		length--;
+	}
+	if (folded) {
+		const zend_string *folded_name = ((zend_class_entry *) Z_PTR_P(folded))->name;
+
+		if (zend_binary_strcmp(ZSTR_VAL(folded_name), ZSTR_LEN(folded_name), exact, length) == 0) {
+			return folded;
+		}
+	}
+
+	zval *zv = zend_hash_str_find(class_table, exact, length);
+
+	return zv ? zv : folded;
+}
+/* }}} */
+
 ZEND_API zend_class_entry *zend_lookup_class_ex(zend_string *name, zend_string *key, uint32_t flags) /* {{{ */
 {
 	zend_class_entry *ce = NULL;
-	zval *zv;
 	zend_string *lc_name;
 	zend_string *autoload_name;
 	uint32_t ce_cache = 0;
@@ -1234,12 +1261,11 @@ ZEND_API zend_class_entry *zend_lookup_class_ex(zend_string *name, zend_string *
 		}
 	}
 
-	zv = zend_hash_find(EG(class_table), lc_name);
-	if (zv) {
+	ce = zend_class_table_find_ptr(EG(class_table), name, lc_name);
+	if (ce) {
 		if (!key) {
 			zend_string_release_ex(lc_name, 0);
 		}
-		ce = (zend_class_entry*)Z_PTR_P(zv);
 		if (UNEXPECTED(!(ce->ce_flags & ZEND_ACC_LINKED))) {
 			if ((flags & ZEND_FETCH_CLASS_ALLOW_UNLINKED) ||
 				((flags & ZEND_FETCH_CLASS_ALLOW_NEARLY_LINKED) &&

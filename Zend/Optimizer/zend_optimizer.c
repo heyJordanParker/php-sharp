@@ -826,18 +826,19 @@ static bool zend_optimizer_ignore_function(zval *fbc_zv, zend_string *filename)
 }
 
 zend_class_entry *zend_optimizer_get_class_entry(
-		const zend_script *script, const zend_op_array *op_array, zend_string *lcname) {
-	zend_class_entry *ce = script ? zend_hash_find_ptr(&script->class_table, lcname) : NULL;
+		const zend_script *script, const zend_op_array *op_array, zend_string *name, zend_string *lcname) {
+	zend_class_entry *ce = script ? zend_class_table_find_ptr(&script->class_table, name, lcname) : NULL;
 	if (ce) {
 		return ce;
 	}
 
-	zval *ce_zv = zend_hash_find(CG(class_table), lcname);
+	zval *ce_zv = zend_class_table_find(CG(class_table), name, lcname);
 	if (ce_zv && !zend_optimizer_ignore_class(ce_zv, op_array ? op_array->filename : NULL)) {
 		return Z_PTR_P(ce_zv);
 	}
 
-	if (op_array && op_array->scope && zend_string_equals_ci(op_array->scope->name, lcname)) {
+	if (op_array && op_array->scope && ((op_array->scope->sharp_flags & SHARP_CLASS_EXACT_KEY)
+			? zend_string_equals(op_array->scope->name, name) : zend_string_equals_ci(op_array->scope->name, lcname))) {
 		return op_array->scope;
 	}
 
@@ -849,7 +850,7 @@ zend_class_entry *zend_optimizer_get_class_entry_from_op1(
 	if (opline->op1_type == IS_CONST) {
 		zval *op1 = CRT_CONSTANT(opline->op1);
 		if (Z_TYPE_P(op1) == IS_STRING) {
-			return zend_optimizer_get_class_entry(script, op_array, Z_STR_P(op1 + 1));
+			return zend_optimizer_get_class_entry(script, op_array, Z_STR_P(op1), Z_STR_P(op1 + 1));
 		}
 	} else if (opline->op1_type == IS_UNUSED && op_array->scope
 			&& !(op_array->scope->ce_flags & ZEND_ACC_TRAIT)
@@ -873,9 +874,9 @@ const zend_class_constant *zend_fetch_class_const_info(
 		zval *op1 = CRT_CONSTANT(opline->op1);
 		if (Z_TYPE_P(op1) == IS_STRING) {
 			if (script) {
-				ce = zend_optimizer_get_class_entry(script, op_array, Z_STR_P(op1 + 1));
+				ce = zend_optimizer_get_class_entry(script, op_array, Z_STR_P(op1), Z_STR_P(op1 + 1));
 			} else {
-				zval *ce_zv = zend_hash_find(EG(class_table), Z_STR_P(op1 + 1));
+				zval *ce_zv = zend_class_table_find(EG(class_table), Z_STR_P(op1), Z_STR_P(op1 + 1));
 				if (ce_zv && !zend_optimizer_ignore_class(ce_zv, op_array->filename)) {
 					ce = Z_PTR_P(ce_zv);
 				}

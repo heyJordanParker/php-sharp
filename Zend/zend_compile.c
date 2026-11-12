@@ -1754,7 +1754,9 @@ static inline bool class_name_refers_to_active_ce(zend_string *class_name, uint3
 		return 1;
 	}
 	return fetch_type == ZEND_FETCH_CLASS_DEFAULT
-		&& zend_string_equals_ci(class_name, CG(active_class_entry)->name);
+		&& ((CG(active_class_entry)->sharp_flags & SHARP_CLASS_EXACT_KEY)
+			? zend_string_equals(class_name, CG(active_class_entry)->name)
+			: zend_string_equals_ci(class_name, CG(active_class_entry)->name));
 }
 /* }}} */
 
@@ -1878,7 +1880,7 @@ static bool zend_verify_ct_const_access(zend_class_constant *c, zend_class_entry
 			if (ce->ce_flags & ZEND_ACC_RESOLVED_PARENT) {
 				ce = ce->parent;
 			} else {
-				ce = zend_hash_find_ptr_lc(CG(class_table), ce->parent_name);
+				ce = zend_class_table_find_ptr(CG(class_table), ce->parent_name, NULL);
 				if (!ce) {
 					break;
 				}
@@ -1898,7 +1900,7 @@ static bool zend_try_ct_eval_class_const(zval *zv, zend_string *class_name, zend
 	if (class_name_refers_to_active_ce(class_name, fetch_type)) {
 		cc = zend_hash_find_ptr(&CG(active_class_entry)->constants_table, name);
 	} else if (fetch_type == ZEND_FETCH_CLASS_DEFAULT && !(CG(compiler_options) & ZEND_COMPILE_NO_CONSTANT_SUBSTITUTION)) {
-		zend_class_entry *ce = zend_hash_find_ptr_lc(CG(class_table), class_name);
+		zend_class_entry *ce = zend_class_table_find_ptr(CG(class_table), class_name, NULL);
 		if (ce) {
 			cc = zend_hash_find_ptr(&ce->constants_table, name);
 		} else {
@@ -5578,15 +5580,17 @@ static void zend_compile_static_call(znode *result, zend_ast *ast, uint32_t type
 	if (opline->op2_type == IS_CONST) {
 		zend_class_entry *ce = NULL;
 		if (opline->op1_type == IS_CONST) {
+			zend_string *name = Z_STR_P(CT_CONSTANT(opline->op1));
 			zend_string *lcname = Z_STR_P(CT_CONSTANT(opline->op1) + 1);
-			ce = zend_hash_find_ptr(CG(class_table), lcname);
+			zend_class_entry *active = CG(active_class_entry);
+			ce = zend_class_table_find_ptr(CG(class_table), name, lcname);
 			if (ce) {
 				if (zend_compile_ignore_class(ce, CG(active_op_array)->filename)) {
 					ce = NULL;
 				}
-			} else if (CG(active_class_entry)
-					&& zend_string_equals_ci(CG(active_class_entry)->name, lcname)) {
-				ce = CG(active_class_entry);
+			} else if (active && ((active->sharp_flags & SHARP_CLASS_EXACT_KEY)
+					? zend_string_equals(active->name, name) : zend_string_equals_ci(active->name, lcname))) {
+				ce = active;
 			}
 		} else if (opline->op1_type == IS_UNUSED
 				&& (opline->op1.num & ZEND_FETCH_CLASS_MASK) == ZEND_FETCH_CLASS_SELF
@@ -9842,7 +9846,9 @@ static void zend_compile_class_decl(znode *result, zend_ast *ast, bool toplevel)
 		}
 		name = zend_prefix_with_ns(unqualified_name);
 		name = zend_new_interned_string(name);
-		lcname = zend_string_tolower(name);
+		/* PHP# names are case-sensitive, spec section 24, so the class table keys a class of a .sharp file by its exact
+		 * name, SHARP_CLASS_EXACT_KEY, which zend_class_table_find() finds as written. */
+		lcname = zend_compiling_sharp_file() ? zend_string_copy(name) : zend_string_tolower(name);
 
 		if (FC(imports)) {
 			zend_string *import_name =
@@ -9873,9 +9879,13 @@ static void zend_compile_class_decl(znode *result, zend_ast *ast, bool toplevel)
 	if (!(decl->flags & ZEND_ACC_ANON_CLASS)) {
 		zend_alloc_ce_cache(ce->name);
 	}
-	/* PHP# names are case-sensitive, spec section 2, so a class of a .sharp file keys its methods by exact name. */
+	/* PHP# names are case-sensitive, spec section 24, so a class of a .sharp file keys its methods by exact name, and the
+	 * class table keys a named one by its exact name. */
 	if (zend_compiling_sharp_file()) {
 		ce->sharp_flags |= SHARP_CLASS_EXACT_NAMES;
+		if (!(decl->flags & ZEND_ACC_ANON_CLASS)) {
+			ce->sharp_flags |= SHARP_CLASS_EXACT_KEY;
+		}
 	}
 
 	if (CG(compiler_options) & ZEND_COMPILE_PRELOAD) {

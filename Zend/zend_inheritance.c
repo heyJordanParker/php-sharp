@@ -265,11 +265,7 @@ static zend_class_entry *lookup_class_ex(
 	bool in_preload = CG(compiler_options) & ZEND_COMPILE_PRELOAD;
 
 	if (UNEXPECTED(!EG(active) && !in_preload)) {
-		zend_string *lc_name = zend_string_tolower(name);
-
-		ce = zend_hash_find_ptr(CG(class_table), lc_name);
-
-		zend_string_release(lc_name);
+		ce = zend_class_table_find_ptr(CG(class_table), name, NULL);
 
 		if (register_unresolved && !ce) {
 			zend_error_noreturn(
@@ -2616,7 +2612,6 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce, zend_class_e
 	size_t i, j = 0;
 	zend_trait_precedence *cur_precedence;
 	zend_trait_method_reference *cur_method_ref;
-	zend_string *lc_trait_name;
 	zend_string *lcname;
 	HashTable **exclude_tables = NULL;
 	zend_class_entry **aliases = NULL;
@@ -2631,9 +2626,7 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce, zend_class_e
 		while ((cur_precedence = precedences[i])) {
 			/** Resolve classes for all precedence operations. */
 			cur_method_ref = &cur_precedence->trait_method;
-			lc_trait_name = zend_string_tolower(cur_method_ref->class_name);
-			trait = zend_hash_find_ptr(EG(class_table), lc_trait_name);
-			zend_string_release_ex(lc_trait_name, 0);
+			trait = zend_class_table_find_ptr(EG(class_table), cur_method_ref->class_name, NULL);
 			if (!trait || !(trait->ce_flags & ZEND_ACC_LINKED)) {
 				zend_error_noreturn(E_COMPILE_ERROR, "Could not find trait %s", ZSTR_VAL(cur_method_ref->class_name));
 			}
@@ -2660,9 +2653,7 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce, zend_class_e
 				zend_class_entry *exclude_ce;
 				uint32_t trait_num;
 
-				lc_trait_name = zend_string_tolower(class_name);
-				exclude_ce = zend_hash_find_ptr(EG(class_table), lc_trait_name);
-				zend_string_release_ex(lc_trait_name, 0);
+				exclude_ce = zend_class_table_find_ptr(EG(class_table), class_name, NULL);
 				if (!exclude_ce || !(exclude_ce->ce_flags & ZEND_ACC_LINKED)) {
 					zend_error_noreturn(E_COMPILE_ERROR, "Could not find trait %s", ZSTR_VAL(class_name));
 				}
@@ -2707,9 +2698,7 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce, zend_class_e
 			cur_method_ref = &ce->trait_aliases[i]->trait_method;
 			if (cur_method_ref->class_name) {
 				/* For all aliases with an explicit class name, resolve the class now. */
-				lc_trait_name = zend_string_tolower(cur_method_ref->class_name);
-				trait = zend_hash_find_ptr(EG(class_table), lc_trait_name);
-				zend_string_release_ex(lc_trait_name, 0);
+				trait = zend_class_table_find_ptr(EG(class_table), cur_method_ref->class_name, NULL);
 				if (!trait || !(trait->ce_flags & ZEND_ACC_LINKED)) {
 					zend_error_noreturn(E_COMPILE_ERROR, "Could not find trait %s", ZSTR_VAL(cur_method_ref->class_name));
 				}

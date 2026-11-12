@@ -304,10 +304,9 @@ static zend_function *sharp_interface_equality(const zend_class_entry *iface)
 		return NULL;
 	}
 
+	/* The trait is PHP#, so the class table keys it by its exact name, SHARP_CLASS_EXACT_KEY. */
 	zend_string *trait_name = zend_string_concat2(ZSTR_VAL(iface->name), ZSTR_LEN(iface->name), ZEND_STRL("\\Defaults"));
-	zend_string *lowercase = zend_string_tolower(trait_name);
-	zend_class_entry *trait = zend_hash_find_ptr(EG(class_table), lowercase);
-	zend_string_release(lowercase);
+	zend_class_entry *trait = zend_hash_find_ptr(EG(class_table), trait_name);
 	zend_string_release(trait_name);
 	if (!trait) {
 		return NULL;

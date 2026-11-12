@@ -1126,7 +1126,7 @@ static inline void _class_exists_impl(zval *return_value, zend_string *name, boo
 			lcname = zend_string_tolower(name);
 		}
 
-		ce = zend_hash_find_ptr(EG(class_table), lcname);
+		ce = zend_class_table_find_ptr(EG(class_table), name, lcname);
 		zend_string_release_ex(lcname, 0);
 	} else {
 		ce = zend_lookup_class(name);

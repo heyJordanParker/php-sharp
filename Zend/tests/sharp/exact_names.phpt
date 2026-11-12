@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class, and any class below it, finds a method only by its exact name: `total` and `Total` are two methods, every caller, plain PHP included, names the one it means, another case is an Error that names the declared method, and the engine still finds each method it calls by PHP's own name
+A PHP# class, and any class below it, finds a method only by its exact name: `total` and `Total` are two methods, every caller, plain PHP included, names the one it means, another case is an Error that names the declared method, and the engine still finds each method it calls by PHP's own name. A PHP# class is found only by its exact name, by `new`, `instanceof`, `class_exists`, reflection, unserialize and the autoloader
 --FILE--
 <?php
 require __DIR__ . '/harness/Framework.inc';
@@ -74,6 +74,29 @@ foreach ($shelf as $key => $value) {
 }
 echo count($shelf), ' ', json_encode($shelf), ' ', "$shelf", "\n";
 
+echo "== a PHP# class is found only by its exact name\n";
+// A plain PHP class whose name differs from a PHP# class's only in case is a second class, which keeps PHP's own rule.
+eval('namespace ExactNames; class ORDER { public function kind(): string { return "plain ORDER"; } }');
+$built = 'ExactNames\\' . 'Order';
+echo get_class(new ExactNames\Order()), ' | ', get_class(new $built()), ' | ', (new ExactNames\ORDER())->kind(), ' | ',
+    get_class(new ExactNames\order()), "\n";
+$wrong = 'ExactNames\\' . 'SHELF';
+var_dump(
+    class_exists('ExactNames\Shelf'),
+    class_exists('\ExactNames\Shelf'),
+    class_exists($wrong),
+    class_exists($wrong, false),
+    $shelf instanceof $wrong,
+    is_a($shelf, $wrong),
+    is_a($shelf, 'ExactNames\Shelf'),
+    ExactNames\Shelf::class,
+);
+attempt(fn () => new $wrong());
+attempt(fn () => new ReflectionClass($wrong));
+echo (new ReflectionClass('ExactNames\Shelf'))->getName(), ' ', get_class(unserialize('O:16:"ExactNames\SHELF":0:{}')), "\n";
+// The autoloader is asked for the name as written, so another case loads nothing.
+var_dump(class_exists('ExactNames\CHARM'), class_exists('ExactNames\Charm'));
+
 echo "== magic methods a PHP# class inherits\n";
 $charm = new ExactNames\Charm();
 echo $charm->charm(), ' | ', $charm->missing, ' | ', $charm->spell(), ' | ', $charm(), ' | ', $charm, "\n";
@@ -119,6 +142,21 @@ offsetUnset
 0 => 0
 1 => 10
 3 "shelf" a shelf
+== a PHP# class is found only by its exact name
+ExactNames\Order | ExactNames\Order | plain ORDER | ExactNames\ORDER
+bool(true)
+bool(true)
+bool(false)
+bool(false)
+bool(false)
+bool(false)
+bool(true)
+string(16) "ExactNames\Shelf"
+Error: Class "ExactNames\SHELF" not found
+ReflectionException: Class "ExactNames\SHELF" does not exist
+ExactNames\Shelf __PHP_Incomplete_Class
+bool(false)
+bool(true)
 == magic methods a PHP# class inherits
 __construct
 charm | __get missing | __call spell | __invoke | __toString
