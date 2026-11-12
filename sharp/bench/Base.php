@@ -83,16 +83,18 @@ abstract class Base
 
     public static function sharpClassExists(int $n): int
     {
-        return self::classExists(implode('\\', ['Bench', 'Loops']), $n);
+        return self::classExists('Bench\Loops', $n);
     }
 
     public static function plainClassExists(int $n): int
     {
-        return self::classExists(implode('\\', ['Bench', 'Base']), $n);
+        return self::classExists('Bench\Base', $n);
     }
 
-    private static function classExists(string $class, int $n): int
+    // The name is built from `$n`, which only the run gives, so no string the compiler interns holds a cached class.
+    private static function classExists(string $name, int $n): int
     {
+        $class = substr($name . $n, 0, strlen($name));
         $total = 0;
         for ($i = 0; $i < $n; $i++) {
             $total += (int) class_exists($class);

@@ -51,7 +51,7 @@ ZEND_API void execute_internal(zend_execute_data *execute_data, zval *return_val
 ZEND_API bool zend_is_valid_class_name(zend_string *name);
 ZEND_API zend_class_entry *zend_lookup_class(zend_string *name);
 ZEND_API zend_class_entry *zend_lookup_class_ex(zend_string *name, zend_string *lcname, uint32_t flags);
-ZEND_API zval *zend_class_table_find_exact(const HashTable *class_table, const zend_string *name, zval *folded);
+ZEND_API zval *zend_class_table_find_exact(const HashTable *class_table, zend_string *name, zval *folded);
 
 /* The entry of the class `name` names in `class_table`, whose lowercase key is `lcname`. A plain PHP class is keyed by
  * its lowercase name, and found in any case. A PHP# class is keyed by its exact name, spec section 24, and found only as

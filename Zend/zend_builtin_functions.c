@@ -1107,7 +1107,6 @@ flf_clean:;
 
 static inline void _class_exists_impl(zval *return_value, zend_string *name, bool autoload, int flags, int skip_flags) /* {{{ */
 {
-	zend_string *lcname;
 	zend_class_entry *ce;
 
 	if (ZSTR_HAS_CE_CACHE(name)) {
@@ -1118,16 +1117,16 @@ static inline void _class_exists_impl(zval *return_value, zend_string *name, boo
 	}
 
 	if (!autoload) {
-		if (ZSTR_VAL(name)[0] == '\\') {
-			/* Ignore leading "\" */
-			lcname = zend_string_alloc(ZSTR_LEN(name) - 1, 0);
-			zend_str_tolower_copy(ZSTR_VAL(lcname), ZSTR_VAL(name) + 1, ZSTR_LEN(name) - 1);
-		} else {
-			lcname = zend_string_tolower(name);
-		}
+		/* Ignore leading "\" */
+		bool qualified = ZSTR_LEN(name) && ZSTR_VAL(name)[0] == '\\';
+		const char *written = ZSTR_VAL(name) + qualified;
+		size_t length = ZSTR_LEN(name) - qualified;
 
-		ce = zend_class_table_find_ptr(EG(class_table), name, lcname);
-		zend_string_release_ex(lcname, 0);
+		/* PHP#: the name as written finds a PHP# class, which the class table keys by its exact name, and a plain PHP
+		 * class whose name it writes as its lowercase key, as zend_lookup_class_ex() finds them. */
+		zval *zv = qualified
+			? zend_hash_str_find(EG(class_table), written, length) : zend_hash_find(EG(class_table), name);
+		ce = zv ? (zend_class_entry *) Z_PTR_P(zv) : zend_hash_str_find_ptr_lc(EG(class_table), written, length);
 	} else {
 		ce = zend_lookup_class(name);
 	}
