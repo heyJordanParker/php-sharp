@@ -692,6 +692,11 @@ ZEND_API uint32_t *zend_get_recursion_guard(zend_object *zobj)
 
 ZEND_COLD static void zend_typed_property_uninitialized_access(const zend_property_info *prop_info, zend_string *name)
 {
+	/* Spec section 6: a PHP# `late` member names itself as PHP# code writes it. */
+	if (prop_info->ce->type == ZEND_USER_CLASS && sharp_is_sharp_file(prop_info->ce->info.user.filename)) {
+		sharp_throw_unset_property(prop_info->ce, name);
+		return;
+	}
 	zend_throw_error(NULL, "Typed property %s::$%s must not be accessed before initialization",
 		ZSTR_VAL(prop_info->ce->name),
 		ZSTR_VAL(name));

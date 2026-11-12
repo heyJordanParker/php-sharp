@@ -1,0 +1,10 @@
+namespace Bags;
+
+public class Countdown : Iterable<Map<string, int>>
+{
+    public Iterable<Map<string, int>> elements()
+    {
+        yield ["left": 2];
+        yield ["left": 1];
+    }
+}

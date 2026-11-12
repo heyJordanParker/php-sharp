@@ -1,0 +1,8 @@
+namespace Titles;
+
+public class Counted
+{
+    public int total { get; set; } = 0;
+
+    public string index() => "orders";
+}
