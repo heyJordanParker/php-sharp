@@ -209,6 +209,9 @@ struct Outcome {
     expected: Vec<Found>,
     /// How many proofs of the converted files ran, each a whole analysis of the project with fresh extension hosts.
     proofs: usize,
+    /// Whether the run itself failed: a proof could not finish, the written files' proof did not hold, a write failed
+    /// or a lowering panicked. A file that stays plain PHP fails nothing, since the report says why.
+    failed: bool,
 }
 
 impl ConvertCommand {
@@ -291,11 +294,10 @@ impl ConvertCommand {
         mut outcome: Outcome,
         checked: Checked,
     ) -> Result<(ExitCode, Outcome), Error> {
-        // With no file to convert, a file stays plain PHP or a named path reaches none, since the command line names a
-        // path at least, so the run fails.
+        // With no file to convert, the run is done: each file it reached stays plain PHP for its reason.
         if checked.is_empty() {
             outcome.report(self.dry_run, color_choice);
-            return Ok((ExitCode::FAILURE, outcome));
+            return Ok((outcome.exit_code(), outcome));
         }
 
         let workspace = configuration.source.workspace.clone();
@@ -344,12 +346,13 @@ impl ConvertCommand {
             .map(|candidate| (candidate.name.clone(), candidate.original.clone(), candidate.text.clone()))
             .collect();
 
-        let mut unproven = false;
+        // A lowering that panicked is a defect of the checker, which fails the run.
+        outcome.failed |= !panics.is_empty();
         if !self.dry_run && !accepted.is_empty() {
             let mut written = 0;
             for candidate in &accepted {
                 if let Err(error) = write(&workspace, &candidate.name, &candidate.text) {
-                    unproven = true;
+                    outcome.failed = true;
                     let name = display(&sharp_name(&candidate.name));
                     tracing::error!(
                         "{name} could not be written, so it and the files after it stay plain PHP: {error}"
@@ -360,14 +363,13 @@ impl ConvertCommand {
             }
             outcome.converted.truncate(written);
             if written > 0 && !prover.prove_written(&plain, &accepted[..written]) {
-                unproven = true;
+                outcome.failed = true;
             }
         }
 
         outcome.report(self.dry_run, color_choice);
 
-        let failed = !outcome.refused.is_empty() || !outcome.unreached.is_empty() || unproven || !panics.is_empty();
-        Ok((if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }, outcome))
+        Ok((outcome.exit_code(), outcome))
     }
 }
 
@@ -440,6 +442,7 @@ impl<'configuration> Prover<'configuration> {
                 Err(error) => {
                     // The error once, as a host's carries up to 64 KiB of its stderr, and each file names the proof.
                     let proof = outcome.proofs;
+                    outcome.failed = true;
                     tracing::error!("Proof {proof} could not finish, so the files it proves stay plain PHP: {error}");
                     for &index in &set {
                         let name = &candidates[index].name;
@@ -753,6 +756,12 @@ impl Outcome {
     fn adds(&mut self, name: &[u8], others: Vec<Found>) {
         let reasons = others.into_iter().map(|found| format!("{}, which converting it adds", found.shown));
         self.refused.entry(name.to_vec()).or_default().extend(reasons);
+    }
+
+    /// Failure when the run itself failed or a path the command line names reaches no file, and success when the run
+    /// completed, whatever files it kept plain PHP, since each keeps its reason in the report.
+    fn exit_code(&self) -> ExitCode {
+        if self.failed || !self.unreached.is_empty() { ExitCode::FAILURE } else { ExitCode::SUCCESS }
     }
 
     fn report(&self, dry_run: bool, color_choice: ColorChoice) {
@@ -1247,7 +1256,8 @@ mod tests {
 
         let (exit_code, outcome) = convert_contracts(&files);
 
-        assert_eq!(exit_code, ExitCode::FAILURE);
+        // A file that stays plain PHP is an outcome the report names, never a failure of the run.
+        assert_eq!(exit_code, ExitCode::SUCCESS);
         let refused: Vec<String> = outcome.refused.keys().map(|name| display(name)).collect();
         assert_eq!(refused, ["src/Contracts/Named0.php"], "{:#?}", outcome.refused);
         assert_eq!(outcome.converted.len(), 12);
@@ -1266,7 +1276,7 @@ mod tests {
 
         let (exit_code, outcome) = convert_contracts(&files);
 
-        assert_eq!(exit_code, ExitCode::FAILURE);
+        assert_eq!(exit_code, ExitCode::SUCCESS);
         let refused: Vec<String> = outcome.refused.keys().map(|name| display(name)).collect();
         assert_eq!(refused, ["src/Contracts/Sink0.php", "src/Contracts/Sink1.php", "src/Contracts/Sink2.php"]);
         assert!(
@@ -1591,7 +1601,7 @@ final class CountsWorkers implements Plugin, BeforeAnalysisHook, AfterAnalysisHo
 
         let (exit_code, outcome) = convert_contracts(&files);
 
-        assert_eq!(exit_code, ExitCode::FAILURE);
+        assert_eq!(exit_code, ExitCode::SUCCESS);
         let refused: Vec<String> = outcome.refused.keys().map(|name| display(name)).collect();
         assert_eq!(refused, ["src/Contracts/Sink0.php"]);
         assert_eq!(outcome.converted.len(), 12);
@@ -1659,7 +1669,8 @@ final class CountsWorkers implements Plugin, BeforeAnalysisHook, AfterAnalysisHo
     }
 
     /// A path the command line names that the project's analysis doesn't load gets one message saying why, a file as
-    /// a folder, and a run with nothing to prove makes no proof.
+    /// a folder, and fails the run, since the run didn't reach what it was asked to convert. A run with nothing to
+    /// prove makes no proof.
     #[test]
     fn each_named_path_the_analysis_does_not_load_says_why() {
         let directory = tempfile::tempdir().unwrap();
@@ -1729,7 +1740,8 @@ final class CountsWorkers implements Plugin, BeforeAnalysisHook, AfterAnalysisHo
         assert_eq!(outcome.proofs, 0);
     }
 
-    /// A run whose every file is refused before its proof, here by its shape, starts no extension host.
+    /// A run whose every file is refused before its proof, here by its shape, starts no extension host, and succeeds:
+    /// the file stays plain PHP with its reason.
     #[test]
     fn a_run_whose_every_file_is_refused_by_its_shape_starts_no_extension_host() {
         let directory = tempfile::tempdir().unwrap();
@@ -1759,7 +1771,7 @@ final class CountsWorkers implements Plugin, BeforeAnalysisHook, AfterAnalysisHo
 
         assert!(!started.exists(), "the run started the extension host");
         let (exit_code, outcome) = run.unwrap();
-        assert_eq!(exit_code, ExitCode::FAILURE);
+        assert_eq!(exit_code, ExitCode::SUCCESS);
         let refused: Vec<String> = outcome.refused.values().flatten().cloned().collect();
         assert_eq!(refused, ["src/Contracts/helpers.php: it declares no class, interface or enum, so it is a script"]);
         assert_eq!(outcome.proofs, 0);

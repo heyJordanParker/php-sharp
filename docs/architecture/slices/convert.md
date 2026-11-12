@@ -112,7 +112,11 @@ An extension host loads the project's own classes (line 5385), and during the pr
 
 `--dry-run` prints each diff and changes nothing.
 
+A run exits 0 when it completes, whatever files stay plain PHP, in a dry run or a real one. A file that stays plain PHP is an outcome, never a failure: on a real project files always stay plain, the report names why each one does, and the summary line counts both, "Converted 329 files to PHP#, and 795 files stay plain PHP." So a CI step can run the command. A run exits 1 only when it fails itself: a path it names reaches no plain PHP file, a proof can't finish, the written files' proof with the extension hosts doesn't hold or can't run, a write fails, or a lowering panics. Each logs its error.
+
 ### What git sees
+
+The command needs git, since it converts only files git holds, where `mago compile` and `mago analyze` need none. A linked worktree's `.git` file names a folder of the main repository's `.git`, which a container that mounts the worktree alone doesn't hold. There the run stops with exit code 2, names the `.git` file and its target, and says to mount the main repository's `.git` folder at the path it has where the worktree was made, or to run in a plain clone.
 
 A file converts only as the last commit holds it, and one that is untracked or changed since stays plain PHP: "git holds no commit of it as it is: commit it first, so git holds its plain PHP". The converted text is written at the `.sharp` name first. Then `git::stage_rename` records the rename in the index with the plain file's contents, as `git mv` does, and only then does the plain file leave, so a write that fails leaves it where it was. The index holds the rename alone, `R100`, and the conversion is an unstaged change on top:
 

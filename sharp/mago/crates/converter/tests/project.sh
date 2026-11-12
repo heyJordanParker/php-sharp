@@ -56,7 +56,7 @@ for file in "${converted[@]}"; do
 done
 
 step "${mago[@]}" convert src/Spec.php src/Box.php src/Factory.php src/Shop 2>&1 | tee ../convert
-[ "${PIPESTATUS[0]}" = 1 ] || fail "mago convert exits 0 although files stay plain PHP"
+[ "${PIPESTATUS[0]}" = 0 ] || fail "mago convert exits non-zero although the run completed and only kept files plain PHP"
 for file in "${plain[@]}"; do
     grep -q "$file stays plain PHP:" ../convert || fail "$file converted"
     [ -f "$file" ] || fail "$file is gone"
