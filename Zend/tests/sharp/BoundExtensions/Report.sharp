@@ -1,0 +1,16 @@
+namespace BoundExtensions;
+
+public class Report
+{
+    public static Heap<string> made()
+    {
+        const heap = new Heap<string>();
+        heap.add("tea");
+        heap.add("pie");
+        return heap;
+    }
+
+    public static int bounded<THeap : Heap<string>>(THeap heap) => heap.size();
+
+    public static int direct(Heap<string> heap) => heap.size();
+}
