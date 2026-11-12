@@ -23,6 +23,11 @@ Code finds a PHP# class, interface, enum or trait only by the name it declares, 
 - `Class<T>.properties()` gives a property of a union of scalars, as `int|string`, and of a nullable one, as `(int|string)?`, where 0.6.8 left both out. A property's class type with type arguments, as `Holder<Box>`, keeps them: its `typeArguments()` is `[typeof(Box)]`, as `typeof(Holder<Box>).typeArguments()` is, where 0.6.8 gave none.
 - A law without a body that proves case by case over an enum it takes reports each case it does not prove, one error each, as "when retry is Retry.ExponentialRamp, still to show: …", where 0.6.8 reported the whole claim once and named no case.
 - A PHP# class overrides the field or the method of a plain PHP ancestor that declares both with one name, as Eloquent's `$casts` and `casts()`, where 0.6.8 refused both overrides with `name-already-in-use`. A call runs the method and a read reads the field, as PHP resolves them. A PHP# class that declares one and inherits the other from a PHP# class is still refused.
+
+## [0.6.8] - 2026-11-12
+
+### Fixed
+
 - A law reads a list of any length at an index it leaves open. 0.6.7 proved such a law only on a short list, and refused `law rampNeverShrinks(int index) => index < 0 || index + 1 >= Retry.ExponentialRamp.backoff().count() || Retry.ExponentialRamp.backoff()[index] <= Retry.ExponentialRamp.backoff()[index + 1]` over the 7 delays `[30, 60, 300, 900, 1800, 3600, 7200]` with "still to show" and the whole claim. It now proves, and the same law over a list that shrinks is still refused.
 - A law without a body proves case by case over an enum it takes, so `law backoffNeverShrinks(Retry retry, int index)` proves over what every `Retry` case's `backoff()` returns.
 - A law body's `match` with an arm that ends in `return` for each case of an enum is exhaustive, where 0.6.7 refused it with "A `match` needs a `default` arm". So is a method's `match` statement whose every arm returns. Arms that miss a case still name it.
@@ -726,7 +731,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.7...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.8...HEAD
+[0.6.8]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.4...v0.6.5
