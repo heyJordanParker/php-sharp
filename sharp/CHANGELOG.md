@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-11-12
+
 ### Fixed
 
 - A law reads a list of any length at an index it leaves open. 0.6.7 proved such a law only on a short list, and refused `law rampNeverShrinks(int index) => index < 0 || index + 1 >= Retry.ExponentialRamp.backoff().count() || Retry.ExponentialRamp.backoff()[index] <= Retry.ExponentialRamp.backoff()[index + 1]` over the 7 delays `[30, 60, 300, 900, 1800, 3600, 7200]` with "still to show" and the whole claim. It now proves, and the same law over a list that shrinks is still refused.
@@ -709,7 +711,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.7...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.8...HEAD
+[0.6.8]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.4...v0.6.5
