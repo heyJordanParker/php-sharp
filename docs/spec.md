@@ -4803,6 +4803,16 @@ public event InvoicePaid(int invoiceId, Money amount);         // event
 
 A name that breaks the rule is a warning, as in "Method name `TotalIn` should be in camel case."
 
+**Names are case-sensitive,** as in C#, Java and Kotlin, so names that differ only in case are two names: `total()` and `Total()` are two methods, and `Order` and `order` are two classes. Code reaches a declaration only by the name it declares, plain PHP code that calls PHP# code included. PHP's own classes and functions keep PHP's rule. A call written in another case reaches nothing, and the error names the declaration, as PHP# code's compile error "`App\Billing\Invoice` has no member `TotalIn`; did you mean `totalIn`?" and plain PHP's `Error` "Call to undefined method App\Billing\Invoice::TotalIn(); did you mean totalIn()?" do. A method that differs from an inherited one only in case is a second method, and an override names its parent's method exactly:
+
+<!-- example exact-names: statements
+public int totalIn(string currency) => 1;
+-->
+```csharp
+this.totalIn("EUR");        // compiles
+this.TotalIn("EUR");        // compile error: no member TotalIn; did you mean totalIn?
+```
+
 **A type holds null only when it is written with `?`,** for parameters, return types, properties and locals alike: `Customer?` may hold null, and `Customer` never does. Section 14.4 lists the compile errors for a `?` or a null check that cannot matter.
 
 A `null` default needs the `?` too, for every type, on a field, a property or a parameter:

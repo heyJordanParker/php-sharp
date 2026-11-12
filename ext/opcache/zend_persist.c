@@ -1256,23 +1256,23 @@ void zend_update_parent_ce(zend_class_entry *ce)
 		if (ce->iterator_funcs_ptr) {
 			memset(ce->iterator_funcs_ptr, 0, sizeof(zend_class_iterator_funcs));
 			if (zend_class_implements_interface(ce, zend_ce_aggregate)) {
-				ce->iterator_funcs_ptr->zf_new_iterator = zend_hash_str_find_ptr(&ce->function_table, "getiterator", sizeof("getiterator") - 1);
+				ce->iterator_funcs_ptr->zf_new_iterator = zend_class_find_protocol_method(ce, ZEND_STRL("getiterator"));
 			}
 			if (zend_class_implements_interface(ce, zend_ce_iterator)) {
-				ce->iterator_funcs_ptr->zf_rewind = zend_hash_str_find_ptr(&ce->function_table, "rewind", sizeof("rewind") - 1);
-				ce->iterator_funcs_ptr->zf_valid = zend_hash_str_find_ptr(&ce->function_table, "valid", sizeof("valid") - 1);
-				ce->iterator_funcs_ptr->zf_key = zend_hash_find_ptr(&ce->function_table, ZSTR_KNOWN(ZEND_STR_KEY));
-				ce->iterator_funcs_ptr->zf_current = zend_hash_str_find_ptr(&ce->function_table, "current", sizeof("current") - 1);
-				ce->iterator_funcs_ptr->zf_next = zend_hash_str_find_ptr(&ce->function_table, "next", sizeof("next") - 1);
+				ce->iterator_funcs_ptr->zf_rewind = zend_class_find_protocol_method(ce, ZEND_STRL("rewind"));
+				ce->iterator_funcs_ptr->zf_valid = zend_class_find_protocol_method(ce, ZEND_STRL("valid"));
+				ce->iterator_funcs_ptr->zf_key = zend_class_find_protocol_method(ce, ZEND_STRL("key"));
+				ce->iterator_funcs_ptr->zf_current = zend_class_find_protocol_method(ce, ZEND_STRL("current"));
+				ce->iterator_funcs_ptr->zf_next = zend_class_find_protocol_method(ce, ZEND_STRL("next"));
 			}
 		}
 
 		if (ce->arrayaccess_funcs_ptr) {
 			ZEND_ASSERT(zend_class_implements_interface(ce, zend_ce_arrayaccess));
-			ce->arrayaccess_funcs_ptr->zf_offsetget = zend_hash_str_find_ptr(&ce->function_table, "offsetget", sizeof("offsetget") - 1);
-			ce->arrayaccess_funcs_ptr->zf_offsetexists = zend_hash_str_find_ptr(&ce->function_table, "offsetexists", sizeof("offsetexists") - 1);
-			ce->arrayaccess_funcs_ptr->zf_offsetset = zend_hash_str_find_ptr(&ce->function_table, "offsetset", sizeof("offsetset") - 1);
-			ce->arrayaccess_funcs_ptr->zf_offsetunset = zend_hash_str_find_ptr(&ce->function_table, "offsetunset", sizeof("offsetunset") - 1);
+			ce->arrayaccess_funcs_ptr->zf_offsetget = zend_class_find_protocol_method(ce, ZEND_STRL("offsetget"));
+			ce->arrayaccess_funcs_ptr->zf_offsetexists = zend_class_find_protocol_method(ce, ZEND_STRL("offsetexists"));
+			ce->arrayaccess_funcs_ptr->zf_offsetset = zend_class_find_protocol_method(ce, ZEND_STRL("offsetset"));
+			ce->arrayaccess_funcs_ptr->zf_offsetunset = zend_class_find_protocol_method(ce, ZEND_STRL("offsetunset"));
 		}
 	}
 

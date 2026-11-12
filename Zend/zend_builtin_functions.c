@@ -987,7 +987,6 @@ ZEND_FUNCTION(method_exists)
 {
 	zval *klass;
 	zend_string *method_name;
-	zend_string *lcname;
 	zend_class_entry *ce;
 	zend_function *func;
 
@@ -1008,9 +1007,7 @@ ZEND_FUNCTION(method_exists)
 		RETURN_THROWS();
 	}
 
-	lcname = zend_string_tolower(method_name);
-	func = zend_hash_find_ptr(&ce->function_table, lcname);
-	zend_string_release_ex(lcname, 0);
+	func = zend_class_find_method(ce, method_name);
 
 	if (func) {
 		/* Exclude shadow properties when checking a method on a specific class. Include

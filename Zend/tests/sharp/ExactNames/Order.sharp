@@ -1,0 +1,12 @@
+namespace ExactNames;
+
+public class Order
+{
+    public int total() => 1;
+
+    public int Total() => 2;
+
+    public static string kind() => "order";
+
+    public int sum() => this.total() + this.Total();
+}

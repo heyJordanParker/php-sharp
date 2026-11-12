@@ -272,10 +272,14 @@ static bool sharp_key_equal(zval *a, zval *b, bool *equal)
 	return sharp_equal(left, right, equal);
 }
 
-/* The class's own method of name, or NULL when it declares none. */
+/* The class's method of name, or NULL when it has none, by the name's exact spelling in a class with
+ * SHARP_CLASS_EXACT_NAMES, see zend_class_find_method. */
 static zend_function *sharp_method(zend_class_entry *ce, const char *name, size_t length)
 {
-	return zend_hash_str_find_ptr(&ce->function_table, name, length);
+	if (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) {
+		return zend_hash_str_find_ptr(&ce->function_table, name, length);
+	}
+	return zend_hash_str_find_ptr_lc(&ce->function_table, name, length);
 }
 
 /* A declared operator == two objects may compare by, with the class each of its parameters takes. A class is found
@@ -309,10 +313,8 @@ static zend_function *sharp_interface_equality(const zend_class_entry *iface)
 		return NULL;
 	}
 
-	zend_string *method = zend_string_concat2(ZEND_STRL("op_equality@"), ZSTR_VAL(iface->name), ZSTR_LEN(iface->name));
-	zend_string *method_key = zend_string_tolower(method);
-	zend_function *declared = zend_hash_find_ptr(&trait->function_table, method_key);
-	zend_string_release(method_key);
+	zend_string *method = zend_string_concat2(ZEND_STRL("op_Equality@"), ZSTR_VAL(iface->name), ZSTR_LEN(iface->name));
+	zend_function *declared = zend_class_find_method(trait, method);
 	zend_string_release(method);
 
 	return declared && (declared->common.fn_flags & ZEND_ACC_STATIC) ? declared : NULL;
@@ -348,7 +350,7 @@ static sharp_class_equalities *sharp_class_equalities_of(zend_class_entry *ce)
 	found->count = 0;
 	found->capacity = 2;
 	for (zend_class_entry *declaring = ce; declaring; declaring = declaring->parent) {
-		zend_function *own = sharp_method(declaring, "op_equality", strlen("op_equality"));
+		zend_function *own = sharp_method(declaring, ZEND_STRL("op_Equality"));
 		if (own && own->common.scope == declaring && (own->common.fn_flags & ZEND_ACC_STATIC)) {
 			sharp_class_equality_add(&found, own);
 		}
@@ -549,7 +551,7 @@ bool sharp_hash(zval *value, uint32_t *hash)
 				return true;
 			}
 			/* hash() counts only beside an operator ==, the pair spec section 19 declares together. */
-			zend_function *declared = sharp_method(object->ce, "hash", strlen("hash"));
+			zend_function *declared = sharp_method(object->ce, ZEND_STRL("hash"));
 			if (declared && !(declared->common.fn_flags & ZEND_ACC_STATIC) && sharp_object_equality(object, object)) {
 				return sharp_hash_declared(object, declared, hash);
 			}

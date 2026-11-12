@@ -5485,8 +5485,7 @@ static void zend_compile_method_call(znode *result, zend_ast *ast, uint32_t type
 	/* Check if this calls a known method on $this */
 	if (opline->op1_type == IS_UNUSED && opline->op2_type == IS_CONST &&
 			CG(active_class_entry) && zend_is_scope_known()) {
-		zend_string *lcname = Z_STR_P(CT_CONSTANT(opline->op2) + 1);
-		fbc = zend_hash_find_ptr(&CG(active_class_entry)->function_table, lcname);
+		fbc = zend_class_find_method_spelled(CG(active_class_entry), Z_STR_P(CT_CONSTANT(opline->op2)));
 
 		/* We only know the exact method that is being called if it is either private or final.
 		 * Otherwise an overriding method in a child class may be called. */
@@ -5510,9 +5509,9 @@ static bool zend_is_constructor(zend_string *name) /* {{{ */
 }
 /* }}} */
 
-static zend_function *zend_get_compatible_func_or_null(zend_class_entry *ce, zend_string *lcname) /* {{{ */
+static zend_function *zend_get_compatible_func_or_null(zend_class_entry *ce, zend_string *name) /* {{{ */
 {
-	zend_function *fbc = zend_hash_find_ptr(&ce->function_table, lcname);
+	zend_function *fbc = zend_class_find_method_spelled(ce, name);
 	if (!fbc || (fbc->common.fn_flags & ZEND_ACC_PUBLIC) || ce == CG(active_class_entry)) {
 		return fbc;
 	}
@@ -5595,8 +5594,7 @@ static void zend_compile_static_call(znode *result, zend_ast *ast, uint32_t type
 			ce = CG(active_class_entry);
 		}
 		if (ce) {
-			zend_string *lcname = Z_STR_P(CT_CONSTANT(opline->op2) + 1);
-			fbc = zend_get_compatible_func_or_null(ce, lcname);
+			fbc = zend_get_compatible_func_or_null(ce, Z_STR_P(CT_CONSTANT(opline->op2)));
 		}
 	}
 
@@ -8731,6 +8729,23 @@ static void add_stringable_interface(zend_class_entry *ce) {
 		ZSTR_INIT_LITERAL("stringable", 0);
 }
 
+/* PHP#: the exact name of the magic method `lcname`, or NULL when it names none. */
+static const char *zend_magic_method_spelling(const zend_string *lcname) /* {{{ */
+{
+	static const char *const spellings[] = {
+		"__construct", "__destruct", "__clone", "__get", "__set", "__isset", "__unset", "__call", "__callStatic",
+		"__toString", "__invoke", "__debugInfo", "__serialize", "__unserialize", "__sleep", "__wakeup", "__set_state",
+	};
+
+	for (size_t i = 0; i < sizeof(spellings) / sizeof(spellings[0]); i++) {
+		if (zend_binary_strcasecmp(ZSTR_VAL(lcname), ZSTR_LEN(lcname), spellings[i], strlen(spellings[i])) == 0) {
+			return spellings[i];
+		}
+	}
+	return NULL;
+}
+/* }}} */
+
 static zend_string *zend_begin_method_decl(zend_op_array *op_array, zend_string *name, bool has_body) /* {{{ */
 {
 	zend_class_entry *ce = CG(active_class_entry);
@@ -8798,7 +8813,19 @@ static zend_string *zend_begin_method_decl(zend_op_array *op_array, zend_string 
 	lcname = zend_string_tolower(name);
 	lcname = zend_new_interned_string(lcname);
 
-	if (zend_hash_add_ptr(&ce->function_table, lcname, op_array) == NULL) {
+	/* PHP#: a class with SHARP_CLASS_EXACT_NAMES finds a magic method, as each method, only by its exact name, so a
+	 * magic method spelled in another case would be one the engine never calls. */
+	if ((ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) && ZSTR_VAL(lcname)[0] == '_' && ZSTR_VAL(lcname)[1] == '_') {
+		const char *spelling = zend_magic_method_spelling(lcname);
+		if (spelling && !zend_string_equals_cstr(name, spelling, strlen(spelling))) {
+			zend_error_noreturn(E_COMPILE_ERROR, "Magic method %s::%s() must be spelled %s()",
+				ZSTR_VAL(ce->name), ZSTR_VAL(name), spelling);
+		}
+	}
+
+	/* PHP#: a class with SHARP_CLASS_EXACT_NAMES keys each method by its exact name, see zend_class_find_method. */
+	zend_string *key = (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? op_array->function_name : lcname;
+	if (zend_hash_add_ptr(&ce->function_table, key, op_array) == NULL) {
 		zend_error_noreturn(E_COMPILE_ERROR, "Cannot redeclare %s::%s()",
 			ZSTR_VAL(ce->name), ZSTR_VAL(name));
 	}
@@ -9845,6 +9872,10 @@ static void zend_compile_class_decl(znode *result, zend_ast *ast, bool toplevel)
 	zend_initialize_class_data(ce, 1);
 	if (!(decl->flags & ZEND_ACC_ANON_CLASS)) {
 		zend_alloc_ce_cache(ce->name);
+	}
+	/* PHP# names are case-sensitive, spec section 2, so a class of a .sharp file keys its methods by exact name. */
+	if (zend_compiling_sharp_file()) {
+		ce->sharp_flags |= SHARP_CLASS_EXACT_NAMES;
 	}
 
 	if (CG(compiler_options) & ZEND_COMPILE_PRELOAD) {

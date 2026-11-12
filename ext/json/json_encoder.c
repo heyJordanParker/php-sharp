@@ -600,7 +600,7 @@ static zend_result php_json_encode_serializable_object(smart_str *buf, zend_obje
 
 	ZEND_GUARD_PROTECT_RECURSION(guard, JSON);
 
-	zend_function *json_serialize_method = zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("jsonserialize"));
+	zend_function *json_serialize_method = zend_class_find_protocol_method(ce, ZEND_STRL("jsonserialize"));
 	ZEND_ASSERT(json_serialize_method != NULL && "This should be guaranteed prior to calling this function");
 	zend_call_known_function(json_serialize_method, obj, ce, &retval, 0, NULL, NULL);
 	/* An exception has occurred */

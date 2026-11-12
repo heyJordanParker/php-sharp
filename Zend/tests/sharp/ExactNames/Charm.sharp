@@ -1,0 +1,8 @@
+namespace ExactNames;
+
+import Lib.Magic;
+
+public class Charm : Magic
+{
+    public string charm() => "charm";
+}

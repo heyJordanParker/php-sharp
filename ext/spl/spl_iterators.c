@@ -632,31 +632,31 @@ static void spl_recursive_it_it_construct(INTERNAL_FUNCTION_PARAMETERS, zend_cla
 	intern->in_iteration = 0;
 	intern->ce = Z_OBJCE_P(object);
 
-	intern->beginIteration = zend_hash_str_find_ptr(&intern->ce->function_table, "beginiteration", sizeof("beginiteration") - 1);
+	intern->beginIteration = zend_class_find_protocol_method(intern->ce, ZEND_STRL("beginiteration"));
 	if (intern->beginIteration->common.scope == ce_base) {
 		intern->beginIteration = NULL;
 	}
-	intern->endIteration = zend_hash_str_find_ptr(&intern->ce->function_table, "enditeration", sizeof("enditeration") - 1);
+	intern->endIteration = zend_class_find_protocol_method(intern->ce, ZEND_STRL("enditeration"));
 	if (intern->endIteration->common.scope == ce_base) {
 		intern->endIteration = NULL;
 	}
-	intern->callHasChildren = zend_hash_str_find_ptr(&intern->ce->function_table, "callhaschildren", sizeof("callHasChildren") - 1);
+	intern->callHasChildren = zend_class_find_protocol_method(intern->ce, ZEND_STRL("callhaschildren"));
 	if (intern->callHasChildren->common.scope == ce_base) {
 		intern->callHasChildren = NULL;
 	}
-	intern->callGetChildren = zend_hash_str_find_ptr(&intern->ce->function_table, "callgetchildren", sizeof("callGetChildren") - 1);
+	intern->callGetChildren = zend_class_find_protocol_method(intern->ce, ZEND_STRL("callgetchildren"));
 	if (intern->callGetChildren->common.scope == ce_base) {
 		intern->callGetChildren = NULL;
 	}
-	intern->beginChildren = zend_hash_str_find_ptr(&intern->ce->function_table, "beginchildren", sizeof("beginchildren") - 1);
+	intern->beginChildren = zend_class_find_protocol_method(intern->ce, ZEND_STRL("beginchildren"));
 	if (intern->beginChildren->common.scope == ce_base) {
 		intern->beginChildren = NULL;
 	}
-	intern->endChildren = zend_hash_str_find_ptr(&intern->ce->function_table, "endchildren", sizeof("endchildren") - 1);
+	intern->endChildren = zend_class_find_protocol_method(intern->ce, ZEND_STRL("endchildren"));
 	if (intern->endChildren->common.scope == ce_base) {
 		intern->endChildren = NULL;
 	}
-	intern->nextElement = zend_hash_str_find_ptr(&intern->ce->function_table, "nextelement", sizeof("nextElement") - 1);
+	intern->nextElement = zend_class_find_protocol_method(intern->ce, ZEND_STRL("nextelement"));
 	if (intern->nextElement->common.scope == ce_base) {
 		intern->nextElement = NULL;
 	}

@@ -229,19 +229,19 @@ static zend_object *spl_array_object_new_ex(zend_class_entry *class_type, zend_o
 	ZEND_ASSERT(parent);
 
 	if (inherited) {
-		intern->fptr_offset_get = zend_hash_str_find_ptr(&class_type->function_table, "offsetget", sizeof("offsetget") - 1);
+		intern->fptr_offset_get = zend_class_find_protocol_method(class_type, ZEND_STRL("offsetget"));
 		if (intern->fptr_offset_get->common.scope == parent) {
 			intern->fptr_offset_get = NULL;
 		}
-		intern->fptr_offset_set = zend_hash_str_find_ptr(&class_type->function_table, "offsetset", sizeof("offsetset") - 1);
+		intern->fptr_offset_set = zend_class_find_protocol_method(class_type, ZEND_STRL("offsetset"));
 		if (intern->fptr_offset_set->common.scope == parent) {
 			intern->fptr_offset_set = NULL;
 		}
-		intern->fptr_offset_has = zend_hash_str_find_ptr(&class_type->function_table, "offsetexists", sizeof("offsetexists") - 1);
+		intern->fptr_offset_has = zend_class_find_protocol_method(class_type, ZEND_STRL("offsetexists"));
 		if (intern->fptr_offset_has->common.scope == parent) {
 			intern->fptr_offset_has = NULL;
 		}
-		intern->fptr_offset_del = zend_hash_str_find_ptr(&class_type->function_table, "offsetunset",  sizeof("offsetunset") - 1);
+		intern->fptr_offset_del = zend_class_find_protocol_method(class_type, ZEND_STRL("offsetunset"));
 		if (intern->fptr_offset_del->common.scope == parent) {
 			intern->fptr_offset_del = NULL;
 		}

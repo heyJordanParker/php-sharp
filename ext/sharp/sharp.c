@@ -5828,7 +5828,7 @@ static bool sharp_type_verified(const sharp_type *type, const sharp_type *shown,
 
 /* Spec section 22: PHP# reads the result of each call whose implementation may be plain PHP as
  * `\Sharp\Internal\returned($result, $implementer, $method, $types, $target)`. `$implementer` is the object or the class
- * the method `$method`, lowercase, ran on, or null with an empty `$method` for a call no PHP# function answers. A PHP#
+ * the method `$method`, as declared, ran on, or null with an empty `$method` for a call no PHP# function answers. A PHP#
  * method gives its result as its type says, so the result comes back as it is, after one lookup, and so does the null
  * a null-safe call gives where its receiver, `$implementer`, is null. Plain PHP's result, as a test double's or an
  * override's, crosses in as the first type the list `$types` spells for the calling frame, each PHP array a Map or Set
@@ -5849,7 +5849,7 @@ ZEND_FUNCTION(Sharp_Internal_returned)
 
 	zend_class_entry *ce = Z_TYPE_P(implementer) == IS_OBJECT ? Z_OBJCE_P(implementer)
 		: Z_TYPE_P(implementer) == IS_STRING ? zend_lookup_class(Z_STR_P(implementer)) : NULL;
-	const zend_function *ran = ce ? zend_hash_find_ptr(&ce->function_table, method) : NULL;
+	const zend_function *ran = ce ? zend_class_find_method(ce, method) : NULL;
 	if ((ran && sharp_function_is_sharp(ran)) || (Z_TYPE_P(implementer) == IS_NULL && ZSTR_LEN(method))) {
 		RETURN_COPY_DEREF(result);
 	}
@@ -7971,7 +7971,7 @@ static void sharp_listener_call(sharp_listener *listener, zval *event)
 		return;
 	}
 	name = Z_STR_P(sharp_element(&listener->row, 1, IS_STRING));
-	method = zend_hash_find_ptr_lc(&ce->function_table, name);
+	method = zend_class_find_method(ce, name);
 	if (!method) {
 		zend_string *member = zend_string_concat3(ZSTR_VAL(ce->name), ZSTR_LEN(ce->name), "\\", 1, ZSTR_VAL(name), ZSTR_LEN(name));
 
@@ -8072,7 +8072,7 @@ ZEND_FUNCTION(Sharp_Internal_emit)
 
 	if (found) {
 		zend_string *name = zend_string_init("dispatch", sizeof("dispatch") - 1, 0);
-		zend_function *dispatch = zend_hash_find_ptr_lc(&Z_OBJCE(dispatcher)->function_table, name);
+		zend_function *dispatch = zend_class_find_method(Z_OBJCE(dispatcher), name);
 		zval arguments[2];
 
 		ZVAL_COPY_VALUE(&arguments[0], event);
@@ -9526,7 +9526,9 @@ static zend_string *sharp_table_json_key(zval *key)
 	}
 	if (Z_TYPE_P(key) == IS_OBJECT) {
 		zend_class_entry *ce = Z_OBJCE_P(key);
-		zend_function *to_string = zend_hash_str_find_ptr(&ce->function_table, "tostring", sizeof("tostring") - 1);
+		zend_function *to_string = (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES)
+			? zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("toString"))
+			: zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("tostring"));
 		if (!to_string) {
 			to_string = ce->__tostring;
 		}

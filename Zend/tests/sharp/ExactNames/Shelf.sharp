@@ -1,0 +1,45 @@
+namespace ExactNames;
+
+import Lib.Grid;
+import Lib.Witness;
+
+public class Shelf : Grid, Countable, JsonSerializable
+{
+    private int position = 0;
+
+    public override bool offsetExists(Any? offset) => offset == "book";
+
+    public override Any? offsetGet(Any? offset) => "a book";
+
+    public override void offsetSet(Any? offset, Any? value)
+    {
+        Witness.say("offsetSet\n");
+    }
+
+    public override void offsetUnset(Any? offset)
+    {
+        Witness.say("offsetUnset\n");
+    }
+
+    public override Any? current() => this.position * 10;
+
+    public override Any? key() => this.position;
+
+    public override void next()
+    {
+        this.position++;
+    }
+
+    public override void rewind()
+    {
+        this.position = 0;
+    }
+
+    public override bool valid() => this.position < 2;
+
+    public int count() => 3;
+
+    public Any? jsonSerialize() => "shelf";
+
+    public string toString() => "a shelf";
+}

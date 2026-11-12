@@ -9345,14 +9345,10 @@ static int zend_jit_init_static_method_call(zend_jit_ctx         *jit,
 	ce = zend_get_known_class(op_array, opline, opline->op1_type, opline->op1);
 	if (!func && ce && (opline->op1_type == IS_CONST || !(ce->ce_flags & ZEND_ACC_TRAIT))) {
 		zval *zv = RT_CONSTANT(opline, opline->op2);
-		zend_string *method_name;
 
 		ZEND_ASSERT(Z_TYPE_P(zv) == IS_STRING);
-		method_name = Z_STR_P(zv);
-		zv = zend_hash_find(&ce->function_table, method_name);
-		if (zv) {
-			zend_function *fn = Z_PTR_P(zv);
-
+		zend_function *fn = zend_class_find_method_spelled(ce, Z_STR_P(zv));
+		if (fn) {
 			if (fn->common.scope == op_array->scope
 			 || (fn->common.fn_flags & ZEND_ACC_PUBLIC)
 			 || ((fn->common.fn_flags & ZEND_ACC_PROTECTED)

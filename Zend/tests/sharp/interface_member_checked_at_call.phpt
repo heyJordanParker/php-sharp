@@ -128,7 +128,7 @@ Fatal error: Declaration of Acme\TextModel::morphToMany($related, $name): string
 Tags::of
   INIT_FCALL 5 160 string("sharp\\internal\\returned")
   DO_FCALL
-  SEND_VAL string("morphtomany") 3
+  SEND_VAL string("morphToMany") 3
   SEND_VAL string("Demo.Relation") 4
   SEND_VAL string("Demo.Taggable.morphToMany()") 5
 Tags::ofPost

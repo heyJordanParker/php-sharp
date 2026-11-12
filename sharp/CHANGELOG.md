@@ -4,6 +4,12 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.8
+
+#### Call a PHP# method by its exact name
+
+PHP# names are case-sensitive, spec section 24, so `total()` and `Total()` are two methods. Code reaches a PHP# class's method, or the method of a class below a PHP# class, only by the name it declares, plain PHP code included. A call in another case reaches nothing, so `$order->Total()` on a class that declares only `total()` throws "Call to undefined method App\Order::Total(); did you mean total()?" where 0.6.8 ran `total()`, and `mago` refuses it with "`App\Order` has no member `Total`; did you mean `total`?". Write the name as the method declares it. A method that differs from an inherited one only in case is a second method, and an override names its parent's method exactly. Plain PHP classes keep PHP's rule.
+
 ### Fixed
 
 - A law reads a list of any length at an index it leaves open. 0.6.7 proved such a law only on a short list, and refused `law rampNeverShrinks(int index) => index < 0 || index + 1 >= Retry.ExponentialRamp.backoff().count() || Retry.ExponentialRamp.backoff()[index] <= Retry.ExponentialRamp.backoff()[index + 1]` over the 7 delays `[30, 60, 300, 900, 1800, 3600, 7200]` with "still to show" and the whole claim. It now proves, and the same law over a list that shrinks is still refused.

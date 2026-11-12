@@ -54,8 +54,12 @@ ZEND_API zval* zend_call_method(zend_object *object, zend_class_entry *obj_ce, z
 	}
 	if (!fn_proxy || !*fn_proxy) {
 		if (EXPECTED(obj_ce)) {
-			fn = zend_hash_str_find_ptr_lc(
-				&obj_ce->function_table, function_name, function_name_len);
+			if (UNEXPECTED(obj_ce->sharp_flags & SHARP_CLASS_EXACT_NAMES)) {
+				fn = zend_class_find_protocol_method(obj_ce, function_name, function_name_len);
+			} else {
+				fn = zend_hash_str_find_ptr_lc(
+					&obj_ce->function_table, function_name, function_name_len);
+			}
 			if (UNEXPECTED(fn == NULL)) {
 				/* error at c-level */
 				zend_error_noreturn(E_CORE_ERROR, "Couldn't find implementation for method %s::%s", ZSTR_VAL(obj_ce->name), function_name);
@@ -301,8 +305,7 @@ static int zend_implement_aggregate(zend_class_entry *interface, zend_class_entr
 	class_type->iterator_funcs_ptr = funcs_ptr;
 
 	memset(funcs_ptr, 0, sizeof(zend_class_iterator_funcs));
-	funcs_ptr->zf_new_iterator = zend_hash_str_find_ptr(
-		&class_type->function_table, "getiterator", sizeof("getiterator") - 1);
+	funcs_ptr->zf_new_iterator = zend_class_find_protocol_method(class_type, ZEND_STRL("getiterator"));
 
 	if (class_type->get_iterator
 	 && class_type->get_iterator != zend_user_it_get_new_iterator
@@ -342,16 +345,11 @@ static int zend_implement_iterator(zend_class_entry *interface, zend_class_entry
 	class_type->iterator_funcs_ptr = funcs_ptr;
 
 	memset(funcs_ptr, 0, sizeof(zend_class_iterator_funcs));
-	funcs_ptr->zf_rewind = zend_hash_str_find_ptr(
-		&class_type->function_table, "rewind", sizeof("rewind") - 1);
-	funcs_ptr->zf_valid = zend_hash_str_find_ptr(
-		&class_type->function_table, "valid", sizeof("valid") - 1);
-	funcs_ptr->zf_key = zend_hash_find_ptr(
-		&class_type->function_table, ZSTR_KNOWN(ZEND_STR_KEY));
-	funcs_ptr->zf_current = zend_hash_str_find_ptr(
-		&class_type->function_table, "current", sizeof("current") - 1);
-	funcs_ptr->zf_next = zend_hash_str_find_ptr(
-		&class_type->function_table, "next", sizeof("next") - 1);
+	funcs_ptr->zf_rewind = zend_class_find_protocol_method(class_type, ZEND_STRL("rewind"));
+	funcs_ptr->zf_valid = zend_class_find_protocol_method(class_type, ZEND_STRL("valid"));
+	funcs_ptr->zf_key = zend_class_find_protocol_method(class_type, ZEND_STRL("key"));
+	funcs_ptr->zf_current = zend_class_find_protocol_method(class_type, ZEND_STRL("current"));
+	funcs_ptr->zf_next = zend_class_find_protocol_method(class_type, ZEND_STRL("next"));
 
 	if (class_type->get_iterator
 	 && class_type->get_iterator != zend_user_it_get_iterator
@@ -389,14 +387,10 @@ static int zend_implement_arrayaccess(zend_class_entry *interface, zend_class_en
 		: zend_arena_alloc(&CG(arena), sizeof(zend_class_arrayaccess_funcs));
 	class_type->arrayaccess_funcs_ptr = funcs_ptr;
 
-	funcs_ptr->zf_offsetget = zend_hash_str_find_ptr(
-		&class_type->function_table, "offsetget", sizeof("offsetget") - 1);
-	funcs_ptr->zf_offsetexists = zend_hash_str_find_ptr(
-		&class_type->function_table, "offsetexists", sizeof("offsetexists") - 1);
-	funcs_ptr->zf_offsetset = zend_hash_str_find_ptr(
-		&class_type->function_table, "offsetset", sizeof("offsetset") - 1);
-	funcs_ptr->zf_offsetunset = zend_hash_str_find_ptr(
-		&class_type->function_table, "offsetunset", sizeof("offsetunset") - 1);
+	funcs_ptr->zf_offsetget = zend_class_find_protocol_method(class_type, ZEND_STRL("offsetget"));
+	funcs_ptr->zf_offsetexists = zend_class_find_protocol_method(class_type, ZEND_STRL("offsetexists"));
+	funcs_ptr->zf_offsetset = zend_class_find_protocol_method(class_type, ZEND_STRL("offsetset"));
+	funcs_ptr->zf_offsetunset = zend_class_find_protocol_method(class_type, ZEND_STRL("offsetunset"));
 
 	return SUCCESS;
 }

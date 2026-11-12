@@ -952,8 +952,7 @@ zend_function *zend_optimizer_get_called_func(
 				zend_class_entry *ce = zend_optimizer_get_class_entry_from_op1(
 					script, op_array, opline);
 				if (ce) {
-					zend_string *func_name = Z_STR_P(CRT_CONSTANT(opline->op2) + 1);
-					zend_function *fbc = zend_hash_find_ptr(&ce->function_table, func_name);
+					zend_function *fbc = zend_class_find_method_spelled(ce, Z_STR_P(CRT_CONSTANT(opline->op2)));
 					if (fbc && !(fbc->common.fn_flags & ZEND_ACC_ABSTRACT)) {
 						bool is_public = (fbc->common.fn_flags & ZEND_ACC_PUBLIC) != 0;
 						bool same_scope = fbc->common.scope == op_array->scope;
@@ -970,9 +969,8 @@ zend_function *zend_optimizer_get_called_func(
 					&& op_array->scope
 					&& !(op_array->fn_flags & ZEND_ACC_TRAIT_CLONE)
 					&& !(op_array->scope->ce_flags & ZEND_ACC_TRAIT)) {
-				zend_string *method_name = Z_STR_P(CRT_CONSTANT(opline->op2) + 1);
-				zend_function *fbc = zend_hash_find_ptr(
-					&op_array->scope->function_table, method_name);
+				zend_function *fbc = zend_class_find_method_spelled(
+					op_array->scope, Z_STR_P(CRT_CONSTANT(opline->op2)));
 				if (fbc) {
 					bool is_private = (fbc->common.fn_flags & ZEND_ACC_PRIVATE) != 0;
 					if (is_private) {
@@ -1608,7 +1606,6 @@ static void zend_optimizer_call_registered_passes(zend_script *script, void *ctx
 ZEND_API void zend_optimize_script(zend_script *script, zend_long optimization_level, zend_long debug_level)
 {
 	zend_op_array *op_array;
-	zend_string *name;
 	zend_optimizer_ctx ctx;
 	zval *zv;
 
@@ -1734,10 +1731,11 @@ ZEND_API void zend_optimize_script(zend_script *script, zend_long optimization_l
 			continue;
 		}
 		zend_class_entry *ce = Z_CE_P(zv);
-		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&ce->function_table, name, op_array) {
+		ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, op_array) {
 			if (op_array->scope != ce && op_array->type == ZEND_USER_FUNCTION) {
-				zend_op_array *orig_op_array =
-					zend_hash_find_ptr(&op_array->scope->function_table, name);
+				/* PHP#: a class and its parent can key the method differently, see zend_class_find_method. */
+				zend_op_array *orig_op_array = (zend_op_array *)
+					zend_class_find_method(op_array->scope, op_array->function_name);
 
 				ZEND_ASSERT(orig_op_array != NULL);
 				if (orig_op_array != op_array) {

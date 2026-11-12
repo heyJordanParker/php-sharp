@@ -3874,7 +3874,6 @@ static zend_always_inline bool zend_is_callable_check_func(zval *callable, zend_
 	zend_string *lmname;
 	const char *colon;
 	size_t clen;
-	HashTable *ftable;
 	int call_via_handler = 0;
 	zend_class_entry *scope;
 	zval *zv;
@@ -3958,7 +3957,6 @@ static zend_always_inline bool zend_is_callable_check_func(zval *callable, zend_
 		}
 		zend_string_release_ex(cname, 0);
 
-		ftable = &fcc->calling_scope->function_table;
 		if (ce_org && !instanceof_function(ce_org, fcc->calling_scope)) {
 			if (error) zend_spprintf(error, 0, "class %s is not a subclass of %s", ZSTR_VAL(ce_org->name), ZSTR_VAL(fcc->calling_scope->name));
 			return 0;
@@ -3973,7 +3971,6 @@ static zend_always_inline bool zend_is_callable_check_func(zval *callable, zend_
 		/* Try to fetch find static method of given class. */
 		mname = Z_STR_P(callable);
 		zend_string_addref(mname);
-		ftable = &ce_org->function_table;
 		fcc->calling_scope = ce_org;
 	} else {
 		/* We already checked for plain function before. */
@@ -3984,14 +3981,15 @@ static zend_always_inline bool zend_is_callable_check_func(zval *callable, zend_
 	}
 
 	lmname = zend_string_tolower(mname);
+	/* PHP#: a class with SHARP_CLASS_EXACT_NAMES keys each method by its exact name, see zend_class_find_method. */
+	zend_string *key = (fcc->calling_scope->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? mname : lmname;
 	if (strict_class &&
-	    fcc->calling_scope &&
-		zend_string_equals_literal(lmname, ZEND_CONSTRUCTOR_FUNC_NAME)) {
+		zend_string_equals_literal(key, ZEND_CONSTRUCTOR_FUNC_NAME)) {
 		fcc->function_handler = fcc->calling_scope->constructor;
 		if (fcc->function_handler) {
 			retval = 1;
 		}
-	} else if ((zv = zend_hash_find(ftable, lmname)) != NULL) {
+	} else if ((zv = zend_hash_find(&fcc->calling_scope->function_table, key)) != NULL) {
 		fcc->function_handler = Z_PTR_P(zv);
 		retval = 1;
 		if ((fcc->function_handler->op_array.fn_flags & ZEND_ACC_CHANGED) &&
@@ -4000,10 +3998,8 @@ static zend_always_inline bool zend_is_callable_check_func(zval *callable, zend_
 			if (scope &&
 			    instanceof_function(fcc->function_handler->common.scope, scope)) {
 
-				zv = zend_hash_find(&scope->function_table, lmname);
-				if (zv != NULL) {
-					zend_function *priv_fbc = Z_PTR_P(zv);
-
+				zend_function *priv_fbc = zend_class_find_method(scope, mname);
+				if (priv_fbc != NULL) {
 					if ((priv_fbc->common.fn_flags & ZEND_ACC_PRIVATE)
 					 && priv_fbc->common.scope == scope) {
 						fcc->function_handler = priv_fbc;
