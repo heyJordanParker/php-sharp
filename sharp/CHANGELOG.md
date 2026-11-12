@@ -4,7 +4,19 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-11-12
+
 ### Upgrading from 0.6.5
+
+#### Handle `null` on an untyped plain PHP property with no default
+
+A plain PHP property with no native type and no default reads as `T?` for its `@var T`, since PHP starts it at `null`. PHP# code that calls a member on it is refused with `possible-method-access-on-null`. A property never narrows, so bind it with `is` before the call:
+
+```csharp
+if (this.transport is Transport transport) {
+    transport.send(message);
+}
+```
 
 #### Rename a static named `name`, `properties` or `typeArguments`
 
@@ -681,7 +693,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.6...HEAD
+[0.6.6]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.2...v0.6.3
