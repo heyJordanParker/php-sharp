@@ -4,6 +4,11 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A law reads a `List` by index, spec section 12. The read gives the element, or throws `OutOfRangeException` at an index outside the list, as the engine does, and a throw doesn't break a law. So `law backoffNeverShrinks(Retry r, int i) => i < 0 || i + 1 >= r.backoff().count() || r.backoff()[i] <= r.backoff()[i + 1]` proves through its own guards, where 0.6.6 refused it with "reaches a collection", and a law without the guards proves where the read is in range. A `Map` read by its key is still refused.
+- A law reaches a backed enum's `from` and `tryFrom`, where 0.6.6 reported "the checker left out Status.from, which the law reaches. This is a bug in the PHP# checker". `from` gives the case whose value matches and throws `ValueError` for any other value, as the engine does, and `tryFrom` gives the case or `null`, so `law fromValueGivesTheCase(Status s) => Status.from(s.value) == s` proves.
+
 ## [0.6.6] - 2026-11-12
 
 ### Upgrading from 0.6.5
@@ -105,8 +110,6 @@ Any? payload = Json.parse(body).value;
 - A law whose body splits on an enum's cases proves, spec section 28. Each case of a body reads the code the claim's calls reach, as a law without a body does, so `law fromLevelUndoesLevel(Role role) => Role.fromLevel(role.level()) == role` with an `if (role == Role.Owner) { return; }` for each case proves when `level()` calls another method, where 0.6.5 refused every case with "when role == Role.Owner, still to show: Role.fromLevel(role.level()) == role". The same holds for a `match` arm, for the case on either side of `==`, and for `!=` in the `else` branch.
 - A law reaches a private method and every method of an enum or a final class, which no subclass can override. `public bool meets(Level @required) => this.rank() >= @required.rank();` with `private int rank()` on an enum proves, where 0.6.5 refused it with "Law meetsItself reaches a call to the overridable method Level.rank in Level.meets. A law cannot know which implementation runs." A `virtual` method of a class a subclass can extend, an interface method and a call through `Self` are still refused.
 - A law reaches an enum's `cases()`, the list of its cases in the order the enum declares them, where 0.6.5 reported "the checker left out Level.cases, which the law reaches. This is a bug in the PHP# checker".
-- A law reads a `List` by index, spec section 12. The read gives the element, or throws `OutOfRangeException` at an index outside the list, as the engine does, and a throw doesn't break a law. So `law backoffNeverShrinks(Retry r, int i) => i < 0 || i + 1 >= r.backoff().count() || r.backoff()[i] <= r.backoff()[i + 1]` proves through its own guards, where 0.6.5 refused it with "reaches a collection", and a law without the guards proves where the read is in range. A `Map` read by its key is still refused.
-- A law reaches a backed enum's `from` and `tryFrom`, where 0.6.5 reported "the checker left out Status.from, which the law reaches. This is a bug in the PHP# checker". `from` gives the case whose value matches and throws `ValueError` for any other value, as the engine does, and `tryFrom` gives the case or `null`, so `law fromValueGivesTheCase(Status s) => Status.from(s.value) == s` proves.
 
 ## [0.6.5] - 2026-11-11
 
