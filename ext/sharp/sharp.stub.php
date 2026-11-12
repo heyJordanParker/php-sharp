@@ -44,6 +44,19 @@ final class Listening
     private function __construct() {}
 }
 
+namespace Sharp\Data;
+
+/**
+ * @strict-properties
+ * @not-serializable
+ */
+final class Sql
+{
+    private function __construct() {}
+
+    public static function identifier(string $name, array $allowed): string {}
+}
+
 namespace Sharp\Internal;
 
 /**
@@ -89,6 +102,12 @@ function equals(mixed $value, mixed $other): bool {}
 function arrayOf(mixed $value, mixed $receiver = null): mixed {}
 
 function returned(mixed $result, object|string|null $implementer, string $method, string $types, string $target): mixed {}
+
+function elements(object $object, bool $pairs): Sequence {}
+
+function properties(string $type): array {}
+
+function typeArguments(string $type): array {}
 
 function readModule(string $path): void {}
 

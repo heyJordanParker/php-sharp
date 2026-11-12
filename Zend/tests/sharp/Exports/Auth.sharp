@@ -1,0 +1,14 @@
+namespace Exports;
+
+import Sharp.Interop.Export;
+
+public static class Auth
+{
+    [Export("sharp_test_auth_redirect")]
+    public static string redirect(string to, int status = 302) => `${status} ${to}`;
+
+    [Export("sharp_test_auth_kept")]
+    public static List<string> kept(List<string> given) => given.filter(item => item != "");
+
+    public static string plain() => "not exported";
+}

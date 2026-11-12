@@ -26,12 +26,12 @@ public class Store
 
     public string tableOfThis() => Self.TABLE;
 
-    public static virtual string name() => "store";
+    public static virtual string label() => "store";
 
     // A default runs where the call left the argument out, on the class the call ran on.
     public static string pick(string table = Self.TABLE) => table;
 
-    public static string pickName(string name = Self.name()) => name;
+    public static string pickName(string name = Self.label()) => name;
 
     // `Self.TABLE` in a pattern is the value of the class the code is called on, as `Store.TABLE` is `Store`'s.
     public static bool isTable(Any value) => value is Self.TABLE;

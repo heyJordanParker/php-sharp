@@ -1,0 +1,8 @@
+namespace Writes;
+
+public class Order
+{
+    public string number { get; set; } = "A-1";
+    public float total { get; set; } = 0.0;
+    public int? lines { get; set; } = null;
+}

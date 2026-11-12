@@ -1,0 +1,10 @@
+namespace Declared;
+
+import Lib.Field;
+
+public class Product : Entity
+{
+    [Field] List<string> tags = [];
+    [Field("units")] int? stock = null;
+    public Map<string, Product> related { get; set; } = [:];
+}
