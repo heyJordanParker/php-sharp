@@ -1,0 +1,61 @@
+namespace Bags;
+
+public class Report
+{
+    public Bag<Order> made()
+    {
+        const bag = new Bag<Order>();
+        bag.add(new Order("A-1", true));
+        bag.add(new Order("A-2", false));
+        bag.add(new Order("A-3", true));
+        return bag;
+    }
+
+    public string numbers(Bag<Order> bag)
+    {
+        let text = "";
+        for (const order of bag) {
+            text += order.number + " ";
+        }
+        return text;
+    }
+
+    public int tally(Iterable<Order> orders)
+    {
+        let n = 0;
+        for (const order of orders) {
+            n += 1;
+        }
+        return n;
+    }
+
+    public int tallied(Bag<Order> bag) => this.tally(bag);
+
+    public int paid(Bag<Order> bag) => bag.filter(o => o.paid).toList().count();
+
+    public string first(Bag<Order> bag) => bag.map(o => o.number).take(1).toList()[0];
+
+    public int counted(Tally tally)
+    {
+        let n = 0;
+        for (const [name, count] of tally) {
+            n += count + name.length();
+        }
+        return n;
+    }
+
+    public int entries(Tally tally) => tally.toList().count();
+
+    public int left(Countdown countdown)
+    {
+        let n = 0;
+        for (const step of countdown) {
+            n += step["left"] ?? 0;
+        }
+        return n;
+    }
+
+    public bool holdsOrders(Any? value) => value is Iterable<Order>;
+
+    public bool holdsNumbers(Any? value) => value is Iterable<int>;
+}

@@ -1,0 +1,11 @@
+namespace Tallies;
+
+public class Shelf
+{
+    public virtual Iterable<[string, int]> heldCounts() => this.counted();
+
+    public virtual Iterable<[string, int]> counted()
+    {
+        yield ["tea", 3];
+    }
+}

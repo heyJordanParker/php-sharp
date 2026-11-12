@@ -1,0 +1,61 @@
+namespace Payloads;
+
+import Sharp.Data.Sql;
+import Sharp.Encoding.Json;
+import Sharp.Net.Ip;
+
+public static class Report
+{
+    public static List<Any?> bytes()
+        => [
+            "école".length(),
+            "école".byteLength(),
+            "école".bytes(),
+            "école".byteSubstring(0, 2),
+            "école".byteSubstring(2),
+            Ip.toBinary("192.168.0.1").bytes(),
+            Ip.toBinary("::1").byteLength(),
+            "".bytes(),
+        ];
+
+    public static string byteRange(int start, int end) => "école".byteSubstring(start, end);
+
+    public static List<string> trims()
+        => [
+            "  sku  ".trim(),
+            "--sku--".trim("-"),
+            "--sku--".trimStart("-"),
+            "/path/".trimEnd("/"),
+            "xyx-a-xyx".trim("xy"),
+            "ééaéé".trim("é"),
+        ];
+
+    public static List<string> encodings()
+    {
+        Map<string, Any> payload = ["url": "https://example.com/a", "name": "école", "total": 1.0];
+
+        return [
+            Json.encode(payload),
+            Json.encode(payload, escapeSlashes: true, escapeUnicode: true, keepZeroFraction: false),
+            Json.encode(payload, keepZeroFraction: false),
+            Json.encode(payload, escapeSlashes: true),
+            Json.encode(Json.parse("{\"a\":[1,2.5,null]}")),
+        ];
+    }
+
+    public static List<bool> comparisons()
+        => [
+            Json.parse("{\"a\":[1,2]}") == Json.parse("{ \"a\": [1, 2] }"),
+            Json.parse("{\"a\":1,\"b\":2}") == Json.parse("{\"b\":2,\"a\":1}"),
+            Json.parse("{\"a\":[1,2]}") == Json.parse("{\"a\":[2,1]}"),
+            Json.parse("1") == Json.parse("1.0"),
+            Json.parse("\"1\"") == Json.parse("1"),
+            Json.parse("null") == Json.parse("false"),
+            Json.parse("{\"a\":{\"b\":[true]}}") == Json.parse("{\"a\":{\"b\":[true]}}"),
+            Json.parse("{\"a\":{\"b\":[true]}}") == Json.parse("{\"a\":{\"b\":[false]}}"),
+        ];
+
+    public static Any? value(string json) => Json.parse(json).value;
+
+    public static string column(string name) => Sql.identifier(name, ["name", "created_at"]);
+}

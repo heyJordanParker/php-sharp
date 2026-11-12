@@ -1,0 +1,11 @@
+namespace Tallies;
+
+public class Report
+{
+    // A plain PHP override may replace each method, so each call reads its result through Sharp\Internal\returned. A
+    // PHP# method's result comes back as it is, the Map itself, where the check of a plain PHP result would put a
+    // Sequence over it.
+    public bool camel(Shelf shelf) => shelf.heldCounts() is Map<string, int>;
+
+    public bool lower(Shelf shelf) => shelf.counted() is Map<string, int>;
+}
