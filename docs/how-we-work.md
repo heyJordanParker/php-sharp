@@ -5,16 +5,16 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 ## Who does what
 
 - **Jordan, the Architect,** owns the language: `docs/spec.md` and the proposals in `docs/decisions/`. He approves or corrects proposals. He doesn't review code or plan work.
-- **Cass, the CTO agent,** owns everything else: the plan, the order of work, the architecture, and this file. Cass starts every agent, posts every PR's one verdict and its approval, and checks that what lands works.
+- **Cass, the CTO agent,** owns everything else: the plan, the order of work, the architecture, and this file. Cass starts every agent, reviews each task's architecture and capabilities before it starts, and checks that what lands meets its Verification.
 - **A builder** is an agent that does one task: one PR, from a new branch to its approval.
-- **A reviewer** is an agent that reviews one task file or one PR once. It changes nothing, and Cass writes its findings into the task file or the PR's one verdict.
 - **A helper** is an agent that reads, searches or researches for Cass, and changes nothing.
 
 ## One agent, one task
 
 - Every task has a task file, and every task gets a fresh agent.
 - Only Cass starts agents.
-- The changes a review asks for belong to the same task, so the same builder makes them.
+- Every task builds the final version. No workaround, interim refusal or code marked "until X lands" ships for a later task to remove. When the final version needs a ruling or another task's work, the task waits for it or takes that work in.
+- A fix Cass asks for belongs to the same task, so the same builder makes it.
 - Cass resumes a builder that dies on an API or network error in the same turn its failure notice arrives.
 
 ## Parallelism
@@ -22,7 +22,7 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 - Each builder runs in its own worktree slot. At most 2 builders run at once, or 3 while the third builder's disk gate holds. Cass never stops a running builder to meet the cap. Cass starts a new builder only while fewer builders run than the cap allows.
 - Fix rounds go first. A builder that resumes to fix its own open PR runs before any new task gets a builder.
 - The third builder is an experiment. Its disk gate holds while free disk is at least 20 GiB, plus 8 GiB for each slot with no `sharp/build/<os>-<arch>/mago/debug/` yet, plus 8 GiB for the new slot. A slot's build stays near 7 GiB once built: Mago's dev build held 6.0 GiB fresh and at most 6.4 GiB through 5 rounds of edits, and the engine and the tests' files held 0.4 GiB. The experiment ends after 5 merges if the median time from founding to merge doesn't fall, or if agent-hours per merge rise. Then the cap returns to 2.
-- At most 4 helpers and reviewers run at once, on top of the builders. Each does one short task.
+- At most 4 helpers run at once, on top of the builders. Each does one short task.
 
 ## Worktree slots
 
@@ -33,15 +33,17 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 
 ## A PR's path to master
 
-0. Before Cass founds the builder for a task with design decisions, Cass starts one fresh reviewer, and it attacks the task file and its research against the code. Cass writes each finding into the task file's Business or Architecture section, where it belongs, not into a list at the end. A mechanical task skips this step: a rename, a version bump or a docs edit.
-1. The builder opens the PR, and CI must pass.
-2. One fresh reviewer reviews the details and the architecture once, while Cass reads the PR against the whole system and the plan. Cass sends a PR that misses its Goal back to its builder at once. Otherwise Cass posts one verdict on the PR that holds the review's findings, Cass's own and any coverage gap. The builder makes every change it asks for, and Cass checks each fix by reading it. No second review round runs.
-3. When every fix is read, Cass posts an approval on the PR.
+No agent reviews code. The review happens before the code exists, and the check after it is the task's Verification.
+
+0. Before Cass founds the builder, Cass reviews the task's architecture and capabilities: every file and public API it changes, every capability it must keep, and the Verification that proves it. Verification names each case where the change could give a wrong result, a crash or a cost, as an input and the output it must give, in every mode CI runs. It is the check a code reviewer would have made.
+1. The builder opens the PR, CI must pass, and its report shows each Verification condition met, with the command and the output it observed.
+2. Cass checks that Evidence against each condition, and checks the PR's shape against the task: the files and public APIs it changes, and no stopgap. A miss goes back to the same builder, and Cass checks its fix the same way.
+3. When every condition is met, Cass posts an approval on the PR.
 4. Cass merges with `gh pr merge --merge --match-head-commit <full head SHA>`, then removes the slot.
 
 A PR that finishes spec sections says so in its body, on its own line, exactly as `Completes: §6.1, §9`. The `COMPLETES` check fails while `sharp/baseline/spec` still lists an example of a named section.
 
-A feature PR changes the spec, its examples, `sharp/baseline/spec` and the code together. It leaves `sharp/bin/spec`, which measures the examples, as master has it: that changes only in a PR of its own, beside Markdown. A feature PR may add or change harness classes in `sharp/harness/`. Its body lists each harness file, and its reviewer checks that no stub makes an example pass falsely. When the builder's work makes listed examples pass, the failing run prints the `git rm` of each fixed example's file in `sharp/baseline/spec/`, and the entries leave through it. A listed example that fails with other errors than before stays on the list unchanged, because the list records which examples fail, not how. An example master already checked never joins the list unchanged.
+A feature PR changes the spec, its examples, `sharp/baseline/spec` and the code together. It leaves `sharp/bin/spec`, which measures the examples, as master has it: that changes only in a PR of its own, beside Markdown. A feature PR may add or change harness classes in `sharp/harness/`. Its body lists each harness file, and its Verification proves that no stub makes an example pass falsely. When the builder's work makes listed examples pass, the failing run prints the `git rm` of each fixed example's file in `sharp/baseline/spec/`, and the entries leave through it. A listed example that fails with other errors than before stays on the list unchanged, because the list records which examples fail, not how. An example master already checked never joins the list unchanged.
 
 New example-marker or run-comment syntax lands in `sharp/bin/spec` one PR before the examples use it, because `SPEC_GUARD` reads a PR's spec with the base's checker.
 
@@ -69,7 +71,7 @@ A release tests and builds once, on the bump's PR, and the tag publishes those s
 
 ## Every mistake becomes a check
 
-Agents make mistakes, and a rule written only in prose gets broken again. So when a reviewer, Cass or CI finds a mistake, the fix comes in two parts:
+Agents make mistakes, and a rule written only in prose gets broken again. So when Cass or CI finds a mistake, the fix comes in two parts:
 
 1. Fix the mistake.
 2. Add the check that would have caught it: a test, a lint, a CI step or a Claude Code hook. The check fails on the mistake and passes on the fix, and the PR shows both runs.
