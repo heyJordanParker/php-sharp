@@ -35,6 +35,8 @@ if (this.transport is Transport transport) {
 Any? payload = Json.parse(body).value;
 ```
 
+The checker can't flag every place that needs it. A `JsonValue` passed on where `Any?` is taken compiles, since `Any?` takes every value, and fails only at run time, where the code that receives it reads it as the decoded value. So check each call of `Json.parse` by hand.
+
 ### Added
 
 - A class is an `Iterable<T>` when its header names `Iterable<T>` and it declares `Iterable<T> elements()`, spec section 12. A loop, `toList()`, `filter`, `map` and `take` read `elements()`, and the object passes wherever an `Iterable<T>` is taken. Plain PHP receives it as a `Traversable`: `foreach ($bag as $i => $order)` gives the keys 0, 1, 2, and a `Tally : Iterable<[string, int]>` gives `"tea" => 3` in `foreach` and in `iterator_to_array()`. A class that names `Iterable<T>` and declares no `elements()` is a compile error: "`Crate` is an `Iterable<int>` and declares or inherits no `elements()`, the member a loop reads." A PHP# class whose plain PHP base implements PHP's `IteratorAggregate`, as a subclass of Laravel's `Collection`, declares no `elements()` and loops over its base's `getIterator()`.
