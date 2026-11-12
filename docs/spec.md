@@ -6623,6 +6623,17 @@ public class Worker
 **A scope follows the fiber that runs in it,** as .NET's `AsyncLocal` and Node's `AsyncLocalStorage` flow into the work they start. A fiber started inside `Scope.run` belongs to that scope, and a `Scope.run` inside a fiber is that fiber's own, so code on another fiber never builds from it. A `scoped` service resolved after its scope ended throws `Sharp\ContainerError`, as .NET throws when code uses a disposed scope.
 
 <!-- example scope-fibers -->
+```csharp
+// app/Mail/Module.sharp
+namespace App.Mail;
+
+module
+{
+    scoped Mailer = SmtpMailer;   // each scope builds its own; a lookup of App\Mail\Mailer starts at App.Mail
+}
+```
+
+<!-- example scope-fibers -->
 ```php
 <?php
 // A plain PHP event loop, such as Revolt's, runs each request in a fiber of its own.
@@ -6799,7 +6810,7 @@ module
 }
 ```
 
-**The container implements PSR-11,** so any framework's container can ask PHP#'s container for a PHP# class. The language never depends on a framework.
+**The container implements PSR-11,** so any framework's container can ask PHP#'s container for a PHP# class. The language never depends on a framework. `get(id)` and `has(id)` look for a binding in the module of the id's own namespace first, then in each namespace above it, as a constructor parameter's lookup starts at its class's namespace. So `get('App\Mail\Mailer')` reads `App.Mail`'s module, then `App`'s, and never `App.Shop`'s, and `has('App\Mail\Mailer')` is false when only `App.Shop`'s module binds `Mailer`.
 
 ## Undecided, in order
 
