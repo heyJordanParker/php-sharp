@@ -22,7 +22,7 @@ class Cart
                 $total += $size * 10;
             }
         }
-        return $total + \Lib\Slots::fromArray($this->prices())->getSize();
+        return $total + \Lib\Slots::fromArray(\Sharp\Internal\returned($this->prices(), $this, 'prices', 'List<int>, List<Any?>', 'Demo.Cart.prices()'))->getSize();
     }
 
     public function prices(): array
@@ -42,12 +42,12 @@ class Cart
 
     public function has(int $cents): bool
     {
-        return \Sharp\Internal\contains($this->prices(), $cents);
+        return \Sharp\Internal\contains(\Sharp\Internal\returned($this->prices(), $this, 'prices', 'List<int>, List<Any?>', 'Demo.Cart.prices()'), $cents);
     }
 
     public function withPrices(array $before, array $after): array
     {
-        return [...$before, ...$this->prices(), 0, ...$after];
+        return [...$before, ...\Sharp\Internal\returned($this->prices(), $this, 'prices', 'List<int>, List<Any?>', 'Demo.Cart.prices()'), 0, ...$after];
     }
 
     public function totals(): array
@@ -61,8 +61,8 @@ class Cart
 
     public function described(): string
     {
-        $totals = $this->totals();
-        [$total, $count] = $this->totals();
+        $totals = \Sharp\Internal\returned($this->totals(), $this, 'totals', '[int, int]', 'Demo.Cart.totals()');
+        [$total, $count] = \Sharp\Internal\returned($this->totals(), $this, 'totals', '[int, int]', 'Demo.Cart.totals()');
         $described = "{$totals[0]}/{$totals[1]} {$total}/{$count}";
         $pairs = [["tea", 3], ["pie", 7]];
         foreach ($pairs as [$name, $cents]) {

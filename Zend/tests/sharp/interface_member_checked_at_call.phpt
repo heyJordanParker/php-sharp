@@ -108,7 +108,7 @@ foreach (['of', 'ofPost'] as $method) {
     preg_match('/^Demo\\\\Tags::' . $method . ':\n((?:[ \d].*\n)*)/m', $dump, $listing);
     echo "Tags::$method\n";
     foreach (explode("\n", $listing[1]) as $line) {
-        if (preg_match('/(DO_FCALL|SHARP_VERIFY_TYPE_ARGS.*)$/', $line, $op)) {
+        if (preg_match('/(DO_FCALL|INIT_FCALL .*|SEND_VAL string.*)$/', $line, $op)) {
             echo "  $op[1]\n";
         }
     }
@@ -126,7 +126,10 @@ mago compile exits 1
 incompatible-return-type: Return type `string` of `Demo\Contact::morphToMany()` is incompatible with parent return type `Demo\Relation` of `Demo\Taggable::morphToMany()`
 Fatal error: Declaration of Acme\TextModel::morphToMany($related, $name): string must be compatible with Demo\Taggable::morphToMany(string $related, string $name): Demo\Relation
 Tags::of
+  INIT_FCALL 5 160 string("sharp\\internal\\returned")
   DO_FCALL
-  SHARP_VERIFY_TYPE_ARGS V2 string("Demo.Relation")
+  SEND_VAL string("morphtomany") 3
+  SEND_VAL string("Demo.Relation") 4
+  SEND_VAL string("Demo.Taggable.morphToMany()") 5
 Tags::ofPost
   DO_FCALL

@@ -1,0 +1,19 @@
+namespace Departures;
+
+import Lib.Checker;
+
+public final class Form : Checker
+{
+    public override Map<string, List<string>> errors() => ["name": ["required"]];
+
+    public override Map<int|string, Any?> merged(Map<int|string, Any?> extra)
+    {
+        Map<int|string, Any?> all = ["a": "1"];
+        for (const [key, value] of extra) {
+            all[key] = value;
+        }
+        return all;
+    }
+
+    public int count(Checker checker) => checker.errors().count() + this.errors().count() + this.merged(["c": "3"]).count();
+}

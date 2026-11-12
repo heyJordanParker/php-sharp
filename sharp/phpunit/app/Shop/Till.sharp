@@ -1,0 +1,14 @@
+namespace App.Shop;
+
+public class Till
+{
+    public Till(private Catalog catalog) { }
+
+    public int price(string item) => this.catalog.prices().get(item) ?? 0;
+
+    public int heldPrice(string item)
+    {
+        Map<string, int> prices = this.catalog.prices();
+        return prices[item] ?? 0;
+    }
+}

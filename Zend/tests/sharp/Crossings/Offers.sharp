@@ -1,0 +1,6 @@
+namespace Demo;
+
+public class Offers
+{
+    public Map<string, int> offers { get; set; } = ["bump": 3, "pin": 5];
+}
