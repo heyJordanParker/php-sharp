@@ -7,5 +7,5 @@ public class OrderStore : Store
 
     public OrderStore() : super() { }
 
-    public static override string name() => "order store";
+    public static override string label() => "order store";
 }

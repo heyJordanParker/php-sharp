@@ -438,6 +438,56 @@ public class Profile
 }
 ```
 
+**A `late` member may stay unset after the constructor,** as Kotlin's `lateinit` and Hack's `__LateInit` may. It is an instance field or an instance property with storage and no initial value, and the constructor need not set it. A read before its first write throws an `Error` that names it as PHP# writes it, and plain PHP's `ReflectionProperty::isInitialized()` gives false until that write, so a framework that fills it after construction tells a value it loaded from one it never loaded, as a PHPUnit test fills a field in `setUp()` and an ORM fills a row after `new`. A `late` static, a `late` member with an initial value, and a `late` computed or `lazy` property are compile errors.
+
+<!-- example late-members -->
+```csharp
+// app/Order.sharp
+namespace App;
+
+public class Order
+{
+    public late int id { get; private set; }               // compiles: the framework fills it after new
+    public late string number { get; set; }                // compiles
+    public late string? note { get; set; }                 // compiles: null is a loaded value, unset is not loaded
+    public int attempts { get; set; } = 0;                 // compiles: an ordinary member keeps section 6's rule
+
+    public late string status { get; set; } = "open";      // compile error: a late member takes no initial value
+    public static late int count { get; set; }             // compile error: a static is never late
+    public late string label => this.number;               // compile error: a computed property has no storage to leave unset
+
+    public string title() => `Order ${this.number}`;        // compiles; throws an Error that names App.Order.number when it is read before it is set
+}
+```
+
+Plain PHP sees PHP's own uninitialized typed property:
+
+<!-- example late-members: statements -->
+```php
+$order = new App\Order();
+$number = new ReflectionProperty(App\Order::class, 'number');
+$number->isInitialized($order);      // false
+$number->setValue($order, 'A-12');
+$number->isInitialized($order);      // true
+$order->title();                     // "Order A-12"
+(new App\Order())->title();          // throws: "App.Order.number is read before its first write."
+```
+
+<!-- example late-test-fields -->
+```csharp
+// tests/CartTest.sharp
+namespace Tests;
+
+import PHPUnit.Framework.TestCase;
+
+public class CartTest : TestCase
+{
+    private late List<string> items;                       // compiles: setUp fills it before each test
+
+    protected override void setUp() { this.items = ["tea"]; }
+}
+```
+
 **A static field or property with storage needs an initial value, whatever its type,** so it holds a value of its type before any code reads it, the static constructor included.
 
 **A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under php-fpm the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value and by its class's static constructor. In a class without a static constructor, a throw in an initial value reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
@@ -605,7 +655,7 @@ public int count { get; didSet => this.touch(); } = 0;            // compile err
 
 ### 6.3 Typed property references
 
-`nameof(Order.total)` names a property. The reference is typed, and the checker rejects a misspelled or removed property wherever it is used. It sits beside `typeof(Order)` (section 25), as in C#'s `nameof`.
+`nameof(Order.total)` names a property, a field or a method that `Order` declares or inherits, instance or static, readable where `nameof` is written, and gives its name as a string, as C#'s `nameof` names a method. The reference is typed, and the checker rejects a misspelled or removed member wherever it is used. It sits beside `typeof(Order)` (section 25).
 
 <!-- example property-references: statements
 Query<Order> query = new Query<Order>();
@@ -617,6 +667,34 @@ query.orderBy(Order.total);           // compile error: Order.total reads a stat
 ```
 
 A bare `Order.total` is never a property reference, so `Class.y` always reads a static value (section 4).
+
+**A method's name passes to a router or an action lookup the same way,** so a rename breaks the build instead of the request:
+
+<!-- example method-names -->
+```csharp
+// app/OrdersController.sharp
+namespace App;
+
+public class OrdersController
+{
+    public string index() => "orders";
+    public string show(int id) => `order ${id}`;
+    private string audit() => "audit";
+}
+```
+
+<!-- example method-names: statements
+import Illuminate.Database.Eloquent.Model;
+-->
+```csharp
+nameof(OrdersController.index);    // "index"
+nameof(OrdersController.show);     // "show"
+nameof(OrdersController.indx);     // compile error: OrdersController declares or inherits no property, field or method indx
+nameof(OrdersController.audit);    // compile error: audit is private, so nameof can't name it here
+nameof(Model.save);                // "save": a method of a plain PHP class
+```
+
+Plain PHP sees the string, so a framework resolves `"index"` as it resolves any action name.
 
 ### 6.4 Reusable property behaviors
 
@@ -824,7 +902,7 @@ public class Receipt
 ```
 
 - **PHP is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation. A bare call names a local or nothing, so calling a built-in function by its bare name from `.sharp` code is the compile error a misspelled name gets. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
-- **A built-in the standard library has no member for is called from a plain PHP class of the project,** which `.sharp` code calls as it calls any plain PHP class (section 23).
+- **A built-in the standard library has no member for is declared with `[Import]`,** a static method without a body whose PHP# types check each argument and the result, as C#'s `[DllImport]` declares a native function (section 23).
 - **PHP's constants are reached the same way,** as `Int.MAX` gives the largest `int`. A bare `CURLOPT_TIMEOUT` is a compile error, because a bare uppercase name is always the code's own constant.
 
 **Output and exit go through the standard library.** `echo` and `print` are removed, and output goes through `Console` (section 29). `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. Exiting goes through `Process`.
@@ -1509,6 +1587,20 @@ copy.add(line);           // changes only copy
 
 At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24). A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
 
+**A plain PHP write into a PHP# property already holds the property's type,** by assignment, by reflection or through a reference, from a file without `strict_types` too, as every value that crosses into PHP# does. PHP's weak mode would store `5` in a `string` property as `"5"`, so a value of another type throws the `TypeError` that names the property and its type:
+
+<!-- example plain-property-writes: statements -->
+```php
+$order = new App\Order();
+$number = new ReflectionProperty(App\Order::class, 'number');
+$number->setValue($order, 5);        // throws: "Cannot assign int to property App\\Order::$number of type string"
+$order->number = 5;                  // throws: "Cannot assign int to property App\\Order::$number of type string"
+$held = &$order->number;
+$held = 5;                           // throws: "Cannot assign int to reference held by property App\\Order::$number of type string"
+$number->setValue($order, 'A-12');
+$order->number;                      // "A-12"
+```
+
 **Plain PHP's write into a PHP# collection is checked too.** A `Map` or a `Set` PHP# code makes carries its type from when it is made, as `new` of a generic class does: a literal takes the type of where it lands, `entries()`, `groupBy()`, `associateBy()` and `toSet()` the type of their result, `filter()` its receiver's, and a PHP array that crosses into a typed place the type of that place. One plain PHP makes, as `new \Sharp\Map()`, takes its type at the first typed place that holds it, a property, a parameter or a return. Each keeps its type, as a C# object keeps its one type. A property's initial value that makes one whose type names a type parameter, as `Map<string, T> index = [:]`, runs in the constructor, and a static's for each type argument, so it has the object's or the type argument's type. A literal in a generic method whose place names the method's own type parameter, as `Map<string, TItem> made = [:]` in `build<TItem>()`, has the type argument of the call. So does a literal in a lambda written in that method, as a C# closure sees its method's type arguments. A parameter's default runs with neither, so a `Map` or a `Set` it makes whose type names a type parameter has no type, and plain PHP's writes into it are not checked. A key and a value plain PHP writes into a `Map`, as `$larder->stock["k"] = "x"`, and an element it adds to a `Set` cross as a PHP array's entry does, and a wrong one throws the `TypeError` at the write, as C# throws on a wrong element written into an array. A write into a `List` property, as `$order->counts[] = "z"`, a write into a `Map`'s value, as `$larder->shelves["k"][] = "x"`, an index write, a nested write, a write through a reference, `sort()`, `array_push()` and `foreach` by reference, writes plain PHP's value. The next PHP# read of the property or of the `Map`'s entries, by an index, a loop, a method such as `values()` or `filter()`, `json_encode` or `serialize`, throws the `TypeError` that names its type and the element, as Kotlin's read of a Java list does. So PHP# code never reads an element its type doesn't hold.
 
 **A plain PHP array keyed by `int` alone arrives as a `List`, renumbered,** as Kotlin reads a Java `List`. PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. A shape whose keys are all `int`, as `list{int, int}` or `array{0: int, 1: int}`, is a `List` too, of its elements in order, and so is each array keyed by `int` alone that a shape's field, a `Map`'s value or a `List`'s element holds. An array keyed by `string` or by `int|string` stays a `Map`, and a value plain PHP types as a list or a map, as `list<int>|array<string, int>`, keeps the keys it holds, so no `string` key is ever lost. A PHP array that crosses into a `Map` keyed by `string` gives each `int` key back as its `string`, so `"5"` stays `"5"`.
@@ -1918,6 +2010,74 @@ rows[0];                                    // compile error: an Iterable has no
 - **Lazy operations,** such as `filter`, `map` and `take`, return an `Iterable<T>`. They run only when `toList()` or a loop reads the result.
 - **A lazy plain PHP source,** such as a generator or Laravel's `LazyCollection`, is checked element by element as it is read, so each element is checked where it enters PHP# (section 11).
 - **The lazy operations belong to `Iterable<T>`.** A value typed as a plain PHP class keeps that class's own methods until it is held as an `Iterable<T>`, as `orders` is above.
+
+**A class is an `Iterable<T>` when its header names `Iterable<T>` and it declares `Iterable<T> elements()`,** as Java's `Iterable` asks for `iterator()` and C#'s `IEnumerable<T>` for `GetEnumerator()`. `elements()` returns an `Iterable` or uses `yield`. A loop, `toList()` and the lazy operations read `elements()`, and the object is an `Iterable<T>` everywhere one is taken, carrying its element type as every PHP# generic does. A class that names `Iterable<T>` and declares no `elements()` is a compile error that names the member:
+
+<!-- example iterable-classes -->
+```csharp
+// app/Bag.sharp
+namespace App;
+
+public class Bag<TItem> : Iterable<TItem>
+{
+    private List<TItem> items = [];
+
+    public void add(TItem item) { this.items.add(item); }
+
+    public Iterable<TItem> elements() => this.items;       // the one member Iterable<T> asks for; a body with yield works too
+}
+```
+
+<!-- example iterable-classes -->
+```csharp
+// app/Tally.sharp
+namespace App;
+
+public class Tally : Iterable<[string, int]>
+{
+    private Map<string, int> counts = ["tea": 3, "pie": 7];
+
+    public Iterable<[string, int]> elements() => this.counts;   // a Map is an Iterable of its entries
+}
+```
+
+<!-- example iterable-classes -->
+```csharp
+// app/Crate.sharp
+namespace App;
+
+public class Crate : Iterable<int> { }                     // compile error: Crate is an Iterable<int> and declares or inherits no elements()
+```
+
+Only a class names `Iterable<T>` in its header. Plain PHP reads the object through the `getIterator()` PHP# writes for it, so the class declares no `getIterator()` of its own.
+
+<!-- example iterable-classes: statements
+public class Tallies { public int tally(Iterable<Order> orders) { let n = 0; for (const order of orders) { n += order.total; } return n; } }
+Tallies report = new Tallies();
+Order paid = new Order();
+-->
+```csharp
+const bag = new Bag<Order>();
+bag.add(paid);
+let count = 0;
+for (const order of bag) { count += 1; }                   // compiles: a Bag<Order> is an Iterable<Order>
+bag.filter(o => o.paid).toList().count();                  // compiles: Iterable<T>'s lazy operations
+report.tally(bag);                                         // compiles: tally takes an Iterable<Order>
+for (const [name, n] of new Tally()) { count += n; }       // compiles: each element is a [string, int]
+bag is Iterable<Order>;                                    // true, read from Bag's type argument with no element read
+```
+
+**Plain PHP receives the object as a `Traversable` whose `foreach` reads `elements()`.** An element that is a `[key, value]` tuple comes as that key and value, as a `Map` reaches plain PHP as the array of its entries, and any other element comes under the keys 0, 1, 2 and on. So plain PHP's `foreach ($tally as $pair)` gets only the value of each pair, as it does for a `Map`:
+
+<!-- example iterable-classes: statements -->
+```php
+$bag = new App\Bag();
+$bag->add(new App\Order());
+$bag instanceof Traversable;                // true
+foreach ($bag as $i => $order) { }
+$i;                                         // 0
+iterator_to_array(new App\Tally());         // ["tea" => 3, "pie" => 7]
+```
 
 **`yield` produces an `Iterable<T>` lazily,** as C#'s `yield return` does. A method that returns `Iterable<T>` produces its next value with `yield value;`, and every element of another `Iterable<T>` with `yield ...other;`:
 
@@ -2850,6 +3010,27 @@ for (const Line line of lines) { … }                 // compiles
 for (let [Status status, int n] of counts) { … }     // parse error: let takes no written type
 ```
 
+**A loop reads an `Iterable<T>` alone,** so a loop over any other value is a compile error that names its type, as Kotlin's and C#'s are. That holds for an object of a class that is no `Iterable` (section 12), where PHP would loop over its public properties:
+
+<!-- example loop-over-object -->
+```csharp
+// app/Basket.sharp
+namespace App;
+
+public class Basket
+{
+    private List<string> items = ["tea"];
+
+    public int count()
+    {
+        let n = 0;
+        for (const item of this.items) { n += item.length(); }   // compiles: a List<string> is an Iterable<string>
+        for (const item of this) { n += 1; }                     // compile error: Basket is no Iterable
+        return n;
+    }
+}
+```
+
 `for (x in y)` is a compile error that names `of`. It closes the TypeScript trap where `in` loops over keys.
 
 These keep their C and PHP form:
@@ -2974,11 +3155,35 @@ const label = `Sku: ${sku}`;   // Sku declares toString(): "Sku: A-12"
 
 A plain PHP file keeps PHP's own interpolation. It converts an object of a class that declares `toString()`, or takes it from an interface's default body (section 22), to the text a template shows, as `(string) $sku` and `"Sku: {$sku}"` do, as Java's and Kotlin's string conversion calls `toString()`.
 
+**A plain PHP class's `__toString()` is its `toString()` in PHP# code,** its own or inherited, when it declares and inherits no `toString()`, as Kotlin calls a Java class's `toString()` as its own. A template shows it and `email.toString()` calls it, and both run PHP's `__toString()`. PHP# code never names `__toString`, and a plain PHP class with neither method stays a template's compile error:
+
+<!-- example plain-to-string -->
+```php
+final class Email
+{
+    public function __construct(private string $address) {}
+
+    public function __toString(): string { return $this->address; }
+}
+
+final class Row {}
+```
+
+<!-- example plain-to-string: statements
+Email email = new Email("ada@example.com");
+Row row = new Row();
+-->
+```csharp
+`To: ${email}`;                        // "To: ada@example.com"
+email.toString();                      // "ada@example.com"
+`Row: ${row}`;                         // compile error: Row declares neither toString() nor __toString()
+```
+
 **A `toString()` is always `string toString()`:** an instance method with no required parameter that returns `string`, as Java's and Kotlin's `toString()` override `Object`'s and `Any`'s. A template and every conversion to text call it with no arguments, so any other `toString()` a type declares is a compile error that names the signature to write, "`Sku.toString()` returns `int`, and PHP# shows a value as text by the `string` its `toString()` returns.", and so is a template of a plain PHP class whose `toString()` is not that one.
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
-**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so `length` counts characters and a case change reaches every letter. `substring`, `indexOf` and `lastIndexOf` count in characters, a search that finds nothing gives `null`, and a range or a start outside the text throws `OutOfRangeException`. `trim`, `trimStart` and `trimEnd` remove whitespace, and `removePrefix` and `removeSuffix` remove their text once when the text starts or ends with it. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. `lines` splits at `"\r\n"`, `"\n"` and `"\r"`. Empty text to replace, an empty delimiter, a negative limit, empty padding and a negative count each throw `ValueError`:
+**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so `length` counts characters and a case change reaches every letter. `substring`, `indexOf` and `lastIndexOf` count in characters, a search that finds nothing gives `null`, and a range or a start outside the text throws `OutOfRangeException`. `trim`, `trimStart` and `trimEnd` remove whitespace, or each character of the text they are given, and `removePrefix` and `removeSuffix` remove their text once when the text starts or ends with it. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. `lines` splits at `"\r\n"`, `"\n"` and `"\r"`. Empty text to replace, an empty delimiter, a negative limit, empty padding and a negative count each throw `ValueError`:
 
 <!-- example text-methods: statements -->
 ```csharp
@@ -3011,6 +3216,24 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 "a:b".split(":", -1);                     // throws: "`split` takes a limit of 0 or more, and it is negative."
 "hello".contains(1);                      // compile error: contains takes a string
 str_contains("hello", "ell");             // compile error: no function str_contains exists
+```
+
+**Bytes:** `byteLength()`, `byteSubstring(start, end)` and `bytes()` read a `string` as its bytes, as `length()`, `substring()` and `codePoints()` read it as characters, so binary data, as `Ip.toBinary` gives, and the bytes another system counts or signs are read in PHP#. `byteSubstring` counts in bytes and throws `OutOfRangeException` for a range outside the bytes, and `bytes()` gives each byte as an `int` from 0 to 255:
+
+<!-- example text-bytes: statements
+import Sharp.Net.Ip;
+-->
+```csharp
+"école".length();                          // 5
+"école".byteLength();                      // 6
+"école".bytes();                           // [195, 169, 99, 111, 108, 101]
+"école".byteSubstring(0, 2);               // "é"
+"école".byteSubstring(0, 9);               // throws: "`byteSubstring` takes a range inside the bytes, and the range is outside it."
+Ip.toBinary("192.168.0.1").bytes();        // [192, 168, 0, 1]
+Ip.toBinary("::1").byteLength();           // 16
+"--sku--".trim("-");                       // "sku"
+"/path/".trimEnd("/");                     // "/path"
+"xyx-a-xyx".trim("xy");                    // "-a-": each character of "xy", not the text "xy"
 ```
 
 PHP's backtick shell execution is removed, and so is `shell_exec()`. A program runs through `Process.run(program, arguments)` (section 29), which takes its arguments as a list, so no shell reads them.
@@ -4317,32 +4540,95 @@ public class CartsController
 - **An import of that namespace is an import like any other,** so a module's `imports` list holds it to the list (section 32).
 - **`global` is an ordinary name.** `global.levenshtein(a, b)` is a compile error that says `global` names no class, and no namespace the file imports, as `gadget.levenshtein(a, b)` is.
 
-**PHP itself is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation (section 8). A built-in the standard library has no member for is called from a plain PHP class of the project, which `.sharp` code imports and calls as any class:
+**`extern namespace WordPress for WP_Post;` gives a library whose classes have no namespace the PHP# namespace `WordPress`,** as C#'s `extern alias` gives an assembly a root namespace and TypeScript's `declare module` names a library without types. The line stands in a `.sharp` file of `extern` declarations, and names a class of the library, which must be a plain PHP class outside any namespace, or it is a compile error. Its folder's namespace-less classes and functions are then `import WordPress;` and `WordPress.add_action(…)`, `import WordPress.WP_Post;` and `WP_Post`, and run PHP's `\add_action` and `\WP_Post`. `extern WordPress.get_post uses Database;` declares an effect as any `extern` does (section 29), after `import WordPress;`. Two lines that name one folder, one namespace given to two folders, and a namespace a class already has are compile errors:
 
-<!-- example built-in-through-a-class -->
+<!-- example extern-namespace -->
 ```php
-namespace App\Support;
+namespace {
+    class WP_Post { public function __construct(public string $post_title = '') {} }
 
-final class Words
-{
-    public static function distance(string $from, string $to): int { return levenshtein($from, $to); }
+    function add_action(string $hook, Closure $callback): bool { return true; }
 }
 ```
 
-<!-- example built-in-through-a-class -->
+<!-- example extern-namespace -->
+```csharp
+// app/Stubs/WordPress.sharp
+namespace App.Stubs;
+
+extern namespace WordPress for WP_Post;
+```
+
+<!-- example extern-namespace -->
+```csharp
+// app/Blog/Feed.sharp
+namespace App.Blog;
+
+import WordPress;
+import WordPress.WP_Post;
+
+public class Feed
+{
+    public bool hook() => WordPress.add_action("init", () => { });   // compiles: runs PHP's \add_action
+    public string title(WP_Post post) => post.post_title;            // compiles: WP_Post is PHP's \WP_Post
+    public bool bare() => add_action("init", () => { });              // compile error: no function add_action exists
+}
+```
+
+**PHP itself is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation (section 8). A built-in the standard library has no member for is declared with `[Import]`, as C#'s `[DllImport]` declares a native function: `import Sharp.Interop.Import;`, then the attribute on a static method without a body makes each call run the PHP function it names. The signature is written in PHP# types, so each argument and the result cross as any plain PHP value does and are checked there, a `Map` argument passing as a PHP array and an array result arriving as the declared `List` or `Map`. The declaration states its effects with `uses`, as any body-less declaration does. A function PHP doesn't declare throws PHP's `Error` that names it at the first call. `[Import]` on an instance method or a method with a body is a compile error, and so is a second `[Import]` of one function in the project, since PHP ignores the case of a function's name:
+
+<!-- example built-in-through-import -->
+```csharp
+// app/Support/Words.sharp
+namespace App.Support;
+
+import Sharp.Interop.Import;
+
+public static class Words
+{
+    [Import("levenshtein")]
+    public static int distance(string from, string to);
+
+    [Import("array_unique")]
+    public static List<string> unique(List<string> items);
+}
+```
+
+<!-- example built-in-through-import -->
 ```csharp
 import App.Support.Words;
 
 public class Search
 {
-    public int closeness(string query, string title) => Words.distance(query, title);   // compiles: the project's plain PHP class calls levenshtein
+    public int closeness(string query, string title) => Words.distance(query, title);   // compiles: runs PHP's levenshtein
+    public List<string> tags(List<string> all) => Words.unique(all);                     // compiles: the result is renumbered
     public int bare(string query, string title) => levenshtein(query, title);           // compile error: no function levenshtein exists
 }
 ```
-<!-- run built-in-through-a-class
+<!-- run built-in-through-import
 Search search = new Search();
 search.closeness("cart", "carts");   // 1
+search.tags(["a", "b", "a"]);        // ["a", "b"]
 -->
+
+**`[Export("name")]` on a static method makes PHP see the global function `name`, which calls the method,** as Rust's `#[no_mangle]` and C#'s `[UnmanagedCallersOnly(EntryPoint = …)]` name a function foreign code calls. `import Sharp.Interop.Export;` names the attribute. The function passes its arguments, named ones included, to the method, whose PHP# types check each one, and returns the method's result. Every exported function is declared when Composer's autoloader loads PHP#'s package, before the app's code and before a library that requires PHP#, so a library that declares its own only when none exists, as WordPress's pluggable functions do, finds the project's first and skips its own. PHP# code still calls the method by its own name. `[Export]` on an instance method is a compile error, and so is a second export of one name in the project, which names both methods:
+
+<!-- example exported-function -->
+```csharp
+// app/Auth.sharp
+namespace App;
+
+import Sharp.Interop.Export;
+
+public class Auth
+{
+    [Export("auth_redirect")]
+    public static string redirect(string to, int status = 302) => `${status} ${to}`;
+
+    [Export("auth_check")]                                       // compile error: only a static method is exported
+    public bool check() => true;
+}
+```
 
 **A plain PHP constant is read through its namespace the same way.** `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`, and a constant a library declares outside any namespace is read through the namespace of its classes, as a function is. A bare uppercase name is always the code's own constant, so a bare `DEFAULT_DPI` is a compile error. PHP's own constants are reached through the standard library, as `Int.MAX` and `Int.MIN` give the `int` bounds:
 
@@ -4806,7 +5092,7 @@ import Sharp.Encoding.Json;
 string body = "{}";
 -->
 ```csharp
-Any? payload = Json.parse(body);
+Any? payload = Json.parse(body).value;
 payload.order;                              // compile error: check what payload is first
 if (payload is WebhookPayload) {
     payload.order.total;                    // narrowed to WebhookPayload
@@ -4834,7 +5120,43 @@ bool d = raw == other;             // compile error: other is an unchecked Any? 
 string a = `plan: ${raw}`;         // compile error: check raw with is, as or match first
 ```
 
-PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path: it reads a struct or a PHP# class through its `parse` (section 10), so a bad field throws the one error that lists every bad field, and a type `parse` can't read is a compile error. `Json.parse(body)` gives any JSON value as `Any?`.
+PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path: it reads a struct or a PHP# class through its `parse` (section 10), so a bad field throws the one error that lists every bad field, and a type `parse` can't read is a compile error. `Json.parse(body)` gives any JSON value as a `JsonValue`, whose `value` is the `Any?` it holds, and two `JsonValue`s are `==` when their values are, at every depth, as kotlinx's `JsonElement` and Rust's `serde_json::Value` compare:
+
+<!-- example json-values: statements
+import Sharp.Encoding.Json;
+-->
+```csharp
+Json.parse("{\"a\":[1,2]}") == Json.parse("{ \"a\": [1, 2] }");   // true
+Json.parse("{\"a\":[1,2]}") != Json.parse("{\"a\":[2,1]}");       // true
+Json.parse("{\"a\":1,\"b\":2}") == Json.parse("{\"b\":2,\"a\":1}"); // true: an object's keys in any order
+```
+
+**`Json.encode` takes `escapeSlashes`, `escapeUnicode` and `keepZeroFraction`,** which default to `false`, `false` and `true`, its output without them. `escapeSlashes` writes `/` as `\/`, `escapeUnicode` writes each character outside ASCII as `\u` and its code, and `keepZeroFraction: false` writes `1.0` as `1`, so a payload can match the bytes another system signs:
+
+<!-- example json-switches: statements
+import Sharp.Encoding.Json;
+Map<string, Any> payload = ["url": "https://example.com/a", "name": "école", "total": 1.0];
+-->
+```csharp
+Json.encode(payload);                                                              // "{\"url\":\"https://example.com/a\",\"name\":\"école\",\"total\":1.0}"
+Json.encode(payload, escapeSlashes: true, escapeUnicode: true, keepZeroFraction: false); // "{\"url\":\"https:\\/\\/example.com\\/a\",\"name\":\"\\u00e9cole\",\"total\":1}"
+Json.encode(payload, keepZeroFraction: false);                                     // "{\"url\":\"https://example.com/a\",\"name\":\"école\",\"total\":1}"
+```
+
+**`Sql.identifier(name, allowed)` gives `name` as SQL only when it is one of `allowed`,** and throws a `ValueError` for any other, so a column or a table chosen while the code runs reaches a plain PHP `literal-string` parameter, as Laravel's `orderByRaw` declares one, as one of the application's own names. Values still go through a query's bindings:
+
+<!-- example sql-identifiers: statements
+import Illuminate.Database.Query.Builder;
+import Sharp.Data.Sql;
+Builder query = new Builder();
+string column = "created_at";
+-->
+```csharp
+Sql.identifier("name", ["name", "created_at"]);                      // "name"
+Sql.identifier("drop", ["name"]);                                    // throws: "`Sql.identifier` takes a name the query allows, and \"drop\" is none of them."
+query.orderByRaw(Sql.identifier(column, ["name", "created_at"]));    // compiles
+query.orderByRaw(column);                                            // compile error: column is composed while the code runs
+```
 
 **`Object` holds any object, and nothing else.** It compiles to PHP's `object`, and `Object?` adds null. Like `Any`, it has no members until `is` narrows it. An `Object` passes where `Any` is expected, and a plain PHP value typed `object` arrives as `Object`.
 
@@ -4924,6 +5246,58 @@ Class<Order> type = Class.of(order);            // compiles: order's runtime cla
 const fresh = new (type)(id);                   // compiles: a new object of that class
 Log.info("saved", ["class": Class.of(order)]);  // compiles
 typeof(order);                                  // compile error: typeof takes a type; write Class.of(order)
+```
+
+**`nameof(Counted)` gives a class's own name, and `name()` its full name with PHP#'s dots,** as C#'s `nameof` and `Type.FullName` do, so a message names a class as PHP# code writes it:
+
+<!-- example class-names -->
+```csharp
+// app/Orders/Counted.sharp
+namespace App.Orders;
+
+public class Counted { }
+```
+
+<!-- example class-names: statements
+import App.Orders.Counted;
+Counted row = new Counted();
+-->
+```csharp
+nameof(Counted);                   // "Counted"
+Class.of(row).name();              // "App.Orders.Counted"
+typeof(Counted).name();            // "App.Orders.Counted"
+```
+
+**`properties()` reads the properties a class declares, and `typeArguments()` a type's type arguments,** as .NET's `Type.GetProperties()` and `GetGenericArguments()` do, so an ORM, a serializer or a form builder reads a class's declared types without plain PHP reflection. `properties()` gives a `List<Property>` of every instance property and field, private ones included, the class's own first and then those it inherits, in the order they are declared. A `Property` has its `name`, its `type` as a `Class<Any?>` without `?`, `nullable`, and `attributes<TAttribute : Object>()`, as `Class<T>`'s own:
+
+<!-- example declared-types -->
+```csharp
+// app/Shelf/Product.sharp
+namespace App.Shelf;
+
+import App.Field;
+
+public class Product
+{
+    [Field] List<string> tags = [];
+    [Field] int? stock = null;
+    public string name { get; } = "tea";
+}
+```
+
+<!-- example declared-types: statements
+import App.Field;
+import App.Shelf.Product;
+-->
+```csharp
+const properties = typeof(Product).properties();
+properties.map(property => property.name);                  // ["tags", "stock", "name"]
+properties[0].type == typeof(List<string>);                  // true
+properties[0].type.typeArguments() == [typeof(string)];     // true
+properties[1].type.typeArguments() == [];                   // true
+properties[1].nullable;                                     // true
+properties[1].attributes<Field>().count();                  // 1
+typeof(Map<string, int>).typeArguments() == [typeof(string), typeof(int)];   // true
 ```
 
 **A class value works wherever a class name works.** `typeof` and `Class.of` give one, and a `Class<T>` field, parameter or local holds one:
@@ -5722,7 +6096,7 @@ extern StripeClient uses Http;
 ```
 
 - **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
-- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern Foundation.now uses Clock;` for a function a library declares outside any namespace, after `import Illuminate.Foundation;` (section 23).
+- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern Foundation.now uses Clock;` for a function a library declares outside any namespace, after `import Illuminate.Foundation;` (section 23). `extern namespace WordPress for WP_Post;` declares no effect: it gives a library whose classes have no namespace the namespace its functions are declared through, as `extern WordPress.get_post uses Database;` (section 23).
 - **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
 
 <!-- example extern-functions -->

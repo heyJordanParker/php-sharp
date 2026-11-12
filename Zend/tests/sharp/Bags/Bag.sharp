@@ -1,0 +1,10 @@
+namespace Bags;
+
+public class Bag<TItem> : Iterable<TItem>
+{
+    private List<TItem> items = [];
+
+    public void add(TItem item) { this.items.add(item); }
+
+    public Iterable<TItem> elements() => this.items;
+}

@@ -1,0 +1,15 @@
+namespace Mailing;
+
+import Lib.Email;
+import Lib.WorkEmail;
+
+public static class Labels
+{
+    public static string to(Email email) => `To: ${email}`;
+
+    public static string text(Email email) => email.toString();
+
+    public static string copied(WorkEmail email) => `Cc: ${email}` + " " + email.toString();
+
+    public static string either(Email|Badge sender) => `From: ${sender} ` + sender.toString();
+}
