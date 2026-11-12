@@ -1,0 +1,28 @@
+namespace App.Probe;
+
+public static class Printer
+{
+    // Each property of `type`, with the name, nullability and type arguments of its type.
+    public static List<string> describe(Class<Object> type)
+    {
+        List<string> lines = [];
+        for (const property of type.properties()) {
+            const arguments = property.type.typeArguments().map(argument => argument.name());
+            const nullable = property.nullable ? "true" : "false";
+            lines.add(`${property.name}: ${property.type.name()} nullable=${nullable} arguments=[${arguments.join(", ")}]`);
+        }
+        return lines;
+    }
+
+    public static List<bool> compare()
+    {
+        const properties = typeof(Shapes).properties();
+        return [
+            properties[0].type == typeof(int|string),
+            properties[1].type == typeof(int|string),
+            properties[4].type == typeof(Holder<Box>),
+            properties[4].type.typeArguments() == [typeof(Box)],
+            typeof(Holder<Box>).typeArguments() == [typeof(Box)],
+        ];
+    }
+}

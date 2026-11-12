@@ -5310,6 +5310,32 @@ properties[1].attributes<Field>().count();                  // 1
 typeof(Map<string, int>).typeArguments() == [typeof(string), typeof(int)];   // true
 ```
 
+**`methods()` reads the methods a class declares,** as .NET's `Type.GetMethods()` does. It gives a `List<Method>` of every instance and static method, private ones included, the class's own first and then those it inherits, in the order they are declared, without the constructor. A `Method` has its `name`, its result `type` as a `Class<Any?>` without `?`, `nullable`, `attributes<TAttribute : Object>()`, and `parameters()`, a `List<Parameter>`. A `Parameter` has its `name`, `type`, `nullable`, `optional`, which holds when it has a default value, and `attributes<TAttribute : Object>()`. The type arguments of the class value stand for the class's type parameters, and a plain PHP method gives its PHP types as PHP# writes them, as `properties()` does:
+
+<!-- example declared-methods -->
+```csharp
+// app/Shelf/Crate.sharp
+namespace App.Shelf;
+
+public class Crate<TItem>
+{
+    public TItem? first(List<TItem> items, int limit = 1) => null;
+}
+```
+
+<!-- example declared-methods: statements
+import App.Shelf.Crate;
+-->
+```csharp
+const methods = typeof(Crate<string>).methods();
+methods[0].name;                                              // "first"
+methods[0].type == typeof(string);                            // true
+methods[0].nullable;                                          // true
+methods[0].parameters().map(parameter => parameter.name);     // ["items", "limit"]
+methods[0].parameters()[0].type == typeof(List<string>);      // true
+methods[0].parameters()[1].optional;                          // true
+```
+
 **A class value works wherever a class name works.** `typeof` and `Class.of` give one, and a `Class<T>` field, parameter or local holds one:
 
 <!-- example class-values -->

@@ -1,0 +1,6 @@
+namespace App.Probe;
+
+public class Holder<TItem : Box>
+{
+    public List<TItem> items { get; set; } = [];
+}

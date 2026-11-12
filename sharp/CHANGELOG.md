@@ -14,8 +14,13 @@ PHP# names are case-sensitive, spec section 24, so `total()` and `Total()` are t
 
 Code finds a PHP# class, interface, enum or trait only by the name it declares, plain PHP code included. `new App\ORDER()` for a class `App\Order` throws `Class "App\ORDER" not found` where 0.6.8 made an `App\Order`, `class_exists('App\ORDER')`, `instanceof` and `is_a` give false, reflection throws, `unserialize` gives an incomplete class, and a class an autoloader loads for the name counts only when its name is the one asked for. `mago` refuses the name with "Cannot find type `ORDER`; did you mean `Order`?". A plain PHP class whose name differs from a PHP# class's only in case is a second class.
 
+### Added
+
+- `Class<T>.methods()` gives a class's instance and static methods, its own first and then those it inherits, spec section 25, as `properties()` gives its properties. A `Method` has its `name`, its result `type`, `nullable`, `attributes<TAttribute : Object>()` and `parameters()`, and a `Parameter` its `name`, `type`, `nullable`, `optional` and `attributes<TAttribute : Object>()`. `typeof(Box<Order>).methods()` reads `Order` where `Box` writes its type parameter.
+
 ### Fixed
 
+- `Class<T>.properties()` gives a property of a union of scalars, as `int|string`, and of a nullable one, as `(int|string)?`, where 0.6.8 left both out. A property's class type with type arguments, as `Holder<Box>`, keeps them: its `typeArguments()` is `[typeof(Box)]`, as `typeof(Holder<Box>).typeArguments()` is, where 0.6.8 gave none.
 - A law reads a list of any length at an index it leaves open. 0.6.7 proved such a law only on a short list, and refused `law rampNeverShrinks(int index) => index < 0 || index + 1 >= Retry.ExponentialRamp.backoff().count() || Retry.ExponentialRamp.backoff()[index] <= Retry.ExponentialRamp.backoff()[index + 1]` over the 7 delays `[30, 60, 300, 900, 1800, 3600, 7200]` with "still to show" and the whole claim. It now proves, and the same law over a list that shrinks is still refused.
 - A law without a body proves case by case over an enum it takes, so `law backoffNeverShrinks(Retry retry, int index)` proves over what every `Retry` case's `backoff()` returns.
 - A law body's `match` with an arm that ends in `return` for each case of an enum is exhaustive, where 0.6.7 refused it with "A `match` needs a `default` arm". So is a method's `match` statement whose every arm returns. Arms that miss a case still name it.

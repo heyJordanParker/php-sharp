@@ -1,0 +1,10 @@
+namespace App.Probe;
+
+public class Shapes
+{
+    public int|string either { get; set; } = 1;
+    public (int|string)? maybeEither { get; set; } = null;
+    public Box|Shelf owner { get; set; } = new Box("a");
+    public string withDefault { get; set; } = "x";
+    public Holder<Box> held { get; set; } = new Holder<Box>();
+}

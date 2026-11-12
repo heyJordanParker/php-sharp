@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: d8eeb6a343287a349527d62746ba0ae85f33b5de */
+ * Stub hash: 6bc89bbe020c07fc516fc753227c5efa2cca0fe2 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -45,6 +45,8 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_properties, 0, 1, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
 ZEND_END_ARG_INFO()
+
+#define arginfo_Sharp_Internal_methods arginfo_Sharp_Internal_properties
 
 #define arginfo_Sharp_Internal_typeArguments arginfo_Sharp_Internal_properties
 
@@ -305,6 +307,7 @@ ZEND_FUNCTION(Sharp_Internal_arrayOf);
 ZEND_FUNCTION(Sharp_Internal_returned);
 ZEND_FUNCTION(Sharp_Internal_elements);
 ZEND_FUNCTION(Sharp_Internal_properties);
+ZEND_FUNCTION(Sharp_Internal_methods);
 ZEND_FUNCTION(Sharp_Internal_typeArguments);
 ZEND_FUNCTION(Sharp_Internal_readModule);
 ZEND_FUNCTION(Sharp_Internal_testModule);
@@ -373,6 +376,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "returned"), zif_Sharp_Internal_returned, arginfo_Sharp_Internal_returned, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "elements"), zif_Sharp_Internal_elements, arginfo_Sharp_Internal_elements, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "properties"), zif_Sharp_Internal_properties, arginfo_Sharp_Internal_properties, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "methods"), zif_Sharp_Internal_methods, arginfo_Sharp_Internal_methods, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "typeArguments"), zif_Sharp_Internal_typeArguments, arginfo_Sharp_Internal_typeArguments, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "readModule"), zif_Sharp_Internal_readModule, arginfo_Sharp_Internal_readModule, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "testModule"), zif_Sharp_Internal_testModule, arginfo_Sharp_Internal_testModule, 0, NULL, NULL)

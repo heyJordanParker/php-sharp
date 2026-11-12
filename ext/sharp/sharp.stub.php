@@ -107,6 +107,8 @@ function elements(object $object, bool $pairs): Sequence {}
 
 function properties(string $type): array {}
 
+function methods(string $type): array {}
+
 function typeArguments(string $type): array {}
 
 function readModule(string $path): void {}

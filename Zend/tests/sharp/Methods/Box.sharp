@@ -1,0 +1,18 @@
+namespace App.Shop;
+
+import Lib.Crate;
+import Lib.Field;
+
+public class Box<TItem : Order> : Crate
+{
+    public TItem first(List<TItem> items, int|string key, (int|string)? note = null) => items[0];
+
+    public List<TItem>? all() => null;
+
+    public static int count(string label) => 1;
+
+    private Map<string, TItem> index() => [:];
+
+    [Field("tagging")]
+    public void tag([Field] string label) { }
+}
