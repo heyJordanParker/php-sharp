@@ -4,6 +4,15 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A law reads a list of any length at an index it leaves open. 0.6.7 proved such a law only on a short list, and refused `law rampNeverShrinks(int index) => index < 0 || index + 1 >= Retry.ExponentialRamp.backoff().count() || Retry.ExponentialRamp.backoff()[index] <= Retry.ExponentialRamp.backoff()[index + 1]` over the 7 delays `[30, 60, 300, 900, 1800, 3600, 7200]` with "still to show" and the whole claim. It now proves, and the same law over a list that shrinks is still refused.
+- A law without a body proves case by case over an enum it takes, so `law backoffNeverShrinks(Retry retry, int index)` proves over what every `Retry` case's `backoff()` returns.
+- A law body's `match` with an arm that ends in `return` for each case of an enum is exhaustive, where 0.6.7 refused it with "A `match` needs a `default` arm". So is a method's `match` statement whose every arm returns. Arms that miss a case still name it.
+- A law whose body splits on an enum with a `default` arm proves, where 0.6.7 reported "the checker wrote a proof of it that does not check. This is a bug in the PHP# checker". Its cases spent the proof's whole time budget on the list reads above.
+- A law whose proof runs out of time is refused as not proven, where 0.6.7 reported "the checker wrote a proof of it that does not check. This is a bug in the PHP# checker". The error names the case and says "the proof ran out of time before it finished". Each step of a proof now has a time budget of its own, so the cases after a slow one still run and report their own goals.
+- A method that ends in a `match` statement with an arm that returns for each case of an enum returns on every path, where 0.6.7 reported `missing-return-statement`. A `match` that misses a case still needs a `return` after it.
+
 ## [0.6.7] - 2026-11-12
 
 ### Fixed
@@ -36,6 +45,8 @@ if (this.transport is Transport transport) {
 ```csharp
 Any? payload = Json.parse(body).value;
 ```
+
+The checker can't flag every place that needs it. A `JsonValue` passed on where `Any?` is taken compiles, since `Any?` takes every value, and fails only at run time, where the code that receives it reads it as the decoded value. So check each call of `Json.parse` by hand.
 
 ### Added
 
