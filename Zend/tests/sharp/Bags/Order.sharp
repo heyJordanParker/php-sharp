@@ -1,0 +1,6 @@
+namespace Bags;
+
+public class Order
+{
+    public Order(public string number { get; }, public bool paid { get; }) { }
+}

@@ -1,0 +1,11 @@
+namespace Tallies;
+
+// Each override returns the Map itself, which a call through Shelf reads as an Iterable of its entries.
+public class Tally : Shelf
+{
+    private Map<string, int> counts = ["tea": 3, "pie": 7];
+
+    public override Map<string, int> heldCounts() => this.counts;
+
+    public override Map<string, int> counted() => this.counts;
+}

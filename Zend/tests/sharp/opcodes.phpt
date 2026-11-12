@@ -7307,6 +7307,8 @@ Accessors/Product: different opcodes and lines in 11 op arrays, same signatures 
   .php   0015 FE_FREE V3
   .php   0016 RETURN null
   .php        3: 0004 - 0015 (loop)
+  .php        ; (lines=7, args=1, vars=1, tmps=2)
+  .php   0006 RETURN null
 Parcel: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Exits: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Positions: same opcodes and lines in 5 op arrays, same signatures in 1 classes

@@ -363,6 +363,10 @@ zval *sharp_static_constructor_state(zend_class_entry *ce);
 ZEND_COLD void sharp_throw_static_constructor_failure(
 	const zend_class_entry *ce, const zend_string *type_arguments, zend_object *failure);
 
+/* Throws the Error a read of the property `name` that the PHP# class `ce` declares throws before its first write, spec
+ * section 6: `App.Order.number is read before its first write.` */
+ZEND_COLD void sharp_throw_unset_property(const zend_class_entry *ce, const zend_string *name);
+
 /* Whether `name` is sharp_type_arguments_key, which also names the hidden local a PHP# generic method keeps its own
  * type arguments in as an IS_PTR. Its name starts with NUL, so no PHP variable names it, and nothing that lists a
  * frame's or a closure's variables to user code lists it. */

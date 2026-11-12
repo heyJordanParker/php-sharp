@@ -1,0 +1,24 @@
+namespace Imports;
+
+import Sharp.Interop.Import;
+
+public static class Words
+{
+    [Import("levenshtein")]
+    public static int between(string a, string b);
+
+    [Import("array_unique")]
+    public static List<string> unique(List<string> items);
+
+    [Import("array_flip")]
+    public static Map<string, int> positions(List<string> items);
+
+    [Import("array_keys")]
+    public static List<string> keys(Map<string, int> counts);
+
+    [Import("str_repeat")]
+    public static int repeated(string text, int times);
+
+    [Import("no_such_function")]
+    public static void missing();
+}

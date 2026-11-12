@@ -13,6 +13,9 @@ public class Loops
     // A plain PHP override may replace it, so each PHP# call reads its result as the method that ran gives it.
     public List<Map<string, int>> maps() => this.rows;
 
+    // The same method in camelCase, which PHP keys in lowercase.
+    public List<Map<string, int>> heldMaps() => this.rows;
+
     public static int listAdd(int n)
     {
         List<int> items = [];
@@ -159,6 +162,17 @@ public class Loops
         let total = 0;
         for (let i = 0; i < n; i++) {
             total += loops.maps().count();
+        }
+        return total;
+    }
+
+    // mapsMethodCall, through a method named in camelCase.
+    public static int camelMethodCall(int n)
+    {
+        Loops loops = new Loops();
+        let total = 0;
+        for (let i = 0; i < n; i++) {
+            total += loops.heldMaps().count();
         }
         return total;
     }

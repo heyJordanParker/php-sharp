@@ -1,0 +1,16 @@
+namespace Late;
+
+public class Order
+{
+    public late int id { get; private set; }
+    public late string number { get; set; }
+    public late string? note { get; set; }
+    public int attempts { get; set; } = 0;
+    private late List<string> lines;
+
+    public string title() => `Order ${this.number}`;
+
+    public void fill() { this.lines = ["tea"]; }
+
+    public int count() => this.lines.count();
+}

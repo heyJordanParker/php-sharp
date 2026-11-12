@@ -1,0 +1,8 @@
+namespace Bags;
+
+public class Tally : Iterable<[string, int]>
+{
+    private Map<string, int> counts = ["tea": 3, "pie": 7];
+
+    public Iterable<[string, int]> elements() => this.counts;
+}
