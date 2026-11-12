@@ -1,0 +1,10 @@
+namespace BoundExtensions;
+
+public class Heap<TItem>
+{
+    private List<TItem> items = [];
+
+    public void add(TItem item) { this.items.add(item); }
+
+    public int count() => this.items.count();
+}
