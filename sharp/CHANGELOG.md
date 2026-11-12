@@ -33,8 +33,51 @@ Any? payload = Json.parse(body).value;
 - `extern namespace WordPress for WP_Post;` gives the folder of the namespace-less plain PHP class `WP_Post` the PHP# namespace `WordPress`, spec section 23: its classes and functions are `import WordPress.WP_Post;` and `WordPress.add_action(…)`, and run PHP's `\WP_Post` and `\add_action`, and `extern WordPress.get_post uses Database;` declares a function's effect. A named class that has a namespace or is PHP#'s, two lines that name one folder, one namespace given to two folders, and a namespace a class already has are compile errors.
 - `[Export("auth_redirect")]` from `Sharp.Interop` on a static method makes PHP see the global function `auth_redirect()`, which calls the method with its arguments, named ones included, and returns its result, spec section 23. The Composer plugin writes `vendor/composer/autoload_sharp_exports.php` at each dump, and PHP#'s `autoload.php` declares its functions, so a library that declares its own only when none exists, as WordPress's pluggable functions do, skips it. `[Export]` on an instance method, and a second export of one name in the project, are compile errors.
 - The converter writes a built-in call that leaves out an argument as the standard library member whose default for it is PHP's own: `round($total)` becomes `total.round()` and `mb_trim($name)` becomes `name.trim()`, where both kept the file plain PHP.
+- `mago convert` converts more of plain PHP with its meaning kept, where it kept the file plain PHP:
+  - a local or a `catch` variable named outside camel case, as `$line_total`, which takes its camel case name, `lineTotal`, wherever its method names it
+  - `__METHOD__`, `__FUNCTION__`, `__NAMESPACE__` and `__TRAIT__`, as the text PHP compiles in their place, and `__CLASS__` as `self::class` converts
+  - a keyed loop over a `string`-keyed array whose body reads the key only as text or as a key, where PHP's `int` key `42` and PHP#'s `"42"` give the same
+  - `(string)` of a value only PHPDoc types `string`, as a template, which converts what the value holds at runtime as `(string)` does, and of a `?string` as `` `${note ?? ""}` ``
+  - a loop over the values of an object whose class implements `Traversable`, as a framework's collection
+  - a condition of several parts and `?:` on a property its class declares with no hook and no `__get`, which a second read gives again, and `?:` on a variable
+  - `match (true)` with `bool` conditions and a `default` arm, as a chain of ternaries, or as `if … else if … else` where it stands as a statement
+  - `self::m()` in a class a subclass can extend, where `m` is a static method of the file that names neither `static` nor `parent`, nor calls through `self` one that does
+  - an intersection type, as `Item&Shareable`, and `class-string`, as `Class<Object>`
+  - `===` between unions of scalars that share a type, as `string|false` and `false`, as `==`
+  - a lambda that takes fewer parameters than the function type it is passed as, which takes each one it lacks, named `unused` where the function type names none
+  - a `string` that may be null in `.` or an interpolated string, as `` `${title ?? ""}` ``, since PHP shows `null` as nothing
+  - `(bool)`, as the comparison a condition of the value's type gives, as `(count != 0)`
+  - `array-key`, as `int|string`, and so a plain `array`, as `Map<int|string, Any?>`, where each key the body reads or writes by is an `int` or a string literal PHP keeps a string
+  - `isset($list[$i])` and `$list[$i] ?? $x`, through `list.getOrNull(i)`
+  - a `catch` of several classes, as `catch (Timeout|Refused e)`
+  - `.=` of an `int`, a `float` or a `string` that may be null onto a string, as `` text += `${count}` ``
+  - `===` between a `mixed` and a string, a `bool` or an enum, as `==`
+  - an `if` whose condition assigns a local, as the assignment on its own line and the local's test
+  - `instanceof self`, as `is` the class's name
+  - `===` between a string and `Order::class`, as `==` with the text of the class's name
+  - `(string)`, `.` and interpolation of a plain PHP object whose class declares `__toString`, as `email.toString()` and `` `${email}` ``
+  - an override of a plain PHP method declared `array` that returns a `Map`, which keeps the plain PHP method's `array`
+  - `===` between two class values, as `==`, where neither may be the class of an object of a PHP# generic class, which carries its type arguments, or one is `Order::class` of a class that takes none, and between an `array-key` and a string, as `==`
+  - `=` and `unset` at an index of an object whose class implements `ArrayAccess`, as the index write and `bag.offsetUnset(key)`
+  - an `if` whose condition first assigns a local that a comparison reads, as `if (($at = $this->find($id)) !== null)`, as the assignment on its own line
+  - `new static(…)`, as `new Self(…)`, in a `final` class, and in any other class that declares a constructor, which becomes `required`
+  - PHP's own constant whose value a standard library constant is, as `PHP_INT_MAX` as `Int.MAX`, which the codex now records for each standard library constant
+
+### Changed
+
+- `mago convert` exits 0 when its run completes, whatever files stay plain PHP, in a dry run or a real one, so a CI step can run it. It exited 1 whenever a file stayed plain PHP, which on a real project is always, so a refusal looked like a broken run. The summary line still counts both, "Would convert 201 files to PHP#, and 739 files stay plain PHP.", and the report names why each file stays. It exits 1 only when the run itself fails: a path it names reaches no plain PHP file, a proof can't finish, the written files' proof with the extension hosts doesn't hold, a write fails, or a lowering panics.
+- `mago convert` names why PHP# can't keep a refused construct, where it said "not converted yet": a write or `unset` at a `List` index, a local first named outside an assignment of its own, an `else if` that assigns, a loop's variable read after the loop, and `===` of a string and a class value or of a type PHP# has none of.
+- `mago convert` refuses `['id' => $id] = $row;`, which it converted to one `row.get("id")` per key: PHP warns on a missing key, and a PHP# `Map` read gives `null` and goes on, and a converted file never succeeds where PHP warned. A key read converts behind `??` or `isset`.
 
 ### Fixed
+
+- A `List` literal inside a literal, where its value type is a `Map`, as `["x": ['a']]` in a `Map<string, Map<int, string>>`, is the compile error spec section 12 names, and so is a `Map` literal where it is a `List`: the checker read only the outer literal.
+- A lowering that panics refuses its file with an error that holds the panic's text, code `lowering-panic`, where the compile dropped the text, or crashed when the checker had accepted the file. `mago convert`'s proof keeps such a file plain PHP and prints the panic's text. A panic in the plain project's proof, of a file every proof refuses, is an error of the run, and one in a standard library file fails the run with its text, where the run went on without that file's forms.
+- `mago convert` refuses a condition, `(bool)` or `!` of a `bool`, an `int`, a `float` or a string that only PHPDoc types, as a framework model's `@property int $count`, which may hold `"0"`, where it wrote PHP#'s test of the type, as `count != 0`, which reads `"0"` otherwise than PHP's truthiness. A value a native declaration, a literal, an operator or a parameter makes that type converts.
+- `mago convert` writes `['a', 'b']` as `[0: 'a', 1: 'b']` where a `Map` is declared, at any depth.
+- `mago convert` refuses a PHP# generic class with a type argument other than its bound, as `Page<Order>` under `Page<TItem : Item>`, in a parameter's or a property's type and in the result of a plain PHP call. Plain PHP creates such an object without type arguments, so it holds its bounds, and the converted file threw `TypeError` where PHP went on: "Return value must be of type Page<Order>, Page<Item> returned".
+- `mago convert` names the compile error that keeps a converted file plain, as "mago compile would refuse it once converted: Declaration of … must be compatible with …", where it named none.
+- `mago convert` in a git worktree whose main repository a container doesn't mount says what to do: "/app/.git names the git folder /Users/me/app/.git/worktrees/design, which doesn't exist here, as in a container that mounts a git worktree alone. mago convert converts only files git holds, so mount the main repository's .git folder at the path it has where the worktree was made, so that folder exists, or run mago convert in a plain clone." It said "`git rev-parse` failed (exit status: 128): fatal: not a git repository: /Users/me/app/.git/worktrees/design". `mago compile` and `mago analyze` read no git, so they run there as they are.
 
 - A plain PHP generic whose key type no argument fixes, as `Arr::from` given an object leaves it, no longer stops `mago compile` with "the analyzer refuses a type PHP# can't write, not `array-key`". Plain PHP's `array-key` enters PHP# as `int|string` wherever it reaches PHP# code: a call's type argument, a return value and a property read. A type argument of a call into a project's plain PHP method that PHP# can't write, as `scalar`, is now refused by the checker as it is for a PHP# method, where the compile stopped on it.
 - A plain PHP method whose PHPDoc says `@return $this` returns the object it is called on inside a backed enum's method, where the checker took it for the enum and refused the method's `return` with "expected `Query`, but found `Status`".
