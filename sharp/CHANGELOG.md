@@ -23,7 +23,10 @@ Code finds a PHP# class, interface, enum or trait only by the name it declares, 
 - `Class<T>.properties()` gives a property of a union of scalars, as `int|string`, and of a nullable one, as `(int|string)?`, where 0.6.8 left both out. A property's class type with type arguments, as `Holder<Box>`, keeps them: its `typeArguments()` is `[typeof(Box)]`, as `typeof(Holder<Box>).typeArguments()` is, where 0.6.8 gave none.
 - A law without a body that proves case by case over an enum it takes reports each case it does not prove, one error each, as "when retry is Retry.ExponentialRamp, still to show: …", where 0.6.8 reported the whole claim once and named no case.
 - A PHP# class overrides the field or the method of a plain PHP ancestor that declares both with one name, as Eloquent's `$casts` and `casts()`, where 0.6.8 refused both overrides with `name-already-in-use`. A call runs the method and a read reads the field, as PHP resolves them. A PHP# class that declares one and inherits the other from a PHP# class is still refused.
-
+- `mago` knows two PHP# classes whose names differ only in case, as `Order` and `ORDER`, as two classes, where 0.6.8 refused the second with "Class `ORDER` is already defined". A plain PHP class still matches in any case.
+- `Sharp\Container` knows a PHP# service class by its exact name, so `get('app\shop\stamp')` names no binding of `App\Shop\Stamp`, and a test file's module applies only to its class's exact name. A plain PHP class still matches in any case.
+- A law tells two fields whose names differ only in case apart, as PHP does, where 0.6.8 read a stored `raw` for an accessor `Raw`.
+- phpdbg finds a PHP# class by its exact name: `break App\Order::total#1` resolves in a loaded PHP# class where 0.6.8 left it pending, and `break App\Order::Total` no longer stops in its twin `total()`.
 ## [0.6.8] - 2026-11-12
 
 ### Fixed

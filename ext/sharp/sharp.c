@@ -102,7 +102,7 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	HashTable *request_spelled_lists;
 	/* Spec section 32: Sharp\Container's bindings, under "namespace id" a list of the modules that bind it, each a
 	 * list of its rows, the base modules' and the environment modules' apart; the paths of the module files it read;
-	 * each test file's module, under the lowercase name of the one class the file declares, and the one of the test
+	 * each test file's module, under the exact name of the one PHP# class the file declares, and the one of the test
 	 * that runs now, or NULL; the services each singleton keeps, by binding row; and the main context's scopes, which
 	 * started in the request's scope. */
 	HashTable container_bindings;
@@ -118,6 +118,12 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	zend_function *sort_comparison;
 	/* See sharp_equality_operators, NULL until the request compares an object. */
 	HashTable *equality_operators;
+	/* The method Sharp\Internal\returned found last, of the class returned_class by the interned name returned_name, or
+	 * NULL with no class until it finds one. A loop's call finds the same one each turn, and a class's methods stay
+	 * the same while the request runs. */
+	const zend_class_entry *returned_class;
+	const zend_string *returned_name;
+	const zend_function *returned_method;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
@@ -6070,7 +6076,18 @@ ZEND_FUNCTION(Sharp_Internal_returned)
 
 	zend_class_entry *ce = Z_TYPE_P(implementer) == IS_OBJECT ? Z_OBJCE_P(implementer)
 		: Z_TYPE_P(implementer) == IS_STRING ? zend_lookup_class(Z_STR_P(implementer)) : NULL;
-	const zend_function *ran = ce ? zend_class_find_method(ce, method) : NULL;
+	const zend_function *ran = NULL;
+	if (ce && ce == SHARP_G(returned_class) && method == SHARP_G(returned_name)) {
+		ran = SHARP_G(returned_method);
+	} else if (ce) {
+		ran = zend_class_find_method(ce, method);
+		/* A name that isn't interned may be freed, and another string take its address. */
+		if (ZSTR_IS_INTERNED(method)) {
+			SHARP_G(returned_class) = ce;
+			SHARP_G(returned_name) = method;
+			SHARP_G(returned_method) = ran;
+		}
+	}
 	if ((ran && sharp_function_is_sharp(ran)) || (Z_TYPE_P(implementer) == IS_NULL && ZSTR_LEN(method))) {
 		RETURN_COPY_DEREF(result);
 	}
@@ -7079,13 +7096,42 @@ static void sharp_fiber_destroyed(zend_fiber_context *context)
 	context->reserved[sharp_fiber_slot] = NULL;
 }
 
-/* The key the bindings of id in the namespace's first length bytes are kept under. */
+/* The key the bindings of id, a service's id as sharp_container_id() writes it, in the namespace's first length bytes
+ * are kept under. A namespace matches in any case, so its part is lowercase. */
 static zend_string *sharp_container_key(const zend_string *namespace, size_t length, const zend_string *id)
 {
 	zend_string *key = zend_strpprintf(0, "%.*s %s", (int) length, ZSTR_VAL(namespace), ZSTR_VAL(id));
-	zend_str_tolower(ZSTR_VAL(key), ZSTR_LEN(key));
+	zend_str_tolower(ZSTR_VAL(key), length);
 
 	return key;
+}
+
+/* The id the container keys the service a type names by, as mago compile writes a binding's: the type with the name of
+ * each PHP# class in it exact, which the class table keys by its exact name, spec section 24, and the rest in
+ * lowercase, as PHP compares a plain class's name. A class not yet loaded is no PHP# class here, so the caller loads
+ * the class a type names first. */
+static zend_string *sharp_container_id(const zend_string *type)
+{
+	zend_string *id = zend_string_init(ZSTR_VAL(type), ZSTR_LEN(type), 0);
+	char *start = ZSTR_VAL(id), *end = start + ZSTR_LEN(id);
+
+	for (char *name = start; name < end;) {
+		char *after = name;
+		while (after < end && (isalnum((unsigned char) *after) || *after == '_' || *after == '\\')) {
+			after++;
+		}
+		if (after == name) {
+			name++;
+			continue;
+		}
+		zend_class_entry *ce = zend_hash_str_find_ptr(EG(class_table), name, after - name);
+		if (!ce || !(ce->sharp_flags & SHARP_CLASS_EXACT_KEY)) {
+			zend_str_tolower(name, after - name);
+		}
+		name = after;
+	}
+
+	return id;
 }
 
 /* Adds rows, one module's binding rows, to module: under each namespace and service id, a list of its rows. */
@@ -7263,7 +7309,7 @@ static zend_string *sharp_container_namespace(const zend_string *name)
 }
 
 /* The row of list, one module's rows of a service, that serves requester or NULL: a row for the class before a row
- * for any class. */
+ * for any class. A row names a PHP# class by its exact name, spec section 24, and a plain class in any case. */
 static zval *sharp_container_row(zval *list, const zend_class_entry *requester)
 {
 	zval *row, *any = NULL;
@@ -7271,7 +7317,9 @@ static zval *sharp_container_row(zval *list, const zend_class_entry *requester)
 		zval *target = zend_hash_index_find(Z_ARRVAL_P(row), 2);
 		if (Z_TYPE_P(target) == IS_NULL) {
 			any = any ? any : row;
-		} else if (requester && zend_string_equals_ci(Z_STR_P(target), requester->name)) {
+		} else if (requester && ((requester->sharp_flags & SHARP_CLASS_EXACT_KEY)
+				? zend_string_equals(Z_STR_P(target), requester->name)
+				: zend_string_equals_ci(Z_STR_P(target), requester->name))) {
 			return row;
 		}
 	} ZEND_HASH_FOREACH_END();
@@ -7331,11 +7379,11 @@ static zval *sharp_container_binding(const zend_string *id, const zend_string *n
 	}
 }
 
-static bool sharp_container_service(zend_string *id, const zend_string *namespace, const zend_class_entry *requester, zval *service);
+static bool sharp_container_service(zend_string *id, const zend_string *written, const zend_string *namespace, const zend_class_entry *requester, zval *service);
 
 /* Fills arguments with the service of each parameter of function: the id its Sharp\Internal\Service attribute
- * names, or its class. A parameter with neither ends the arguments when it is optional. On failure arguments is
- * undefined. */
+ * names, as mago compile writes it, or its class's. A parameter with neither ends the arguments when it is optional.
+ * On failure arguments is undefined. */
 static bool sharp_container_arguments(const zend_function *function, const zend_string *namespace, const zend_class_entry *requester, zval *arguments)
 {
 	array_init(arguments);
@@ -7346,10 +7394,14 @@ static bool sharp_container_arguments(const zend_function *function, const zend_
 			? zend_get_parameter_attribute_str(function->common.attributes, "sharp\\internal\\service", sizeof("sharp\\internal\\service") - 1, i)
 			: NULL;
 		zval named;
+		const zend_string *written;
 		if (attribute && zend_get_attribute_value(&named, attribute, 0, function->common.scope) == SUCCESS) {
 			id = Z_STR(named);
+			written = id;
 		} else if (ZEND_TYPE_HAS_NAME(argument->type)) {
-			id = zend_string_copy(ZEND_TYPE_NAME(argument->type));
+			written = ZEND_TYPE_NAME(argument->type);
+			zend_lookup_class((zend_string *) written);
+			id = sharp_container_id(written);
 		} else if (i >= function->common.required_num_args) {
 			break;
 		} else {
@@ -7361,7 +7413,7 @@ static bool sharp_container_arguments(const zend_function *function, const zend_
 		}
 
 		zval service;
-		bool built = sharp_container_service(id, namespace, requester, &service);
+		bool built = sharp_container_service(id, written, namespace, requester, &service);
 		zend_string_release(id);
 		if (!built) {
 			zval_ptr_dtor(arguments);
@@ -7513,8 +7565,8 @@ static bool sharp_container_bound(zval *row, zval *service)
 	return built;
 }
 
-/* The service id names for requester, a class of namespace or NULL. */
-static bool sharp_container_service(zend_string *id, const zend_string *namespace, const zend_class_entry *requester, zval *service)
+/* The service id names for requester, a class of namespace or NULL. A failure names the service as written. */
+static bool sharp_container_service(zend_string *id, const zend_string *written, const zend_string *namespace, const zend_class_entry *requester, zval *service)
 {
 	zval *row = sharp_container_binding(id, namespace, requester);
 	if (row) {
@@ -7522,26 +7574,28 @@ static bool sharp_container_service(zend_string *id, const zend_string *namespac
 	}
 
 	if (!EG(exception)) {
-		zend_throw_error(sharp_ce_container_error, "No module binds %s%s%s", ZSTR_VAL(id), requester ? " for " : "",
+		zend_throw_error(sharp_ce_container_error, "No module binds %s%s%s", ZSTR_VAL(written), requester ? " for " : "",
 			requester ? ZSTR_VAL(requester->name) : "");
 	}
 
 	return false;
 }
 
-/* The id of the service named name, and its namespace, after reading the modules of its class's folders. */
-static zend_string *sharp_container_requested(zend_string *name, zend_string **namespace)
+/* The service named name as written, without a leading `\`, its id and its namespace, after reading the modules of
+ * its class's folders. */
+static zend_string *sharp_container_requested(zend_string *name, zend_string **id, zend_string **namespace)
 {
-	zend_string *id = ZSTR_LEN(name) > 0 && ZSTR_VAL(name)[0] == '\\'
+	zend_string *written = ZSTR_LEN(name) > 0 && ZSTR_VAL(name)[0] == '\\'
 		? zend_string_init(ZSTR_VAL(name) + 1, ZSTR_LEN(name) - 1, 0)
 		: zend_string_copy(name);
-	zend_class_entry *ce = memchr(ZSTR_VAL(id), '<', ZSTR_LEN(id)) ? NULL : zend_lookup_class(id);
+	zend_class_entry *ce = memchr(ZSTR_VAL(written), '<', ZSTR_LEN(written)) ? NULL : zend_lookup_class(written);
 	if (ce && ce->type == ZEND_USER_CLASS) {
 		sharp_container_read_folders(ce->info.user.filename);
 	}
-	*namespace = sharp_container_namespace(id);
+	*namespace = sharp_container_namespace(written);
+	*id = sharp_container_id(written);
 
-	return id;
+	return written;
 }
 
 ZEND_METHOD(Sharp_Container, get)
@@ -7552,11 +7606,12 @@ ZEND_METHOD(Sharp_Container, get)
 		Z_PARAM_STR(name)
 	ZEND_PARSE_PARAMETERS_END();
 
-	zend_string *namespace;
-	zend_string *id = sharp_container_requested(name, &namespace);
-	sharp_container_service(id, namespace, NULL, return_value);
+	zend_string *id, *namespace;
+	zend_string *written = sharp_container_requested(name, &id, &namespace);
+	sharp_container_service(id, written, namespace, NULL, return_value);
 	zend_string_release(namespace);
 	zend_string_release(id);
+	zend_string_release(written);
 }
 
 ZEND_METHOD(Sharp_Container, has)
@@ -7567,11 +7622,12 @@ ZEND_METHOD(Sharp_Container, has)
 		Z_PARAM_STR(name)
 	ZEND_PARSE_PARAMETERS_END();
 
-	zend_string *namespace;
-	zend_string *id = sharp_container_requested(name, &namespace);
+	zend_string *id, *namespace;
+	zend_string *written = sharp_container_requested(name, &id, &namespace);
 	bool has = sharp_container_binding(id, namespace, NULL) != NULL;
 	zend_string_release(namespace);
 	zend_string_release(id);
+	zend_string_release(written);
 
 	RETURN_BOOL(has);
 }
@@ -7642,9 +7698,7 @@ ZEND_FUNCTION(Sharp_Internal_testModule)
 	zval module;
 	array_init(&module);
 	sharp_container_group(bindings, Z_ARRVAL(module));
-	zend_string *name = zend_string_tolower(class);
-	zend_hash_update(&SHARP_G(container_tests), name, &module);
-	zend_string_release(name);
+	zend_hash_update(&SHARP_G(container_tests), class, &module);
 }
 
 /* Spec section 6.5: a `static lazy` property computes its value on its first read and keeps it for a singleton's
@@ -7704,9 +7758,7 @@ ZEND_FUNCTION(Sharp_Internal_startTest)
 	ZEND_PARSE_PARAMETERS_END();
 
 	sharp_container_forget();
-	zend_string *name = zend_string_tolower(class);
-	zval *module = zend_hash_find(&SHARP_G(container_tests), name);
-	zend_string_release(name);
+	zval *module = zend_hash_find(&SHARP_G(container_tests), class);
 	SHARP_G(container_test) = module ? Z_ARRVAL_P(module) : NULL;
 }
 
@@ -8231,7 +8283,7 @@ ZEND_METHOD(Sharp_Internal_Listener, __construct)
  * throws when the table is damaged. */
 static zend_string *sharp_dispatcher_namespace(zend_class_entry *event)
 {
-	static const char id[] = " sharp\\dispatcher";
+	static const char id[] = " Sharp\\Dispatcher";
 	zend_string *key;
 	size_t root_length;
 
@@ -8287,7 +8339,7 @@ ZEND_FUNCTION(Sharp_Internal_emit)
 		RETURN_THROWS();
 	}
 	id = zend_string_init("Sharp\\Dispatcher", sizeof("Sharp\\Dispatcher") - 1, 0);
-	found = sharp_container_service(id, namespace, NULL, &dispatcher);
+	found = sharp_container_service(id, id, namespace, NULL, &dispatcher);
 	zend_string_release(id);
 	zend_string_release(namespace);
 
@@ -10305,6 +10357,8 @@ static PHP_RINIT_FUNCTION(sharp)
 	sharp_fiber_scopes_start(&SHARP_G(container_main_scopes), sharp_scope_start());
 	EG(main_fiber_context)->reserved[sharp_fiber_slot] = &SHARP_G(container_main_scopes);
 
+	/* A class of the last request may be freed, and another take its address. */
+	SHARP_G(returned_class) = NULL;
 	/* The CLI names the script in argv[0] only while the request starts, as PHP's $argv does. */
 	zval *arguments = &SHARP_G(arguments);
 

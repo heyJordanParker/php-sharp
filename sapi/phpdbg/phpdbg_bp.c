@@ -571,7 +571,6 @@ PHPDBG_API void phpdbg_resolve_op_array_breaks(zend_op_array *op_array) /* {{{ *
 
 PHPDBG_API int phpdbg_resolve_opline_break(phpdbg_breakopline_t *new_break) /* {{{ */
 {
-	HashTable *func_table = EG(function_table);
 	zend_function *func;
 
 	if (new_break->func_name == NULL) {
@@ -603,14 +602,21 @@ PHPDBG_API int phpdbg_resolve_opline_break(phpdbg_breakopline_t *new_break) /* {
 	}
 
 	if (new_break->class_name != NULL) {
-		zend_class_entry *ce;
-		if (!(ce = zend_hash_str_find_ptr_lc(EG(class_table), new_break->class_name, new_break->class_len))) {
+		/* A PHP# class is found by its exact name, and its methods too, spec section 24. */
+		zend_string *class_name = zend_string_init(new_break->class_name, new_break->class_len, 0);
+		zend_class_entry *ce = zend_class_table_find_ptr(EG(class_table), class_name, NULL);
+		zend_string_release(class_name);
+		if (!ce) {
 			return FAILURE;
 		}
-		func_table = &ce->function_table;
+		zend_string *method = zend_string_init(new_break->func_name, new_break->func_len, 0);
+		func = zend_class_find_method(ce, method);
+		zend_string_release(method);
+	} else {
+		func = zend_hash_str_find_ptr_lc(EG(function_table), new_break->func_name, new_break->func_len);
 	}
 
-	if (!(func = zend_hash_str_find_ptr_lc(func_table, new_break->func_name, new_break->func_len))) {
+	if (!func) {
 		if (new_break->class_name != NULL && new_break->func_name != NULL) {
 			phpdbg_error("Method %s doesn't exist in class %s", new_break->func_name, new_break->class_name);
 			return 2;
@@ -988,8 +994,17 @@ static inline phpdbg_breakbase_t *phpdbg_find_breakpoint_method(zend_op_array *o
 
 	if ((class_table = zend_hash_find_ptr(&PHPDBG_G(bp)[PHPDBG_BREAK_METHOD], class_lcname))) {
 		zend_string *lcname = zend_string_tolower(ops->function_name);
+		phpdbg_breakmethod_t *method = zend_hash_find_ptr(class_table, lcname);
 
-		brake = zend_hash_find_ptr(class_table, lcname);
+		/* A PHP# class is named by its exact name, and its methods too, spec section 24, so a breakpoint written in
+		 * another case is another class's or method's. */
+		if (method
+				&& (!(ops->scope->sharp_flags & SHARP_CLASS_EXACT_KEY)
+					|| zend_binary_strcmp(method->class_name, method->class_len, ZSTR_VAL(ops->scope->name), ZSTR_LEN(ops->scope->name)) == 0)
+				&& (!(ops->scope->sharp_flags & SHARP_CLASS_EXACT_NAMES)
+					|| zend_binary_strcmp(method->func_name, method->func_len, ZSTR_VAL(ops->function_name), ZSTR_LEN(ops->function_name)) == 0)) {
+			brake = (phpdbg_breakbase_t *) method;
+		}
 
 		zend_string_release(lcname);
 	}
