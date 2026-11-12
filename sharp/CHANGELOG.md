@@ -4,10 +4,36 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-11-11
+
+### Upgrading from 0.6.4
+
+#### Declare a list plain PHP gives as a list
+
+`is`, `as` and `match` test plain PHP's array as the type it arrives as, spec section 12, and a bare `array` arrives as a `Map<int|string, Any?>`, whatever keys it holds. In 0.6.4, `box.records as List<Map<string, string?>>` tested the raw array and gave the list, while `const records = box.records;` held the `Map` and gave null, so the same value answered two ways. A `Map` is never a `List`, so a `List` test of it is now a compile error: "This pattern never matches the value it tests, a `Map<int|string, Any?>?`: a `Map` is never a `List`." Read the `Map`'s values as a `List` in PHP#:
+
+```csharp
+List<Any?>? rows = box.records?.values();
+```
+
+Or declare the list in plain PHP, and PHP# reads it as a `List` both ways:
+
+```php
+/** @var list<array<string, ?string>>|null */
+public ?array $records = null;
+```
+
 ### Fixed
 
 - On a busy Mac, `mago analyze --watch` checks only the folders FSEvents has not started on, where a watcher FSEvents didn't start in time checked every watched file, `vendor/` included, every half second for the rest of the session. A folder goes back to FSEvents once FSEvents reports a change there, and the watch prints "The file watcher reported a change in …, so this run stops checking the files there." The warning now names those folders: "The file watcher reported no change in … within 30s, so this run checks the files there every 500ms until it does." The checks of the project's files skip the folders the watch's changes skip, as `vendor/` when it is an `includes` root and `node_modules/`, and read only the files of the configured extensions. The checks of `mago.toml`, `composer.json` and `composer.lock` still read every file beside them.
 - On macOS, `mago` no longer hangs when a process of an extension worker's or the law checker's process group never ends, as one the kernel holds on a stalled disk. Mago sent the group SIGKILL until no process of it ran, so it waited forever, and a worker's restart and the end of every run waited too. It now stops after 10 seconds, leaves that process running, and goes on: the worker's error says "process group 4321 still ran 10000 ms after SIGKILL", and the law checker refuses the law as one that "did not finish within … seconds".
+- A plain PHP method that overrides a PHP# class's method, and the test double PHPUnit's `createMock()` or Mockery generates, gives PHP# its PHP array as the `Map` or `Set` the method declares. In 0.6.4, `const status = source.status(); return status.get("status");`, and the same read without the local, threw "ValueError: Sharp\Internal\get(): Argument #1 ($collection) must be a list" when `source` was such a class, since only a PHP# interface's member was read as a value plain PHP may give.
+- A call whose method may be plain PHP's reads its result as its declared type wherever the call is written: an argument, a constructor's argument, a collection literal's element and a spread too. This covers a plain PHP function or method, a PHP# interface's member, and a PHP# class's method an override may replace, a static method `Self.` or a class value reaches included. In 0.6.4, `Map<int|string, Any?> payload = [...source.payload()];` on a plain PHP interface `Source { public function payload(): array; }` threw "Error: Call to a member function keys() on array", and so did `[...request.query.all(), ...payload]`. The engine looks up the method that ran, so a call that runs a PHP# method gives its result as it is, whatever the result holds.
+- A PHP# property that overrides a plain PHP parent's array property, as `protected override Map<string, string> casts { get; set; } = ["paid": "bool"];` overrides Eloquent's `$casts`, keeps the parent's storage, so the parent's own code reads the PHP array. In 0.6.4, `array_merge(['id' => 'int'], $this->casts)` in the parent threw "TypeError: array_merge(): Argument #2 must be of type array, Sharp\Map given". PHP# code still reads the property as its `Map`.
+- A PHP# method that overrides a plain PHP method declared `array` with a `Map` or `Set` result, as `public override Map<string, List<string>> errors() => [:];` under `public function errors(): array`, keeps the plain PHP method's `array`, so its class loads. In 0.6.4, `mago compile` accepted it and loading the class failed: "PHP Fatal error: Declaration of Child::errors(): Sharp\Map|array must be compatible with Base::errors(): array". The method returns the PHP array to every caller, and PHP# code reads it as the `Map`.
+- An extension host that refines a PHP# member's type to a type PHP# can't write, such as an `array{key: string, reason: string}` shape on a `Map<string, string>?` property, no longer stops `mago analyze`. 0.6.4 panicked in every analysis of the project, whatever file it was scoped to: "internal error: entered unreachable code: PHP# writes no array shape". The member keeps the type it declares, and the analysis goes on with an error at the member: "The host `typing` refines `Notice.fields` to `array{'key': string, 'reason': string}`, which PHP# can't write, so it keeps its declared type `Map<string, string>?`." A refinement PHP# writes that doesn't fit the declared type, as `Other` on a `Spec?` member, is an error at the member too, in the same words, where it was a "Docblock property type" mismatch. A refinement that fits, as `Special` on `Spec?`, still applies where PHP# alone gives the member its values: a result, and a property whose `set` is private. On a property plain PHP may write, or a parameter of a method plain PHP may call, the engine checks each value against the declared type alone, so a narrower type is an error at the member too: "The host `typing` refines `Notice.opened` to `Special?`, which narrows its declared type `Spec?`, and plain PHP may give it any `Spec?`." The same holds for a parameter, a result, a type parameter's bound, a parent's type argument and a lambda's `this`, and for an abstract or interface method, whose refinement applied unchecked before.
+- `mago analyze` reads plain PHP's `str_getcsv()` as returning `list<string|null>`, which PHP returns, where it read the bare `array` its signature declares. Plain PHP code that reads the result by a string key now gets the report a list gives, and PHP# reads the result as a `List<string?>`, where it read a `Map<int|string, Any?>`.
+- An interface method or an abstract method with a parameter default, as `int read(Map<string, int> limits = [:]);`, compiles: the analysis types and checks the default, and `mago compile` panicked on it before.
 
 ## [0.6.4] - 2026-11-07
 
@@ -563,7 +589,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.4...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.5...HEAD
+[0.6.5]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.1...v0.6.2
