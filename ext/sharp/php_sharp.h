@@ -208,6 +208,8 @@ typedef enum {
 	SHARP_BUILT_IN_SET,
 	SHARP_BUILT_IN_ITERABLE,
 	SHARP_BUILT_IN_CLASS,
+	/* The result of a function that never returns, spec section 8, which no value is of and which fits every type. */
+	SHARP_BUILT_IN_NEVER,
 } sharp_built_in;
 
 typedef struct _sharp_type sharp_type;

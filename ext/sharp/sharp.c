@@ -3152,7 +3152,7 @@ static const struct {
 	{"string", 0, SHARP_BUILT_IN_STRING}, {"void", 0, SHARP_BUILT_IN_VOID}, {"null", 0, SHARP_BUILT_IN_NULL},
 	{"Any", 0, SHARP_BUILT_IN_ANY}, {"Object", 0, SHARP_BUILT_IN_OBJECT}, {"List", 1, SHARP_BUILT_IN_LIST},
 	{"Map", 2, SHARP_BUILT_IN_MAP}, {"Set", 1, SHARP_BUILT_IN_SET}, {"Iterable", 1, SHARP_BUILT_IN_ITERABLE},
-	{"Class", 1, SHARP_BUILT_IN_CLASS},
+	{"Class", 1, SHARP_BUILT_IN_CLASS}, {"never", 0, SHARP_BUILT_IN_NEVER},
 };
 
 /* A type as its text spells it, before it is interned. */
@@ -4611,10 +4611,25 @@ static void sharp_php_type_join(smart_str *text, zend_string **parts, uint32_t c
 }
 
 /* The PHP# text of the member of a PHP union that is `length` bytes at `at`: `App\Order` as `App.Order`, `object` as
- * `Object`, `array` as the `Map<int|string, Any?>` a plain PHP array arrives as, spec section 12, and an intersection
- * `(A&B)` as `A & B`, without the parentheses a union holds it in. */
-static zend_string *sharp_php_type_member(const char *at, size_t length)
+ * `Object`, `array` as the `Map<int|string, Any?>` a plain PHP array arrives as, spec section 12, an intersection
+ * `(A&B)` as `A & B`, without the parentheses a union holds it in, and `self`, `parent` and `static` as the class each
+ * names: `self` the class `self`, `parent` its parent, and `static` the class `called` the code runs on. PHP writes the
+ * class itself for `self` and `parent` outside a trait, so they reach here from a trait, naming the class that uses it. */
+static zend_string *sharp_php_type_member(
+	const char *at, size_t length, const zend_class_entry *self, const zend_class_entry *called)
 {
+	const zend_class_entry *named = NULL;
+	if (length == 4 && memcmp(at, "self", 4) == 0) {
+		named = self;
+	} else if (length == 6 && memcmp(at, "parent", 6) == 0) {
+		named = self ? self->parent : NULL;
+	} else if (length == 6 && memcmp(at, "static", 6) == 0) {
+		named = called;
+	}
+	if (named) {
+		return sharp_php_type_member(ZSTR_VAL(named->name), ZSTR_LEN(named->name), NULL, NULL);
+	}
+
 	smart_str text = {0};
 	if (length == 6 && memcmp(at, "object", 6) == 0) {
 		smart_str_appends(&text, "Object");
@@ -4630,7 +4645,7 @@ static zend_string *sharp_php_type_member(const char *at, size_t length)
 		for (const char *end = at + length, *amp; at < end; at = amp + 1) {
 			amp = memchr(at, '&', end - at);
 			amp = amp ? amp : end;
-			classes[count++] = sharp_php_type_member(at, amp - at);
+			classes[count++] = sharp_php_type_member(at, amp - at, self, called);
 		}
 		sharp_php_type_join(&text, classes, count, " & ");
 		efree(classes);
@@ -4646,8 +4661,10 @@ static zend_string *sharp_php_type_member(const char *at, size_t length)
 
 /* Appends the PHP type `type` as PHP# writes it, for a member that carries no PHP# type: each member as
  * sharp_php_type_member writes it, a union's members in order, `?int` and `int|null` as `int?`, `int|string|null` as
- * `(int|string)?`, and `mixed` and no type as `Any?`. */
-static void sharp_php_type_text(smart_str *text, zend_type type)
+ * `(int|string)?`, and `mixed` and no type as `Any?`, with `self`, `parent` and `static` the classes of `self` and
+ * `called`. */
+static void sharp_php_type_text(
+	smart_str *text, zend_type type, const zend_class_entry *self, const zend_class_entry *called)
 {
 	if (!ZEND_TYPE_IS_SET(type) || ZEND_TYPE_PURE_MASK(type) == MAY_BE_ANY) {
 		smart_str_appends(text, "Any?");
@@ -4670,9 +4687,20 @@ static void sharp_php_type_text(smart_str *text, zend_type type)
 		while (bar < end && *bar != '|') {
 			bar = *bar == '(' ? memchr(bar, ')', end - bar) + 1 : bar + 1;
 		}
-		members[count++] = sharp_php_type_member(at, bar - at);
+		members[count++] = sharp_php_type_member(at, bar - at, self, called);
 		at = bar + 1;
 	}
+	/* A trait's `self|Order` names one class twice once `Order` uses the trait, which PHP keeps as two members. */
+	qsort(members, count, sizeof(*members), sharp_text_compare);
+	uint32_t distinct = 1;
+	for (uint32_t i = 1; i < count; i++) {
+		if (zend_string_equals(members[i], members[distinct - 1])) {
+			zend_string_release(members[i]);
+		} else {
+			members[distinct++] = members[i];
+		}
+	}
+	count = distinct;
 	bool grouped = nullable && (count > 1 || memchr(ZSTR_VAL(members[0]), '&', ZSTR_LEN(members[0])));
 	if (grouped) {
 		smart_str_appendc(text, '(');
@@ -4725,7 +4753,7 @@ static const sharp_type *sharp_property_declared_type(
 	if (info->sharp_type) {
 		smart_str_append(&written, info->sharp_type);
 	} else {
-		sharp_php_type_text(&written, info->type);
+		sharp_php_type_text(&written, info->type, info->ce, ce);
 	}
 	smart_str_0(&written);
 	const sharp_type *types = sharp_declared_types(written.s, info->ce, ce, arguments, NULL);
@@ -4755,15 +4783,17 @@ static const zend_string *sharp_method_bounds(const zend_function *func)
 
 /* Appends the function type the PHP declaration of `func` gives it, spec section 21: `result`, or else its PHP result
  * type, then each parameter's PHP type, a variadic one's last, each as sharp_php_type_text writes it, so a type it
- * leaves out is `Any?`. It lists no effects, as the checker gives a PHP signature none, which fits every function
- * type's `uses`. */
-static void sharp_php_function_type_text(smart_str *text, const zend_function *func, const zend_string *result)
+ * leaves out is `Any?`, `self` its class and `static` the class `called` it runs on. It lists no effects, as the
+ * checker gives a PHP signature none, which fits every function type's `uses`. */
+static void sharp_php_function_type_text(
+	smart_str *text, const zend_function *func, const zend_string *result, const zend_class_entry *called)
 {
+	const zend_class_entry *self = func->common.scope;
 	smart_str_appends(text, "Function<");
 	if (result) {
 		smart_str_append(text, result);
 	} else if (func->common.fn_flags & ZEND_ACC_HAS_RETURN_TYPE) {
-		sharp_php_type_text(text, func->common.arg_info[-1].type);
+		sharp_php_type_text(text, func->common.arg_info[-1].type, self, called);
 	} else {
 		smart_str_appends(text, "Any?");
 	}
@@ -4773,7 +4803,7 @@ static void sharp_php_function_type_text(smart_str *text, const zend_function *f
 		if (i) {
 			smart_str_appends(text, ", ");
 		}
-		sharp_php_type_text(text, func->common.arg_info[i].type);
+		sharp_php_type_text(text, func->common.arg_info[i].type, self, called);
 	}
 	smart_str_appends(text, ")>");
 }
@@ -4789,7 +4819,7 @@ static const sharp_type *sharp_method_declared_types(
 	if (carried && zend_string_starts_with_literal(carried, "Function<")) {
 		smart_str_append(&written, carried);
 	} else {
-		sharp_php_function_type_text(&written, func, carried);
+		sharp_php_function_type_text(&written, func, carried, ce);
 	}
 	smart_str_0(&written);
 	const sharp_type *types = sharp_declared_types(written.s, func->common.scope, ce, arguments, sharp_method_bounds(func));
@@ -5519,6 +5549,8 @@ static bool sharp_type_holds(
 			return mode != SHARP_HOLDS_TEST || sharp_iterable_object_holds(type, Z_OBJ_P(value));
 		case SHARP_BUILT_IN_CLASS:
 			return sharp_class_value_is(value, type->members[0]);
+		case SHARP_BUILT_IN_NEVER:
+			return false;
 		default:
 			return true;
 	}
@@ -6603,10 +6635,11 @@ static bool sharp_type_function_fits(
  * with type arguments each subclass whose header gives it type arguments its own take, a function type each function
  * type that can be assigned to it, a tuple each tuple whose element types are within its own, an intersection what
  * each of its classes holds, and any other bound only itself. A
- * union is within a bound when each of its members is, and an intersection when one of its classes is. */
+ * union is within a bound when each of its members is, and an intersection when one of its classes is. `never`, which
+ * no value is of, is within every bound. */
 static bool sharp_type_fits(sharp_type_node *type, sharp_type_node *bound, sharp_type_reader *reader)
 {
-	if (sharp_type_node_is(bound, "Any?")) {
+	if (sharp_type_node_is(bound, "Any?") || sharp_type_node_is(type, "never")) {
 		return true;
 	}
 	if (type->kind == SHARP_TYPE_UNION) {
@@ -6736,12 +6769,12 @@ static const sharp_type *sharp_carried_result(const sharp_type *carried)
 	return carried && carried->kind == SHARP_TYPE_FUNCTION ? carried->members[0] : carried;
 }
 
-/* The function type the PHP declaration of the plain PHP function `func` gives it, spec section 21, as
+/* The function type the PHP declaration of the plain PHP function `func` gives it run on `called`, spec section 21, as
  * sharp_php_function_type_text writes it. The declaration is code, so its type lives for the process. */
-static const sharp_type *sharp_php_function_type(const zend_function *func)
+static const sharp_type *sharp_php_function_type(const zend_function *func, const zend_class_entry *called)
 {
 	smart_str written = {0};
-	sharp_php_function_type_text(&written, func, NULL);
+	sharp_php_function_type_text(&written, func, NULL, called);
 	smart_str_0(&written);
 	const sharp_type *list = sharp_type_list(ZSTR_VAL(written.s), ZSTR_LEN(written.s));
 	smart_str_free(&written);
@@ -6750,12 +6783,18 @@ static const sharp_type *sharp_php_function_type(const zend_function *func)
 }
 
 /* The type the closure `value` carries: a PHP# closure's as sharp_function_carried spells it for the object the closure
- * is bound to and the method type arguments it captured, and a plain PHP closure's as its PHP declaration gives it. */
+ * is bound to and the method type arguments it captured, and a plain PHP closure's as its PHP declaration gives it, its
+ * `static` the closure's called class. */
 static const sharp_type *sharp_closure_carried(const zval *value)
 {
 	const zend_function *func = zend_get_closure_method_def(Z_OBJ_P(value));
 	if (!sharp_function_is_sharp(func)) {
-		return sharp_php_function_type(func);
+		zend_class_entry *called;
+		zend_function *invoked;
+		zend_object *bound;
+		Z_OBJ_HANDLER_P(value, get_closure)(Z_OBJ_P(value), &called, &invoked, &bound, true);
+
+		return sharp_php_function_type(func, called);
 	}
 	zval *this_ptr = zend_get_closure_this_ptr((zval *) value);
 	zend_object *object = Z_TYPE_P(this_ptr) == IS_OBJECT ? Z_OBJ_P(this_ptr) : NULL;
