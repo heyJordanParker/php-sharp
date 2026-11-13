@@ -6,6 +6,25 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Fixed
 
+- `mago analyze --watch` and the language server drop the uses an edited method of a plain PHP class with exact names made, as the plain `Room` that implements a PHP# interface keys `syncedId`, spec section 24. An edit of the body or the signature of `Room::syncedId` that stops calling `Cart.total` brings back spec section 5's warning "`Cart.total` is public, and nothing outside `App.Shop` uses it.", as a full run reports it. 0.6.10 named the edited method `syncedid`, which no use of `syncedId` meets, and kept the uses its old body made.
+- Two PHP# names that differ only in case name two things everywhere, spec section 24, where 0.6.10 still compared some names ignoring case and took one twin for the other. Each compare now keys a name by the engine's rule, a PHP# class-like and the methods of a class with exact names as written, and any other in any case:
+  - A host's return-type, assertion, signature and call-forwarding provider, its method-call hook and its entry point of `Demo\Box::total` reach `total` and never its twin `Total`, and a class-like pattern names a PHP# class-like as written. The SDK's `FunctionLikeIdentifier` carries its class's rule as Mago answers it, so `equals` tells `Box::total` from `Box::Total`, and a worker accepts one hook of both `Box::open` and `Box::Open`, where 0.6.10 refused it as a target named twice. The analyzer protocol moves to 1.14, so a mixed pair is refused at its first message.
+  - An effect is a class-like named by its key, so `uses DISK` allows no call of the `foreign` class `Disk`.
+  - A struct's own `Parse` leaves it the generated `parse` and `tryParse`, a PHP# enum must implement a `Cases` its interface declares, its own static `Cases` keeps its own type, and a plain PHP class with exact names has no `ToString` that runs its `__toString()`.
+  - A PHP# class-like `App\RANDOM`, declared in the file or anywhere in its namespace, leaves a bare `Random` in `App` naming the standard library's `Sharp\Random`, where 0.6.10 reported "Cannot find type `Random`; did you mean `App.RANDOM`?".
+  - A type that names two twins, as `Parcel.Box | Parcel.BOX` of an enum with the cases `Box` and `BOX`, holds both and takes a `BOX` value, where 0.6.10's checker refused it with "Duplicate type `Parcel.BOX` is redundant." The engine compares the class names of a declared type exactly in a `.sharp` file, so plain PHP's `Foo|FOO` is still a duplicate type.
+  - An override whose signature names a PHP# class's twin, as `ship(Parcel\BOX $parcel)` where the parent takes `Parcel\Box`, is refused with PHP's "Declaration of … must be compatible with …", where 0.6.10 took the two for one class. Two names in a signature are one type when they reach one class, so plain PHP's `foo` is still its parent's `Foo`, loaded, autoloaded while the child links, or preloaded.
+  - An `unchecked-exception-classes` or `unchecked-exceptions` entry names a PHP# exception as written, so `App\Errors\NotFound` leaves its twin `NOTFOUND` checked.
+  - In a `.sharp` file, a method `priceof` is no clash with a property `priceOf`, the laws `same` and `Same` are two laws, a method `later` is no clash with the case `Later`, a method `Seconds` none with a case's field `seconds`, `status()` is no constructor of the enum `Status`, `Order.order()` is a named constructor of `Order`, `GetIterator` is no `getIterator`, a bare `Total` names no method `total`, and a constant of `Report` reads no static member through its twin `REPORT`.
+
+## [0.6.10] - 2026-11-13
+
+### Upgrading from 0.6.9
+
+0.6.10 fixes regressions 0.6.9 shipped with exact names, among them a plain PHP class whose override of a camelCase default body of a PHP# interface never ran. Upgrade from 0.6.9 straight away. From 0.6.8, follow 0.6.9's upgrade notes. 0.6.9 left out one rule there: a plain PHP class that implements a PHP# interface has exact names, as a class below a PHP# class does, so every method of it, inherited from a plain parent too, is reached only by the name it declares.
+
+### Fixed
+
 - A plain PHP closure answers `is Function<…>` by its declared PHP signature, spec section 21, where 0.6.9 answered false for every one. `static fn (): ?Item => new Item()` and `static fn (): Item => new Item()` are a `Function<Item?() uses none>`, a parameter it declares no type for takes anything, and a result it declares no type for is `Any?`, so `static fn () => new Item()` is a `Function<Any?()>` and not a `Function<Item?()>`. Its type lists no effects, so it fits every `uses`, as the checker takes a plain PHP callable.
 - `mago` names a method that a plain PHP class's `__call` serves as the call writes it, so a call of `whereKey` that the `__call` of a `ForwardedQuery` serves warns "Ambiguous method call to `whereKey` on class `ForwardedQuery`.", where 0.6.9 wrote `wherekey`.
 - A lazy `map` of a plain PHP closure is an `Iterable` of the result type the closure declares, spec section 12, so `ids.map(label)` with `static fn (int $id): string => "#$id"` is an `Iterable<string>` without running it, where 0.6.9 read every plain closure's result as `Any?`. A closure that declares no result type still gives an `Iterable<Any?>`.
@@ -21,16 +40,6 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
   - A host's method, property and class initializer provider for a plain PHP class serves a PHP# subclass.
   - A `class-initializers` entry such as `setUp` initializes the properties of a plain PHP class that has exact names from a PHP# interface.
   - A `class_alias()` of a PHP# class names it, and the references a string callable `'Probe\Box::openLid'`, a PHP first-class callable and an effect record name a PHP# class by its exact name.
-- `mago analyze --watch` and the language server drop the uses an edited method of a plain PHP class with exact names made, as the plain `Room` that implements a PHP# interface keys `syncedId`, spec section 24. An edit of the body or the signature of `Room::syncedId` that stops calling `Cart.total` brings back spec section 5's warning "`Cart.total` is public, and nothing outside `App.Shop` uses it.", as a full run reports it. 0.6.10 named the edited method `syncedid`, which no use of `syncedId` meets, and kept the uses its old body made.
-- Two PHP# names that differ only in case name two things everywhere, spec section 24, where 0.6.10 still compared some names ignoring case and took one twin for the other. Each compare now keys a name by the engine's rule, a PHP# class-like and the methods of a class with exact names as written, and any other in any case:
-  - A host's return-type, assertion, signature and call-forwarding provider, its method-call hook and its entry point of `Demo\Box::total` reach `total` and never its twin `Total`, and a class-like pattern names a PHP# class-like as written. The SDK's `FunctionLikeIdentifier` carries its class's rule as Mago answers it, so `equals` tells `Box::total` from `Box::Total`, and a worker accepts one hook of both `Box::open` and `Box::Open`, where 0.6.10 refused it as a target named twice. The analyzer protocol moves to 1.14, so a mixed pair is refused at its first message.
-  - An effect is a class-like named by its key, so `uses DISK` allows no call of the `foreign` class `Disk`.
-  - A struct's own `Parse` leaves it the generated `parse` and `tryParse`, a PHP# enum must implement a `Cases` its interface declares, its own static `Cases` keeps its own type, and a plain PHP class with exact names has no `ToString` that runs its `__toString()`.
-  - A PHP# class-like `App\RANDOM`, declared in the file or anywhere in its namespace, leaves a bare `Random` in `App` naming the standard library's `Sharp\Random`, where 0.6.10 reported "Cannot find type `Random`; did you mean `App.RANDOM`?".
-  - A type that names two twins, as `Parcel.Box | Parcel.BOX` of an enum with the cases `Box` and `BOX`, holds both and takes a `BOX` value, where 0.6.10's checker refused it with "Duplicate type `Parcel.BOX` is redundant." The engine compares the class names of a declared type exactly in a `.sharp` file, so plain PHP's `Foo|FOO` is still a duplicate type.
-  - An override whose signature names a PHP# class's twin, as `ship(Parcel\BOX $parcel)` where the parent takes `Parcel\Box`, is refused with PHP's "Declaration of … must be compatible with …", where 0.6.10 took the two for one class. Two names in a signature are one type when they reach one class, so plain PHP's `foo` is still its parent's `Foo`, loaded, autoloaded while the child links, or preloaded.
-  - An `unchecked-exception-classes` or `unchecked-exceptions` entry names a PHP# exception as written, so `App\Errors\NotFound` leaves its twin `NOTFOUND` checked.
-  - In a `.sharp` file, a method `priceof` is no clash with a property `priceOf`, the laws `same` and `Same` are two laws, a method `later` is no clash with the case `Later`, a method `Seconds` none with a case's field `seconds`, `status()` is no constructor of the enum `Status`, `Order.order()` is a named constructor of `Order`, `GetIterator` is no `getIterator`, a bare `Total` names no method `total`, and a constant of `Report` reads no static member through its twin `REPORT`.
 
 ## [0.6.9] - 2026-11-13
 
@@ -775,7 +784,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.9...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.10...HEAD
+[0.6.10]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.9...v0.6.10
 [0.6.9]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.8...v0.6.9
 [0.6.8]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.6...v0.6.7
