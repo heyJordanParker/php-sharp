@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: d2df3c5d80f5355577fb5a54b270e82c14ef02f1 */
+ * Stub hash: 2295258b6e92dcb70b1b9fe7ed47f07c3f740900 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -106,8 +106,9 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_build, 0, 2, IS_M
 	ZEND_ARG_VARIADIC_TYPE_INFO(0, arguments, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_emit, 0, 1, IS_VOID, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_emit, 0, 2, IS_VOID, 0)
 	ZEND_ARG_TYPE_INFO(0, event, IS_OBJECT, 0)
+	ZEND_ARG_TYPE_INFO(0, dispatcher, IS_STRING, 1)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_listenersFor, 0, 1, IS_ARRAY, 0)
@@ -316,7 +317,9 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_class_Sharp_Internal_Listener___construct arginfo_class_Sharp_Listening___construct
 
-#define arginfo_class_Sharp_Internal_Listener_hear arginfo_Sharp_Internal_emit
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Internal_Listener_hear, 0, 1, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, event, IS_OBJECT, 0)
+ZEND_END_ARG_INFO()
 
 ZEND_FUNCTION(Sharp_Internal_accepts);
 ZEND_FUNCTION(Sharp_Internal_statics);

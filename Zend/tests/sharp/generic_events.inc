@@ -40,7 +40,7 @@ namespace {
         heard('Events.on<Saved<Order>> and a Saved<Order>', fn () => (new Order(9))->save());
         heard('Events.on<Saved<Order>> and a Saved<Invoice>', fn () => (new Invoice(10))->save());
         $listening = null;
-        heard('plain PHP emits a Saved<Invoice>', fn () => Sharp\Internal\emit(Hears::invoiceSaved(11)));
+        heard('plain PHP emits a Saved<Invoice>', fn () => Sharp\Internal\emit(Hears::invoiceSaved(11), 'Sharp\Dispatcher'));
         $listeners = (new Sharp\Psr\ListenerProvider())->getListenersForEvent(Hears::invoiceSaved(12));
         heard('a PSR-14 dispatcher runs the listeners of a Saved<Invoice>', function () use ($listeners): void {
             foreach ($listeners as $listener) {

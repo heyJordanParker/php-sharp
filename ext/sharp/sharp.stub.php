@@ -120,7 +120,7 @@ function building(object $object): bool {}
 
 function build(object $object, \Closure $body, mixed ...$arguments): mixed {}
 
-function emit(object $event): void {}
+function emit(object $event, ?string $dispatcher): void {}
 
 function listenersFor(object $event): array {}
 

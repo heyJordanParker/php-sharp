@@ -56,6 +56,22 @@ public enum SortColumn : string
 query.orderByRaw(column.value);   // column is a SortColumn
 ```
 
+#### Move the engine, mago and the standard library to 0.6.11 together, then compile again
+
+The 0.6.11 engine refuses every `.sharpc` file an older mago wrote, because `SHARP_UNIT_ABI` changed: each `emit` now passes the engine the dispatcher it hands the event to, the interface the standard library marks, where 0.6.10 passed the event alone.
+
+```text
+Shop.sharp was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine.
+```
+
+With `sharp.compile_command` set, the engine runs it and reads the files it writes. Otherwise, compile again after upgrading. mago 0.6.11 also needs the 0.6.11 standard library, whose `Dispatcher` carries the mark: against the 0.6.10 library, every `emit` throws `Sharp\ContainerError` with "No module binds a dispatcher".
+
+```sh
+composer require "heyjordanparker/php-sharp-composer:^0.6.11"
+composer require --dev "heyjordanparker/mago-sharp:^0.6.11"
+vendor/bin/mago compile
+```
+
 ### Added
 
 - `Class<T>.methods()` and `properties()` read what .NET's `MethodInfo` and Kotlin's `KFunction` read, spec section 25. A `Method` gives its `declaringClass`, `isStatic` and `visibility`, a `Property` its `declaringClass` and `visibility`, and a `Parameter` `isVariadic` and `defaultValue()`. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member, so an `internal` member reads `Internal` though plain PHP reaches it as a public one. `defaultValue()` evaluates the default on each read, a `new` in it included, and throws `OutOfRangeException` for a parameter without one.

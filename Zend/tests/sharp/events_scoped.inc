@@ -110,7 +110,7 @@ function listening(string $name, string $type = 'App\Scoped\Paid'): Sharp\Listen
 
 function pay(int $orderId): void
 {
-    Sharp\Internal\emit(new App\Scoped\Paid($orderId));
+    Sharp\Internal\emit(new App\Scoped\Paid($orderId), 'Sharp\Dispatcher');
 }
 
 // Prints what the listeners heard while $run ran.

@@ -8605,22 +8605,26 @@ ZEND_METHOD(Sharp_Internal_Listener, __construct)
 	ZEND_PARSE_PARAMETERS_NONE();
 }
 
-/* The namespace whose binding of the dispatcher serves the whole app, as spec section 15's "An app replaces the
- * dispatcher once at startup" says: the running test module's, whatever namespace its header names; else that of the
- * app's top module that binds it, which mago compile writes in the listener table of the event's project, read here
- * with the modules above it; else the root namespace, which the standard library's module serves. Returns NULL and
- * throws when the table is damaged. */
-static zend_string *sharp_dispatcher_namespace(zend_class_entry *event)
+/* The namespace whose binding of the dispatcher, the service of the id dispatcher names, serves the whole app, as spec
+ * section 15's "An app replaces the dispatcher once at startup" says: the running test module's, whatever namespace its
+ * header names; else that of the app's top module that binds it, which mago compile writes in the listener table of the
+ * event's project, read here with the modules above it; else the root namespace, which the standard library's module
+ * serves. Returns NULL and throws when the table is damaged. */
+static zend_string *sharp_dispatcher_namespace(zend_class_entry *event, const zend_string *dispatcher)
 {
-	static const char id[] = " Sharp\\Dispatcher";
 	zend_string *key;
 	size_t root_length;
 
 	if (SHARP_G(container_test)) {
+		/* A test module's binding is keyed "<namespace> <id>". */
 		ZEND_HASH_FOREACH_STR_KEY(SHARP_G(container_test), key) {
-			if (ZSTR_LEN(key) >= sizeof(id) - 1
-					&& memcmp(ZSTR_VAL(key) + ZSTR_LEN(key) - (sizeof(id) - 1), id, sizeof(id) - 1) == 0) {
-				return zend_string_init(ZSTR_VAL(key), ZSTR_LEN(key) - (sizeof(id) - 1), 0);
+			if (ZSTR_LEN(key) > ZSTR_LEN(dispatcher)) {
+				size_t namespace_length = ZSTR_LEN(key) - ZSTR_LEN(dispatcher) - 1;
+
+				if (ZSTR_VAL(key)[namespace_length] == ' '
+						&& memcmp(ZSTR_VAL(key) + namespace_length + 1, ZSTR_VAL(dispatcher), ZSTR_LEN(dispatcher)) == 0) {
+					return zend_string_init(ZSTR_VAL(key), namespace_length, 0);
+				}
 			}
 		} ZEND_HASH_FOREACH_END();
 	}
@@ -8648,28 +8652,33 @@ static zend_string *sharp_dispatcher_namespace(zend_class_entry *event)
 }
 
 /* emit hands the event to the app's dispatcher with one function per listener. The dispatcher sees every event, one
- * no listener hears included, whoever emits it: an app class, a PHP# package in vendor/ or plain PHP. */
+ * no listener hears included, whoever emits it: an app class, a PHP# package in vendor/ or plain PHP. id is the
+ * dispatcher's service, the interface the standard library marks DispatchesEmits, which mago compile names at each
+ * emit, so the engine names no class. It is null in a project without the standard library, which has no dispatcher. */
 ZEND_FUNCTION(Sharp_Internal_emit)
 {
 	zval *event, listeners, dispatcher;
 	zend_string *id, *namespace;
 	bool found;
 
-	ZEND_PARSE_PARAMETERS_START(1, 1)
+	ZEND_PARSE_PARAMETERS_START(2, 2)
 		Z_PARAM_OBJECT(event)
+		Z_PARAM_STR_OR_NULL(id)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!id) {
+		zend_throw_error(sharp_ce_container_error, "No module binds a dispatcher");
+		RETURN_THROWS();
+	}
 	if (!sharp_listeners_for(event, &listeners)) {
 		RETURN_THROWS();
 	}
-	namespace = sharp_dispatcher_namespace(Z_OBJCE_P(event));
+	namespace = sharp_dispatcher_namespace(Z_OBJCE_P(event), id);
 	if (!namespace) {
 		zval_ptr_dtor(&listeners);
 		RETURN_THROWS();
 	}
-	id = zend_string_init("Sharp\\Dispatcher", sizeof("Sharp\\Dispatcher") - 1, 0);
 	found = sharp_container_service(id, id, namespace, NULL, &dispatcher);
-	zend_string_release(id);
 	zend_string_release(namespace);
 
 	if (found) {

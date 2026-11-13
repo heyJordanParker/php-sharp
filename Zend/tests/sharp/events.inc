@@ -39,13 +39,13 @@ for ($run = 0; $run < 2; $run++) {
     heard(fn () => $register->pay(7, 5));
     heard(fn () => $register->refund(8));
     heard(fn () => $register->pay(9, -1));
-    heard(fn () => Sharp\Internal\emit(new Shop\OrderPaid(10, 3)));
-    heard(fn () => Sharp\Internal\emit(new Lib\JobFailed('mail')));
-    heard(fn () => Sharp\Internal\emit(new Unheard()));
+    heard(fn () => Sharp\Internal\emit(new Shop\OrderPaid(10, 3), 'Sharp\Dispatcher'));
+    heard(fn () => Sharp\Internal\emit(new Lib\JobFailed('mail'), 'Sharp\Dispatcher'));
+    heard(fn () => Sharp\Internal\emit(new Unheard(), 'Sharp\Dispatcher'));
 }
 
 try {
-    Sharp\Internal\emit(7);
+    Sharp\Internal\emit(7, 'Sharp\Dispatcher');
 } catch (TypeError $error) {
     echo $error->getMessage(), "\n";
 }

@@ -34,7 +34,7 @@ $use = static fn (string $who): string => '<?php require ' . var_export(__DIR__ 
     . ' $checkout = (new Sharp\Container())->get("App\\\\Shop\\\\Checkout");'
     . ' echo "' . $who . ', a binding and an expression over its parameters: ", $checkout->usedMailer()->name(), " ", $checkout->usedGreeting()->usedText(), "\n";'
     . ' echo "' . $who . ', a checked call from plain PHP: ", App\Fresh\Notices::count(["a", "b"]), "\n";'
-    . ' Sharp\Internal\emit(new App\Fresh\Paid(1));'
+    . ' Sharp\Internal\emit(new App\Fresh\Paid(1), "Sharp\\\\Dispatcher");'
     . ' echo "' . $who . ', a listener: ", implode(" ", App\Fresh\Notices::$log), "\n";';
 file_put_contents("$root/preload.php", $use('preload'));
 file_put_contents("$root/request.php", $use('request'));
