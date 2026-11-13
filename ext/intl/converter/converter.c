@@ -507,7 +507,7 @@ static void php_converter_resolve_callback(
 	const char *callback_name,
 	size_t callback_name_len
 ) {
-	zend_function *fn = zend_hash_str_find_ptr_lc(&obj->ce->function_table, callback_name, callback_name_len);
+	zend_function *fn = zend_class_find_protocol_method(obj->ce, callback_name, callback_name_len);
 	ZEND_ASSERT(fn != NULL);
 
 	fcc->function_handler = fn;
@@ -921,8 +921,8 @@ static zend_object *php_converter_object_ctor(zend_class_entry *ce, php_converte
 	zend_object_std_init(&objval->obj, ce);
 	object_properties_init(&objval->obj, ce);
 	intl_error_init(&(objval->error));
-	php_converter_resolve_callback(&objval->to_cache, &objval->obj, ZEND_STRL("toUCallback"));
-	php_converter_resolve_callback(&objval->from_cache, &objval->obj, ZEND_STRL("fromUCallback"));
+	php_converter_resolve_callback(&objval->to_cache, &objval->obj, ZEND_STRL("toucallback"));
+	php_converter_resolve_callback(&objval->from_cache, &objval->obj, ZEND_STRL("fromucallback"));
 
 	*pobjval = objval;
 

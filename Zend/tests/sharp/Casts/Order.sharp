@@ -1,0 +1,13 @@
+namespace App.Casts;
+
+import Lib.Casting;
+
+public class Order : Casting
+{
+    protected override Map<string, string> casts() => ["paid": "bool"];
+
+    // A call runs the method, and a read reads the field, as PHP resolves them.
+    public Map<string, string> called() => this.casts();
+
+    public Any? read() => this.casts;
+}

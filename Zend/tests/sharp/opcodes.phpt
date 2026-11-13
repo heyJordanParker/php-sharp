@@ -214,7 +214,7 @@ echo 'a check and another opcode: ', without_checks($added, $checks) === $twin ?
 Calc: same opcodes and lines in 5 op arrays, same signatures in 1 classes
 Nulls: same opcodes and lines in 18 op arrays, same signatures in 1 classes
 ControlFlow: different opcodes and lines in 6 op arrays, same signatures in 1 classes
-  .sharp      ; (lines=32, args=1, vars=5, tmps=14)
+  .sharp      ; (lines=27, args=1, vars=5, tmps=14)
   .sharp L0061 0004 T7 = SHARP_VERIFY_TYPE_ARGS V6 string("List<int>")
   .sharp L0061 0005 V8 = FE_RESET_R T7 0010
   .sharp L0061 0006 FE_FETCH_R V8 CV2($price) 0010
@@ -222,28 +222,23 @@ ControlFlow: different opcodes and lines in 6 op arrays, same signatures in 1 cl
   .sharp L0062 0008 ASSIGN_OP (ADD) CV1($total) T9
   .sharp L0061 0009 JMP 0006
   .sharp L0061 0010 FE_FREE V8
-  .sharp L0064 0011 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .sharp L0064 0012 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
-  .sharp L0064 0013 V11 = DO_FCALL
-  .sharp L0064 0014 SEND_VAR V11 1
-  .sharp L0064 0015 SEND_VAL null 2
-  .sharp L0064 0016 SEND_VAL string("") 3
-  .sharp L0064 0017 SEND_VAL string("Map<int, int>") 4
-  .sharp L0064 0018 SEND_VAL string("Demo\\Prices::all()") 5
-  .sharp L0064 0019 V12 = DO_ICALL
-  .sharp L0064 0020 ASSIGN CV3($slots) V12
-  .sharp L0065 0021 V14 = FE_RESET_R CV3($slots) 0027
-  .sharp L0065 0022 T15 = FE_FETCH_R V14 CV2($price) 0027
-  .sharp L0065 0023 ASSIGN CV4($slot) T15
-  .sharp L0066 0024 ASSIGN_OP (ADD) CV1($total) CV4($slot)
-  .sharp L0067 0025 ASSIGN CV2($price) int(0)
-  .sharp L0065 0026 JMP 0022
-  .sharp L0065 0027 FE_FREE V14
-  .sharp L0069 0028 VERIFY_RETURN_TYPE CV1($total)
-  .sharp L0069 0029 RETURN CV1($total)
-  .sharp L0070 0030 VERIFY_RETURN_TYPE
-  .sharp L0070 0031 RETURN null
-  .sharp      ; (lines=32, args=1, vars=5, tmps=14)
+  .sharp L0064 0011 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
+  .sharp L0064 0012 V11 = DO_FCALL
+  .sharp L0064 0013 T12 = SHARP_RETURNED V11 null
+  .sharp L0064 0014 OP_DATA string("") string("Map<int, int>")
+  .sharp L0064 0015 ASSIGN CV3($slots) T12
+  .sharp L0065 0016 V14 = FE_RESET_R CV3($slots) 0022
+  .sharp L0065 0017 T15 = FE_FETCH_R V14 CV2($price) 0022
+  .sharp L0065 0018 ASSIGN CV4($slot) T15
+  .sharp L0066 0019 ASSIGN_OP (ADD) CV1($total) CV4($slot)
+  .sharp L0067 0020 ASSIGN CV2($price) int(0)
+  .sharp L0065 0021 JMP 0017
+  .sharp L0065 0022 FE_FREE V14
+  .sharp L0069 0023 VERIFY_RETURN_TYPE CV1($total)
+  .sharp L0069 0024 RETURN CV1($total)
+  .sharp L0070 0025 VERIFY_RETURN_TYPE
+  .sharp L0070 0026 RETURN null
+  .sharp      ; (lines=27, args=1, vars=5, tmps=14)
   .sharp 0004 T7 = SHARP_VERIFY_TYPE_ARGS V6 string("List<int>")
   .sharp 0005 V8 = FE_RESET_R T7 0010
   .sharp 0006 FE_FETCH_R V8 CV2($price) 0010
@@ -251,109 +246,116 @@ ControlFlow: different opcodes and lines in 6 op arrays, same signatures in 1 cl
   .sharp 0008 ASSIGN_OP (ADD) CV1($total) T9
   .sharp 0009 JMP 0006
   .sharp 0010 FE_FREE V8
-  .sharp 0011 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .sharp 0012 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
-  .sharp 0013 V11 = DO_FCALL
-  .sharp 0014 SEND_VAR V11 1
-  .sharp 0015 SEND_VAL null 2
-  .sharp 0016 SEND_VAL string("") 3
-  .sharp 0017 SEND_VAL string("Map<int, int>") 4
-  .sharp 0018 SEND_VAL string("Demo\\Prices::all()") 5
-  .sharp 0019 V12 = DO_ICALL
-  .sharp 0020 ASSIGN CV3($slots) V12
-  .sharp 0021 V14 = FE_RESET_R CV3($slots) 0027
-  .sharp 0022 T15 = FE_FETCH_R V14 CV2($price) 0027
-  .sharp 0023 ASSIGN CV4($slot) T15
-  .sharp 0024 ASSIGN_OP (ADD) CV1($total) CV4($slot)
-  .sharp 0025 ASSIGN CV2($price) int(0)
-  .sharp 0026 JMP 0022
-  .sharp 0027 FE_FREE V14
-  .sharp 0028 VERIFY_RETURN_TYPE CV1($total)
-  .sharp 0029 RETURN CV1($total)
-  .sharp 0030 VERIFY_RETURN_TYPE
-  .sharp 0031 RETURN null
+  .sharp 0011 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
+  .sharp 0012 V11 = DO_FCALL
+  .sharp 0013 T12 = SHARP_RETURNED V11 null
+  .sharp 0014 OP_DATA string("") string("Map<int, int>")
+  .sharp 0015 ASSIGN CV3($slots) T12
+  .sharp 0016 V14 = FE_RESET_R CV3($slots) 0022
+  .sharp 0017 T15 = FE_FETCH_R V14 CV2($price) 0022
+  .sharp 0018 ASSIGN CV4($slot) T15
+  .sharp 0019 ASSIGN_OP (ADD) CV1($total) CV4($slot)
+  .sharp 0020 ASSIGN CV2($price) int(0)
+  .sharp 0021 JMP 0017
+  .sharp 0022 FE_FREE V14
+  .sharp 0023 VERIFY_RETURN_TYPE CV1($total)
+  .sharp 0024 RETURN CV1($total)
+  .sharp 0025 VERIFY_RETURN_TYPE
+  .sharp 0026 RETURN null
   .sharp      8: 0006 - 0010 (loop)
-  .sharp      14: 0022 - 0027 (loop)
-  .php        ; (lines=31, args=1, vars=5, tmps=13)
+  .sharp      12: 0014 - 0015 (tmp/var)
+  .sharp      14: 0017 - 0022 (loop)
+  .php        ; (lines=26, args=1, vars=5, tmps=13)
   .php   L0061 0004 V7 = FE_RESET_R V6 0009
   .php   L0061 0005 FE_FETCH_R V7 CV2($price) 0009
   .php   L0062 0006 T8 = MUL CV2($price) CV0($factor)
   .php   L0062 0007 ASSIGN_OP (ADD) CV1($total) T8
   .php   L0061 0008 JMP 0005
   .php   L0061 0009 FE_FREE V7
-  .php   L0064 0010 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .php   L0064 0011 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
-  .php   L0064 0012 V10 = DO_FCALL
-  .php   L0064 0013 SEND_VAR V10 1
-  .php   L0064 0014 SEND_VAL null 2
-  .php   L0064 0015 SEND_VAL string("") 3
-  .php   L0064 0016 SEND_VAL string("Map<int, int>") 4
-  .php   L0064 0017 SEND_VAL string("Demo\\Prices::all()") 5
-  .php   L0064 0018 V11 = DO_ICALL
-  .php   L0064 0019 ASSIGN CV3($slots) V11
-  .php   L0065 0020 V13 = FE_RESET_R CV3($slots) 0026
-  .php   L0065 0021 T14 = FE_FETCH_R V13 CV2($price) 0026
-  .php   L0065 0022 ASSIGN CV4($slot) T14
-  .php   L0066 0023 ASSIGN_OP (ADD) CV1($total) CV4($slot)
-  .php   L0067 0024 ASSIGN CV2($price) int(0)
-  .php   L0065 0025 JMP 0021
-  .php   L0065 0026 FE_FREE V13
-  .php   L0069 0027 VERIFY_RETURN_TYPE CV1($total)
-  .php   L0069 0028 RETURN CV1($total)
-  .php   L0070 0029 VERIFY_RETURN_TYPE
-  .php   L0070 0030 RETURN null
-  .php        ; (lines=31, args=1, vars=5, tmps=13)
+  .php   L0064 0010 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
+  .php   L0064 0011 V10 = DO_FCALL
+  .php   L0064 0012 T11 = SHARP_RETURNED V10 null
+  .php   L0064 0013 OP_DATA string("") string("Map<int, int>")
+  .php   L0064 0014 ASSIGN CV3($slots) T11
+  .php   L0065 0015 V13 = FE_RESET_R CV3($slots) 0021
+  .php   L0065 0016 T14 = FE_FETCH_R V13 CV2($price) 0021
+  .php   L0065 0017 ASSIGN CV4($slot) T14
+  .php   L0066 0018 ASSIGN_OP (ADD) CV1($total) CV4($slot)
+  .php   L0067 0019 ASSIGN CV2($price) int(0)
+  .php   L0065 0020 JMP 0016
+  .php   L0065 0021 FE_FREE V13
+  .php   L0069 0022 VERIFY_RETURN_TYPE CV1($total)
+  .php   L0069 0023 RETURN CV1($total)
+  .php   L0070 0024 VERIFY_RETURN_TYPE
+  .php   L0070 0025 RETURN null
+  .php        ; (lines=26, args=1, vars=5, tmps=13)
   .php   0004 V7 = FE_RESET_R V6 0009
   .php   0005 FE_FETCH_R V7 CV2($price) 0009
   .php   0006 T8 = MUL CV2($price) CV0($factor)
   .php   0007 ASSIGN_OP (ADD) CV1($total) T8
   .php   0008 JMP 0005
   .php   0009 FE_FREE V7
-  .php   0010 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .php   0011 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
-  .php   0012 V10 = DO_FCALL
-  .php   0013 SEND_VAR V10 1
-  .php   0014 SEND_VAL null 2
-  .php   0015 SEND_VAL string("") 3
-  .php   0016 SEND_VAL string("Map<int, int>") 4
-  .php   0017 SEND_VAL string("Demo\\Prices::all()") 5
-  .php   0018 V11 = DO_ICALL
-  .php   0019 ASSIGN CV3($slots) V11
-  .php   0020 V13 = FE_RESET_R CV3($slots) 0026
-  .php   0021 T14 = FE_FETCH_R V13 CV2($price) 0026
-  .php   0022 ASSIGN CV4($slot) T14
-  .php   0023 ASSIGN_OP (ADD) CV1($total) CV4($slot)
-  .php   0024 ASSIGN CV2($price) int(0)
-  .php   0025 JMP 0021
-  .php   0026 FE_FREE V13
-  .php   0027 VERIFY_RETURN_TYPE CV1($total)
-  .php   0028 RETURN CV1($total)
-  .php   0029 VERIFY_RETURN_TYPE
-  .php   0030 RETURN null
+  .php   0010 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
+  .php   0011 V10 = DO_FCALL
+  .php   0012 T11 = SHARP_RETURNED V10 null
+  .php   0013 OP_DATA string("") string("Map<int, int>")
+  .php   0014 ASSIGN CV3($slots) T11
+  .php   0015 V13 = FE_RESET_R CV3($slots) 0021
+  .php   0016 T14 = FE_FETCH_R V13 CV2($price) 0021
+  .php   0017 ASSIGN CV4($slot) T14
+  .php   0018 ASSIGN_OP (ADD) CV1($total) CV4($slot)
+  .php   0019 ASSIGN CV2($price) int(0)
+  .php   0020 JMP 0016
+  .php   0021 FE_FREE V13
+  .php   0022 VERIFY_RETURN_TYPE CV1($total)
+  .php   0023 RETURN CV1($total)
+  .php   0024 VERIFY_RETURN_TYPE
+  .php   0025 RETURN null
   .php        7: 0005 - 0009 (loop)
-  .php        13: 0021 - 0026 (loop)
+  .php        11: 0013 - 0014 (tmp/var)
+  .php        13: 0016 - 0021 (loop)
 Order/Order: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Order/Till: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Expressions: same opcodes and lines in 8 op arrays, same signatures in 1 classes
 Checkout: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Page: same opcodes and lines in 10 op arrays, same signatures in 1 classes
-Stage: same opcodes and lines in 4 op arrays, same signatures in 1 classes
-Suit: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Rank: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Stage: different opcodes and lines in 4 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Demo\\Stage")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Stage")
+  .php   L0005 0000 DECLARE_CLASS string("demo\\stage")
+  .php   0000 DECLARE_CLASS string("demo\\stage")
+Suit: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Demo\\Suit")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Suit")
+  .php   L0003 0000 DECLARE_CLASS string("demo\\suit")
+  .php   0000 DECLARE_CLASS string("demo\\suit")
+Rank: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Demo\\Rank")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Rank")
+  .php   L0003 0000 DECLARE_CLASS string("demo\\rank")
+  .php   0000 DECLARE_CLASS string("demo\\rank")
 Shipment: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Task: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Shapes/Measured: same opcodes and lines in 2 op arrays, same signatures in 0 classes
 Shapes/Shape: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Shapes/Unit: same opcodes and lines in 1 op arrays, same signatures in 1 classes
 Members: same opcodes and lines in 10 op arrays, same signatures in 1 classes
-Site/Page: same opcodes and lines in 9 op arrays, same signatures in 1 classes
+Site/Page: different opcodes and lines in 9 op arrays, same signatures in 1 classes
+  .sharp L0010 0000 DECLARE_CLASS string("Site\\Page") string("lib\\resource")
+  .sharp 0000 DECLARE_CLASS string("Site\\Page") string("lib\\resource")
+  .php   L0010 0000 DECLARE_CLASS string("site\\page") string("lib\\resource")
+  .php   0000 DECLARE_CLASS string("site\\page") string("lib\\resource")
 Site/Shape: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Site/Square: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Site/Square: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Site\\Square") string("site\\shape")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Site\\Square") string("site\\shape")
+  .php   L0003 0000 DECLARE_CLASS string("site\\square") string("site\\shape")
+  .php   0000 DECLARE_CLASS_DELAYED string("site\\square") string("site\\shape")
 Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in 1 classes
   check  Demo\Cart::fill string("List<Demo.Item>")
   check  Demo\Cart::withPrices string("List<int>, List<int>")
-  .sharp      ; (lines=79, args=1, vars=7, tmps=41)
+  .sharp      ; (lines=74, args=1, vars=7, tmps=41)
   .sharp L0012 0001 V8 = NEW 2 string("Demo\\Item")
   .sharp L0012 0005 T10 = INIT_ARRAY 1 (packed) V8 NEXT
   .sharp L0012 0007 OP_DATA T10
@@ -409,25 +411,20 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .sharp L0020 0057 JMP 0051
   .sharp L0020 0058 FE_FREE V36
   .sharp L0025 0059 INIT_STATIC_METHOD_CALL 1 string("Lib\\Slots") string("fromArray")
-  .sharp L0025 0060 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .sharp L0025 0061 INIT_METHOD_CALL 0 THIS string("prices")
-  .sharp L0025 0062 V42 = DO_FCALL
-  .sharp L0025 0063 SEND_VAR V42 1
-  .sharp L0025 0064 T43 = FETCH_THIS
-  .sharp L0025 0065 SEND_VAL T43 2
-  .sharp L0025 0066 SEND_VAL string("prices") 3
-  .sharp L0025 0067 SEND_VAL string("List<int>, List<Any?>") 4
-  .sharp L0025 0068 SEND_VAL string("Demo.Cart.prices()") 5
-  .sharp L0025 0069 V44 = DO_ICALL
-  .sharp L0025 0070 SEND_VAR_NO_REF_EX V44 1
-  .sharp L0025 0071 V45 = DO_FCALL
-  .sharp L0025 0072 INIT_METHOD_CALL 0 V45 string("getSize")
-  .sharp L0025 0073 V46 = DO_FCALL
-  .sharp L0025 0074 T47 = ADD CV3($total) V46
-  .sharp L0025 0075 VERIFY_RETURN_TYPE T47
-  .sharp L0025 0076 RETURN T47
-  .sharp L0026 0077 VERIFY_RETURN_TYPE
-  .sharp L0026 0078 RETURN null
+  .sharp L0025 0060 INIT_METHOD_CALL 0 THIS string("prices")
+  .sharp L0025 0061 V42 = DO_FCALL
+  .sharp L0025 0062 T43 = FETCH_THIS
+  .sharp L0025 0063 T44 = SHARP_RETURNED V42 T43
+  .sharp L0025 0064 OP_DATA string("prices") string("List<int>, List<Any?>")
+  .sharp L0025 0065 SEND_VAL_EX T44 1
+  .sharp L0025 0066 V45 = DO_FCALL
+  .sharp L0025 0067 INIT_METHOD_CALL 0 V45 string("getSize")
+  .sharp L0025 0068 V46 = DO_FCALL
+  .sharp L0025 0069 T47 = ADD CV3($total) V46
+  .sharp L0025 0070 VERIFY_RETURN_TYPE T47
+  .sharp L0025 0071 RETURN T47
+  .sharp L0026 0072 VERIFY_RETURN_TYPE
+  .sharp L0026 0073 RETURN null
   .sharp      ; (lines=17, args=0, vars=3, tmps=6)
   .sharp L0031 0001 T4 = FETCH_OBJ_R THIS string("items")
   .sharp L0031 0002 V5 = FE_RESET_R T4 0012
@@ -468,7 +465,7 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .sharp L0040 0020 RETURN T12
   .sharp L0041 0021 VERIFY_RETURN_TYPE
   .sharp L0041 0022 RETURN null
-  .sharp      ; (lines=79, args=1, vars=7, tmps=41)
+  .sharp      ; (lines=74, args=1, vars=7, tmps=41)
   .sharp 0001 V8 = NEW 2 string("Demo\\Item")
   .sharp 0005 T10 = INIT_ARRAY 1 (packed) V8 NEXT
   .sharp 0007 OP_DATA T10
@@ -524,29 +521,26 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .sharp 0057 JMP 0051
   .sharp 0058 FE_FREE V36
   .sharp 0059 INIT_STATIC_METHOD_CALL 1 string("Lib\\Slots") string("fromArray")
-  .sharp 0060 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .sharp 0061 INIT_METHOD_CALL 0 THIS string("prices")
-  .sharp 0062 V42 = DO_FCALL
-  .sharp 0063 SEND_VAR V42 1
-  .sharp 0064 T43 = FETCH_THIS
-  .sharp 0065 SEND_VAL T43 2
-  .sharp 0066 SEND_VAL string("prices") 3
-  .sharp 0067 SEND_VAL string("List<int>, List<Any?>") 4
-  .sharp 0068 SEND_VAL string("Demo.Cart.prices()") 5
-  .sharp 0069 V44 = DO_ICALL
-  .sharp 0070 SEND_VAR_NO_REF_EX V44 1
-  .sharp 0071 V45 = DO_FCALL
-  .sharp 0072 INIT_METHOD_CALL 0 V45 string("getSize")
-  .sharp 0073 V46 = DO_FCALL
-  .sharp 0074 T47 = ADD CV3($total) V46
-  .sharp 0075 VERIFY_RETURN_TYPE T47
-  .sharp 0076 RETURN T47
-  .sharp 0077 VERIFY_RETURN_TYPE
-  .sharp 0078 RETURN null
+  .sharp 0060 INIT_METHOD_CALL 0 THIS string("prices")
+  .sharp 0061 V42 = DO_FCALL
+  .sharp 0062 T43 = FETCH_THIS
+  .sharp 0063 T44 = SHARP_RETURNED V42 T43
+  .sharp 0064 OP_DATA string("prices") string("List<int>, List<Any?>")
+  .sharp 0065 SEND_VAL_EX T44 1
+  .sharp 0066 V45 = DO_FCALL
+  .sharp 0067 INIT_METHOD_CALL 0 V45 string("getSize")
+  .sharp 0068 V46 = DO_FCALL
+  .sharp 0069 T47 = ADD CV3($total) V46
+  .sharp 0070 VERIFY_RETURN_TYPE T47
+  .sharp 0071 RETURN T47
+  .sharp 0072 VERIFY_RETURN_TYPE
+  .sharp 0073 RETURN null
   .sharp      8: 0002 - 0005 (new)
   .sharp      32: 0044 - 0048 (loop)
   .sharp      36: 0051 - 0058 (loop)
-  .sharp      47: 0075 - 0076 (tmp/var)
+  .sharp      42: 0062 - 0063 (tmp/var)
+  .sharp      44: 0064 - 0065 (tmp/var)
+  .sharp      47: 0070 - 0071 (tmp/var)
   .sharp      ; (lines=17, args=0, vars=3, tmps=6)
   .sharp 0001 T4 = FETCH_OBJ_R THIS string("items")
   .sharp 0002 V5 = FE_RESET_R T4 0012
@@ -588,7 +582,7 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .sharp 0022 RETURN null
   .sharp      12: 0019 - 0020 (tmp/var)
   .sharp     Property [ private Sharp\Map $counts = Closure({closure:<file>:8})() ]
-  .php        ; (lines=64, args=1, vars=5, tmps=35)
+  .php        ; (lines=59, args=1, vars=5, tmps=35)
   .php   L0012 0001 V6 = NEW 2 string("Demo\\Item")
   .php   L0012 0005 T8 = INIT_ARRAY 1 (packed) V6 NEXT
   .php   L0012 0007 OP_DATA T8
@@ -629,25 +623,20 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .php   L0020 0042 JMP 0036
   .php   L0020 0043 FE_FREE V28
   .php   L0025 0044 INIT_STATIC_METHOD_CALL 1 string("Lib\\Slots") string("fromArray")
-  .php   L0025 0045 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .php   L0025 0046 INIT_METHOD_CALL 0 THIS string("prices")
-  .php   L0025 0047 V34 = DO_FCALL
-  .php   L0025 0048 SEND_VAR V34 1
-  .php   L0025 0049 T35 = FETCH_THIS
-  .php   L0025 0050 SEND_VAL T35 2
-  .php   L0025 0051 SEND_VAL string("prices") 3
-  .php   L0025 0052 SEND_VAL string("List<int>, List<Any?>") 4
-  .php   L0025 0053 SEND_VAL string("Demo.Cart.prices()") 5
-  .php   L0025 0054 V36 = DO_ICALL
-  .php   L0025 0055 SEND_VAR_NO_REF_EX V36 1
-  .php   L0025 0056 V37 = DO_FCALL
-  .php   L0025 0057 INIT_METHOD_CALL 0 V37 string("getSize")
-  .php   L0025 0058 V38 = DO_FCALL
-  .php   L0025 0059 T39 = ADD CV1($total) V38
-  .php   L0025 0060 VERIFY_RETURN_TYPE T39
-  .php   L0025 0061 RETURN T39
-  .php   L0026 0062 VERIFY_RETURN_TYPE
-  .php   L0026 0063 RETURN null
+  .php   L0025 0045 INIT_METHOD_CALL 0 THIS string("prices")
+  .php   L0025 0046 V34 = DO_FCALL
+  .php   L0025 0047 T35 = FETCH_THIS
+  .php   L0025 0048 T36 = SHARP_RETURNED V34 T35
+  .php   L0025 0049 OP_DATA string("prices") string("List<int>, List<Any?>")
+  .php   L0025 0050 SEND_VAL_EX T36 1
+  .php   L0025 0051 V37 = DO_FCALL
+  .php   L0025 0052 INIT_METHOD_CALL 0 V37 string("getSize")
+  .php   L0025 0053 V38 = DO_FCALL
+  .php   L0025 0054 T39 = ADD CV1($total) V38
+  .php   L0025 0055 VERIFY_RETURN_TYPE T39
+  .php   L0025 0056 RETURN T39
+  .php   L0026 0057 VERIFY_RETURN_TYPE
+  .php   L0026 0058 RETURN null
   .php        ; (lines=15, args=0, vars=2, tmps=5)
   .php   L0031 0001 T3 = FETCH_OBJ_R THIS string("items")
   .php   L0031 0002 V4 = FE_RESET_R T3 0010
@@ -680,7 +669,7 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .php   L0040 0014 RETURN T9
   .php   L0041 0015 VERIFY_RETURN_TYPE
   .php   L0041 0016 RETURN null
-  .php        ; (lines=64, args=1, vars=5, tmps=35)
+  .php        ; (lines=59, args=1, vars=5, tmps=35)
   .php   0001 V6 = NEW 2 string("Demo\\Item")
   .php   0005 T8 = INIT_ARRAY 1 (packed) V6 NEXT
   .php   0007 OP_DATA T8
@@ -721,31 +710,28 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .php   0042 JMP 0036
   .php   0043 FE_FREE V28
   .php   0044 INIT_STATIC_METHOD_CALL 1 string("Lib\\Slots") string("fromArray")
-  .php   0045 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .php   0046 INIT_METHOD_CALL 0 THIS string("prices")
-  .php   0047 V34 = DO_FCALL
-  .php   0048 SEND_VAR V34 1
-  .php   0049 T35 = FETCH_THIS
-  .php   0050 SEND_VAL T35 2
-  .php   0051 SEND_VAL string("prices") 3
-  .php   0052 SEND_VAL string("List<int>, List<Any?>") 4
-  .php   0053 SEND_VAL string("Demo.Cart.prices()") 5
-  .php   0054 V36 = DO_ICALL
-  .php   0055 SEND_VAR_NO_REF_EX V36 1
-  .php   0056 V37 = DO_FCALL
-  .php   0057 INIT_METHOD_CALL 0 V37 string("getSize")
-  .php   0058 V38 = DO_FCALL
-  .php   0059 T39 = ADD CV1($total) V38
-  .php   0060 VERIFY_RETURN_TYPE T39
-  .php   0061 RETURN T39
-  .php   0062 VERIFY_RETURN_TYPE
-  .php   0063 RETURN null
+  .php   0045 INIT_METHOD_CALL 0 THIS string("prices")
+  .php   0046 V34 = DO_FCALL
+  .php   0047 T35 = FETCH_THIS
+  .php   0048 T36 = SHARP_RETURNED V34 T35
+  .php   0049 OP_DATA string("prices") string("List<int>, List<Any?>")
+  .php   0050 SEND_VAL_EX T36 1
+  .php   0051 V37 = DO_FCALL
+  .php   0052 INIT_METHOD_CALL 0 V37 string("getSize")
+  .php   0053 V38 = DO_FCALL
+  .php   0054 T39 = ADD CV1($total) V38
+  .php   0055 VERIFY_RETURN_TYPE T39
+  .php   0056 RETURN T39
+  .php   0057 VERIFY_RETURN_TYPE
+  .php   0058 RETURN null
   .php        6: 0002 - 0005 (new)
   .php        15: 0016 - 0017 (tmp/var)
   .php        18: 0020 - 0021 (tmp/var)
   .php        24: 0029 - 0033 (loop)
   .php        28: 0036 - 0043 (loop)
-  .php        39: 0060 - 0061 (tmp/var)
+  .php        34: 0047 - 0048 (tmp/var)
+  .php        36: 0049 - 0050 (tmp/var)
+  .php        39: 0055 - 0056 (tmp/var)
   .php        ; (lines=15, args=0, vars=2, tmps=5)
   .php   0002 V4 = FE_RESET_R T3 0010
   .php   0003 FE_FETCH_R V4 CV1($item) 0010
@@ -6131,11 +6117,31 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .php       Property [ public Sharp\Set $tags ]
   .php       Property [ public Sharp\Set $states { get; set; } ]
   .php       Property [ private Sharp\Set $sizes ]
-Store/Order: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-RushOrders/Order: same opcodes and lines in 2 op arrays, same signatures in 1 classes
-RushOrders/RushOrder: same opcodes and lines in 1 op arrays, same signatures in 1 classes
-TypedOrders/Order: same opcodes and lines in 2 op arrays, same signatures in 1 classes
-TypedOrders/RushOrder: same opcodes and lines in 1 op arrays, same signatures in 1 classes
+Store/Order: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Store\\Order") string("lib\\model")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Store\\Order") string("lib\\model")
+  .php   L0005 0000 DECLARE_CLASS string("store\\order") string("lib\\model")
+  .php   0000 DECLARE_CLASS_DELAYED string("store\\order") string("lib\\model")
+RushOrders/Order: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Rush\\Order") string("lib\\model")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Rush\\Order") string("lib\\model")
+  .php   L0005 0000 DECLARE_CLASS string("rush\\order") string("lib\\model")
+  .php   0000 DECLARE_CLASS_DELAYED string("rush\\order") string("lib\\model")
+RushOrders/RushOrder: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Rush\\RushOrder") string("rush\\order")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Rush\\RushOrder") string("rush\\order")
+  .php   L0003 0000 DECLARE_CLASS string("rush\\rushorder") string("rush\\order")
+  .php   0000 DECLARE_CLASS_DELAYED string("rush\\rushorder") string("rush\\order")
+TypedOrders/Order: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Typed\\Order") string("lib\\typedmodel")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Typed\\Order") string("lib\\typedmodel")
+  .php   L0005 0000 DECLARE_CLASS string("typed\\order") string("lib\\typedmodel")
+  .php   0000 DECLARE_CLASS_DELAYED string("typed\\order") string("lib\\typedmodel")
+TypedOrders/RushOrder: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Typed\\RushOrder") string("typed\\order")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Typed\\RushOrder") string("typed\\order")
+  .php   L0003 0000 DECLARE_CLASS string("typed\\rushorder") string("typed\\order")
+  .php   0000 DECLARE_CLASS_DELAYED string("typed\\rushorder") string("typed\\order")
 Permalink: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 Library: different opcodes and lines in 18 op arrays, same signatures in 1 classes
   check  Demo\Library::query string("Map<string, Any?>")
@@ -7309,7 +7315,11 @@ Accessors/Product: different opcodes and lines in 11 op arrays, same signatures 
   .php        3: 0004 - 0015 (loop)
   .php        ; (lines=7, args=1, vars=1, tmps=2)
   .php   0006 RETURN null
-Parcel: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Parcel: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Store\\Parcel") string("lib\\row")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Store\\Parcel") string("lib\\row")
+  .php   L0005 0000 DECLARE_CLASS string("store\\parcel") string("lib\\row")
+  .php   0000 DECLARE_CLASS_DELAYED string("store\\parcel") string("lib\\row")
 Exits: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Positions: same opcodes and lines in 5 op arrays, same signatures in 1 classes
 Deploy: same opcodes and lines in 6 op arrays, same signatures in 1 classes
@@ -7335,25 +7345,21 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .sharp L0008 0011 RETURN T6
   .sharp L0008 0012 VERIFY_RETURN_TYPE
   .sharp L0008 0013 RETURN null
-  .sharp      ; (lines=30, args=0, vars=1, tmps=14)
-  .sharp L0010 0012 T8 = SHARP_TYPE_ARGS string("Paging.Order")
-  .sharp L0010 0013 V9 = DO_FCALL T8
-  .sharp L0010 0014 SEND_VAR V9 1
-  .sharp L0010 0015 SEND_VAR CV0($receiver#1) 2
-  .sharp L0010 0016 SEND_VAL string("list") 3
-  .sharp L0010 0017 SEND_VAL string("Paging.PaginatedList<Paging.Order>") 4
-  .sharp L0010 0018 SEND_VAL string("Paging.Repository.list()") 5
-  .sharp L0010 0019 V10 = DO_ICALL
-  .sharp L0010 0020 T4 = ADD_ARRAY_ELEMENT V10 NEXT
-  .sharp L0010 0021 T11 = FETCH_DIM_R T4 int(1)
-  .sharp L0010 0022 T12 = SHARP_VERIFY_TYPE_ARGS T11 string("Paging.PaginatedList<Paging.Order>")
-  .sharp L0010 0023 INIT_METHOD_CALL 0 T12 string("first")
-  .sharp L0010 0024 V13 = DO_FCALL
-  .sharp L0010 0025 T14 = FETCH_OBJ_R V13 string("id")
-  .sharp L0010 0026 VERIFY_RETURN_TYPE T14
-  .sharp L0010 0027 RETURN T14
-  .sharp L0010 0028 VERIFY_RETURN_TYPE
-  .sharp L0010 0029 RETURN null
+  .sharp      ; (lines=25, args=0, vars=1, tmps=14)
+  .sharp L0010 0011 T8 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp L0010 0012 V9 = DO_FCALL T8
+  .sharp L0010 0013 T10 = SHARP_RETURNED V9 CV0($receiver#1)
+  .sharp L0010 0014 OP_DATA string("list") string("Paging.PaginatedList<Paging.Order>")
+  .sharp L0010 0015 T4 = ADD_ARRAY_ELEMENT T10 NEXT
+  .sharp L0010 0016 T11 = FETCH_DIM_R T4 int(1)
+  .sharp L0010 0017 T12 = SHARP_VERIFY_TYPE_ARGS T11 string("Paging.PaginatedList<Paging.Order>")
+  .sharp L0010 0018 INIT_METHOD_CALL 0 T12 string("first")
+  .sharp L0010 0019 V13 = DO_FCALL
+  .sharp L0010 0020 T14 = FETCH_OBJ_R V13 string("id")
+  .sharp L0010 0021 VERIFY_RETURN_TYPE T14
+  .sharp L0010 0022 RETURN T14
+  .sharp L0010 0023 VERIFY_RETURN_TYPE
+  .sharp L0010 0024 RETURN null
   .sharp      ; (lines=16, args=0, vars=0, tmps=6)
   .sharp L0012 0005 T1 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp L0012 0006 V2 = DO_FCALL T1
@@ -7421,27 +7427,24 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .sharp 0011 RETURN T6
   .sharp      2: 0003 - 0007 (new)
   .sharp      6: 0010 - 0011 (tmp/var)
-  .sharp      ; (lines=30, args=0, vars=1, tmps=14)
-  .sharp 0012 T8 = SHARP_TYPE_ARGS string("Paging.Order")
-  .sharp 0013 V9 = DO_FCALL T8
-  .sharp 0014 SEND_VAR V9 1
-  .sharp 0015 SEND_VAR CV0($receiver#1) 2
-  .sharp 0016 SEND_VAL string("list") 3
-  .sharp 0017 SEND_VAL string("Paging.PaginatedList<Paging.Order>") 4
-  .sharp 0018 SEND_VAL string("Paging.Repository.list()") 5
-  .sharp 0019 V10 = DO_ICALL
-  .sharp 0020 T4 = ADD_ARRAY_ELEMENT V10 NEXT
-  .sharp 0021 T11 = FETCH_DIM_R T4 int(1)
-  .sharp 0022 T12 = SHARP_VERIFY_TYPE_ARGS T11 string("Paging.PaginatedList<Paging.Order>")
-  .sharp 0023 INIT_METHOD_CALL 0 T12 string("first")
-  .sharp 0024 V13 = DO_FCALL
-  .sharp 0025 T14 = FETCH_OBJ_R V13 string("id")
-  .sharp 0026 VERIFY_RETURN_TYPE T14
-  .sharp 0027 RETURN T14
-  .sharp 0028 VERIFY_RETURN_TYPE
-  .sharp 0029 RETURN null
-  .sharp      4: 0004 - 0021 (tmp/var)
-  .sharp      14: 0026 - 0027 (tmp/var)
+  .sharp      ; (lines=25, args=0, vars=1, tmps=14)
+  .sharp 0011 T8 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp 0012 V9 = DO_FCALL T8
+  .sharp 0013 T10 = SHARP_RETURNED V9 CV0($receiver#1)
+  .sharp 0014 OP_DATA string("list") string("Paging.PaginatedList<Paging.Order>")
+  .sharp 0015 T4 = ADD_ARRAY_ELEMENT T10 NEXT
+  .sharp 0016 T11 = FETCH_DIM_R T4 int(1)
+  .sharp 0017 T12 = SHARP_VERIFY_TYPE_ARGS T11 string("Paging.PaginatedList<Paging.Order>")
+  .sharp 0018 INIT_METHOD_CALL 0 T12 string("first")
+  .sharp 0019 V13 = DO_FCALL
+  .sharp 0020 T14 = FETCH_OBJ_R V13 string("id")
+  .sharp 0021 VERIFY_RETURN_TYPE T14
+  .sharp 0022 RETURN T14
+  .sharp 0023 VERIFY_RETURN_TYPE
+  .sharp 0024 RETURN null
+  .sharp      4: 0004 - 0016 (tmp/var)
+  .sharp      10: 0014 - 0015 (tmp/var)
+  .sharp      14: 0021 - 0022 (tmp/var)
   .sharp      ; (lines=16, args=0, vars=0, tmps=6)
   .sharp 0005 T1 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp 0006 V2 = DO_FCALL T1
@@ -7452,6 +7455,8 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .sharp 0011 T5 = QM_ASSIGN int(0)
   .sharp 0012 VERIFY_RETURN_TYPE T5
   .sharp 0013 RETURN T5
+  .sharp 0014 VERIFY_RETURN_TYPE
+  .sharp 0015 RETURN null
   .sharp      5: 0012 - 0013 (tmp/var)
   .sharp      ; (lines=16, args=0, vars=0, tmps=6)
   .sharp 0005 T1 = SHARP_TYPE_ARGS string("Paging.Order")
@@ -7463,6 +7468,8 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .sharp 0011 T5 = QM_ASSIGN int(0)
   .sharp 0012 VERIFY_RETURN_TYPE T5
   .sharp 0013 RETURN T5
+  .sharp 0014 VERIFY_RETURN_TYPE
+  .sharp 0015 RETURN null
   .sharp      5: 0012 - 0013 (tmp/var)
   .sharp      ; (lines=14, args=0, vars=0, tmps=6)
   .sharp 0001 V0 = FETCH_CLASS (exception) string("Paging\\Feed")
@@ -7503,23 +7510,19 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .php   L0008 0009 RETURN T4
   .php   L0008 0010 VERIFY_RETURN_TYPE
   .php   L0008 0011 RETURN null
-  .php        ; (lines=28, args=0, vars=1, tmps=12)
-  .php   L0010 0012 V8 = DO_FCALL
-  .php   L0010 0013 SEND_VAR V8 1
-  .php   L0010 0014 SEND_VAR CV0($receiver#1) 2
-  .php   L0010 0015 SEND_VAL string("list") 3
-  .php   L0010 0016 SEND_VAL string("Paging.PaginatedList<Paging.Order>") 4
-  .php   L0010 0017 SEND_VAL string("Paging.Repository.list()") 5
-  .php   L0010 0018 V9 = DO_ICALL
-  .php   L0010 0019 T4 = ADD_ARRAY_ELEMENT V9 NEXT
-  .php   L0010 0020 T10 = FETCH_DIM_R T4 int(1)
-  .php   L0010 0021 INIT_METHOD_CALL 0 T10 string("first")
-  .php   L0010 0022 V11 = DO_FCALL
-  .php   L0010 0023 T12 = FETCH_OBJ_R V11 string("id")
-  .php   L0010 0024 VERIFY_RETURN_TYPE T12
-  .php   L0010 0025 RETURN T12
-  .php   L0010 0026 VERIFY_RETURN_TYPE
-  .php   L0010 0027 RETURN null
+  .php        ; (lines=23, args=0, vars=1, tmps=12)
+  .php   L0010 0011 V8 = DO_FCALL
+  .php   L0010 0012 T9 = SHARP_RETURNED V8 CV0($receiver#1)
+  .php   L0010 0013 OP_DATA string("list") string("Paging.PaginatedList<Paging.Order>")
+  .php   L0010 0014 T4 = ADD_ARRAY_ELEMENT T9 NEXT
+  .php   L0010 0015 T10 = FETCH_DIM_R T4 int(1)
+  .php   L0010 0016 INIT_METHOD_CALL 0 T10 string("first")
+  .php   L0010 0017 V11 = DO_FCALL
+  .php   L0010 0018 T12 = FETCH_OBJ_R V11 string("id")
+  .php   L0010 0019 VERIFY_RETURN_TYPE T12
+  .php   L0010 0020 RETURN T12
+  .php   L0010 0021 VERIFY_RETURN_TYPE
+  .php   L0010 0022 RETURN null
   .php        ; (lines=14, args=0, vars=0, tmps=4)
   .php   L0012 0005 V1 = DO_FCALL
   .php   L0012 0006 T2 = JMP_NULL V1 0008
@@ -7564,25 +7567,22 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .php   L0028 0010 VERIFY_RETURN_TYPE
   .php   L0028 0011 RETURN null
   .php   0000 V0 = NEW 1 string("Paging\\PaginatedList")
-  .php        ; (lines=28, args=0, vars=1, tmps=12)
-  .php   0012 V8 = DO_FCALL
-  .php   0013 SEND_VAR V8 1
-  .php   0014 SEND_VAR CV0($receiver#1) 2
-  .php   0015 SEND_VAL string("list") 3
-  .php   0016 SEND_VAL string("Paging.PaginatedList<Paging.Order>") 4
-  .php   0017 SEND_VAL string("Paging.Repository.list()") 5
-  .php   0018 V9 = DO_ICALL
-  .php   0019 T4 = ADD_ARRAY_ELEMENT V9 NEXT
-  .php   0020 T10 = FETCH_DIM_R T4 int(1)
-  .php   0021 INIT_METHOD_CALL 0 T10 string("first")
-  .php   0022 V11 = DO_FCALL
-  .php   0023 T12 = FETCH_OBJ_R V11 string("id")
-  .php   0024 VERIFY_RETURN_TYPE T12
-  .php   0025 RETURN T12
-  .php   0026 VERIFY_RETURN_TYPE
-  .php   0027 RETURN null
-  .php        4: 0004 - 0020 (tmp/var)
-  .php        12: 0024 - 0025 (tmp/var)
+  .php        ; (lines=23, args=0, vars=1, tmps=12)
+  .php   0011 V8 = DO_FCALL
+  .php   0012 T9 = SHARP_RETURNED V8 CV0($receiver#1)
+  .php   0013 OP_DATA string("list") string("Paging.PaginatedList<Paging.Order>")
+  .php   0014 T4 = ADD_ARRAY_ELEMENT T9 NEXT
+  .php   0015 T10 = FETCH_DIM_R T4 int(1)
+  .php   0016 INIT_METHOD_CALL 0 T10 string("first")
+  .php   0017 V11 = DO_FCALL
+  .php   0018 T12 = FETCH_OBJ_R V11 string("id")
+  .php   0019 VERIFY_RETURN_TYPE T12
+  .php   0020 RETURN T12
+  .php   0021 VERIFY_RETURN_TYPE
+  .php   0022 RETURN null
+  .php        4: 0004 - 0015 (tmp/var)
+  .php        9: 0013 - 0014 (tmp/var)
+  .php        12: 0019 - 0020 (tmp/var)
   .php        ; (lines=14, args=0, vars=0, tmps=4)
   .php   0005 V1 = DO_FCALL
   .php   0006 T2 = JMP_NULL V1 0008
@@ -7620,17 +7620,33 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .php       /** @param Feed<Order> $feed */
   .php       /** @param Validator<DatabaseEntity> $validator */
 Generics/DatabaseEntity: same opcodes and lines in 2 op arrays, same signatures in 1 classes
-Generics/EntityValidator: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Generics/EntityValidator: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Paging\\EntityValidator")
+  .sharp 0000 DECLARE_CLASS string("Paging\\EntityValidator")
+  .php   L0003 0000 DECLARE_CLASS string("paging\\entityvalidator")
+  .php   0000 DECLARE_CLASS string("paging\\entityvalidator")
 Generics/Feed: different opcodes and lines in 3 op arrays, same signatures in 1 classes
   check  Paging\Feed::__construct string("List<$0>")
   .php       /** @param list<TItem> $items */
   .php       /** @return TItem */
-Generics/Order: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Generics/Order: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Paging\\Order") string("paging\\databaseentity")
+  .sharp 0000 DECLARE_CLASS string("Paging\\Order") string("paging\\databaseentity")
+  .php   L0003 0000 DECLARE_CLASS string("paging\\order") string("paging\\databaseentity")
+  .php   0000 DECLARE_CLASS string("paging\\order") string("paging\\databaseentity")
 Generics/OrderPage: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Paging\\OrderPage") string("paging\\paginatedlist")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Paging\\OrderPage") string("paging\\paginatedlist")
+  .php   L0003 0000 DECLARE_CLASS string("paging\\orderpage") string("paging\\paginatedlist")
+  .php   0000 DECLARE_CLASS_DELAYED string("paging\\orderpage") string("paging\\paginatedlist")
   .php       /** @param list<TItem> $rows */
   .php       /** @return TItem */
 Generics/OrderQuery: different opcodes and lines in 3 op arrays, same signatures in 1 classes
   check  Paging\OrderQuery::__construct string("List<Paging.Order>")
+  .sharp L0003 0000 DECLARE_CLASS string("Paging\\OrderQuery")
+  .sharp 0000 DECLARE_CLASS string("Paging\\OrderQuery")
+  .php   L0003 0000 DECLARE_CLASS string("paging\\orderquery")
+  .php   0000 DECLARE_CLASS string("paging\\orderquery")
   .php       /** @param list<Order> $orders */
 Generics/PaginatedList: different opcodes and lines in 3 op arrays, same signatures in 1 classes
   check  Paging\PaginatedList::__construct string("List<$0>")
@@ -7638,84 +7654,66 @@ Generics/PaginatedList: different opcodes and lines in 3 op arrays, same signatu
   .php       /** @return TItem */
 Generics/Query: same opcodes and lines in 2 op arrays, same signatures in 0 classes
 Generics/Repository: different opcodes and lines in 2 op arrays, same signatures in 1 classes
-  .sharp      ; (lines=20, args=1, vars=2, tmps=6)
+  .sharp      ; (lines=15, args=1, vars=2, tmps=6)
   .sharp L0008 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
   .sharp L0008 0002 V2 = FETCH_CLASS (exception) string("Paging\\PaginatedList")
   .sharp L0008 0003 T3 = SHARP_TYPE_ARGS CV1($) string("#0")
   .sharp L0008 0004 V4 = NEW 1 V2 T3
-  .sharp L0008 0005 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .sharp L0008 0006 INIT_METHOD_CALL 0 CV0($query) string("rows")
-  .sharp L0008 0007 V5 = DO_FCALL
-  .sharp L0008 0008 SEND_VAR V5 1
-  .sharp L0008 0009 SEND_VAR CV0($query) 2
-  .sharp L0008 0010 SEND_VAL string("rows") 3
-  .sharp L0008 0011 SEND_VAL string("List<#0>, List<Any?>") 4
-  .sharp L0008 0012 SEND_VAL string("Paging.Query.rows()") 5
-  .sharp L0008 0013 V6 = DO_ICALL
-  .sharp L0008 0014 SEND_VAR_NO_REF_EX V6 1
-  .sharp L0008 0015 DO_FCALL
-  .sharp L0008 0016 VERIFY_RETURN_TYPE V4
-  .sharp L0008 0017 RETURN V4
-  .sharp L0008 0018 VERIFY_RETURN_TYPE
-  .sharp L0008 0019 RETURN null
-  .sharp      ; (lines=20, args=1, vars=2, tmps=6)
+  .sharp L0008 0005 INIT_METHOD_CALL 0 CV0($query) string("rows")
+  .sharp L0008 0006 V5 = DO_FCALL
+  .sharp L0008 0007 T6 = SHARP_RETURNED V5 CV0($query)
+  .sharp L0008 0008 OP_DATA string("rows") string("List<#0>, List<Any?>")
+  .sharp L0008 0009 SEND_VAL_EX T6 1
+  .sharp L0008 0010 DO_FCALL
+  .sharp L0008 0011 VERIFY_RETURN_TYPE V4
+  .sharp L0008 0012 RETURN V4
+  .sharp L0008 0013 VERIFY_RETURN_TYPE
+  .sharp L0008 0014 RETURN null
+  .sharp      ; (lines=15, args=1, vars=2, tmps=6)
   .sharp 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
   .sharp 0002 V2 = FETCH_CLASS (exception) string("Paging\\PaginatedList")
   .sharp 0003 T3 = SHARP_TYPE_ARGS CV1($) string("#0")
   .sharp 0004 V4 = NEW 1 V2 T3
-  .sharp 0005 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .sharp 0006 INIT_METHOD_CALL 0 CV0($query) string("rows")
-  .sharp 0007 V5 = DO_FCALL
-  .sharp 0008 SEND_VAR V5 1
-  .sharp 0009 SEND_VAR CV0($query) 2
-  .sharp 0010 SEND_VAL string("rows") 3
-  .sharp 0011 SEND_VAL string("List<#0>, List<Any?>") 4
-  .sharp 0012 SEND_VAL string("Paging.Query.rows()") 5
-  .sharp 0013 V6 = DO_ICALL
-  .sharp 0014 SEND_VAR_NO_REF_EX V6 1
-  .sharp 0015 DO_FCALL
-  .sharp 0016 VERIFY_RETURN_TYPE V4
-  .sharp 0017 RETURN V4
-  .sharp 0018 VERIFY_RETURN_TYPE
-  .sharp 0019 RETURN null
-  .sharp      4: 0005 - 0016 (new)
-  .sharp      4: 0016 - 0017 (tmp/var)
-  .php        ; (lines=17, args=1, vars=1, tmps=4)
+  .sharp 0005 INIT_METHOD_CALL 0 CV0($query) string("rows")
+  .sharp 0006 V5 = DO_FCALL
+  .sharp 0007 T6 = SHARP_RETURNED V5 CV0($query)
+  .sharp 0008 OP_DATA string("rows") string("List<#0>, List<Any?>")
+  .sharp 0009 SEND_VAL_EX T6 1
+  .sharp 0010 DO_FCALL
+  .sharp 0011 VERIFY_RETURN_TYPE V4
+  .sharp 0012 RETURN V4
+  .sharp 0013 VERIFY_RETURN_TYPE
+  .sharp 0014 RETURN null
+  .sharp      4: 0005 - 0011 (new)
+  .sharp      6: 0008 - 0009 (tmp/var)
+  .sharp      4: 0011 - 0012 (tmp/var)
+  .php        ; (lines=12, args=1, vars=1, tmps=4)
   .php   L0008 0001 V1 = NEW 1 string("Paging\\PaginatedList")
-  .php   L0008 0002 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .php   L0008 0003 INIT_METHOD_CALL 0 CV0($query) string("rows")
-  .php   L0008 0004 V2 = DO_FCALL
-  .php   L0008 0005 SEND_VAR V2 1
-  .php   L0008 0006 SEND_VAR CV0($query) 2
-  .php   L0008 0007 SEND_VAL string("rows") 3
-  .php   L0008 0008 SEND_VAL string("List<#0>, List<Any?>") 4
-  .php   L0008 0009 SEND_VAL string("Paging.Query.rows()") 5
-  .php   L0008 0010 V3 = DO_ICALL
-  .php   L0008 0011 SEND_VAR_NO_REF_EX V3 1
-  .php   L0008 0012 DO_FCALL
-  .php   L0008 0013 VERIFY_RETURN_TYPE V1
-  .php   L0008 0014 RETURN V1
-  .php   L0008 0015 VERIFY_RETURN_TYPE
-  .php   L0008 0016 RETURN null
-  .php        ; (lines=17, args=1, vars=1, tmps=4)
+  .php   L0008 0002 INIT_METHOD_CALL 0 CV0($query) string("rows")
+  .php   L0008 0003 V2 = DO_FCALL
+  .php   L0008 0004 T3 = SHARP_RETURNED V2 CV0($query)
+  .php   L0008 0005 OP_DATA string("rows") string("List<#0>, List<Any?>")
+  .php   L0008 0006 SEND_VAL_EX T3 1
+  .php   L0008 0007 DO_FCALL
+  .php   L0008 0008 VERIFY_RETURN_TYPE V1
+  .php   L0008 0009 RETURN V1
+  .php   L0008 0010 VERIFY_RETURN_TYPE
+  .php   L0008 0011 RETURN null
+  .php        ; (lines=12, args=1, vars=1, tmps=4)
   .php   0001 V1 = NEW 1 string("Paging\\PaginatedList")
-  .php   0002 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .php   0003 INIT_METHOD_CALL 0 CV0($query) string("rows")
-  .php   0004 V2 = DO_FCALL
-  .php   0005 SEND_VAR V2 1
-  .php   0006 SEND_VAR CV0($query) 2
-  .php   0007 SEND_VAL string("rows") 3
-  .php   0008 SEND_VAL string("List<#0>, List<Any?>") 4
-  .php   0009 SEND_VAL string("Paging.Query.rows()") 5
-  .php   0010 V3 = DO_ICALL
-  .php   0011 SEND_VAR_NO_REF_EX V3 1
-  .php   0012 DO_FCALL
-  .php   0013 VERIFY_RETURN_TYPE V1
-  .php   0014 RETURN V1
-  .php   0015 VERIFY_RETURN_TYPE
-  .php   0016 RETURN null
-  .php        1: 0002 - 0013 (new)
-  .php        1: 0013 - 0014 (tmp/var)
+  .php   0002 INIT_METHOD_CALL 0 CV0($query) string("rows")
+  .php   0003 V2 = DO_FCALL
+  .php   0004 T3 = SHARP_RETURNED V2 CV0($query)
+  .php   0005 OP_DATA string("rows") string("List<#0>, List<Any?>")
+  .php   0006 SEND_VAL_EX T3 1
+  .php   0007 DO_FCALL
+  .php   0008 VERIFY_RETURN_TYPE V1
+  .php   0009 RETURN V1
+  .php   0010 VERIFY_RETURN_TYPE
+  .php   0011 RETURN null
+  .php        1: 0002 - 0008 (new)
+  .php        3: 0005 - 0006 (tmp/var)
+  .php        1: 0008 - 0009 (tmp/var)
   .php       /** @template TItem of DatabaseEntity
   .php        *  @param Query<TItem> $query
   .php        *  @return PaginatedList<TItem> */
@@ -7741,21 +7739,16 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .sharp L0028 0002 T2 = FETCH_DIM_R CV0($items) int(0)
   .sharp L0028 0003 RETURN T2
   .sharp L0028 0004 RETURN null
-  .sharp      ; (lines=15, args=1, vars=2, tmps=2)
+  .sharp      ; (lines=10, args=1, vars=2, tmps=2)
   .sharp L0032 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity & Paging.Shareable")
-  .sharp L0032 0002 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .sharp L0032 0003 INIT_METHOD_CALL 0 CV0($item) string("link")
-  .sharp L0032 0004 V2 = DO_FCALL
-  .sharp L0032 0005 SEND_VAR V2 1
-  .sharp L0032 0006 SEND_VAR CV0($item) 2
-  .sharp L0032 0007 SEND_VAL string("link") 3
-  .sharp L0032 0008 SEND_VAL string("string") 4
-  .sharp L0032 0009 SEND_VAL string("Paging.Shareable.link()") 5
-  .sharp L0032 0010 V3 = DO_ICALL
-  .sharp L0032 0011 VERIFY_RETURN_TYPE V3
-  .sharp L0032 0012 RETURN V3
-  .sharp L0032 0013 VERIFY_RETURN_TYPE
-  .sharp L0032 0014 RETURN null
+  .sharp L0032 0002 INIT_METHOD_CALL 0 CV0($item) string("link")
+  .sharp L0032 0003 V2 = DO_FCALL
+  .sharp L0032 0004 T3 = SHARP_RETURNED V2 CV0($item)
+  .sharp L0032 0005 OP_DATA string("link") string("string")
+  .sharp L0032 0006 VERIFY_RETURN_TYPE T3
+  .sharp L0032 0007 RETURN T3
+  .sharp L0032 0008 VERIFY_RETURN_TYPE
+  .sharp L0032 0009 RETURN null
   .sharp      ; (lines=28, args=2, vars=4, tmps=13)
   .sharp L0034 0004 V4 = DO_FCALL
   .sharp L0034 0005 T5 = CONCAT V4 string("#")
@@ -7793,6 +7786,7 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .sharp 0010 RETURN CV3($item)
   .sharp 0011 JMP 0004
   .sharp 0012 FE_FREE V4
+  .sharp 0013 RETURN null
   .sharp      4: 0004 - 0009 (loop)
   .sharp      4: 0011 - 0012 (loop)
   .sharp      ; (lines=5, args=1, vars=2, tmps=1)
@@ -7800,20 +7794,17 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .sharp 0002 T2 = FETCH_DIM_R CV0($items) int(0)
   .sharp 0003 RETURN T2
   .sharp 0004 RETURN null
-  .sharp      ; (lines=15, args=1, vars=2, tmps=2)
+  .sharp      ; (lines=10, args=1, vars=2, tmps=2)
   .sharp 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity & Paging.Shareable")
-  .sharp 0002 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .sharp 0003 INIT_METHOD_CALL 0 CV0($item) string("link")
-  .sharp 0004 V2 = DO_FCALL
-  .sharp 0005 SEND_VAR V2 1
-  .sharp 0006 SEND_VAR CV0($item) 2
-  .sharp 0007 SEND_VAL string("link") 3
-  .sharp 0008 SEND_VAL string("string") 4
-  .sharp 0009 SEND_VAL string("Paging.Shareable.link()") 5
-  .sharp 0010 V3 = DO_ICALL
-  .sharp 0011 VERIFY_RETURN_TYPE V3
-  .sharp 0012 RETURN V3
-  .sharp      3: 0011 - 0012 (tmp/var)
+  .sharp 0002 INIT_METHOD_CALL 0 CV0($item) string("link")
+  .sharp 0003 V2 = DO_FCALL
+  .sharp 0004 T3 = SHARP_RETURNED V2 CV0($item)
+  .sharp 0005 OP_DATA string("link") string("string")
+  .sharp 0006 VERIFY_RETURN_TYPE T3
+  .sharp 0007 RETURN T3
+  .sharp 0008 VERIFY_RETURN_TYPE
+  .sharp 0009 RETURN null
+  .sharp      3: 0005 - 0007 (tmp/var)
   .sharp      ; (lines=28, args=2, vars=4, tmps=13)
   .sharp 0004 V4 = DO_FCALL
   .sharp 0005 T5 = CONCAT V4 string("#")
@@ -7862,20 +7853,15 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .php   L0028 0001 T1 = FETCH_DIM_R CV0($items) int(0)
   .php   L0028 0002 RETURN T1
   .php   L0028 0003 RETURN null
-  .php        ; (lines=14, args=1, vars=1, tmps=2)
-  .php   L0032 0001 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .php   L0032 0002 INIT_METHOD_CALL 0 CV0($item) string("link")
-  .php   L0032 0003 V1 = DO_FCALL
-  .php   L0032 0004 SEND_VAR V1 1
-  .php   L0032 0005 SEND_VAR CV0($item) 2
-  .php   L0032 0006 SEND_VAL string("link") 3
-  .php   L0032 0007 SEND_VAL string("string") 4
-  .php   L0032 0008 SEND_VAL string("Paging.Shareable.link()") 5
-  .php   L0032 0009 V2 = DO_ICALL
-  .php   L0032 0010 VERIFY_RETURN_TYPE V2
-  .php   L0032 0011 RETURN V2
-  .php   L0032 0012 VERIFY_RETURN_TYPE
-  .php   L0032 0013 RETURN null
+  .php        ; (lines=9, args=1, vars=1, tmps=2)
+  .php   L0032 0001 INIT_METHOD_CALL 0 CV0($item) string("link")
+  .php   L0032 0002 V1 = DO_FCALL
+  .php   L0032 0003 T2 = SHARP_RETURNED V1 CV0($item)
+  .php   L0032 0004 OP_DATA string("link") string("string")
+  .php   L0032 0005 VERIFY_RETURN_TYPE T2
+  .php   L0032 0006 RETURN T2
+  .php   L0032 0007 VERIFY_RETURN_TYPE
+  .php   L0032 0008 RETURN null
   .php        ; (lines=13, args=2, vars=2, tmps=7)
   .php   L0034 0004 V3 = DO_FCALL
   .php   L0034 0005 T4 = CONCAT V3 string("#")
@@ -7898,26 +7884,22 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .php   0010 JMP 0003
   .php   0011 FE_FREE V3
   .php   0012 RETURN null
+  .php   0013 VERIFY_RETURN_TYPE
+  .php   0014 RETURN null
   .php        3: 0003 - 0008 (loop)
   .php        3: 0010 - 0011 (loop)
   .php        ; (lines=4, args=1, vars=1, tmps=1)
   .php   0001 T1 = FETCH_DIM_R CV0($items) int(0)
   .php   0002 RETURN T1
   .php   0003 RETURN null
-  .php        ; (lines=14, args=1, vars=1, tmps=2)
-  .php   0001 INIT_FCALL 5 160 string("sharp\\internal\\returned")
-  .php   0002 INIT_METHOD_CALL 0 CV0($item) string("link")
-  .php   0003 V1 = DO_FCALL
-  .php   0004 SEND_VAR V1 1
-  .php   0005 SEND_VAR CV0($item) 2
-  .php   0006 SEND_VAL string("link") 3
-  .php   0007 SEND_VAL string("string") 4
-  .php   0008 SEND_VAL string("Paging.Shareable.link()") 5
-  .php   0009 V2 = DO_ICALL
-  .php   0010 VERIFY_RETURN_TYPE V2
-  .php   0011 RETURN V2
-  .php   0012 VERIFY_RETURN_TYPE
-  .php        2: 0010 - 0011 (tmp/var)
+  .php        ; (lines=9, args=1, vars=1, tmps=2)
+  .php   0001 INIT_METHOD_CALL 0 CV0($item) string("link")
+  .php   0002 V1 = DO_FCALL
+  .php   0003 T2 = SHARP_RETURNED V1 CV0($item)
+  .php   0004 OP_DATA string("link") string("string")
+  .php   0005 VERIFY_RETURN_TYPE T2
+  .php   0006 RETURN T2
+  .php        2: 0004 - 0006 (tmp/var)
   .php        ; (lines=13, args=2, vars=2, tmps=7)
   .php   0006 T5 = FETCH_OBJ_R CV1($entity) string("id")
   .php   0007 T6 = CAST (string) T5
@@ -8323,14 +8305,46 @@ Operators/Operators: different opcodes and lines in 48 op arrays, same signature
   .php   0001 CV1($value) = RECV 2
   .php   0002 T2 = CAST (string) CV0($key)
   .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
-Operators/Order: same opcodes and lines in 1 op arrays, same signatures in 1 classes
-Traits/Align: same opcodes and lines in 2 op arrays, same signatures in 1 classes
-Traits/Draft: same opcodes and lines in 1 op arrays, same signatures in 1 classes
-Traits/Essay: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Traits/Guide: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Operators/Order: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Billing\\Order") string("billing\\databaseentity")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Billing\\Order") string("billing\\databaseentity")
+  .php   L0003 0000 DECLARE_CLASS string("billing\\order") string("billing\\databaseentity")
+  .php   0000 DECLARE_CLASS_DELAYED string("billing\\order") string("billing\\databaseentity")
+Traits/Align: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Demo\\Align")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Align")
+  .php   L0005 0000 DECLARE_CLASS string("demo\\align")
+  .php   0000 DECLARE_CLASS string("demo\\align")
+Traits/Draft: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Demo\\Draft")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Draft")
+  .php   L0005 0000 DECLARE_CLASS string("demo\\draft")
+  .php   0000 DECLARE_CLASS string("demo\\draft")
+Traits/Essay: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0006 0000 DECLARE_CLASS string("Demo\\Essay") string("lib\\document")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Essay") string("lib\\document")
+  .php   L0006 0000 DECLARE_CLASS string("demo\\essay") string("lib\\document")
+  .php   0000 DECLARE_CLASS string("demo\\essay") string("lib\\document")
+Traits/Guide: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0003 0000 DECLARE_CLASS string("Demo\\Guide") string("demo\\essay")
+  .sharp 0000 DECLARE_CLASS_DELAYED string("Demo\\Guide") string("demo\\essay")
+  .php   L0003 0000 DECLARE_CLASS string("demo\\guide") string("demo\\essay")
+  .php   0000 DECLARE_CLASS_DELAYED string("demo\\guide") string("demo\\essay")
 Traits/Linked: same opcodes and lines in 2 op arrays, same signatures in 0 classes
-Traits/Posting: same opcodes and lines in 1 op arrays, same signatures in 1 classes
-Traits/Shade: same opcodes and lines in 1 op arrays, same signatures in 1 classes
-Traits/Tier: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Traits/Posting: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0007 0000 DECLARE_CLASS string("Demo\\Posting") string("lib\\persisted")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Posting") string("lib\\persisted")
+  .php   L0007 0000 DECLARE_CLASS string("demo\\posting") string("lib\\persisted")
+  .php   0000 DECLARE_CLASS string("demo\\posting") string("lib\\persisted")
+Traits/Shade: different opcodes and lines in 1 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Demo\\Shade")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Shade")
+  .php   L0005 0000 DECLARE_CLASS string("demo\\shade")
+  .php   0000 DECLARE_CLASS string("demo\\shade")
+Traits/Tier: different opcodes and lines in 2 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("Demo\\Tier")
+  .sharp 0000 DECLARE_CLASS string("Demo\\Tier")
+  .php   L0005 0000 DECLARE_CLASS string("demo\\tier")
+  .php   0000 DECLARE_CLASS string("demo\\tier")
 a check: same
 a check and another opcode: different

@@ -280,7 +280,7 @@ static inline bool can_elide_list_type(
 		}
 		if (ZEND_TYPE_HAS_NAME(*single_type)) {
 			zend_string *lcname = zend_string_tolower(ZEND_TYPE_NAME(*single_type));
-			const zend_class_entry *ce = zend_optimizer_get_class_entry(script, op_array, lcname);
+			const zend_class_entry *ce = zend_optimizer_get_class_entry(script, op_array, ZEND_TYPE_NAME(*single_type), lcname);
 			zend_string_release(lcname);
 			bool result = ce && safe_instanceof(use_info->ce, ce);
 			if (result == !is_intersection) {
@@ -331,6 +331,8 @@ static bool opline_supports_assign_contraction(
 			if ((opline + 1)->op1_type == IS_CV && (opline + 1)->op1.var == cv_var) return 0;
 			ZEND_FALLTHROUGH;
 		case ZEND_FRAMELESS_ICALL_2:
+		/* PHP#: a plain PHP result crosses into the result while it reads the implementer and the result. */
+		case ZEND_SHARP_RETURNED:
 			if (opline->op2_type == IS_CV && opline->op2.var == cv_var) return 0;
 			ZEND_FALLTHROUGH;
 		case ZEND_FRAMELESS_ICALL_1:

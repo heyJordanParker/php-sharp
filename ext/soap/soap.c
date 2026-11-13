@@ -2284,7 +2284,7 @@ static bool do_request(zval *this_ptr, xmlDoc *request, const char *location, co
 			ZVAL_COPY(Z_CLIENT_LAST_REQUEST_P(this_ptr), &params[0]);
 		}
 
-		zend_function *func = zend_hash_str_find_ptr(&Z_OBJCE_P(this_ptr)->function_table, ZEND_STRL("__dorequest"));
+		zend_function *func = zend_class_find_protocol_method(Z_OBJCE_P(this_ptr), ZEND_STRL("__dorequest"));
 		ZEND_ASSERT(func != NULL);
 
 		zend_call_known_instance_method(func, Z_OBJ_P(this_ptr), response, 5, params);

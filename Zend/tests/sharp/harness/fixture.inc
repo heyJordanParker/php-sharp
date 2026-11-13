@@ -7,7 +7,8 @@
  * the code reaches them. A class a type declares inside its name, as an interface's `HasDesign\Defaults` trait or an
  * enum case's `Verdict\Ruled`, spec section 22, loads from its type's file. With `$extension` `inc`, it loads each
  * type's plain PHP twin beside its file instead. The standard library's `Sharp\ListMembers`, `Sharp\MapMembers`,
- * `Sharp\SetMembers`, `Sharp\IterableMembers`, `Sharp\ClassMembers` and `Sharp\Property` load as a project's do.
+ * `Sharp\SetMembers`, `Sharp\IterableMembers`, `Sharp\ClassMembers`, `Sharp\Property`, `Sharp\Method` and
+ * `Sharp\Parameter` load as a project's do.
  */
 function fixture(string $name, string $extension = 'sharp'): void
 {
@@ -21,19 +22,20 @@ function fixture(string $name, string $extension = 'sharp'): void
         $namespace = preg_match('{^namespace\s+([\w.]+)\s*;}m', file_get_contents($file), $match) === 1
             ? strtr($match[1], '.', '\\') . '\\'
             : '';
-        $files[strtolower($namespace . basename($file, '.sharp'))] = substr($file, 0, -strlen('sharp')) . $extension;
+        $files[$namespace . basename($file, '.sharp')] = substr($file, 0, -strlen('sharp')) . $extension;
     }
     // A collection's member a call can't run in place, as a member's value, runs on the standard library's class of
-    // the collection's members, and a class value's on `ClassMembers`, which makes each `Property`.
-    foreach (['ListMembers', 'MapMembers', 'SetMembers', 'IterableMembers', 'ClassMembers', 'Property'] as $members) {
-        $files['sharp\\' . strtolower($members)] = dirname(__DIR__, 4) . "/sharp/composer/library/Sharp/$members.sharp";
+    // the collection's members, and a class value's on `ClassMembers`, which makes each `Property`, `Method` and
+    // `Parameter`.
+    foreach (['ListMembers', 'MapMembers', 'SetMembers', 'IterableMembers', 'ClassMembers', 'Property', 'Method', 'Parameter'] as $members) {
+        $files["Sharp\\$members"] = dirname(__DIR__, 4) . "/sharp/composer/library/Sharp/$members.sharp";
     }
     fixture_files($files);
     // A named function, unlike a closure, takes no object handle, so the objects a test prints keep their numbers.
     spl_autoload_register('fixture_load');
 }
 
-/** The file of each class the loaded fixtures declare, by its lowercase name, with `$files` added. */
+/** The file of each class the loaded fixtures declare, by its exact name, spec section 24, with `$files` added. */
 function fixture_files(array $files = []): array
 {
     static $known = [];
@@ -45,7 +47,7 @@ function fixture_load(string $class): void
 {
     $files = fixture_files();
     $owner = substr($class, 0, (int) strrpos($class, '\\'));
-    $file = $files[strtolower($class)] ?? $files[strtolower($owner)] ?? null;
+    $file = $files[$class] ?? $files[$owner] ?? null;
     if ($file !== null) {
         require_once $file;
     }

@@ -1,3 +1,3 @@
 [source]
-paths = ["sharp/bench/*.sharp", "sharp/composer/library"]
-extensions = ["sharp"]
+paths = ["sharp/bench/*.sharp", "sharp/bench/Base.php", "sharp/composer/library"]
+extensions = ["sharp", "php"]

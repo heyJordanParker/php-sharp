@@ -51,6 +51,36 @@ ZEND_API void execute_internal(zend_execute_data *execute_data, zval *return_val
 ZEND_API bool zend_is_valid_class_name(zend_string *name);
 ZEND_API zend_class_entry *zend_lookup_class(zend_string *name);
 ZEND_API zend_class_entry *zend_lookup_class_ex(zend_string *name, zend_string *lcname, uint32_t flags);
+ZEND_API zval *zend_class_table_find_exact(const HashTable *class_table, zend_string *name, zval *folded);
+
+/* The entry of the class `name` names in `class_table`, whose lowercase key is `lcname`. A plain PHP class is keyed by
+ * its lowercase name, and found in any case. A PHP# class is keyed by its exact name, spec section 24, and found only as
+ * written, so a name the lowercase key doesn't find as written probes it. */
+static zend_always_inline zval *zend_class_table_find(const HashTable *class_table, zend_string *name, zend_string *lcname)
+{
+	zval *zv = zend_hash_find(class_table, lcname);
+
+	if (EXPECTED(zv) && EXPECTED(((zend_class_entry *) Z_PTR_P(zv))->name == name)) {
+		return zv;
+	}
+
+	return zend_class_table_find_exact(class_table, name, zv);
+}
+
+/* The class `name` names in `class_table`, as zend_class_table_find() finds it, with its lowercase key `lcname`, or
+ * NULL to lowercase `name`. */
+static zend_always_inline zend_class_entry *zend_class_table_find_ptr(const HashTable *class_table, zend_string *name, zend_string *lcname)
+{
+	zend_string *key = lcname ? lcname : zend_string_tolower(name);
+	zval *zv = zend_class_table_find(class_table, name, key);
+
+	if (!lcname) {
+		zend_string_release(key);
+	}
+
+	return zv ? (zend_class_entry *) Z_PTR_P(zv) : NULL;
+}
+
 ZEND_API zend_class_entry *zend_get_called_scope(zend_execute_data *ex);
 ZEND_API zend_object *zend_get_this_object(zend_execute_data *ex);
 ZEND_API zend_result zend_eval_string(const char *str, zval *retval_ptr, const char *string_name);

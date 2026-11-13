@@ -950,21 +950,21 @@ fn a_module_returns_each_binding_as_its_namespace_service_class_lifetime_and_val
         )
     };
 
-    let mailer = r#"ZVAL "app\\mail\\mailer""#;
+    let mailer = r#"ZVAL "App\\Mail\\Mailer""#;
     let smtp = r#"ZVAL "App\\Mail\\SmtpMailer""#;
     for (bindings, expected) in [
-        // ['app\shop', 'app\mail\mailer', null, 'singleton', 'App\Mail\SmtpMailer']
+        // ['app\shop', 'App\Mail\Mailer', null, 'singleton', 'App\Mail\SmtpMailer']
         ("    singleton Mailer = SmtpMailer;", [mailer, "ZVAL null", r#"ZVAL "singleton""#, smtp]),
-        // ['app\shop', 'app\mail\mailer', 'App\Shop\SendReceipt', 'scoped', 'App\Mail\SmtpMailer']
+        // ['app\shop', 'App\Mail\Mailer', 'App\Shop\SendReceipt', 'scoped', 'App\Mail\SmtpMailer']
         (
             "    scoped Mailer for SendReceipt = SmtpMailer;",
             [mailer, r#"ZVAL "App\\Shop\\SendReceipt""#, r#"ZVAL "scoped""#, smtp],
         ),
-        // ['app\shop', 'list<app\pricing\pricerule>', null, 'transient', ['App\Pricing\TaxRule']]
+        // ['app\shop', 'list<App\Pricing\PriceRule>', null, 'transient', ['App\Pricing\TaxRule']]
         (
             "    transient List<PriceRule> = [TaxRule];",
             [
-                r#"ZVAL "list<app\\pricing\\pricerule>""#,
+                r#"ZVAL "list<App\\Pricing\\PriceRule>""#,
                 "ZVAL null",
                 r#"ZVAL "transient""#,
                 indoc! {r#"
@@ -974,7 +974,7 @@ fn a_module_returns_each_binding_as_its_namespace_service_class_lifetime_and_val
                         null"#},
             ],
         ),
-        // ['app\shop', 'app\mail\mailer', null, 'singleton', static fn (\App\Mail\SmtpMailer $smtp) => $smtp]
+        // ['app\shop', 'App\Mail\Mailer', null, 'singleton', static fn (\App\Mail\SmtpMailer $smtp) => $smtp]
         (
             "    singleton Mailer(SmtpMailer smtp) = smtp;\n    transient SmtpMailer = SmtpMailer;",
             [
@@ -998,8 +998,8 @@ fn a_module_returns_each_binding_as_its_namespace_service_class_lifetime_and_val
                       null"#},
             ],
         ),
-        // ['app\shop', 'app\mail\mailer', null, 'singleton',
-        //     static fn (#[\Sharp\Internal\Service('list<app\pricing\pricerule>')] array $rules) => new \App\Mail\SmtpMailer()]
+        // ['app\shop', 'App\Mail\Mailer', null, 'singleton',
+        //     static fn (#[\Sharp\Internal\Service('list<App\Pricing\PriceRule>')] array $rules) => new \App\Mail\SmtpMailer()]
         (
             "    singleton Mailer(List<PriceRule> rules) = new SmtpMailer();\n    transient List<PriceRule> = [TaxRule];",
             [
@@ -1018,7 +1018,7 @@ fn a_module_returns_each_binding_as_its_namespace_service_class_lifetime_and_val
                               ATTRIBUTE
                                 ZVAL "Sharp\\Internal\\Service"
                                 ARG_LIST
-                                  ZVAL "list<app\\pricing\\pricerule>"
+                                  ZVAL "list<App\\Pricing\\PriceRule>"
                           null
                           null
                       null
@@ -1205,8 +1205,8 @@ fn a_constructor_parameter_whose_php_type_drops_its_service_names_the_service() 
     };
 
     for (parameter, constructor) in [
-        ("List<TaxRule> rules", service("list<app\\pricing\\taxrule>")),
-        ("Map<string, TaxRule> rules", service("array<string, app\\pricing\\taxrule>")),
+        ("List<TaxRule> rules", service("list<App\\Pricing\\TaxRule>")),
+        ("Map<string, TaxRule> rules", service("array<string, App\\Pricing\\TaxRule>")),
         ("List<string> names", "null\n".to_owned()),
         ("TaxRule rule", "null\n".to_owned()),
         ("int count", "null\n".to_owned()),
@@ -8179,7 +8179,7 @@ fn a_member_of_a_value_that_may_be_a_list_or_an_iterable_runs_the_iterable_s_las
                                     ARG_LIST
                                   VAR
                                     ZVAL "receiver#1"
-                                  ZVAL "tolist"
+                                  ZVAL "toList"
                                   ZVAL "List<int>, List<Any?>"
                                   ZVAL "App.Tenant.Report.toList()"
                               METHOD_CALL
@@ -9668,7 +9668,7 @@ fn a_list_index_write_runs_the_standard_library_s_set_member() {
         .map(|read| String::from_utf8_lossy(&read.name).into_owned())
         .collect();
 
-    assert_eq!(inlined, ["sharp\\listmembers::set"]);
+    assert_eq!(inlined, ["Sharp\\ListMembers::set"]);
 }
 
 /// ```php
@@ -13870,7 +13870,7 @@ fn a_generic_call_carries_its_type_arguments_and_a_generic_method_its_metadata()
                           ZVAL "#0"
                     VAR
                       ZVAL "this"
-                    ZVAL "pairwith"
+                    ZVAL "pairWith"
                     ZVAL "App.Pair<$0, #0>"
                     ZVAL "App.PaginatedList.pairWith()"
         "##}
@@ -15541,6 +15541,40 @@ fn a_header_trait_and_the_traits_of_default_bodies_are_one_use_after_the_interfa
               NAME_LIST
                 ZVAL "Lib\\HasLabel"
               null
+        "#}
+    );
+}
+
+/// Spec section 22: `override` replaces any inherited method, a trait's included, and PHP's `#[\Override]` counts only a
+/// parent class's and an interface's methods. So a method that replaces only a trait's, `label`, lowers without it,
+/// static or not, and one that replaces a parent class's, `status`, or a parent class's and a trait's, `both`, keeps it.
+#[test]
+fn an_override_of_a_trait_method_alone_has_no_override_attribute() {
+    let library = [(
+        "src/Lib/Drafts.php",
+        "<?php namespace Lib; class Base { protected function status(): string { return 'draft'; } protected function both(): string { return 'base'; } } trait Defaulted { protected function label(): string { return 'draft'; } protected static function kind(): string { return 'draft'; } protected function both(): string { return 'trait'; } }",
+    )];
+    let lowered = Lowered::with(
+        "namespace App;\n\nimport Lib.Base;\nimport Lib.Defaulted;\n\npublic class Post : Base, Defaulted\n{\n    protected override string status() => \"published\";\n\n    protected override string label() => \"published\";\n\n    protected static override string kind() => \"published\";\n\n    protected override string both() => \"published\";\n}\n",
+        &library,
+    );
+    let attributes = |method: &str| lowered.render(lowered.child(lowered.method_named(method), 4));
+
+    assert_eq!(
+        ["status", "label", "kind", "both"].map(attributes).concat(),
+        indoc! {r#"
+            ATTRIBUTE_LIST
+              ATTRIBUTE_GROUP
+                ATTRIBUTE
+                  ZVAL "Override"
+                  null
+            null
+            null
+            ATTRIBUTE_LIST
+              ATTRIBUTE_GROUP
+                ATTRIBUTE
+                  ZVAL "Override"
+                  null
         "#}
     );
 }
@@ -20702,7 +20736,7 @@ fn a_static_call_beside_a_get_is_the_static_method_call_static_serves() {
         .map(|(name, _)| String::from_utf8_lossy(&name).into_owned())
         .collect();
 
-    assert_eq!(forms, ["sharp\\text::found"]);
+    assert_eq!(forms, ["Sharp\\Text::found"]);
     assert_eq!(
         Lowered::with(
             "namespace App.Tenant;\n\nimport Lib.Order;\n\nclass Report\n{\n    public void run(int extra)\n    {\n        Order.where(extra);\n    }\n}\n",
@@ -22054,22 +22088,40 @@ fn a_map_a_class_method_gives_becomes_the_object_where_a_plain_override_may_give
 }
 
 /// ```php
-/// return \Sharp\Internal\returned($source->heldStatus(), $source, 'heldstatus', 'Map<string, string>', …);
+/// return \Sharp\Internal\returned($source->heldStatus(), $source, 'heldStatus', 'Map<string, string>', …);
 /// ```
 ///
-/// Spec section 22: `\Sharp\Internal\returned` looks the method up in the class's `function_table`, which PHP keys in
-/// lowercase, so the call names a camelCase method in lowercase, and the engine gives the PHP# method's result as it is.
+/// Spec section 22: `\Sharp\Internal\returned` looks the method up in the class's `function_table`, which keys a PHP#
+/// class's method by its exact name, spec section 24, so the call names a camelCase method as declared, and the engine
+/// gives the PHP# method's result as it is.
 #[test]
-fn a_camel_case_method_s_result_is_read_by_its_lowercase_name() {
+fn a_camel_case_method_s_result_is_read_by_its_declared_name() {
     let source = (
         "src/App/Tenant/Source.sharp",
         "namespace App.Tenant;\n\npublic class Source\n{\n    public virtual Map<string, string> heldStatus() => [\"status\": \"active\"];\n}\n",
     );
     let body = body_in("Map<string, string> run(Source source)", "        return source.heldStatus();\n", &[source]);
 
-    assert!(body.contains("ZVAL \"Sharp\\\\Internal\\\\returned\""), "{body}");
-    assert!(body.contains("ZVAL \"heldstatus\""), "{body}");
-    assert!(body.contains("ZVAL \"App.Tenant.Source.heldStatus()\""), "{body}");
+    assert_eq!(
+        body,
+        indoc! {r#"
+            STMT_LIST
+              RETURN
+                CALL
+                  ZVAL "Sharp\\Internal\\returned"
+                  ARG_LIST
+                    METHOD_CALL
+                      VAR
+                        ZVAL "source"
+                      ZVAL "heldStatus"
+                      ARG_LIST
+                    VAR
+                      ZVAL "source"
+                    ZVAL "heldStatus"
+                    ZVAL "Map<string, string>, Map<Any?, Any?>"
+                    ZVAL "App.Tenant.Source.heldStatus()"
+        "#}
+    );
 }
 
 /// ```php
@@ -29781,11 +29833,11 @@ fn an_inline_form_gives_the_plain_php_call_its_body_makes() {
     assert_eq!(
         calls,
         [
-            ("sharp\\calls".to_owned(), "broken".to_owned(), Some(vec![PhpCallArgument::Slot(0), literal("true")]), 1),
-            ("sharp\\calls".to_owned(), "named".to_owned(), None, 1),
-            ("sharp\\calls".to_owned(), "plain".to_owned(), Some(vec![PhpCallArgument::Slot(0), literal("false")]), 1),
+            ("Sharp\\Calls".to_owned(), "broken".to_owned(), Some(vec![PhpCallArgument::Slot(0), literal("true")]), 1),
+            ("Sharp\\Calls".to_owned(), "named".to_owned(), None, 1),
+            ("Sharp\\Calls".to_owned(), "plain".to_owned(), Some(vec![PhpCallArgument::Slot(0), literal("false")]), 1),
             (
-                "sharp\\calls".to_owned(),
+                "Sharp\\Calls".to_owned(),
                 "remainder".to_owned(),
                 Some(vec![PhpCallArgument::Slot(0), literal("1.5")]),
                 1
@@ -29801,7 +29853,7 @@ fn an_inline_form_gives_the_plain_php_call_its_body_makes() {
 /// `again` calls `Self`, which names the caller's class once copied there. `hidden` and `muted` are not public.
 #[test]
 fn a_method_whose_body_is_one_call_reading_each_slot_once_gives_an_inline_form() {
-    assert_eq!(form_names(TEXT), ["sharp\\text::capitalized", "sharp\\text::padded", "sharp\\text::wrapped"]);
+    assert_eq!(form_names(TEXT), ["Sharp\\Text::capitalized", "Sharp\\Text::padded", "Sharp\\Text::wrapped"]);
 }
 
 /// ```php
@@ -29836,7 +29888,7 @@ fn a_void_method_gives_an_inline_form_and_a_constructor_none() {
 
     assert_eq!(
         form_names(("vendor/heyjordanparker/php-sharp-composer/library/Sharp/Counter.sharp", code)),
-        ["sharp\\counter::log"]
+        ["Sharp\\Counter::log"]
     );
 }
 
@@ -29849,7 +29901,7 @@ fn a_method_that_runs_position_current_gives_no_inline_form() {
             "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Here.sharp",
             "namespace Sharp;\n\npublic class Here\n{\n    public static Position now() => Position.current();\n\n    public static string capitalized(string text) => global.ucfirst(text);\n}\n"
         )),
-        ["sharp\\here::capitalized"]
+        ["Sharp\\Here::capitalized"]
     );
 }
 
@@ -30407,7 +30459,7 @@ fn a_call_of_a_variadic_native_body_keeps_its_static_call() {
 fn the_unit_names_each_form_it_inlines_with_its_fingerprint() {
     let forms = common::checked(TEXT.0, TEXT.1, &[], inline_forms).expect("the library file is checked");
     let (_, capitalized) =
-        forms.iter().find(|(name, _)| name == b"sharp\\text::capitalized").expect("capitalized has a form");
+        forms.iter().find(|(name, _)| name == b"Sharp\\Text::capitalized").expect("capitalized has a form");
     let code = "namespace App.Tenant;\n\nimport Sharp.Text;\n\nclass Report\n{\n    public string run(string name) => Text.capitalized(name) + Text.capitalized(name);\n}\n";
     let lowered = Lowered::inlining(code, &[], &[TEXT]);
     let inlined: Vec<(String, u64)> = lowered
@@ -30418,11 +30470,12 @@ fn the_unit_names_each_form_it_inlines_with_its_fingerprint() {
         .map(|read| (String::from_utf8_lossy(&read.name).into_owned(), read.fingerprint))
         .collect();
 
-    assert_eq!(inlined, [("sharp\\text::capitalized".to_owned(), capitalized.fingerprint())]);
+    assert_eq!(inlined, [("Sharp\\Text::capitalized".to_owned(), capitalized.fingerprint())]);
 }
 
 /// The unit names the function type of each method its file declares with the xxh3-64 of the type text `is` tests a
-/// closure of it by, which `Reads::function_types` takes, since the effects the text lists come from other files.
+/// closure of it by, which `Reads::function_types` takes, since the effects the text lists come from other files. The
+/// `parse` and `tryParse` spec section 10 gives the class carry theirs too.
 #[test]
 fn the_unit_names_each_function_type_with_the_hash_of_its_text() {
     let code = "namespace App.Tenant;\n\nclass Report\n{\n    public int twice(int x) => x * 2;\n}\n";
@@ -30435,7 +30488,20 @@ fn the_unit_names_each_function_type_with_the_hash_of_its_text() {
         .map(|read| (String::from_utf8_lossy(&read.name).into_owned(), read.fingerprint))
         .collect();
 
-    assert_eq!(function_types, [("App\\Tenant\\Report::twice".to_owned(), xxh3_64(b"Function<int(int)>"))]);
+    assert_eq!(
+        function_types,
+        [
+            (
+                "App\\Tenant\\Report::parse".to_owned(),
+                xxh3_64(b"Function<App.Tenant.Report(Map<string, Any?>|Object)>")
+            ),
+            (
+                "App\\Tenant\\Report::tryParse".to_owned(),
+                xxh3_64(b"Function<App.Tenant.Report?(Map<string, Any?>|Object)>")
+            ),
+            ("App\\Tenant\\Report::twice".to_owned(), xxh3_64(b"Function<int(int)>")),
+        ]
+    );
 }
 
 /// Each node an inlined form copies takes the line of its call, as the call's own nodes would, and each value keeps
@@ -30476,7 +30542,7 @@ fn a_form_fingerprint_follows_its_body_and_not_its_lines() {
         common::checked(TEXT.0, code, &[], inline_forms)
             .expect("the library file is checked")
             .into_iter()
-            .find(|(name, _)| name == b"sharp\\text::capitalized")
+            .find(|(name, _)| name == b"Sharp\\Text::capitalized")
             .map(|(_, form)| form.fingerprint())
             .expect("capitalized has a form")
     };
@@ -32293,7 +32359,9 @@ fn a_struct_parses_each_field_from_its_key_and_creates_itself_through_its_main_c
                 RETURN
                   VAR
                     ZVAL "object#5"
-              ZVAL "App\\Ticket"
+              SHARP_TYPE_ARGS
+                ZVAL "App\\Ticket"
+                ZVAL "Function<App.Ticket(Map<string, Any?>|Object)>"
               null
 
             METHOD [17] "tryParse" @5-5
@@ -32327,7 +32395,9 @@ fn a_struct_parses_each_field_from_its_key_and_creates_itself_through_its_main_c
                         RETURN
                           ZVAL null
                   null
-              ZVAL [256] "App\\Ticket"
+              SHARP_TYPE_ARGS
+                ZVAL [256] "App\\Ticket"
+                ZVAL "Function<App.Ticket?(Map<string, Any?>|Object)>"
               null
         "#}
     );
@@ -34640,7 +34710,9 @@ fn a_class_parses_as_a_struct_does() {
                         RETURN
                           ZVAL null
                   null
-              ZVAL [256] "App\\Ticket"
+              SHARP_TYPE_ARGS
+                ZVAL [256] "App\\Ticket"
+                ZVAL "Function<App.Ticket?(Map<string, Any?>|Object)>"
               null
         "#}
     );
@@ -34751,6 +34823,49 @@ fn a_class_parses_as_a_struct_does() {
             "namespace App;\n\npublic struct Cents\n{\n    public Cents(public int value { get; }) { }\n\n    public static Cents parse(string text) => new Cents(1);\n}\n"
         ),
         ["__construct", "parse", "op_Equality"]
+    );
+}
+
+/// Spec sections 10 and 29: the `parse` and `tryParse` a class gets carry their whole type, as a declared method does,
+/// with the effects of what `parse` runs: the main constructor, the `set` accessor of a property it writes, and the
+/// `parse` of a class a field holds, here a `foreign` class's.
+#[test]
+fn a_generated_parse_lists_the_effects_of_what_it_runs() {
+    let files = lowered_each(
+        &[
+            (
+                "src/App/Ledger.sharp",
+                "namespace App;\n\npublic foreign class Ledger\n{\n    public static int opened() => 1;\n}\n",
+            ),
+            (
+                "src/App/Audit.sharp",
+                "namespace App;\n\npublic foreign class Audit\n{\n    public static string cleaned(string text) => text;\n}\n",
+            ),
+            (
+                "src/App/Line.sharp",
+                "namespace App;\n\npublic foreign class Line\n{\n    public Line(public int count { get; }) { }\n}\n",
+            ),
+            (
+                "src/App/Order.sharp",
+                "namespace App;\n\npublic class Order\n{\n    public Order(int id)\n    {\n        this.id = id + Ledger.opened();\n    }\n\n    public int id { get; }\n\n    public string note { get; set => field = Audit.cleaned(value); } = \"\";\n\n    public List<Line> lines { get; init; } = [];\n}\n",
+            ),
+        ],
+        &[],
+    );
+    let (order, _) = class_in(&files, "Order");
+    let result = |method: &str| order.render(order.child(order.method_named(method), 3));
+
+    assert_eq!(
+        [result("parse"), result("tryParse")].join("\n"),
+        indoc! {r#"
+            SHARP_TYPE_ARGS
+              ZVAL "App\\Order"
+              ZVAL "Function<App.Order(Map<string, Any?>|Object) uses App.Audit, App.Ledger, App.Line>"
+
+            SHARP_TYPE_ARGS
+              ZVAL [256] "App\\Order"
+              ZVAL "Function<App.Order?(Map<string, Any?>|Object) uses App.Audit, App.Ledger, App.Line>"
+        "#}
     );
 }
 
@@ -35461,7 +35576,7 @@ fn readonly_lowers_to_the_same_php_as_without_it() {
     let plain = Lowered::with(&shop("", ""), &[order]);
 
     // The container fills `orders` with the service its PHP type, `array`, drops, and builds `ids` as a `Set`.
-    assert!(plain.tree().contains(r#"ZVAL "list<app\\order>""#), "{}", plain.tree());
+    assert!(plain.tree().contains(r#"ZVAL "list<App\\Order>""#), "{}", plain.tree());
     assert_eq!(marked.tree(), plain.tree());
 }
 

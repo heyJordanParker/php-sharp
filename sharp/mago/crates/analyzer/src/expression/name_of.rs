@@ -6,7 +6,6 @@ use mago_reporting::Annotation;
 use mago_reporting::Issue;
 use mago_span::HasSpan;
 use mago_syntax::cst::NameOf;
-use mago_word::ascii_lowercase_word;
 use mago_word::concat_word;
 use mago_word::word;
 
@@ -39,7 +38,7 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for NameOf<'arena> {
         let name = word(context.resolved_names.get(&self.class));
         artifacts.symbol_references.add_reference_to_symbol(
             &block_context.scope,
-            ascii_lowercase_word(name.as_bytes()),
+            context.codebase.class_key(name.as_bytes()),
             false,
         );
 
@@ -61,10 +60,9 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for NameOf<'arena> {
             if let Some(method) = context.codebase.get_declaring_method(class.name.as_bytes(), member.name.value)
                 && let Some(metadata) = method.method_metadata.as_ref()
             {
-                let declaring = context.codebase.get_declaring_method_identifier(&MethodIdentifier::new(
-                    class.name,
-                    ascii_lowercase_word(member.name.value),
-                ));
+                let declaring = context
+                    .codebase
+                    .get_declaring_method_identifier(&MethodIdentifier::new(class.name, word(member.name.value)));
                 let declaring_class = declaring.get_class_name();
                 if !is_visible_from_scope(context.codebase, metadata.visibility, declaring_class.as_bytes(), scope) {
                     let method_name = display_sharp_member(class_name, word(member.name.value));
@@ -80,7 +78,7 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for NameOf<'arena> {
                 }
                 artifacts.symbol_references.add_reference_to_class_member(
                     &block_context.scope,
-                    (ascii_lowercase_word(declaring_class.as_bytes()), ascii_lowercase_word(member.name.value)),
+                    (context.codebase.class_key(declaring_class.as_bytes()), declaring.get_method_name()),
                     false,
                 );
 
@@ -116,7 +114,7 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for NameOf<'arena> {
 
         artifacts.symbol_references.add_reference_to_class_member(
             &block_context.scope,
-            (ascii_lowercase_word(resolution.declaring_class.name.as_bytes()), property_name),
+            (resolution.declaring_class.name, property_name),
             false,
         );
 

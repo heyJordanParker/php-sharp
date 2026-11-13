@@ -1199,10 +1199,39 @@ ZEND_API bool zend_is_valid_class_name(zend_string *name) {
 	return 1;
 }
 
+/* PHP#: the class `name` finds when the lowercase key found none or `folded`, a class whose name differs from it: a
+ * PHP# class, which the class table keys by its exact name, spec section 24, or else `folded`. A plain PHP class whose
+ * name differs from a PHP# class's only in case keeps its lowercase key beside it, so `Order` finds the PHP# class
+ * even then. */
+ZEND_API zend_never_inline zval *zend_class_table_find_exact(
+	const HashTable *class_table, zend_string *name, zval *folded) /* {{{ */
+{
+	const char *exact = ZSTR_VAL(name);
+	size_t length = ZSTR_LEN(name);
+
+	if (exact[0] == '\\') {
+		exact++;
+		length--;
+	}
+	if (folded) {
+		const zend_string *folded_name = ((zend_class_entry *) Z_PTR_P(folded))->name;
+
+		if (zend_binary_strcmp(ZSTR_VAL(folded_name), ZSTR_LEN(folded_name), exact, length) == 0) {
+			return folded;
+		}
+	}
+
+	/* A name the code compiles is interned with its hash, which the probe reuses. */
+	zval *zv = exact == ZSTR_VAL(name)
+		? zend_hash_find(class_table, name) : zend_hash_str_find(class_table, exact, length);
+
+	return zv ? zv : folded;
+}
+/* }}} */
+
 ZEND_API zend_class_entry *zend_lookup_class_ex(zend_string *name, zend_string *key, uint32_t flags) /* {{{ */
 {
 	zend_class_entry *ce = NULL;
-	zval *zv;
 	zend_string *lc_name;
 	zend_string *autoload_name;
 	uint32_t ce_cache = 0;
@@ -1215,31 +1244,36 @@ ZEND_API zend_class_entry *zend_lookup_class_ex(zend_string *name, zend_string *
 		}
 	}
 
+	/* Without the leading `\` a name may be written with. */
+	const char *written = ZSTR_VAL(name);
+	size_t length = ZSTR_LEN(name);
+
 	if (key) {
 		lc_name = key;
+		ce = zend_class_table_find_ptr(EG(class_table), name, key);
 	} else {
-		if (!ZSTR_LEN(name)) {
+		if (!length) {
 			return NULL;
 		}
 
-		if (ZSTR_VAL(name)[0] == '\\') {
-			if (ZSTR_LEN(name) == 1) {
+		if (written[0] == '\\') {
+			if (length == 1) {
 				/* A lone namespace separator names no class, e.g. is_callable('\::method'). */
 				return NULL;
 			}
-			lc_name = zend_string_alloc(ZSTR_LEN(name) - 1, 0);
-			zend_str_tolower_copy(ZSTR_VAL(lc_name), ZSTR_VAL(name) + 1, ZSTR_LEN(name) - 1);
-		} else {
-			lc_name = zend_string_tolower(name);
+			written++;
+			length--;
 		}
+		/* PHP#: the name as written finds a PHP# class, which the class table keys by its exact name, spec section 24,
+		 * and a plain PHP class whose name it writes as its lowercase key. Any other plain PHP class is found by the
+		 * name lowercased on the stack, so a name that finds a class allocates nothing. */
+		zval *zv = written == ZSTR_VAL(name)
+			? zend_hash_find(EG(class_table), name) : zend_hash_str_find(EG(class_table), written, length);
+		ce = zv ? (zend_class_entry *) Z_PTR_P(zv) : zend_hash_str_find_ptr_lc(EG(class_table), written, length);
+		lc_name = NULL;
 	}
 
-	zv = zend_hash_find(EG(class_table), lc_name);
-	if (zv) {
-		if (!key) {
-			zend_string_release_ex(lc_name, 0);
-		}
-		ce = (zend_class_entry*)Z_PTR_P(zv);
+	if (ce) {
 		if (UNEXPECTED(!(ce->ce_flags & ZEND_ACC_LINKED))) {
 			if ((flags & ZEND_FETCH_CLASS_ALLOW_UNLINKED) ||
 				((flags & ZEND_FETCH_CLASS_ALLOW_NEARLY_LINKED) &&
@@ -1264,23 +1298,21 @@ ZEND_API zend_class_entry *zend_lookup_class_ex(zend_string *name, zend_string *
 
 	/* The compiler is not-reentrant. Make sure we autoload only during run-time. */
 	if ((flags & ZEND_FETCH_CLASS_NO_AUTOLOAD) || zend_is_compiling()) {
-		if (!key) {
-			zend_string_release_ex(lc_name, 0);
-		}
 		return NULL;
 	}
 
 	if (!zend_autoload) {
-		if (!key) {
-			zend_string_release_ex(lc_name, 0);
-		}
 		return NULL;
 	}
 
 	/* Verify class name before passing it to the autoloader. */
 	if (!key && !ZSTR_HAS_CE_CACHE(name) && !zend_is_valid_class_name(name)) {
-		zend_string_release_ex(lc_name, 0);
 		return NULL;
+	}
+
+	if (!key) {
+		lc_name = zend_string_alloc(length, 0);
+		zend_str_tolower_copy(ZSTR_VAL(lc_name), written, length);
 	}
 
 	if (EG(in_autoload) == NULL) {

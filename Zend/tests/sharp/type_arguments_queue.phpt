@@ -64,9 +64,10 @@ $run[3] = 'changed';
 echo $run[4], "\n";
 
 echo "unserialize resolves each class a type argument names, as it resolves an object's class\n";
-// A class written in the wrong case takes its declared spelling, so the type is the one code spells.
-$run = unserialize(str_replace('"App.Order, int"', '"app.ORDER, int"', serialize(Queue::pair())));
-echo implode(', ', arguments($run)), ' ', var_export($run == Queue::pair(), true), "\n";
+// PHP# names are case-sensitive, spec section 24, so a PHP# class written in another case names no class, as an object's
+// class does.
+var_dump(@unserialize(str_replace('"App.Order, int"', '"App.ORDER, int"', serialize(Queue::pair()))));
+var_dump(@unserialize(str_replace('O:9:"App\Order"', 'O:9:"App\ORDER"', serialize(new App\Order(7))))::class);
 echo get_class(unserialize(serialize(Queue::pair()), ['allowed_classes' => ['App\Pair', 'App\Order']])), "\n";
 // An autoloader that unserializes leaves the outer data's reference numbers alone.
 spl_autoload_register(static function (string $class): void {
@@ -149,7 +150,8 @@ __PHP_Incomplete_Class true
 __PHP_Incomplete_Class true
 true true changed
 unserialize resolves each class a type argument names, as it resolves an object's class
-App.Order, int true
+bool(false)
+string(22) "__PHP_Incomplete_Class"
 App\Pair
 int, App.Late? true
 an object plain PHP creates has its intersection bound as its type argument

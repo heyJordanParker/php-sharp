@@ -2049,7 +2049,9 @@ static zend_function *dbstmt_method_get(zend_object **object_pp, zend_string *me
 
 	lc_method_name = zend_string_tolower(method_name);
 
-	if ((fbc = zend_hash_find_ptr(&object->ce->function_table, lc_method_name)) == NULL) {
+	/* PHP#: a class with SHARP_CLASS_EXACT_NAMES keys each method by its exact name, see zend_class_find_method. */
+	if ((fbc = zend_hash_find_ptr(&object->ce->function_table,
+			(object->ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? method_name : lc_method_name)) == NULL) {
 		pdo_stmt_t *stmt = php_pdo_stmt_fetch_object(object);
 		/* instance not created by PDO object */
 		if (!stmt->dbh) {

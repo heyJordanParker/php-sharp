@@ -4239,6 +4239,42 @@ fn a_false_law_over_a_list_index_read_is_not_proven_and_a_map_key_read_is_refuse
     );
 }
 
+/// A law without a body over an enum it takes that proves case by case reports each case it does not prove on its own,
+/// with the case it is: over a ramp of delays that shrinks from 30 to 20, only `Retry.ExponentialRamp`, and with
+/// `Retry.Linear`'s delays shrinking from 20 to 15 too, both.
+#[test]
+fn a_law_without_a_body_reports_each_enum_case_it_does_not_prove() {
+    let claim =
+        "index < 0 || index + 1 >= retry.backoff().count() || retry.backoff()[index] <= retry.backoff()[index + 1]";
+    let ramp = retry(&format!("law backoffNeverShrinks(Retry retry, int index) => {claim};"))
+        .replace("[30, 60, 300", "[30, 20, 300");
+    let linear = ramp.replace("[10, 20, 30]", "[10, 20, 15]");
+    for (source, cases) in
+        [(ramp, vec!["Retry.ExponentialRamp"]), (linear, vec!["Retry.Linear", "Retry.ExponentialRamp"])]
+    {
+        let directory = library_project(&[("app/Shared/Events/Retry.sharp", &source)]);
+
+        let output = compile(directory.path());
+
+        assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+        for case in &cases {
+            assert!(
+                printed(&output).contains(&format!(
+                    "error[law-unproven]: law backoffNeverShrinks is not proven\n = when retry is {case}, still to show: {claim}\n"
+                )),
+                "{}",
+                printed(&output)
+            );
+        }
+        assert_eq!(
+            printed(&output).matches("law backoffNeverShrinks is not proven").count(),
+            cases.len(),
+            "{}",
+            printed(&output)
+        );
+    }
+}
+
 /// A case whose proof runs out of its time budget is not proven, as any case left open is: it is refused as
 /// `law-unproven`, names the case, and says the proof ran out of time. The case after it still runs, and is reported on
 /// its own. The slow case's claim has 18 `||` choices for `omega` to split on, 2^18 cases in all.
@@ -5028,6 +5064,15 @@ fn a_law_reaching_a_loop_that_reads_a_local_it_adds_to_is_refused() {
     assert_unmodeled(
         "namespace App.Shared;\n\npublic class Shape\n{\n    public static int capped(List<int> xs)\n    {\n        let sum = 0;\n        for (const x of xs) {\n            if (sum < 10) {\n                sum += x;\n            }\n        }\n        return sum;\n    }\n\n    law cappedHolds(List<int> xs) => Shape.capped(xs) == Shape.capped(xs);\n}\n",
         "Law cappedHolds reaches a loop that reads a local it adds to in Shape.capped. Write the method as recursion that calls itself on a smaller value.",
+    );
+}
+
+/// PHP finds a property by its exact name, so a law knows a stored `raw` and an accessor `Raw` apart.
+#[test]
+fn a_law_knows_a_stored_field_from_an_accessor_whose_name_differs_only_in_case() {
+    assert_unmodeled(
+        "namespace App.Shared;\n\npublic class Shape\n{\n    public Shape(public int raw { get; }) { }\n    public int Raw => this.raw * 2;\n\n    law doubledHolds(Shape s) => s.Raw == s.Raw;\n}\n",
+        "Law doubledHolds reaches the accessor of Shape.Raw in Shape.doubledHolds. Compute the value in a method, and give the property no accessor body.",
     );
 }
 

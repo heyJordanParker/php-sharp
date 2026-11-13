@@ -54,8 +54,10 @@ static inline void php_json_pretty_print_char(smart_str *buf, int options, char 
 static inline void php_json_pretty_print_indent(smart_str *buf, int options, const php_json_encoder *encoder) /* {{{ */
 {
 	if (options & PHP_JSON_PRETTY_PRINT) {
+		size_t width = encoder->indent ? (size_t) encoder->indent : 4;
+
 		for (int i = 0; i < encoder->depth; ++i) {
-			smart_str_appendl(buf, "    ", 4);
+			memset(smart_str_extend(buf, width), ' ', width);
 		}
 	}
 }
@@ -600,7 +602,7 @@ static zend_result php_json_encode_serializable_object(smart_str *buf, zend_obje
 
 	ZEND_GUARD_PROTECT_RECURSION(guard, JSON);
 
-	zend_function *json_serialize_method = zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("jsonserialize"));
+	zend_function *json_serialize_method = zend_class_find_protocol_method(ce, ZEND_STRL("jsonserialize"));
 	ZEND_ASSERT(json_serialize_method != NULL && "This should be guaranteed prior to calling this function");
 	zend_call_known_function(json_serialize_method, obj, ce, &retval, 0, NULL, NULL);
 	/* An exception has occurred */

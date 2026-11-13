@@ -1382,7 +1382,7 @@ object ":" uiv ":" ["]	{
 			}
 		}
 
-		ce = zend_hash_find_ptr(EG(class_table), lc_name);
+		ce = zend_class_table_find_ptr(EG(class_table), class_name, lc_name);
 		if (ce
 		 && (ce->ce_flags & ZEND_ACC_LINKED)
 		 && !(ce->ce_flags & ZEND_ACC_ANON_CLASS)) {

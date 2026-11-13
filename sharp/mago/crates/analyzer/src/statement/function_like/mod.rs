@@ -1265,6 +1265,7 @@ where
     A: Arena,
 {
     add_symbol_references(
+        context.codebase,
         &type_metadata.type_union,
         block_context.scope.get_function_like_identifier().as_ref(),
         artifacts,
@@ -1524,33 +1525,40 @@ where
     }
 }
 
+/// Records each symbol `parameter_type` names by its key, spec section 24: a class-like's in the codebase, a
+/// function's lowercase, and a method's in its class.
 fn add_symbol_references(
+    codebase: &CodebaseMetadata,
     parameter_type: &TUnion,
     calling_function_like_id: Option<&FunctionLikeIdentifier>,
     artifacts: &mut AnalysisArtifacts,
 ) {
     for type_node in parameter_type.get_all_child_nodes() {
         if let TypeRef::Atomic(atomic) = type_node {
-            match atomic {
-                TAtomic::Reference(TReference::Symbol { name, .. })
-                | TAtomic::Callable(TCallable::Alias(FunctionLikeIdentifier::Function(name))) => {
-                    let name = ascii_lowercase_word(name.as_bytes());
-                    match calling_function_like_id {
-                        Some(FunctionLikeIdentifier::Function(calling_function)) => {
-                            artifacts.symbol_references.add_symbol_reference_to_symbol(*calling_function, name, true);
-                        }
-                        Some(FunctionLikeIdentifier::Method(calling_classlike, calling_function)) => {
-                            artifacts.symbol_references.add_class_member_reference_to_symbol(
-                                (*calling_classlike, *calling_function),
-                                name,
-                                true,
-                            );
-                        }
-                        _ => {}
-                    }
+            let symbol = match atomic {
+                TAtomic::Reference(TReference::Symbol { name, .. }) => Some(codebase.class_key(name.as_bytes())),
+                TAtomic::Callable(TCallable::Alias(FunctionLikeIdentifier::Function(name))) => {
+                    Some(ascii_lowercase_word(name.as_bytes()))
                 }
+                _ => None,
+            };
+            match atomic {
+                _ if let Some(name) = symbol => match calling_function_like_id {
+                    Some(FunctionLikeIdentifier::Function(calling_function)) => {
+                        artifacts.symbol_references.add_symbol_reference_to_symbol(*calling_function, name, true);
+                    }
+                    Some(FunctionLikeIdentifier::Method(calling_classlike, calling_function)) => {
+                        artifacts.symbol_references.add_class_member_reference_to_symbol(
+                            (*calling_classlike, *calling_function),
+                            name,
+                            true,
+                        );
+                    }
+                    _ => {}
+                },
                 TAtomic::Callable(TCallable::Alias(FunctionLikeIdentifier::Method(name, member_name))) => {
-                    let method = (ascii_lowercase_word(name.as_bytes()), ascii_lowercase_word(member_name.as_bytes()));
+                    let class = codebase.class_key(name.as_bytes());
+                    let method = (class, codebase.method_key(class, member_name.as_bytes()));
                     match calling_function_like_id {
                         Some(FunctionLikeIdentifier::Function(calling_function)) => {
                             artifacts.symbol_references.add_symbol_reference_to_class_member(
@@ -2252,7 +2260,8 @@ where
     }
 }
 
-/// Reports each type `type_union`, written at `span`, names that no analyzed file or stub declares.
+/// Reports each type `type_union`, written at `span`, names that no analyzed file or stub declares, a PHP# type in
+/// another case than the type declares among them, which names nothing, spec section 24.
 pub(crate) fn report_undefined_types<A>(context: &mut Context<'_, '_, A>, type_union: &TUnion, span: Span)
 where
     A: Arena,
@@ -2914,4 +2923,69 @@ pub(crate) fn collection_key_error(
         .with_help(format!(
             "{fix} an `int`, a `float`, a `string`, a `bool`, `null`, an enum, a struct, a `List`, `Set` or `Map` of them, or a class that declares `public static bool operator ==` with `public int hash()`."
         ))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+    use std::collections::HashSet;
+
+    use mago_allocator::LocalArena;
+    use mago_codex::reference::ReferenceOrigin;
+    use mago_codex::reference::SymbolReferenceKind;
+    use mago_codex::scanner::scan_program;
+    use mago_database::file::File;
+    use mago_names::resolver::NameResolver;
+    use mago_syntax::parser::parse_file;
+    use mago_word::empty_word;
+
+    use super::*;
+    use crate::settings::Settings;
+
+    /// A host may refine a parameter to a callable that names a function or a method, and the signature that holds it
+    /// references the function by its lowercase name and the method by its class's key and its key in that class, spec
+    /// section 24: both as written for a PHP# class. Only a named function or method records a reference.
+    #[test]
+    fn a_callable_type_references_its_function_and_its_method_by_their_keys() {
+        let file = File::ephemeral(
+            Cow::Borrowed(b"src/Shop/Order.sharp"),
+            Cow::Borrowed(b"namespace Shop;\n\npublic class Order\n{\n    public int totalDue() => 1;\n}\n"),
+        );
+        let arena = LocalArena::new();
+        let program = parse_file(&arena, &file);
+        let names = NameResolver::new(&arena).resolve(program);
+        let codebase = scan_program(&arena, &file, program, &names, Settings::default().version);
+        let callables = TUnion::from_vec(vec![
+            TAtomic::Callable(TCallable::Alias(FunctionLikeIdentifier::Function(word(b"Shop\\Format")))),
+            TAtomic::Callable(TCallable::Alias(FunctionLikeIdentifier::Method(
+                word(b"Shop\\Order"),
+                word(b"totalDue"),
+            ))),
+        ]);
+        let lambda = FunctionLikeIdentifier::for_closure(&file, program.span());
+
+        let mut artifacts = AnalysisArtifacts::new();
+        add_symbol_references(
+            &codebase,
+            &callables,
+            Some(&FunctionLikeIdentifier::Function(word(b"run"))),
+            &mut artifacts,
+        );
+        add_symbol_references(&codebase, &callables, Some(&lambda), &mut artifacts);
+        add_symbol_references(&codebase, &callables, None, &mut artifacts);
+
+        let mut references = HashSet::new();
+        artifacts.symbol_references.for_each_reference(|origin, symbol, kind| {
+            references.insert((origin, symbol, kind));
+        });
+        let run = ReferenceOrigin::Symbol((word(b"run"), empty_word()));
+        assert_eq!(
+            references,
+            HashSet::from([
+                (run, (word(b"shop\\format"), empty_word()), SymbolReferenceKind::Signature),
+                (run, (word(b"Shop\\Order"), word(b"totalDue")), SymbolReferenceKind::Signature),
+                (run, (word(b"Shop\\Order"), empty_word()), SymbolReferenceKind::Body),
+            ])
+        );
+    }
 }

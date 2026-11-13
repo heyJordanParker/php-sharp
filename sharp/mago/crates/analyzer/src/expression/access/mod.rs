@@ -27,7 +27,6 @@ use mago_syntax::cst::Instantiation;
 use mago_syntax::cst::LocalIdentifier;
 use mago_syntax::cst::PropertyAccess;
 use mago_word::Word;
-use mago_word::ascii_lowercase_word;
 use mago_word::concat_word;
 use mago_word::word;
 
@@ -422,7 +421,10 @@ pub(crate) fn report_unknown_member_owner<A>(context: &mut Context<'_, '_, A>, n
 where
     A: Arena,
 {
-    if report_unknown_sharp_class(context, context.resolved_names.get(name), name.span()) {
+    let resolved = context.resolved_names.get(name);
+    if crate::utils::casing::report_sharp_class_like_in_another_case(context, resolved, name.span())
+        || report_unknown_sharp_class(context, resolved, name.span())
+    {
         return;
     }
 
@@ -584,7 +586,7 @@ fn record_class_type_arguments<A>(
     let Some(type_arguments) = statics_type_arguments(context, block_context, artifacts, class_expression) else {
         return;
     };
-    let method = MethodIdentifier::new(class, ascii_lowercase_word(name.value));
+    let method = MethodIdentifier::new(class, word(name.value));
     let declaring_class = context.codebase.get_declaring_method_identifier(&method).get_class_name();
     let Some(class_type_arguments) =
         static_member_type_arguments(context, class, declaring_class, Some(&type_arguments))

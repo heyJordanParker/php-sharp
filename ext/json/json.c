@@ -144,7 +144,7 @@ PHP_JSON_API zend_result php_json_encode(smart_str *buf, zval *val, int options)
 }
 /* }}} */
 
-static const char *php_json_get_error_msg(php_json_error_code error_code) /* {{{ */
+PHP_JSON_API const char *php_json_get_error_msg(php_json_error_code error_code) /* {{{ */
 {
 	switch(error_code) {
 		case PHP_JSON_ERROR_NONE:

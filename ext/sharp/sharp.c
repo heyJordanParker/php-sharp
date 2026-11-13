@@ -14,6 +14,7 @@
 #include "ext/hash/php_hash.h"
 #include "ext/hash/php_hash_xxhash.h"
 #include "ext/json/php_json.h"
+#include "ext/json/php_json_encoder.h"
 #include "ext/json/php_json_parser.h"
 #include "ext/spl/spl_exceptions.h"
 #include "ext/standard/basic_functions.h"
@@ -102,7 +103,7 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	HashTable *request_spelled_lists;
 	/* Spec section 32: Sharp\Container's bindings, under "namespace id" a list of the modules that bind it, each a
 	 * list of its rows, the base modules' and the environment modules' apart; the paths of the module files it read;
-	 * each test file's module, under the lowercase name of the one class the file declares, and the one of the test
+	 * each test file's module, under the exact name of the one PHP# class the file declares, and the one of the test
 	 * that runs now, or NULL; the services each singleton keeps, by binding row; and the main context's scopes, which
 	 * started in the request's scope. */
 	HashTable container_bindings;
@@ -4579,9 +4580,73 @@ static zend_string *sharp_type_class_value(const sharp_type *type)
 	return type->class_name ? type->class_name : type->text;
 }
 
-/* Appends the PHP type `type` as PHP# writes it, for a property that carries no PHP# type: `App\Order` as `App.Order`,
- * `?int` and `int|null` as `int?`, `mixed` and no type as `Any?`, `object` as `Object`, and `array` as the
- * `Map<int|string, Any?>` a plain PHP array arrives as, spec section 12. */
+static int sharp_text_compare(const void *left, const void *right)
+{
+	const zend_string *a = *(const zend_string *const *) left;
+	const zend_string *b = *(const zend_string *const *) right;
+
+	return zend_binary_strcmp(ZSTR_VAL(a), ZSTR_LEN(a), ZSTR_VAL(b), ZSTR_LEN(b));
+}
+
+/* Appends `parts`, the texts of a union's or an intersection's members, as PHP# writes the type: in order, as
+ * sharp_type_read_union and sharp_type_read_intersection read them, each between `separator`s, and an intersection in
+ * a union of several members in parentheses. Releases each part. */
+static void sharp_php_type_join(smart_str *text, zend_string **parts, uint32_t count, const char *separator)
+{
+	qsort(parts, count, sizeof(*parts), sharp_text_compare);
+	for (uint32_t i = 0; i < count; i++) {
+		bool grouped = count > 1 && *separator == '|' && memchr(ZSTR_VAL(parts[i]), '&', ZSTR_LEN(parts[i]));
+		if (i) {
+			smart_str_appends(text, separator);
+		}
+		if (grouped) {
+			smart_str_appendc(text, '(');
+		}
+		smart_str_append(text, parts[i]);
+		if (grouped) {
+			smart_str_appendc(text, ')');
+		}
+		zend_string_release(parts[i]);
+	}
+}
+
+/* The PHP# text of the member of a PHP union that is `length` bytes at `at`: `App\Order` as `App.Order`, `object` as
+ * `Object`, `array` as the `Map<int|string, Any?>` a plain PHP array arrives as, spec section 12, and an intersection
+ * `(A&B)` as `A & B`, without the parentheses a union holds it in. */
+static zend_string *sharp_php_type_member(const char *at, size_t length)
+{
+	smart_str text = {0};
+	if (length == 6 && memcmp(at, "object", 6) == 0) {
+		smart_str_appends(&text, "Object");
+	} else if (length == 5 && memcmp(at, "array", 5) == 0) {
+		smart_str_appends(&text, "Map<int|string, Any?>");
+	} else if (memchr(at, '&', length)) {
+		if (*at == '(') {
+			at++;
+			length -= 2;
+		}
+		zend_string **classes = safe_emalloc(length, sizeof(*classes), 0);
+		uint32_t count = 0;
+		for (const char *end = at + length, *amp; at < end; at = amp + 1) {
+			amp = memchr(at, '&', end - at);
+			amp = amp ? amp : end;
+			classes[count++] = sharp_php_type_member(at, amp - at);
+		}
+		sharp_php_type_join(&text, classes, count, " & ");
+		efree(classes);
+	} else {
+		for (size_t i = 0; i < length; i++) {
+			smart_str_appendc(&text, at[i] == '\\' ? '.' : at[i]);
+		}
+	}
+	smart_str_0(&text);
+
+	return text.s;
+}
+
+/* Appends the PHP type `type` as PHP# writes it, for a member that carries no PHP# type: each member as
+ * sharp_php_type_member writes it, a union's members in order, `?int` and `int|null` as `int?`, `int|string|null` as
+ * `(int|string)?`, and `mixed` and no type as `Any?`. */
 static void sharp_php_type_text(smart_str *text, zend_type type)
 {
 	if (!ZEND_TYPE_IS_SET(type) || ZEND_TYPE_PURE_MASK(type) == MAY_BE_ANY) {
@@ -4597,23 +4662,25 @@ static void sharp_php_type_text(smart_str *text, zend_type type)
 		nullable = true;
 		end -= 5;
 	}
+	zend_string **members = safe_emalloc(end - at, sizeof(*members), 0);
+	uint32_t count = 0;
 	while (at < end) {
-		const char *bar = memchr(at, '|', end - at);
-		size_t length = (bar ? bar : end) - at;
-		if (length == 6 && memcmp(at, "object", 6) == 0) {
-			smart_str_appends(text, "Object");
-		} else if (length == 5 && memcmp(at, "array", 5) == 0) {
-			smart_str_appends(text, "Map<int|string, Any?>");
-		} else {
-			for (size_t i = 0; i < length; i++) {
-				smart_str_appendc(text, at[i] == '\\' ? '.' : at[i]);
-			}
+		/* A `|` inside an intersection's parentheses is no union's. */
+		const char *bar = at;
+		while (bar < end && *bar != '|') {
+			bar = *bar == '(' ? memchr(bar, ')', end - bar) + 1 : bar + 1;
 		}
-		at += length;
-		if (bar) {
-			smart_str_appendc(text, '|');
-			at++;
-		}
+		members[count++] = sharp_php_type_member(at, bar - at);
+		at = bar + 1;
+	}
+	bool grouped = nullable && (count > 1 || memchr(ZSTR_VAL(members[0]), '&', ZSTR_LEN(members[0])));
+	if (grouped) {
+		smart_str_appendc(text, '(');
+	}
+	sharp_php_type_join(text, members, count, "|");
+	efree(members);
+	if (grouped) {
+		smart_str_appendc(text, ')');
 	}
 	if (nullable) {
 		smart_str_appendc(text, '?');
@@ -4621,9 +4688,36 @@ static void sharp_php_type_text(smart_str *text, zend_type type)
 	zend_string_release(written);
 }
 
-/* The type the property `info` declares, read on a class value of `ce` whose type arguments are `arguments`, spec section
- * 25: its PHP# type, or its PHP type as PHP# writes it, with each type parameter of its class the type argument the class
- * value gives it, or its bound. */
+/* The types the type list `written` spells, which a member of `declaring` declares, read on a class value of `ce` whose
+ * type arguments are `arguments`, spec section 25: with each type parameter of its class the type argument the class
+ * value gives it, or its bound, and each of its method's own type parameters `bounds` gives, its bound. */
+static const sharp_type *sharp_declared_types(const zend_string *written, const zend_class_entry *declaring,
+	const zend_class_entry *ce, const sharp_type *arguments, const zend_string *bounds)
+{
+	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(written), ZSTR_LEN(written), zend_arena_create(1024));
+	sharp_type_node *open = sharp_type_read_list(&reader);
+	const sharp_type *class_bounds = sharp_class_is_sharp(ce) ? sharp_class_bounds(ce) : NULL;
+	const sharp_type *given = arguments ? arguments : class_bounds;
+	sharp_type_node *of_class = open && (reader.names & SHARP_TYPE_NAMES_THIS)
+		? sharp_type_node_ancestor(ce, sharp_type_node_list(given ? given->text : NULL, &reader), declaring, &reader)
+		: NULL;
+	sharp_type_node *of_method = NULL;
+	if (open && (reader.names & SHARP_TYPE_NAMES_METHOD) && bounds) {
+		/* A method's bounds may name its class's type parameters, as its own types do. */
+		sharp_type_reader own = sharp_type_reader_of(ZSTR_VAL(bounds), ZSTR_LEN(bounds), reader.arena);
+		sharp_type_node *open_bounds = sharp_type_read_list(&own);
+		reader.arena = own.arena;
+		of_method = open_bounds ? sharp_type_node_substitute(open_bounds, of_class, NULL, false, &reader) : NULL;
+	}
+	sharp_type_node *list = open ? sharp_type_node_substitute(open, of_class, of_method, false, &reader) : NULL;
+	const sharp_type *types = list ? sharp_type_intern(list, SHARP_TYPE_FROM_SUBSTITUTION, &reader.arena) : NULL;
+	zend_arena_destroy(reader.arena);
+
+	return types;
+}
+
+/* The type the property `info` declares, read on a class value of `ce` whose type arguments are `arguments`, as
+ * sharp_declared_types reads it: its PHP# type, or its PHP type as PHP# writes it. */
 static const sharp_type *sharp_property_declared_type(
 	const zend_property_info *info, const zend_class_entry *ce, const sharp_type *arguments)
 {
@@ -4634,25 +4728,97 @@ static const sharp_type *sharp_property_declared_type(
 		sharp_php_type_text(&written, info->type);
 	}
 	smart_str_0(&written);
-	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(written.s), ZSTR_LEN(written.s), zend_arena_create(1024));
-	sharp_type_node *open = sharp_type_read_list(&reader);
-	const sharp_type *bounds = sharp_class_is_sharp(ce) ? sharp_class_bounds(ce) : NULL;
-	const sharp_type *given = arguments ? arguments : bounds;
-	sharp_type_node *of_class = open && (reader.names & SHARP_TYPE_NAMES_THIS)
-		? sharp_type_node_ancestor(ce, sharp_type_node_list(given ? given->text : NULL, &reader), info->ce, &reader)
-		: NULL;
-	sharp_type_node *list = open ? sharp_type_node_substitute(open, of_class, NULL, false, &reader) : NULL;
-	const sharp_type *type = list ? sharp_type_intern(list, SHARP_TYPE_FROM_SUBSTITUTION, &reader.arena) : NULL;
-	zend_arena_destroy(reader.arena);
+	const sharp_type *types = sharp_declared_types(written.s, info->ce, ce, arguments, NULL);
 	smart_str_free(&written);
 
-	return type ? type->members[0] : NULL;
+	return types ? types->members[0] : NULL;
+}
+
+/* The bounds of the own type parameters of the method `func`, the type list its ZEND_SHARP_RECV_TYPE_ARGS gives a call
+ * from plain PHP after its parameters arrive, or NULL for a method that declares none. */
+static const zend_string *sharp_method_bounds(const zend_function *func)
+{
+	if (func->type != ZEND_USER_FUNCTION) {
+		return NULL;
+	}
+	for (const zend_op *op = func->op_array.opcodes, *end = op + func->op_array.last; op < end; op++) {
+		if (op->opcode == ZEND_SHARP_RECV_TYPE_ARGS) {
+			return op->op1_type == IS_CONST ? Z_STR_P(RT_CONSTANT(op, op->op1)) : NULL;
+		}
+		if (op->opcode != ZEND_RECV && op->opcode != ZEND_RECV_INIT && op->opcode != ZEND_RECV_VARIADIC) {
+			return NULL;
+		}
+	}
+
+	return NULL;
+}
+
+/* The types the method `func` declares, read on a class value of `ce` whose type arguments are `arguments`, as
+ * sharp_declared_types reads them: a list of its result type, then each parameter's type, from the whole type a PHP#
+ * method carries, or else from its PHP types as PHP# writes them, after the result type a PHP# method carries alone. */
+static const sharp_type *sharp_method_declared_types(
+	const zend_function *func, const zend_class_entry *ce, const sharp_type *arguments)
+{
+	uint32_t count = func->common.num_args + !!(func->common.fn_flags & ZEND_ACC_VARIADIC);
+	const zend_string *carried = func->type == ZEND_USER_FUNCTION ? func->op_array.sharp_type : NULL;
+	bool whole = carried && zend_string_starts_with_literal(carried, "Function<");
+	smart_str written = {0};
+	if (whole) {
+		smart_str_append(&written, carried);
+	} else {
+		if (carried) {
+			smart_str_append(&written, carried);
+		} else if (func->common.fn_flags & ZEND_ACC_HAS_RETURN_TYPE) {
+			sharp_php_type_text(&written, func->common.arg_info[-1].type);
+		} else {
+			smart_str_appends(&written, "Any?");
+		}
+		for (uint32_t i = 0; i < count; i++) {
+			smart_str_appends(&written, ", ");
+			sharp_php_type_text(&written, func->common.arg_info[i].type);
+		}
+	}
+	smart_str_0(&written);
+	const sharp_type *types = sharp_declared_types(written.s, func->common.scope, ce, arguments, sharp_method_bounds(func));
+	smart_str_free(&written);
+
+	/* A whole type's members are its result type, its parameters' types, then the effects it uses. */
+	return types && whole ? types->members[0] : types;
+}
+
+/* The class a class value `value` names, with the type arguments it carries in `arguments`, or NULL with an exception
+ * for one that names no class. */
+static zend_class_entry *sharp_class_value_declaring(const zend_string *value, const sharp_type **arguments)
+{
+	const sharp_type *carried = sharp_class_value_type(value);
+	*arguments = NULL;
+	if (carried && carried->kind == SHARP_TYPE_NAMED && carried->class_name) {
+		const char *open = memchr(ZSTR_VAL(carried->text), '<', ZSTR_LEN(carried->text));
+		*arguments = open ? sharp_type_list(open + 1, ZSTR_VAL(carried->text) + ZSTR_LEN(carried->text) - open - 2) : NULL;
+
+		return zend_fetch_class_by_name(carried->class_name, NULL, ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
+	}
+
+	zend_string *name = sharp_type_class_name(ZSTR_VAL(value), ZSTR_LEN(value), false);
+	zend_class_entry *ce = zend_fetch_class(name, ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
+	zend_string_release_ex(name, false);
+
+	return ce;
+}
+
+/* Adds the class value of `type` without `?` to `entry`, then the `?` the type ends with, or "" for a type that is not
+ * nullable. */
+static void sharp_add_declared_type(zval *entry, const sharp_type *type)
+{
+	bool nullable = type->kind == SHARP_TYPE_NULLABLE;
+
+	add_next_index_str(entry, zend_string_copy(sharp_type_class_value(nullable ? type->members[0] : type)));
+	add_next_index_string(entry, nullable ? "?" : "");
 }
 
 /* Spec section 25: what `Class<T>.properties()` reads, the instance properties and fields of the class `type` names, its
  * own first and then those it inherits, in the order they are declared. Each is the list of the class that declares
- * it, its name, the class value of its type without `?`, and the `?` the type ends with, or "" for a type that is not
- * nullable. */
+ * it, its name, and its type as sharp_add_declared_type adds it. */
 ZEND_FUNCTION(Sharp_Internal_properties)
 {
 	zend_string *value;
@@ -4661,18 +4827,8 @@ ZEND_FUNCTION(Sharp_Internal_properties)
 		Z_PARAM_STR(value)
 	ZEND_PARSE_PARAMETERS_END();
 
-	const sharp_type *carried = sharp_class_value_type(value);
-	const sharp_type *arguments = NULL;
-	zend_class_entry *ce;
-	if (carried && carried->kind == SHARP_TYPE_NAMED && carried->class_name) {
-		ce = zend_fetch_class_by_name(carried->class_name, NULL, ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-		const char *open = memchr(ZSTR_VAL(carried->text), '<', ZSTR_LEN(carried->text));
-		arguments = open ? sharp_type_list(open + 1, ZSTR_VAL(carried->text) + ZSTR_LEN(carried->text) - open - 2) : NULL;
-	} else {
-		zend_string *name = sharp_type_class_name(ZSTR_VAL(value), ZSTR_LEN(value), false);
-		ce = zend_fetch_class(name, ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-		zend_string_release_ex(name, false);
-	}
+	const sharp_type *arguments;
+	zend_class_entry *ce = sharp_class_value_declaring(value, &arguments);
 	if (!ce) {
 		RETURN_THROWS();
 	}
@@ -4686,16 +4842,74 @@ ZEND_FUNCTION(Sharp_Internal_properties)
 		}
 		const sharp_type *type = sharp_property_declared_type(info, ce, arguments);
 		if (!type) {
-			continue;
+			zend_throw_error(NULL, "PHP# reads no type for %s::$%s. This is a bug in PHP#",
+				ZSTR_VAL(info->ce->name), zend_get_unmangled_property_name(info->name));
+			zval_ptr_dtor(return_value);
+			RETVAL_NULL();
+			RETURN_THROWS();
 		}
-		bool nullable = type->kind == SHARP_TYPE_NULLABLE;
 		zval property;
 		array_init_size(&property, 4);
 		add_next_index_str(&property, zend_string_copy(info->ce->name));
 		add_next_index_string(&property, zend_get_unmangled_property_name(info->name));
-		add_next_index_str(&property, zend_string_copy(sharp_type_class_value(nullable ? type->members[0] : type)));
-		add_next_index_string(&property, nullable ? "?" : "");
+		sharp_add_declared_type(&property, type);
 		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &property);
+	} ZEND_HASH_FOREACH_END();
+}
+
+/* Spec section 25: what `Class<T>.methods()` reads, the instance and static methods of the class `type` names, its own
+ * first and then those it inherits, in the order they are declared, without its constructor, the magic methods PHP
+ * names with `__`, and the methods PHP# runs a member's accessors as, whose names hold `#`. Each is a list of string
+ * lists: first the class that declares it, its name, and its result type as sharp_add_declared_type adds it, then one
+ * per parameter, its name, its type as sharp_add_declared_type adds it, and "optional" for one a call may leave out, or
+ * "". */
+ZEND_FUNCTION(Sharp_Internal_methods)
+{
+	zend_string *value;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	const sharp_type *arguments;
+	zend_class_entry *ce = sharp_class_value_declaring(value, &arguments);
+	if (!ce) {
+		RETURN_THROWS();
+	}
+
+	array_init(return_value);
+	zend_function *func;
+	ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, func) {
+		const zend_string *name = func->common.function_name;
+		if ((ZSTR_LEN(name) > 1 && ZSTR_VAL(name)[0] == '_' && ZSTR_VAL(name)[1] == '_')
+			|| memchr(ZSTR_VAL(name), '#', ZSTR_LEN(name))) {
+			continue;
+		}
+		const sharp_type *types = sharp_method_declared_types(func, ce, arguments);
+		if (!types) {
+			zend_throw_error(NULL, "PHP# reads no type for %s::%s(). This is a bug in PHP#",
+				ZSTR_VAL(func->common.scope->name), ZSTR_VAL(name));
+			zval_ptr_dtor(return_value);
+			RETVAL_NULL();
+			RETURN_THROWS();
+		}
+		uint32_t count = func->common.num_args + !!(func->common.fn_flags & ZEND_ACC_VARIADIC);
+		zval method, declared;
+		array_init_size(&method, count + 1);
+		array_init_size(&declared, 4);
+		add_next_index_str(&declared, zend_string_copy(func->common.scope->name));
+		add_next_index_str(&declared, zend_string_copy(func->common.function_name));
+		sharp_add_declared_type(&declared, types->members[0]);
+		zend_hash_next_index_insert_new(Z_ARRVAL(method), &declared);
+		for (uint32_t i = 0; i < count; i++) {
+			zval parameter;
+			array_init_size(&parameter, 4);
+			add_next_index_string(&parameter, get_function_arg_name(func, i + 1));
+			sharp_add_declared_type(&parameter, types->members[i + 1]);
+			add_next_index_string(&parameter, i >= func->common.required_num_args ? "optional" : "");
+			zend_hash_next_index_insert_new(Z_ARRVAL(method), &parameter);
+		}
+		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &method);
 	} ZEND_HASH_FOREACH_END();
 }
 
@@ -4710,6 +4924,14 @@ ZEND_FUNCTION(Sharp_Internal_typeArguments)
 	ZEND_PARSE_PARAMETERS_END();
 
 	array_init(return_value);
+	/* A class with type arguments has its class name for its class value, which sharp_class_values knows its type by. */
+	const sharp_type *carried = sharp_class_value_type(value);
+	if (carried) {
+		for (uint32_t i = 0; i < carried->count; i++) {
+			add_next_index_str(return_value, zend_string_copy(sharp_type_class_value(carried->members[i])));
+		}
+		return;
+	}
 	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
 	sharp_type_node *node = sharp_class_value_read(value, &reader);
 	if (node && node->kind == SHARP_TYPE_NAMED && node->count) {
@@ -5513,11 +5735,10 @@ static const sharp_type *sharp_frame_method_type_arguments(const zend_execute_da
 	return NULL;
 }
 
-/* Whether the type text list `text`, which an internal function takes as its argument `argument`, holds `count` types,
- * or any number for 0, and names a type parameter of this only for an `object` and one of the method only for a
- * `method`. Plain PHP may pass any text, and sharp_type_list_of_frame reads only a text that passes. False after the
- * ValueError. */
-static bool sharp_caller_type_text(zend_string *text, uint32_t argument, uint32_t count, bool object, bool method)
+/* What is wrong with the type text list `text`, which an internal function takes as an argument, or NULL when it holds
+ * `count` types, or any number for 0, and names a type parameter of this only for an `object` and one of the method
+ * only for a `method`. Plain PHP may pass any text, and sharp_type_list_of_frame reads only a text that passes. */
+static const char *sharp_caller_type_text_problem(zend_string *text, uint32_t count, bool object, bool method)
 {
 	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(text), ZSTR_LEN(text), zend_arena_create(1024));
 	const sharp_type_node *read = sharp_type_read_list(&reader);
@@ -5525,15 +5746,13 @@ static bool sharp_caller_type_text(zend_string *text, uint32_t argument, uint32_
 	uint32_t names = reader.names;
 	zend_arena_destroy(reader.arena);
 	if (!is_list) {
-		zend_argument_value_error(argument, count == 1 ? "must be one PHP# type" : "must be a PHP# type list");
-		return false;
+		return count == 1 ? "must be one PHP# type" : "must be a PHP# type list";
 	}
 	if (((names & SHARP_TYPE_NAMES_THIS) && !object) || ((names & SHARP_TYPE_NAMES_METHOD) && !method)) {
-		zend_argument_value_error(argument, "must name only type parameters the calling code has type arguments for");
-		return false;
+		return "must name only type parameters the calling code has type arguments for";
 	}
 
-	return true;
+	return NULL;
 }
 
 /* The type text list `text` that the internal function `execute_data` runs takes as its argument `argument`, spelled
@@ -5547,7 +5766,9 @@ static const sharp_type *sharp_caller_type_list(
 	bool is_user_code = caller && caller->func && ZEND_USER_CODE(caller->func->type);
 	zend_object *object = is_user_code && Z_TYPE(caller->This) == IS_OBJECT ? Z_OBJ(caller->This) : NULL;
 	const sharp_type *method = is_user_code ? sharp_frame_method_type_arguments(caller) : NULL;
-	if (!sharp_caller_type_text(text, argument, count, object, method)) {
+	const char *problem = sharp_caller_type_text_problem(text, count, object, method);
+	if (problem) {
+		zend_argument_value_error(argument, "%s", problem);
 		return NULL;
 	}
 
@@ -5805,6 +6026,39 @@ ZEND_FUNCTION(Sharp_Internal_equals)
 	RETURN_BOOL(equal);
 }
 
+/* Spec section 24: the JSON text Sharp.Encoding.Json.encode writes, json_encode's with `$flags`, or with
+ * JSON_PRETTY_PRINT's layout at `$indent` spaces a level when `$indent` is above 0. It throws JsonException as
+ * json_encode does with JSON_THROW_ON_ERROR. */
+ZEND_FUNCTION(Sharp_Internal_jsonEncode)
+{
+	zval *value;
+	zend_long flags, indent;
+
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_ZVAL(value)
+		Z_PARAM_LONG(flags)
+		Z_PARAM_LONG(indent)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (indent < 0 || indent > INT_MAX) {
+		zend_argument_value_error(3, "must be between 0 and %d", INT_MAX);
+		RETURN_THROWS();
+	}
+	php_json_encoder encoder;
+	php_json_encode_init(&encoder);
+	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
+	encoder.indent = (int) indent;
+	smart_str text = {0};
+	php_json_encode_zval(&text, value, (int) (indent ? flags | PHP_JSON_PRETTY_PRINT : flags & ~PHP_JSON_PRETTY_PRINT),
+		&encoder);
+	if (encoder.error_code != PHP_JSON_ERROR_NONE) {
+		smart_str_free(&text);
+		zend_throw_exception(php_json_exception_ce, php_json_get_error_msg(encoder.error_code), encoder.error_code);
+		RETURN_THROWS();
+	}
+	RETURN_STR(smart_str_extract(&text));
+}
+
 /* Spec section 12: PHP# passes plain PHP `\Sharp\Internal\arrayOf($value)`, the PHP array sharp_array_of gives. Through
  * a function value, `$receiver` is the function the value goes to, and a closure of PHP# takes the value as it is. */
 ZEND_FUNCTION(Sharp_Internal_arrayOf)
@@ -5826,14 +6080,85 @@ ZEND_FUNCTION(Sharp_Internal_arrayOf)
 
 static bool sharp_type_verified(const sharp_type *type, const sharp_type *shown, zval *value, const char *target);
 
-/* Spec section 22: PHP# reads the result of each call whose implementation may be plain PHP as
- * `\Sharp\Internal\returned($result, $implementer, $method, $types, $target)`. `$implementer` is the object or the class
- * the method `$method`, lowercase, ran on, or null with an empty `$method` for a call no PHP# function answers. A PHP#
- * method gives its result as its type says, so the result comes back as it is, after one lookup, and so does the null
- * a null-safe call gives where its receiver, `$implementer`, is null. Plain PHP's result, as a test double's or an
- * override's, crosses in as the first type the list `$types` spells for the calling frame, each PHP array a Map or Set
- * it holds becoming the object and a List renumbered, and is checked against the second, which may read less of the
- * value, the first where the list holds one, a TypeError naming `$target` and the first type. */
+/* Spec section 22: PHP# reads the result of each call whose implementation may be plain PHP, as a test double's or an
+ * override's, through `\Sharp\Internal\returned($result, $implementer, $method, $types, $target)`, which the compiler
+ * makes a ZEND_SHARP_RETURNED. A PHP# method gives its result as its type says. Plain PHP's result crosses in, each PHP
+ * array a Map or Set it holds becoming the object and a List renumbered, and is checked against the second type, which
+ * may read less of the value. A class's methods stay the same while the request runs, so `cache` keeps the method each
+ * class gives by the name. */
+bool sharp_returned(zend_execute_data *caller, zval *result, zval *value, zval *implementer, zend_string *method,
+	const zval *types, void **cache)
+{
+	ZVAL_DEREF(value);
+	ZVAL_DEREF(implementer);
+	zend_class_entry *ce = NULL;
+	if (Z_TYPE_P(implementer) == IS_OBJECT) {
+		ce = Z_OBJCE_P(implementer);
+	} else if (Z_TYPE_P(implementer) == IS_STRING) {
+		ce = zend_lookup_class(Z_STR_P(implementer));
+	} else if (Z_TYPE_P(implementer) == IS_NULL && ZSTR_LEN(method)) {
+		ZVAL_COPY(result, value);
+		return true;
+	}
+	if (ce) {
+		if (cache[0] != ce) {
+			const zend_function *ran = zend_class_find_method(ce, method);
+			cache[0] = ce;
+			cache[1] = sharp_function_is_sharp(ran) ? (void *) ran : NULL;
+		}
+		if (cache[1]) {
+			ZVAL_COPY(result, value);
+			return true;
+		}
+	}
+
+	bool is_user_code = caller && caller->func && ZEND_USER_CODE(caller->func->type);
+	zend_object *object = is_user_code && Z_TYPE(caller->This) == IS_OBJECT ? Z_OBJ(caller->This) : NULL;
+	/* The list is spelled for the calling frame as ZEND_SHARP_VERIFY_TYPE_ARGS spells its own, a method's own type
+	 * parameter as any type, since a call from plain PHP gives the method none. Plain PHP may write the call itself. */
+	const char *problem = sharp_caller_type_text_problem(Z_STR_P(types), 0, object, true);
+	if (problem) {
+		zend_value_error("Sharp\\Internal\\returned(): Argument #4 ($types) %s", problem);
+		ZVAL_UNDEF(result);
+		return false;
+	}
+	const sharp_type *expected = sharp_type_list_of_frame(types, object, NULL, true,
+		is_user_code ? sharp_type_scope(caller->func->common.scope, caller->func) : NULL, cache + 2);
+	if (!expected) {
+		if (EG(exception)) {
+			ZVAL_UNDEF(result);
+			return false;
+		}
+		ZVAL_COPY(result, value);
+		return true;
+	}
+
+	const sharp_type *crossing = expected->members[0];
+	const sharp_type *checked = expected->count > 1 ? expected->members[1] : crossing;
+	/* Each List the PHP arrays hold is renumbered before a Map or Set takes it. */
+	zval renumbered, plan;
+	ZVAL_COPY(&renumbered, value);
+	sharp_type_renumber(crossing, &renumbered);
+	sharp_type_plan(&plan, crossing);
+	bool crossed = sharp_crossed(result, &renumbered, &plan, crossing);
+	zval_ptr_dtor(&plan);
+	zval_ptr_dtor(&renumbered);
+	/* sharp_crossed released what it made when it failed. */
+	if (!crossed) {
+		ZVAL_UNDEF(result);
+		return false;
+	}
+	if (!sharp_type_verified(checked, crossing, result, Z_STRVAL_P(types + 1))) {
+		zval_ptr_dtor(result);
+		ZVAL_UNDEF(result);
+		return false;
+	}
+
+	return true;
+}
+
+/* A call of \Sharp\Internal\returned the compiler can't make a ZEND_SHARP_RETURNED, as call_user_func's, finds the
+ * method each time. */
 ZEND_FUNCTION(Sharp_Internal_returned)
 {
 	zval *result, *implementer;
@@ -5847,53 +6172,11 @@ ZEND_FUNCTION(Sharp_Internal_returned)
 		Z_PARAM_STR(target)
 	ZEND_PARSE_PARAMETERS_END();
 
-	zend_class_entry *ce = Z_TYPE_P(implementer) == IS_OBJECT ? Z_OBJCE_P(implementer)
-		: Z_TYPE_P(implementer) == IS_STRING ? zend_lookup_class(Z_STR_P(implementer)) : NULL;
-	const zend_function *ran = ce ? zend_hash_find_ptr(&ce->function_table, method) : NULL;
-	if ((ran && sharp_function_is_sharp(ran)) || (Z_TYPE_P(implementer) == IS_NULL && ZSTR_LEN(method))) {
-		RETURN_COPY_DEREF(result);
-	}
-
-	const zend_execute_data *caller = EX(prev_execute_data);
-	bool is_user_code = caller && caller->func && ZEND_USER_CODE(caller->func->type);
-	zend_object *object = is_user_code && Z_TYPE(caller->This) == IS_OBJECT ? Z_OBJ(caller->This) : NULL;
-	/* The list is spelled for the calling frame as ZEND_SHARP_VERIFY_TYPE_ARGS spells its own, a method's own type
-	 * parameter as any type, since a call from plain PHP gives the method none. */
-	if (!sharp_caller_type_text(types, 4, 0, object, true)) {
-		RETURN_THROWS();
-	}
-	zval spelled;
-	ZVAL_STR(&spelled, types);
-	void *cache[4] = {NULL};
-	const sharp_type *expected = sharp_type_list_of_frame(&spelled, object, NULL, true,
-		is_user_code ? sharp_type_scope(caller->func->common.scope, caller->func) : NULL, cache);
-	if (!expected) {
-		if (EG(exception)) {
-			RETURN_THROWS();
-		}
-		RETURN_COPY_DEREF(result);
-	}
-
-	const sharp_type *crossing = expected->members[0];
-	const sharp_type *checked = expected->count > 1 ? expected->members[1] : crossing;
-	/* Each List the PHP arrays hold is renumbered before a Map or Set takes it. */
-	zval renumbered, plan;
-	ZVAL_COPY_DEREF(&renumbered, result);
-	sharp_type_renumber(crossing, &renumbered);
-	sharp_type_plan(&plan, crossing);
-	bool crossed = sharp_crossed(return_value, &renumbered, &plan, crossing);
-	zval_ptr_dtor(&plan);
-	zval_ptr_dtor(&renumbered);
-	/* sharp_crossed released what it made when it failed. */
-	if (!crossed) {
-		ZVAL_UNDEF(return_value);
-		RETURN_THROWS();
-	}
-	if (!sharp_type_verified(checked, crossing, return_value, ZSTR_VAL(target))) {
-		zval_ptr_dtor(return_value);
-		ZVAL_UNDEF(return_value);
-		RETURN_THROWS();
-	}
+	zval texts[2];
+	ZVAL_STR(&texts[0], types);
+	ZVAL_STR(&texts[1], target);
+	void *cache[6] = {NULL};
+	sharp_returned(EX(prev_execute_data), return_value, result, implementer, method, texts, cache);
 }
 
 /* Throws the Error for the type arguments of a frame that ZEND_SHARP_TYPE_ARGS could not spell. */
@@ -6858,13 +7141,42 @@ static void sharp_fiber_destroyed(zend_fiber_context *context)
 	context->reserved[sharp_fiber_slot] = NULL;
 }
 
-/* The key the bindings of id in the namespace's first length bytes are kept under. */
+/* The key the bindings of id, a service's id as sharp_container_id() writes it, in the namespace's first length bytes
+ * are kept under. A namespace matches in any case, so its part is lowercase. */
 static zend_string *sharp_container_key(const zend_string *namespace, size_t length, const zend_string *id)
 {
 	zend_string *key = zend_strpprintf(0, "%.*s %s", (int) length, ZSTR_VAL(namespace), ZSTR_VAL(id));
-	zend_str_tolower(ZSTR_VAL(key), ZSTR_LEN(key));
+	zend_str_tolower(ZSTR_VAL(key), length);
 
 	return key;
+}
+
+/* The id the container keys the service a type names by, as mago compile writes a binding's: the type with the name of
+ * each PHP# class in it exact, which the class table keys by its exact name, spec section 24, and the rest in
+ * lowercase, as PHP compares a plain class's name. A class not yet loaded is no PHP# class here, so the caller loads
+ * the class a type names first. */
+static zend_string *sharp_container_id(const zend_string *type)
+{
+	zend_string *id = zend_string_init(ZSTR_VAL(type), ZSTR_LEN(type), 0);
+	char *start = ZSTR_VAL(id), *end = start + ZSTR_LEN(id);
+
+	for (char *name = start; name < end;) {
+		char *after = name;
+		while (after < end && (isalnum((unsigned char) *after) || *after == '_' || *after == '\\')) {
+			after++;
+		}
+		if (after == name) {
+			name++;
+			continue;
+		}
+		zend_class_entry *ce = zend_hash_str_find_ptr(EG(class_table), name, after - name);
+		if (!ce || !(ce->sharp_flags & SHARP_CLASS_EXACT_KEY)) {
+			zend_str_tolower(name, after - name);
+		}
+		name = after;
+	}
+
+	return id;
 }
 
 /* Adds rows, one module's binding rows, to module: under each namespace and service id, a list of its rows. */
@@ -7042,7 +7354,7 @@ static zend_string *sharp_container_namespace(const zend_string *name)
 }
 
 /* The row of list, one module's rows of a service, that serves requester or NULL: a row for the class before a row
- * for any class. */
+ * for any class. A row names a PHP# class by its exact name, spec section 24, and a plain class in any case. */
 static zval *sharp_container_row(zval *list, const zend_class_entry *requester)
 {
 	zval *row, *any = NULL;
@@ -7050,7 +7362,9 @@ static zval *sharp_container_row(zval *list, const zend_class_entry *requester)
 		zval *target = zend_hash_index_find(Z_ARRVAL_P(row), 2);
 		if (Z_TYPE_P(target) == IS_NULL) {
 			any = any ? any : row;
-		} else if (requester && zend_string_equals_ci(Z_STR_P(target), requester->name)) {
+		} else if (requester && ((requester->sharp_flags & SHARP_CLASS_EXACT_KEY)
+				? zend_string_equals(Z_STR_P(target), requester->name)
+				: zend_string_equals_ci(Z_STR_P(target), requester->name))) {
 			return row;
 		}
 	} ZEND_HASH_FOREACH_END();
@@ -7110,11 +7424,11 @@ static zval *sharp_container_binding(const zend_string *id, const zend_string *n
 	}
 }
 
-static bool sharp_container_service(zend_string *id, const zend_string *namespace, const zend_class_entry *requester, zval *service);
+static bool sharp_container_service(zend_string *id, const zend_string *written, const zend_string *namespace, const zend_class_entry *requester, zval *service);
 
 /* Fills arguments with the service of each parameter of function: the id its Sharp\Internal\Service attribute
- * names, or its class. A parameter with neither ends the arguments when it is optional. On failure arguments is
- * undefined. */
+ * names, as mago compile writes it, or its class's. A parameter with neither ends the arguments when it is optional.
+ * On failure arguments is undefined. */
 static bool sharp_container_arguments(const zend_function *function, const zend_string *namespace, const zend_class_entry *requester, zval *arguments)
 {
 	array_init(arguments);
@@ -7125,10 +7439,14 @@ static bool sharp_container_arguments(const zend_function *function, const zend_
 			? zend_get_parameter_attribute_str(function->common.attributes, "sharp\\internal\\service", sizeof("sharp\\internal\\service") - 1, i)
 			: NULL;
 		zval named;
+		const zend_string *written;
 		if (attribute && zend_get_attribute_value(&named, attribute, 0, function->common.scope) == SUCCESS) {
 			id = Z_STR(named);
+			written = id;
 		} else if (ZEND_TYPE_HAS_NAME(argument->type)) {
-			id = zend_string_copy(ZEND_TYPE_NAME(argument->type));
+			written = ZEND_TYPE_NAME(argument->type);
+			zend_lookup_class((zend_string *) written);
+			id = sharp_container_id(written);
 		} else if (i >= function->common.required_num_args) {
 			break;
 		} else {
@@ -7140,7 +7458,7 @@ static bool sharp_container_arguments(const zend_function *function, const zend_
 		}
 
 		zval service;
-		bool built = sharp_container_service(id, namespace, requester, &service);
+		bool built = sharp_container_service(id, written, namespace, requester, &service);
 		zend_string_release(id);
 		if (!built) {
 			zval_ptr_dtor(arguments);
@@ -7292,8 +7610,8 @@ static bool sharp_container_bound(zval *row, zval *service)
 	return built;
 }
 
-/* The service id names for requester, a class of namespace or NULL. */
-static bool sharp_container_service(zend_string *id, const zend_string *namespace, const zend_class_entry *requester, zval *service)
+/* The service id names for requester, a class of namespace or NULL. A failure names the service as written. */
+static bool sharp_container_service(zend_string *id, const zend_string *written, const zend_string *namespace, const zend_class_entry *requester, zval *service)
 {
 	zval *row = sharp_container_binding(id, namespace, requester);
 	if (row) {
@@ -7301,26 +7619,28 @@ static bool sharp_container_service(zend_string *id, const zend_string *namespac
 	}
 
 	if (!EG(exception)) {
-		zend_throw_error(sharp_ce_container_error, "No module binds %s%s%s", ZSTR_VAL(id), requester ? " for " : "",
+		zend_throw_error(sharp_ce_container_error, "No module binds %s%s%s", ZSTR_VAL(written), requester ? " for " : "",
 			requester ? ZSTR_VAL(requester->name) : "");
 	}
 
 	return false;
 }
 
-/* The id of the service named name, and its namespace, after reading the modules of its class's folders. */
-static zend_string *sharp_container_requested(zend_string *name, zend_string **namespace)
+/* The service named name as written, without a leading `\`, its id and its namespace, after reading the modules of
+ * its class's folders. */
+static zend_string *sharp_container_requested(zend_string *name, zend_string **id, zend_string **namespace)
 {
-	zend_string *id = ZSTR_LEN(name) > 0 && ZSTR_VAL(name)[0] == '\\'
+	zend_string *written = ZSTR_LEN(name) > 0 && ZSTR_VAL(name)[0] == '\\'
 		? zend_string_init(ZSTR_VAL(name) + 1, ZSTR_LEN(name) - 1, 0)
 		: zend_string_copy(name);
-	zend_class_entry *ce = memchr(ZSTR_VAL(id), '<', ZSTR_LEN(id)) ? NULL : zend_lookup_class(id);
+	zend_class_entry *ce = memchr(ZSTR_VAL(written), '<', ZSTR_LEN(written)) ? NULL : zend_lookup_class(written);
 	if (ce && ce->type == ZEND_USER_CLASS) {
 		sharp_container_read_folders(ce->info.user.filename);
 	}
-	*namespace = sharp_container_namespace(id);
+	*namespace = sharp_container_namespace(written);
+	*id = sharp_container_id(written);
 
-	return id;
+	return written;
 }
 
 ZEND_METHOD(Sharp_Container, get)
@@ -7331,11 +7651,12 @@ ZEND_METHOD(Sharp_Container, get)
 		Z_PARAM_STR(name)
 	ZEND_PARSE_PARAMETERS_END();
 
-	zend_string *namespace;
-	zend_string *id = sharp_container_requested(name, &namespace);
-	sharp_container_service(id, namespace, NULL, return_value);
+	zend_string *id, *namespace;
+	zend_string *written = sharp_container_requested(name, &id, &namespace);
+	sharp_container_service(id, written, namespace, NULL, return_value);
 	zend_string_release(namespace);
 	zend_string_release(id);
+	zend_string_release(written);
 }
 
 ZEND_METHOD(Sharp_Container, has)
@@ -7346,11 +7667,12 @@ ZEND_METHOD(Sharp_Container, has)
 		Z_PARAM_STR(name)
 	ZEND_PARSE_PARAMETERS_END();
 
-	zend_string *namespace;
-	zend_string *id = sharp_container_requested(name, &namespace);
+	zend_string *id, *namespace;
+	zend_string *written = sharp_container_requested(name, &id, &namespace);
 	bool has = sharp_container_binding(id, namespace, NULL) != NULL;
 	zend_string_release(namespace);
 	zend_string_release(id);
+	zend_string_release(written);
 
 	RETURN_BOOL(has);
 }
@@ -7421,9 +7743,7 @@ ZEND_FUNCTION(Sharp_Internal_testModule)
 	zval module;
 	array_init(&module);
 	sharp_container_group(bindings, Z_ARRVAL(module));
-	zend_string *name = zend_string_tolower(class);
-	zend_hash_update(&SHARP_G(container_tests), name, &module);
-	zend_string_release(name);
+	zend_hash_update(&SHARP_G(container_tests), class, &module);
 }
 
 /* Spec section 6.5: a `static lazy` property computes its value on its first read and keeps it for a singleton's
@@ -7483,9 +7803,7 @@ ZEND_FUNCTION(Sharp_Internal_startTest)
 	ZEND_PARSE_PARAMETERS_END();
 
 	sharp_container_forget();
-	zend_string *name = zend_string_tolower(class);
-	zval *module = zend_hash_find(&SHARP_G(container_tests), name);
-	zend_string_release(name);
+	zval *module = zend_hash_find(&SHARP_G(container_tests), class);
 	SHARP_G(container_test) = module ? Z_ARRVAL_P(module) : NULL;
 }
 
@@ -7971,7 +8289,7 @@ static void sharp_listener_call(sharp_listener *listener, zval *event)
 		return;
 	}
 	name = Z_STR_P(sharp_element(&listener->row, 1, IS_STRING));
-	method = zend_hash_find_ptr_lc(&ce->function_table, name);
+	method = zend_class_find_method(ce, name);
 	if (!method) {
 		zend_string *member = zend_string_concat3(ZSTR_VAL(ce->name), ZSTR_LEN(ce->name), "\\", 1, ZSTR_VAL(name), ZSTR_LEN(name));
 
@@ -8010,7 +8328,7 @@ ZEND_METHOD(Sharp_Internal_Listener, __construct)
  * throws when the table is damaged. */
 static zend_string *sharp_dispatcher_namespace(zend_class_entry *event)
 {
-	static const char id[] = " sharp\\dispatcher";
+	static const char id[] = " Sharp\\Dispatcher";
 	zend_string *key;
 	size_t root_length;
 
@@ -8066,13 +8384,13 @@ ZEND_FUNCTION(Sharp_Internal_emit)
 		RETURN_THROWS();
 	}
 	id = zend_string_init("Sharp\\Dispatcher", sizeof("Sharp\\Dispatcher") - 1, 0);
-	found = sharp_container_service(id, namespace, NULL, &dispatcher);
+	found = sharp_container_service(id, id, namespace, NULL, &dispatcher);
 	zend_string_release(id);
 	zend_string_release(namespace);
 
 	if (found) {
 		zend_string *name = zend_string_init("dispatch", sizeof("dispatch") - 1, 0);
-		zend_function *dispatch = zend_hash_find_ptr_lc(&Z_OBJCE(dispatcher)->function_table, name);
+		zend_function *dispatch = zend_class_find_method(Z_OBJCE(dispatcher), name);
 		zval arguments[2];
 
 		ZVAL_COPY_VALUE(&arguments[0], event);
@@ -9526,7 +9844,9 @@ static zend_string *sharp_table_json_key(zval *key)
 	}
 	if (Z_TYPE_P(key) == IS_OBJECT) {
 		zend_class_entry *ce = Z_OBJCE_P(key);
-		zend_function *to_string = zend_hash_str_find_ptr(&ce->function_table, "tostring", sizeof("tostring") - 1);
+		zend_function *to_string = (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES)
+			? zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("toString"))
+			: zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("tostring"));
 		if (!to_string) {
 			to_string = ce->__tostring;
 		}

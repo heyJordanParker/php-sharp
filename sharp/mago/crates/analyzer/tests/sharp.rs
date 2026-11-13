@@ -566,7 +566,8 @@ fn a_bare_name_of_an_alias_of_the_files_namespace_is_a_reference_to_the_alias() 
 
     assert!(issues.is_empty(), "{issues:#?}");
     let referencing = references.get_references_to_symbol((ascii_lowercase_word(b"Demo\\Pace"), empty_word()));
-    let report = ascii_lowercase_word(b"Demo\\Report");
+    // The PHP# class `Report` is keyed by its exact name, spec section 24.
+    let report = word(b"Demo\\Report");
     assert_eq!(referencing, HashSet::from_iter([&(report, empty_word()), &(report, word(b"percent"))]));
 }
 
@@ -7197,8 +7198,9 @@ fn a_read_of_an_extension_the_file_does_not_import_is_annotated_as_a_read() {
 }
 
 /// Spec section 14.3: `this.discount(…)` always has one meaning, so a class may not declare a field, a property or a
-/// method named like a method, field or property it inherits and can see, from a PHP# class or a plain PHP one, at any
-/// depth. A private member of an ancestor is no member the class sees.
+/// method named like a method, field or property it inherits and can see from a PHP# class, at any depth. A private
+/// member of an ancestor is no member the class sees. A plain PHP ancestor's member is PHP's to resolve, a call as the
+/// method and a read as the field, so `Banner`'s are no error.
 #[test]
 fn a_member_named_as_an_inherited_member_is_an_error() {
     let base = "<?php\n\nnamespace Lib;\n\nclass Base\n{\n    public string $label = \"\";\n    private string $secret = \"\";\n\n    public function shout(): string\n    {\n        return \"\";\n    }\n\n    private function hidden(): string\n    {\n        return \"\";\n    }\n}\n";
@@ -7225,12 +7227,7 @@ fn a_member_named_as_an_inherited_member_is_an_error() {
 
     assert_eq!(
         each_file(issues, &sharp, &others),
-        [
-            vec![],
-            vec![format!("5:34 {in_use}"), format!("6:16 {in_use}")],
-            vec![format!("5:16 {in_use}")],
-            vec![format!("7:19 {in_use}"), format!("8:34 {in_use}")],
-        ]
+        [vec![], vec![format!("5:34 {in_use}"), format!("6:16 {in_use}")], vec![format!("5:16 {in_use}")], vec![]]
     );
     let messages = each_file(messages, &sharp, &others);
     assert_eq!(
@@ -7241,6 +7238,27 @@ fn a_member_named_as_an_inherited_member_is_an_error() {
         messages[2][0],
         "`Clearance` declares the property `rebate` and inherits the method `rebate` from `Pricing`, so `x.rebate(…)` could run either. Rename one of them."
     );
+}
+
+/// Spec section 14.3: a plain PHP ancestor may declare a field and a method of one name, as Eloquent's `HasAttributes`
+/// declares `$casts` and `casts()`, and PHP runs a call as the method and a read as the field. So a PHP# class
+/// overrides either one, and its code calls the method and reads the field or the property.
+#[test]
+fn a_class_overrides_the_field_or_the_method_a_plain_ancestor_names_alike() {
+    let parent = "<?php\n\nnamespace Lib;\n\nclass P\n{\n    protected $x = [];\n\n    protected function x()\n    {\n        return [];\n    }\n}\n";
+    let sharp = [
+        (
+            "src/Demo/C.sharp",
+            "namespace Demo;\n\nimport Lib.P;\n\npublic class C : P\n{\n    protected override Map<string, string> x() => [:];\n\n    public Map<string, string> called() => this.x();\n\n    public Any? read() => this.x;\n}\n",
+        ),
+        (
+            "src/Demo/D.sharp",
+            "namespace Demo;\n\nimport Lib.P;\n\npublic class D : P\n{\n    protected override Map<string, string> x { get; set; } = [:];\n\n    public Any? called() => this.x();\n\n    public Map<string, string> read() => this.x;\n}\n",
+        ),
+    ];
+    let others = [("src/Lib/P.php", parent)];
+
+    assert_eq!(each_file(issues, &sharp, &others), [Vec::<String>::new(), Vec::new()]);
 }
 
 #[test]
@@ -10067,10 +10085,10 @@ fn an_extension_on_a_union_runs_on_the_parts_that_lack_a_member_of_its_name() {
     assert_messages(("src/App/Billing/Labels.sharp", calls), &others, &[]);
     let extension = |member: &str| {
         format!(
-            r#"FunctionLike {{ callee: Method("app\\billing\\unionlabels", "{member}"), class: Some("app\\billing\\unionlabels") }}"#
+            r#"FunctionLike {{ callee: Method("App\\Billing\\UnionLabels", "{member}"), class: Some("App\\Billing\\UnionLabels") }}"#
         )
     };
-    let own = r#"FunctionLike { callee: Method("App\\Billing\\Order", "label"), class: Some("app\\billing\\order") }"#
+    let own = r#"FunctionLike { callee: Method("App\\Billing\\Order", "label"), class: Some("App\\Billing\\Order") }"#
         .to_owned();
     assert_eq!(
         recorded_callees(
@@ -10427,7 +10445,7 @@ fn a_plugin_reads_an_extension_members_receiver_as_its_first_argument() {
         .iter()
         .map(|(method, [receiver, argument])| format!("{method} {} {}", text(*receiver), text(*argument)))
         .collect();
-    assert_eq!(seen, ["slug title \"-\"", "isblank title none"]);
+    assert_eq!(seen, ["slug title \"-\"", "isBlank title none"]);
 }
 
 /// Records the type a throw type provider reads for the first argument of each call of `Lib\seal` and of a method of
@@ -14211,7 +14229,7 @@ fn a_collection_member_on_a_value_that_may_be_an_object_runs_the_objects_method_
     assert_eq!(
         refusals(("src/Demo/Shelf.sharp", sharp), &[boxed]),
         [
-            "10:38 non-existent-method Method `Box.isempty` does not exist. | Ensure the method `Box.isempty` is defined."
+            "10:38 non-existent-method Method `Box.isEmpty` does not exist. | Ensure the method `Box.isEmpty` is defined."
         ]
     );
 }
@@ -20414,9 +20432,9 @@ fn a_call_of_a_property_holding_a_function_records_the_property() {
             &["this.scale(extra)", "order.handler(extra)", "Report.shared(extra)"]
         ),
         [
-            [r#"Property { class: "demo\\report", property: "$scale" }"#],
+            [r#"Property { class: "Demo\\Report", property: "$scale" }"#],
             [r#"Property { class: "lib\\order", property: "$handler" }"#],
-            [r#"Property { class: "demo\\report", property: "$shared" }"#]
+            [r#"Property { class: "Demo\\Report", property: "$shared" }"#]
         ]
     );
 }
@@ -20540,7 +20558,7 @@ fn new_on_a_generic_class_without_a_constructor_records_the_type_arguments_it_wr
 
     assert_eq!(recorded_type_arguments(report, &[r#box, crate_], "new Box<int>()"), ["int"]);
     assert_eq!(recorded_type_arguments(report, &[r#box, crate_], "new Crate<string>()"), ["string"]);
-    assert_eq!(recorded_type_arguments(tray, &[], "new Self()"), ["('T.demo\\tray extends mixed)"]);
+    assert_eq!(recorded_type_arguments(tray, &[], "new Self()"), ["('T.Demo\\Tray extends mixed)"]);
     assert_eq!(each_file(issues, &[r#box, crate_], &[]), vec![Vec::<String>::new(); 2]);
 }
 
@@ -21906,9 +21924,9 @@ fn equatable_is_no_return_type_and_joins_no_object() {
 
 /// A PHP# class can't declare a static named like a member of `Class`, spec section 25, as TypeScript's error 2699
 /// refuses one named like a member of `Function`: `type.attributes` on a class value reaches `Class`'s, so a static
-/// method, a static property, a constant and an enum case of that name never run through it. A method name is
-/// compared ignoring case, as PHP calls one, and the message quotes the static's name and `Class`'s member each as
-/// written. An instance member and a static of another name are not reached through a class value, so they stay.
+/// method, a static property, a constant and an enum case of that name never run through it. PHP# names are
+/// case-sensitive, spec section 24, so a static `Attributes` is reached as written, and only its case is warned on.
+/// An instance member and a static of another name are not reached through a class value, so they stay.
 #[test]
 fn a_static_named_like_a_member_of_class_is_an_error() {
     let refusal =
@@ -21918,14 +21936,8 @@ fn a_static_named_like_a_member_of_class_is_an_error() {
         "namespace Demo;\n\npublic class Report\n{\n    public static string Attributes() => \"\";\n}\n",
     );
 
-    assert_eq!(issues(capitalized, &[CLASS_MEMBERS]), ["5:26 method-name-case", "5:26 name-already-in-use"]);
-    assert_eq!(
-        messages(capitalized, &[CLASS_MEMBERS]),
-        [
-            "Method name `Attributes` should be in camel case.",
-            "`type.Attributes` on a class value reaches `Class`'s member `attributes`, never this static. Rename it."
-        ]
-    );
+    assert_eq!(issues(capitalized, &[CLASS_MEMBERS]), ["5:26 method-name-case"]);
+    assert_eq!(messages(capitalized, &[CLASS_MEMBERS]), ["Method name `Attributes` should be in camel case."]);
     // A constant is compared by its exact name, so one named `attributes` also breaks the upper snake case of spec
     // section 24.
     for (member, column, warning) in [
@@ -23134,7 +23146,7 @@ fn the_declared_type_a_call_goes_into_fixes_its_type_arguments() {
     let analyzed = ("src/Demo/Report.sharp", sharp);
 
     assert_eq!(each_file(issues, &declared, &[]), vec![Vec::<String>::new(); 3]);
-    assert_eq!(recorded_type_arguments(shelf, &declared, "this.shelved()"), ["('TItem.demo\\shelf extends mixed)"]);
+    assert_eq!(recorded_type_arguments(shelf, &declared, "this.shelved()"), ["('TItem.Demo\\Shelf extends mixed)"]);
     for (call, recorded) in [
         ("cache.get(\"orders\")", "list<Demo\\Order>"),
         ("this.make()", "Demo\\Order"),
@@ -28030,7 +28042,7 @@ fn a_getter_building_and_changing_a_new_object_passes() {
 
     assert_eq!(effect_issues(&[page, builder]), Vec::<String>::new());
     let (codebase, summaries) = summarized(&[page, builder]);
-    let add = FunctionLikeIdentifier::Method(ascii_lowercase_word(b"App\\Shop\\Builder"), ascii_lowercase_word(b"add"));
+    let add = FunctionLikeIdentifier::Method(word(b"App\\Shop\\Builder"), word(b"add"));
     assert_eq!(
         Effects::solve(&codebase, &summaries).impurity(&codebase, &add).as_deref(),
         Some("changes `this.text`"),
@@ -28445,12 +28457,10 @@ fn a_foreign_object_is_an_ordinary_parameter_and_return_type() {
     assert_eq!(issues(stamp, &[instant]), Vec::<String>::new());
     let (codebase, summaries) = summarized(&[stamp, instant, BUILTINS]);
     let effects = Effects::solve(&codebase, &summaries);
-    let method = |name: &[u8]| {
-        FunctionLikeIdentifier::Method(ascii_lowercase_word(b"App\\Shop\\Stamp"), ascii_lowercase_word(name))
-    };
+    let method = |name: &[u8]| FunctionLikeIdentifier::Method(word(b"App\\Shop\\Stamp"), word(name));
     let clock = Some(vec![word("Sharp\\Time\\Clock")]);
-    assert_eq!(effects.function_effects(&method(b"stampedWith")), clock, "a parameter");
-    assert_eq!(effects.function_effects(&method(b"later")), clock, "a returned one");
+    assert_eq!(effects.function_effects(&codebase, &method(b"stampedWith")), clock, "a parameter");
+    assert_eq!(effects.function_effects(&codebase, &method(b"later")), clock, "a returned one");
 
     let stamps = (
         "app/Shop/Stamps.sharp",
@@ -28600,7 +28610,7 @@ fn a_recursive_pair_of_methods_solves_without_looping() {
     );
     let (codebase, summaries) = summarized(&files);
     let effects = Effects::solve(&codebase, &summaries);
-    let even = FunctionLikeIdentifier::Method(ascii_lowercase_word(b"App\\Shop\\Tree"), ascii_lowercase_word(b"even"));
+    let even = FunctionLikeIdentifier::Method(word(b"App\\Shop\\Tree"), word(b"even"));
     assert_eq!(
         effects.impurity(&codebase, &even).as_deref(),
         Some("reaches `Tree.odd`, which calls `Chrono.now` with the effect `Clock`")
@@ -28635,9 +28645,7 @@ fn the_files_a_call_reaches_are_its_methods_its_overrides_and_its_accessors() {
     let (codebase, summaries) = summarized(&[base, sale, stock, opened, till, CLOCK_STUB, NOW]);
     let effects = Effects::solve(&codebase, &summaries);
     let file = |class: &[u8]| codebase.get_class_like(class).expect("the class is declared").span.file_id;
-    let method = |name: &[u8]| {
-        FunctionLikeIdentifier::Method(ascii_lowercase_word(b"App\\Shop\\Till"), ascii_lowercase_word(name))
-    };
+    let method = |name: &[u8]| FunctionLikeIdentifier::Method(word(b"App\\Shop\\Till"), word(name));
 
     let callee_files = effects.callee_files(&codebase);
     assert_eq!(
@@ -28654,8 +28662,8 @@ fn the_files_a_call_reaches_are_its_methods_its_overrides_and_its_accessors() {
         )
     );
     assert_eq!(callee_files.get(&file(b"App\\Shop\\Sale")), None);
-    assert_eq!(effects.function_effects(&method(b"add")), Some(Vec::new()));
-    assert_eq!(effects.function_effects(&method(b"ring")), Some(vec![word("Sharp\\Time\\Clock")]));
+    assert_eq!(effects.function_effects(&codebase, &method(b"add")), Some(Vec::new()));
+    assert_eq!(effects.function_effects(&codebase, &method(b"ring")), Some(vec![word("Sharp\\Time\\Clock")]));
 }
 
 /// An operator on an instance runs the operator its class declares (spec section 19), so a getter that applies one
@@ -29459,6 +29467,72 @@ fn a_composed_string_for_a_plain_php_literal_string_is_refused_by_name() {
     );
 }
 
+/// An interface that isn't sealed is open, spec section 21: any class may implement it, so `Payment` minus `Paid` is
+/// still a `Payment`, never the implementers the checker happens to see, and `not (Paid or Refunded)` can match.
+#[test]
+fn an_open_interface_without_one_implementer_is_still_the_interface() {
+    let others = [
+        ("src/App/Payment.sharp", "namespace App;\n\npublic interface Payment\n{\n}\n"),
+        ("src/App/Paid.sharp", "namespace App;\n\npublic class Paid : Payment\n{\n}\n"),
+        ("src/App/Refunded.sharp", "namespace App;\n\npublic class Refunded : Payment\n{\n}\n"),
+    ];
+    let sharp = "namespace App;\n\npublic class Probe\n{\n    public bool neither(Payment given) => given is not (Paid or Refunded);\n\n    public Payment rest(Payment given)\n    {\n        if (given is not Paid) {\n            const bool refunded = given is Refunded;\n            return given;\n        }\n        return given;\n    }\n}\n";
+
+    assert_eq!(explained(("src/App/Probe.sharp", sharp), &others), Vec::<String>::new());
+}
+
+/// A value fixed when the code compiles is a `literal-string`, spec section 24: a template or a `+` join whose parts are
+/// literals and constants of type `int`, `float` or `string` passes to a plain PHP `literal-string` parameter, as a
+/// constant that holds one does, and a template that holds a value of the running code is still refused.
+#[test]
+fn a_string_fixed_when_the_code_compiles_passes_to_a_plain_php_literal_string() {
+    let query = (
+        "src/Lib/Query.php",
+        "<?php\n\nnamespace Lib;\n\nfinal class Query\n{\n    /**\n     * @param literal-string $sql\n     */\n    public function selectRaw(string $sql): self\n    {\n        return $this;\n    }\n}\n",
+    );
+    let sharp = "namespace Demo;\n\nimport Lib.Query;\n\npublic enum Weights\n{\n    case One;\n\n    private const int COUNT = 3;\n    private const float SHARE = 0.5;\n    private const string TOUCHES = \"COUNT(*) OVER (PARTITION BY order_id)\";\n    private const string LINEAR = `1.0 / ${Weights.TOUCHES} as weight`;\n    private const string PER = \"1.0 / \" + Weights.TOUCHES;\n\n    public Query weigh(Query query, string column)\n    {\n        query.selectRaw(Weights.LINEAR);\n        query.selectRaw(Weights.PER);\n        query.selectRaw(`${Weights.SHARE} / ${Weights.COUNT} as weight, ${\"x\"}`);\n        query.selectRaw(\"max(\" + Weights.TOUCHES + \")\");\n        return query.selectRaw(`max(${column})`);\n    }\n}\n";
+
+    assert_eq!(
+        explained(("src/Demo/Weights.sharp", sharp), &[query]),
+        [
+            "21:32 possibly-invalid-argument Argument #1 of method `Query.selectRaw` takes a `literal-string`, a string literal or a constant, and this string is composed while the code runs. Write the string as a literal or a constant, and pass each value it holds separately, as a query's bindings for its `?` placeholders take them."
+        ]
+    );
+}
+
+/// A constant's type is its declared type, which its value may only narrow, so a constant of the wrong type is refused
+/// and a read of one has the type it declares. Its value follows spec section 18 as a body's code does, so a string
+/// joined with a number is refused where the constant is declared, with help naming the template that writes it.
+#[test]
+fn a_constant_has_its_declared_type_and_its_value_follows_the_operators_of_a_body() {
+    let sharp = "namespace Demo;\n\npublic enum Weights\n{\n    case One;\n\n    private const int COUNT = 3;\n    private const string LABEL = \"1.0 / \" + Weights.COUNT + \" as weight\";\n    private const int X = \"a\";\n    private const string SHOWN = `1.0 / ${Weights.COUNT} as weight`;\n\n    public string label() => Weights.LABEL;\n\n    public int x() => Weights.X;\n\n    public string shown() => Weights.SHOWN;\n}\n";
+
+    assert_eq!(
+        explained(("src/Demo/Weights.sharp", sharp), &[]),
+        [
+            "8:34 invalid-operand `+` cannot join `\"1.0 / \"` and `3`: it joins two strings or adds two numbers. Put the value in a template written between backticks, as in `1.0 / ${Weights.COUNT} as weight`.",
+            "9:27 invalid-constant-value Value for constant `Weights.X` is not assignable to its declared type. Change the value to match the declared type, or update the declared type to accept the value.",
+        ]
+    );
+}
+
+/// Spec section 18: a chain of `+` that joins a string with a number is refused once, at its first such `+`, with help
+/// that writes the whole chain as a template, the numbers it adds before its first string as one value, and a template
+/// in the chain as the text it writes.
+#[test]
+fn a_chain_that_joins_a_string_with_a_number_is_refused_with_its_template() {
+    let sharp = "namespace Demo;\n\npublic class Report\n{\n    public string run(int count, string name)\n    {\n        const items = count + 1 + \" items\";\n        const shown = name + \": \" + count + \"/\" + 3;\n        const tagged = `#${name}: ` + count;\n        return items + shown + tagged;\n    }\n}\n";
+
+    assert_eq!(
+        explained(("src/Demo/Report.sharp", sharp), &[]),
+        [
+            "7:23 invalid-operand `+` cannot join `int` and `\" items\"`: it joins two strings or adds two numbers. Put the value in a template written between backticks, as in `${count + 1} items`.",
+            "8:23 invalid-operand `+` cannot join `string` and `int`: it joins two strings or adds two numbers. Put the value in a template written between backticks, as in `${name}: ${count}/${3}`.",
+            "9:24 invalid-operand `+` cannot join `string` and `int`: it joins two strings or adds two numbers. Put the value in a template written between backticks, as in `#${name}: ${count}`.",
+        ]
+    );
+}
+
 /// A plain PHP class's `__toString()`, its own or inherited, is its `toString()`, spec section 18: a template shows it
 /// and a call runs it. A plain PHP class with neither stays a template's error, and a value that holds an enum beside
 /// such a class has no one call that shows both.
@@ -30109,11 +30183,11 @@ fn emit_has_the_effect_events() {
     assert_eq!(issues(checkout, &ORDER_EVENTS), Vec::<String>::new());
     // Its own `emit` and a call of a function whose type lists `Events` give a function type `Events` once.
     let (codebase, summaries) = summarized(&[checkout, order_event, order_paid]);
-    let broadcast = FunctionLikeIdentifier::Method(
-        ascii_lowercase_word(b"App\\Shop\\Checkout"),
-        ascii_lowercase_word(b"broadcast"),
+    let broadcast = FunctionLikeIdentifier::Method(word(b"App\\Shop\\Checkout"), word(b"broadcast"));
+    assert_eq!(
+        Effects::solve(&codebase, &summaries).function_effects(&codebase, &broadcast),
+        Some(vec![word("Sharp\\Events")])
     );
-    assert_eq!(Effects::solve(&codebase, &summaries).function_effects(&broadcast), Some(vec![word("Sharp\\Events")]));
     assert_eq!(
         effect_issues(&[checkout, order_event, order_paid]),
         [
@@ -31924,5 +31998,271 @@ fn a_keyword_in_another_case_that_names_nothing_suggests_the_keyword() {
             &[base, ("src/Demo/This.sharp", this)]
         ),
         Vec::<String>::new()
+    );
+}
+
+/// Spec section 24: PHP# names are case-sensitive, as in C#, Java and Kotlin. `total()` and `Total()` are two methods
+/// of one class, each reached only by its exact name, from PHP# and from plain PHP alike, and a call in another case is
+/// refused with the method it meant. A method that differs from a plain PHP parent's only in case is a second method,
+/// and an override names the parent's method exactly.
+#[test]
+fn a_method_is_reached_only_by_its_exact_name() {
+    let order = (
+        "src/Demo/Order.sharp",
+        "namespace Demo;
+
+public class Order
+{
+    public int total() => 1;
+
+    public int Total() => 2;
+
+    public int sum() => this.total() + this.Total();
+}
+",
+    );
+    let base = (
+        "src/Lib/Base.php",
+        "<?php
+
+namespace Lib;
+
+class Base
+{
+    public function doThing(): int { return 1; }
+}
+",
+    );
+    let child = (
+        "src/Demo/Child.sharp",
+        "namespace Demo;
+
+import Lib.Base;
+
+public class Child : Base
+{
+    public override int doThing() => 2;
+
+    public int dothing() => 3;
+}
+",
+    );
+
+    // `Total` breaks only the camel case of spec section 24, which is a warning.
+    assert_eq!(issues(order, &[]), ["7:16 method-name-case"]);
+    assert_eq!(issues(child, &[base]), Vec::<String>::new());
+
+    let caller = (
+        "src/Demo/Caller.sharp",
+        "namespace Demo;
+
+public class Caller
+{
+    public int run(Order order) => order.TOTAL() + order.Total();
+}
+",
+    );
+    assert_eq!(messages(caller, &[order]), ["`Order` has no member `TOTAL`; did you mean `Total`?"]);
+
+    let plain = (
+        "src/Demo/caller.php",
+        "<?php
+
+namespace Demo;
+
+function run(Order $order): int
+{
+    return $order->TOTAL() + $order->total();
+}
+",
+    );
+    // Plain PHP goes on with the call's `mixed` result, which its own checks report after.
+    assert_eq!(
+        messages(plain, &[order]).first().map(String::as_str),
+        Some("`Demo\\Order` has no member `TOTAL`; did you mean `Total`?")
+    );
+}
+
+/// Spec section 24: PHP# names are case-sensitive, so the engine finds a PHP# type only by its exact name, from any
+/// code, and a type, a `new`, a static call, a header and an import that write it in another case name nothing.
+#[test]
+fn a_type_is_reached_only_by_its_exact_name() {
+    let order = (
+        "src/Demo/Order.sharp",
+        "namespace Demo;
+
+public class Order
+{
+    public static Order make() => new Order();
+}
+",
+    );
+    let base = (
+        "src/Demo/Base.sharp",
+        "namespace Demo;
+
+public abstract class Base
+{
+}
+",
+    );
+    let priced = (
+        "src/Demo/Priced.sharp",
+        "namespace Demo;
+
+public interface Priced
+{
+}
+",
+    );
+    let caller = (
+        "src/Demo/Caller.sharp",
+        "namespace Demo;
+
+public class Caller
+{
+    public ORDER kept(ORDER order) => order;
+
+    public Order made() => ORDER.make();
+
+    public Order built() => new ORDER();
+
+    public bool tested(Any? value) => value is ORDER;
+
+    public Class<Order> named() => typeof(ORDER);
+
+    public void caught()
+    {
+        try {
+            Order.make();
+        } catch (FAILED failure) {
+        }
+    }
+}
+",
+    );
+    let failed = (
+        "src/Demo/Failed.sharp",
+        "namespace Demo;
+
+public class Failed : Exception
+{
+}
+",
+    );
+    let rush = (
+        "src/Demo/Rush.sharp",
+        "namespace Demo;
+
+public class Rush : BASE, PRICED
+{
+}
+",
+    );
+    let shop = (
+        "src/Shop/Cart.sharp",
+        "namespace Shop;
+
+import Demo.ORDER;
+
+public class Cart
+{
+}
+",
+    );
+    let plain = (
+        "src/Demo/caller.php",
+        "<?php
+
+namespace Demo;
+
+function run(): ORDER
+{
+    return new ORDER();
+}
+",
+    );
+
+    assert_eq!(
+        messages(caller, &[order, failed]),
+        [
+            "Cannot find type `ORDER`; did you mean `Order`?",
+            "Cannot find type `ORDER`; did you mean `Order`?",
+            "Cannot find type `ORDER`; did you mean `Order`?",
+            "Cannot find type `ORDER`; did you mean `Order`?",
+            "Cannot find type `ORDER`; did you mean `Order`?",
+            "Cannot find type `ORDER`; did you mean `Order`?",
+            "Cannot find type `FAILED`; did you mean `Failed`?",
+        ]
+    );
+    assert_eq!(
+        messages(rush, &[base, priced]),
+        ["Cannot find type `BASE`; did you mean `Base`?", "Cannot find type `PRICED`; did you mean `Priced`?"]
+    );
+    assert_eq!(messages(shop, &[order]), ["Cannot find type `Demo.ORDER`; did you mean `Demo.Order`?"]);
+    assert_eq!(
+        messages(plain, &[order]),
+        [
+            "Cannot find type `Demo\\ORDER`; did you mean `Demo\\Order`?",
+            "Cannot find type `Demo\\ORDER`; did you mean `Demo\\Order`?",
+        ]
+    );
+}
+
+/// Spec section 24: a PHP# type's identity is its exact name, so `Order` and `ORDER` in one namespace are two types,
+/// neither a duplicate of the other, each reached by its own name with its own members, and a name in a third case
+/// reaches neither.
+#[test]
+fn two_types_whose_names_differ_only_in_case_are_two_types() {
+    let order = (
+        "src/Demo/Order.sharp",
+        "namespace Demo;
+
+public class Order
+{
+    public int total() => 1;
+}
+",
+    );
+    let shouted = (
+        "src/Demo/ORDER.sharp",
+        "namespace Demo;
+
+public class ORDER
+{
+    public string label() => \"line\";
+}
+",
+    );
+    let caller = (
+        "src/Demo/Caller.sharp",
+        "namespace Demo;
+
+public class Caller
+{
+    public int total(Order order) => order.total();
+
+    public string label(ORDER line) => line.label();
+
+    public int built() => new Order().total();
+
+    public string made() => new ORDER().label();
+
+    public int wrong(ORDER line) => line.total();
+
+    public OrDer missing() => new OrDer();
+}
+",
+    );
+
+    assert_eq!(messages(order, &[shouted]), Vec::<String>::new());
+    assert_eq!(messages(shouted, &[order]), Vec::<String>::new());
+    assert_eq!(
+        messages(caller, &[order, shouted]),
+        [
+            "Method `Demo.ORDER.total` does not exist.",
+            "Cannot find type `OrDer`; did you mean `Demo.ORDER`?",
+            "Cannot find type `OrDer`; did you mean `Demo.ORDER`?",
+        ]
     );
 }

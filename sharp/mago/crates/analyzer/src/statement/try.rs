@@ -256,7 +256,8 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for Try<'arena> {
             let mut definitely_defined_locals: Option<WordSet> = None;
             for caught_class in &caught_classes {
                 for possibly_thrown_exception in possibly_thrown_exceptions.keys() {
-                    if possibly_thrown_exception.as_bytes().eq_ignore_ascii_case(caught_class.as_bytes())
+                    if context.codebase.class_key(possibly_thrown_exception.as_bytes())
+                        == context.codebase.class_key(caught_class.as_bytes())
                         || context
                             .codebase
                             .is_instance_of(possibly_thrown_exception.as_bytes(), caught_class.as_bytes())

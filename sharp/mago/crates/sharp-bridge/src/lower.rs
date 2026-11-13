@@ -5,6 +5,7 @@ use mago_allocator::LocalArena;
 use mago_analyzer::CollectionKind;
 use mago_analyzer::artifacts::MemberCall;
 use mago_codex::defaults_trait_name;
+use mago_codex::metadata::CodebaseMetadata;
 use mago_codex::metadata::function_like::FunctionLikeMetadata;
 use mago_codex::metadata::module::BindingValueMetadata;
 use mago_codex::metadata::module::ModuleKind;
@@ -830,7 +831,8 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
         for (binding, binding_metadata) in written.zip(&metadata.bindings) {
             let line = self.line(binding);
             let namespace = self.string(0, line, metadata.namespace.as_bytes());
-            let service = self.string(0, line, service_id(&binding_metadata.service.type_union).as_bytes());
+            let id = service_id(&binding_metadata.service.type_union, self.types.codebase());
+            let service = self.string(0, line, id.as_bytes());
             let target = match binding_metadata.target {
                 Some(target) => self.string(0, line, target.as_bytes()),
                 None => self.zval(line, sharp_value::SHARP_NULL, |_| {}),
@@ -1097,7 +1099,8 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
 
     /// The `parse` and `tryParse` of the struct or PHP# class being lowered, whose `members` are declared and whose name
     /// is at `span`, where the codex gives it them, spec section 10. No input holds a function, so a type with a
-    /// function field, also inside a collection, has neither, and the checker refuses its call.
+    /// function field, also inside a collection, has neither, and the checker refuses its call. Each carries its whole
+    /// type, as a declared method does, with the effects the analysis records for it, so `is` and `methods()` read it.
     fn parse_methods(&mut self, members: &Sequence<ClassLikeMember>, span: Span) -> Vec<u32> {
         if !self.types.parses(self.class) {
             return Vec::new();
@@ -1212,6 +1215,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
         self.static_type_parameters = None;
         let body = self.node(SHARP_AST_STMT_LIST, 0, line, &statements);
         let return_type = self.string(ZEND_NAME_FQ, line, self.class);
+        let return_type = self.function_type(return_type, self.types.method_type(self.class, b"parse"), 0, line);
 
         Some(self.declaration(
             SHARP_AST_METHOD,
@@ -1260,6 +1264,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
         let body = self.node(SHARP_AST_STMT_LIST, 0, line, &[r#try]);
         let return_type = self.string(ZEND_NAME_FQ, line, self.class);
         self.nodes[return_type as usize].attr |= ZEND_TYPE_NULLABLE;
+        let return_type = self.function_type(return_type, self.types.method_type(self.class, b"tryParse"), 0, line);
 
         self.declaration(
             SHARP_AST_METHOD,
@@ -2766,11 +2771,13 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
         };
         self.static_type_parameters = None;
         // A sub-interface's body that replaces its parent's default body runs as a method of its trait of default
-        // bodies, which has no parent, so only the interface's signature carries `#[\Override]`.
+        // bodies, which has no parent, so only the interface's signature carries `#[\Override]`. PHP's attribute counts
+        // only a parent class's and an interface's methods, so a method that replaces only a trait's has none.
         let r#override =
             method.modifiers.iter().find(|modifier| matches!(modifier, Modifier::Override(_))).filter(|_| {
-                first_statements.is_none()
-                    || self.types.class_declaration(self.class).kind != DeclarationKind::Interface
+                (first_statements.is_none()
+                    || self.types.class_declaration(self.class).kind != DeclarationKind::Interface)
+                    && self.types.replaces_inherited_method(self.class, php_method_name(method))
             });
         let attributes = self.attributes(&method.attribute_lists, r#override, None);
 
@@ -3425,7 +3432,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
             unreachable!("semantics refuses a method parameter without a type");
         };
         let hint_index = self.hint(hint);
-        let service = service.and_then(|service| dropped_service(hint, service));
+        let service = service.and_then(|service| dropped_service(hint, service, self.types.codebase()));
         let node = self.parameter_of_type(parameter, hint_index, service);
         if self.types.is_widened(parameter.variable.span) {
             self.nodes[node as usize].attr |= ZEND_PARAM_WIDENED;
@@ -5451,13 +5458,13 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                 let late = self.node(SHARP_AST_CLASS_NAME, 0, line, &[late]);
                 let lowered = self.unchecked_expression(line, expression);
 
-                self.returned_result(line, lowered, late, member.name.as_bytes(), check)
+                self.returned_result(line, lowered, late, member.original_name.as_bytes(), check)
             }
             object => self.with_held_receiver(line, object, |this| {
                 let lowered = this.unchecked_expression(line, expression);
                 let implementer = this.expression(object);
 
-                this.returned_result(line, lowered, implementer, member.name.as_bytes(), check)
+                this.returned_result(line, lowered, implementer, member.original_name.as_bytes(), check)
             }),
         };
 
@@ -5486,12 +5493,12 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
         };
         let implementer = self.expression(receiver);
 
-        self.returned_result(line, call, implementer, member.name.as_bytes(), check)
+        self.returned_result(line, call, implementer, member.original_name.as_bytes(), check)
     }
 
     /// `\Sharp\Internal\returned($lowered, $implementer, $method, $types, $target)`, with the type list and the name of
-    /// `check`, as [`Self::returned_call`] says. `method` is the method's `FunctionLikeMetadata::name`, which is
-    /// lowercase, as PHP keys a class's `function_table`, so the engine finds `getStatus` as `getstatus`.
+    /// `check`, as [`Self::returned_call`] says. `method` is the method's declared name,
+    /// `FunctionLikeMetadata::original_name`, which a PHP# class finds only as declared.
     fn returned_result(
         &mut self,
         line: u32,
@@ -9936,7 +9943,7 @@ fn class_flags(modifiers: &Sequence<Modifier>) -> u32 {
 /// drops the service, spec section 32: a collection of objects, as `List<PriceRule>` runs as `array`. The engine reads
 /// any other parameter's class from its PHP type, and a collection of values is no service. Neither is a type that
 /// names a type parameter, as `List<TItem>` does, whose objects are of a type each type argument fixes.
-fn dropped_service(hint: &Hint, service: &FunctionLikeParameterMetadata) -> Option<Word> {
+fn dropped_service(hint: &Hint, service: &FunctionLikeParameterMetadata, codebase: &CodebaseMetadata) -> Option<Word> {
     let r#type = &service.type_metadata.as_ref()?.type_union;
     let collection = matches!(
         without_readonly(hint),
@@ -9946,7 +9953,7 @@ fn dropped_service(hint: &Hint, service: &FunctionLikeParameterMetadata) -> Opti
     let of_objects = nodes.iter().any(|node| matches!(node, TypeRef::Atomic(TAtomic::Object(_))));
     let is_open = nodes.iter().any(|node| matches!(node, TypeRef::Atomic(TAtomic::GenericParameter(_))));
 
-    (collection && of_objects && !is_open).then(|| service_id(r#type))
+    (collection && of_objects && !is_open).then(|| service_id(r#type, codebase))
 }
 
 /// Where plain PHP's array, which the checker reads as a `List`, goes, as [`Lowering::arriving`] lowers it.

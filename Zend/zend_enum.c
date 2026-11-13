@@ -418,7 +418,8 @@ static ZEND_NAMED_FUNCTION(zend_enum_try_from_func)
 }
 
 static void zend_enum_register_func(zend_class_entry *ce, zend_known_string_id name_id, zend_internal_function *zif) {
-	zend_string *name = ZSTR_KNOWN(name_id);
+	/* PHP#: a class with SHARP_CLASS_EXACT_NAMES keys each method by its exact name, see zend_class_find_method. */
+	zend_string *name = (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? zif->function_name : ZSTR_KNOWN(name_id);
 	zif->type = ZEND_INTERNAL_FUNCTION;
 	zif->module = EG(current_module);
 	zif->scope = ce;

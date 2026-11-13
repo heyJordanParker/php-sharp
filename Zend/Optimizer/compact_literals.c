@@ -251,6 +251,14 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 						}
 					}
 					break;
+				case ZEND_OP_DATA:
+					if ((opline - 1)->opcode == ZEND_SHARP_RETURNED) {
+						// the method's name, and a type text followed by the name of the call
+						LITERAL_INFO(opline->op1.constant, 1);
+						LITERAL_INFO(opline->op2.constant, 2);
+						break;
+					}
+					ZEND_FALLTHROUGH;
 				default:
 					if (opline->op1_type == IS_CONST) {
 						LITERAL_INFO(opline->op1.constant, 1);
@@ -719,6 +727,12 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 					// op2 type text, spelled with the class and type arguments of this
 					opline->extended_value = cache_size;
 					cache_size += 4 * sizeof(void *);
+					break;
+				case ZEND_SHARP_RETURNED:
+					// the implementer's class and its PHP# method, then the OP_DATA's type text, spelled with the
+					// class and type arguments of this
+					opline->extended_value = cache_size;
+					cache_size += 6 * sizeof(void *);
 					break;
 				case ZEND_CATCH:
 					if (opline->op1_type == IS_CONST) {

@@ -725,6 +725,19 @@ impl<'analysis> Types<'analysis> {
         })
     }
 
+    /// Whether the method `method` of `class` replaces a method a parent class or an interface of `class` has, which
+    /// PHP's `#[\Override]` counts. PHP# takes `override` for a trait's method too, spec section 22, and PHP's attribute
+    /// counts no trait the class uses itself, so a method that replaces only a trait's lowers without it.
+    pub(crate) fn replaces_inherited_method(&self, class: &[u8], method: &[u8]) -> bool {
+        self.codebase.get_class_like(class).is_some_and(|metadata| {
+            metadata
+                .all_parent_classes
+                .iter()
+                .chain(&metadata.all_parent_interfaces)
+                .any(|ancestor| self.codebase.method_exists(ancestor.as_bytes(), method))
+        })
+    }
+
     /// Whether each PHP# call of the method `method` of `class` checks its result, as
     /// [`ClassLikeMetadata::checks_results_at_call`] tells.
     pub(crate) fn checks_results_at_call(&self, class: &[u8], method: &[u8]) -> bool {
@@ -809,7 +822,7 @@ impl<'analysis> Types<'analysis> {
         }
         let mut effects: Vec<String> = self
             .effects
-            .function_effects(function)?
+            .function_effects(self.codebase, function)?
             .into_iter()
             .map(|effect| class_text(effect, self.codebase))
             .collect();
@@ -1462,7 +1475,7 @@ impl<'analysis> Types<'analysis> {
         let metadata = self.codebase.get_class_like(&[class, b"\\", case].concat())?;
 
         (metadata.flags.is_enum_case_class()
-            && metadata.direct_parent_class.is_some_and(|parent| parent.as_bytes().eq_ignore_ascii_case(class)))
+            && metadata.direct_parent_class.is_some_and(|parent| parent == self.codebase.class_key(class)))
         .then_some(metadata.original_name)
     }
 

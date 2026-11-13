@@ -117,7 +117,7 @@ ZEND_API HashTable *zend_std_build_object_properties_array(zend_object *zobj) /*
 	ZEND_ASSERT(!(zend_object_is_lazy_proxy(zobj) && zend_lazy_object_initialized(zobj)));
 	ZEND_ASSERT(!zobj->properties);
 	/* PHP#: as in zend_std_get_properties_ex, an object of a plain PHP class pays one test. */
-	if (UNEXPECTED(ce->sharp_flags)) {
+	if (UNEXPECTED(ce->sharp_flags & (SHARP_CLASS_HAS_CROSSING_PROPS|SHARP_CLASS_HAS_TYPED_PROPS))) {
 		sharp_object_exposed(zobj);
 	}
 	ht = zend_new_array(ce->default_properties_count);
@@ -1773,13 +1773,11 @@ ZEND_API void zend_std_unset_dimension(zend_object *object, zval *offset) /* {{{
 
 static zend_never_inline zend_function *zend_get_parent_private_method(zend_class_entry *scope, zend_class_entry *ce, zend_string *function_name) /* {{{ */
 {
-	zval *func;
 	zend_function *fbc;
 
 	if (scope != ce && scope && is_derived_class(ce, scope)) {
-		func = zend_hash_find(&scope->function_table, function_name);
-		if (func != NULL) {
-			fbc = Z_FUNC_P(func);
+		fbc = zend_class_find_method(scope, function_name);
+		if (fbc != NULL) {
 			if ((fbc->common.fn_flags & ZEND_ACC_PRIVATE)
 			 && fbc->common.scope == scope) {
 				return fbc;
@@ -1787,6 +1785,42 @@ static zend_never_inline zend_function *zend_get_parent_private_method(zend_clas
 		}
 	}
 	return NULL;
+}
+/* }}} */
+
+/* PHP#: the declarer is the nearest ancestor without SHARP_CLASS_EXACT_NAMES, or such an interface of `ce`, and it
+ * finds `name` in any case, as PHP does. A name no declarer has, such as `__invoke` or one of PHP#'s own, is found only
+ * as written. */
+ZEND_API zend_function *zend_class_find_protocol_method(const zend_class_entry *ce, const char *name, size_t length) /* {{{ */
+{
+	if (EXPECTED(!(ce->sharp_flags & SHARP_CLASS_EXACT_NAMES))) {
+		return zend_hash_str_find_ptr(&ce->function_table, name, length);
+	}
+
+	const zend_function *declared = NULL;
+	const zend_class_entry *base = ce->parent;
+	while (base && (base->sharp_flags & SHARP_CLASS_EXACT_NAMES)) {
+		base = base->parent;
+	}
+	if (base) {
+		declared = zend_hash_str_find_ptr_lc(&base->function_table, name, length);
+	}
+	for (uint32_t i = 0; !declared && i < ce->num_interfaces; i++) {
+		if (!(ce->interfaces[i]->sharp_flags & SHARP_CLASS_EXACT_NAMES)) {
+			declared = zend_hash_str_find_ptr_lc(&ce->interfaces[i]->function_table, name, length);
+		}
+	}
+	if (declared) {
+		return zend_hash_find_ptr(&ce->function_table, declared->common.function_name);
+	}
+	return zend_hash_str_find_ptr(&ce->function_table, name, length);
+}
+/* }}} */
+
+ZEND_API zend_function *zend_class_find_method_spelled(const zend_class_entry *ce, zend_string *name) /* {{{ */
+{
+	zend_function *fbc = zend_class_find_method(ce, name);
+	return fbc && zend_string_equals(fbc->common.function_name, name) ? fbc : NULL;
 }
 /* }}} */
 
@@ -2005,6 +2039,14 @@ ZEND_API zend_function *zend_std_get_method(zend_object **obj_ptr, zend_string *
 	zend_class_entry *scope;
 	ALLOCA_FLAG(use_heap);
 
+	/* PHP#: a class with SHARP_CLASS_EXACT_NAMES keys each method by its exact name, so its one probe is the name the
+	 * call writes, whoever calls, and the lowercase key a compiled call carries is never used. */
+	zval exact_key;
+	if (UNEXPECTED(zobj->ce->sharp_flags & SHARP_CLASS_EXACT_NAMES)) {
+		ZVAL_STR(&exact_key, method_name);
+		key = &exact_key;
+	}
+
 	if (EXPECTED(key != NULL)) {
 		lc_method_name = Z_STR_P(key);
 #ifdef ZEND_ALLOCA_MAX_SIZE
@@ -2034,7 +2076,7 @@ ZEND_API zend_function *zend_std_get_method(zend_object **obj_ptr, zend_string *
 
 		if (fbc->common.scope != scope) {
 			if (fbc->op_array.fn_flags & ZEND_ACC_CHANGED) {
-				zend_function *updated_fbc = zend_get_parent_private_method(scope, zobj->ce, lc_method_name);
+				zend_function *updated_fbc = zend_get_parent_private_method(scope, zobj->ce, method_name);
 
 				if (EXPECTED(updated_fbc != NULL)) {
 					fbc = updated_fbc;
@@ -2095,6 +2137,12 @@ static zend_always_inline zend_function *get_static_method_fallback(
 ZEND_API zend_function *zend_std_get_static_method(zend_class_entry *ce, zend_string *function_name, const zval *key) /* {{{ */
 {
 	zend_string *lc_function_name;
+	/* PHP#: as in zend_std_get_method, a class with SHARP_CLASS_EXACT_NAMES is probed with the name the call writes. */
+	zval exact_key;
+	if (UNEXPECTED(ce->sharp_flags & SHARP_CLASS_EXACT_NAMES)) {
+		ZVAL_STR(&exact_key, function_name);
+		key = &exact_key;
+	}
 	if (EXPECTED(key != NULL)) {
 		lc_function_name = Z_STR_P(key);
 	} else {

@@ -437,22 +437,30 @@ PHPDBG_API void phpdbg_set_breakpoint_method(const char *class_name, const char 
 	HashTable class_breaks, *class_table;
 	size_t class_len = strlen(class_name);
 	size_t func_len = strlen(func_name);
-	char *func_lcname, *class_lcname;
 
 	if (*class_name == '\\') {
 		class_name++;
 		class_len--;
 	}
 
-	func_lcname = zend_str_tolower_dup(func_name, func_len);
-	class_lcname = zend_str_tolower_dup(class_name, class_len);
+	/* PHP#: a PHP# class is named exactly, and the methods of a class below one, spec section 24, so `Order::total` and
+	 * `Order::Total` are two breakpoints there, while a plain PHP class keeps PHP's rule and names itself and its
+	 * methods in any case. A class that isn't loaded yet may be either, so its breakpoint keeps the names it is written
+	 * with, by which phpdbg_find_breakpoint_method also finds a plain PHP class's method in any case. */
+	zend_string *written = zend_string_init(class_name, class_len, 0);
+	zend_class_entry *ce = zend_class_table_find_ptr(EG(class_table), written, NULL);
+	zend_string_release(written);
+	char *class_key = !ce || (ce->sharp_flags & SHARP_CLASS_EXACT_KEY)
+		? estrndup(class_name, class_len) : zend_str_tolower_dup(class_name, class_len);
+	char *func_key = !ce || (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES)
+		? estrndup(func_name, func_len) : zend_str_tolower_dup(func_name, func_len);
 
-	if (!(class_table = zend_hash_str_find_ptr(&PHPDBG_G(bp)[PHPDBG_BREAK_METHOD], class_lcname, class_len))) {
+	if (!(class_table = zend_hash_str_find_ptr(&PHPDBG_G(bp)[PHPDBG_BREAK_METHOD], class_key, class_len))) {
 		zend_hash_init(&class_breaks, 8, NULL, phpdbg_class_breaks_dtor, 0);
-		class_table = zend_hash_str_update_mem(&PHPDBG_G(bp)[PHPDBG_BREAK_METHOD], class_lcname, class_len, &class_breaks, sizeof(HashTable));
+		class_table = zend_hash_str_update_mem(&PHPDBG_G(bp)[PHPDBG_BREAK_METHOD], class_key, class_len, &class_breaks, sizeof(HashTable));
 	}
 
-	if (!zend_hash_str_exists(class_table, func_lcname, func_len)) {
+	if (!zend_hash_str_exists(class_table, func_key, func_len)) {
 		phpdbg_breakmethod_t new_break;
 
 		PHPDBG_G(flags) |= PHPDBG_HAS_METHOD_BP;
@@ -463,7 +471,7 @@ PHPDBG_API void phpdbg_set_breakpoint_method(const char *class_name, const char 
 		new_break.func_name = estrndup(func_name, func_len);
 		new_break.func_len = func_len;
 
-		zend_hash_str_update_mem(class_table, func_lcname, func_len, &new_break, sizeof(phpdbg_breakmethod_t));
+		zend_hash_str_update_mem(class_table, func_key, func_len, &new_break, sizeof(phpdbg_breakmethod_t));
 
 		phpdbg_notice("Breakpoint #%d added at %s::%s", new_break.id, class_name, func_name);
 
@@ -472,8 +480,8 @@ PHPDBG_API void phpdbg_set_breakpoint_method(const char *class_name, const char 
 		phpdbg_error("Breakpoint exists at %s::%s", class_name, func_name);
 	}
 
-	efree(func_lcname);
-	efree(class_lcname);
+	efree(func_key);
+	efree(class_key);
 } /* }}} */
 
 PHPDBG_API void phpdbg_set_breakpoint_opline(zend_ulong opline) /* {{{ */
@@ -571,7 +579,6 @@ PHPDBG_API void phpdbg_resolve_op_array_breaks(zend_op_array *op_array) /* {{{ *
 
 PHPDBG_API int phpdbg_resolve_opline_break(phpdbg_breakopline_t *new_break) /* {{{ */
 {
-	HashTable *func_table = EG(function_table);
 	zend_function *func;
 
 	if (new_break->func_name == NULL) {
@@ -603,14 +610,21 @@ PHPDBG_API int phpdbg_resolve_opline_break(phpdbg_breakopline_t *new_break) /* {
 	}
 
 	if (new_break->class_name != NULL) {
-		zend_class_entry *ce;
-		if (!(ce = zend_hash_str_find_ptr_lc(EG(class_table), new_break->class_name, new_break->class_len))) {
+		/* A PHP# class is found by its exact name, and its methods too, spec section 24. */
+		zend_string *class_name = zend_string_init(new_break->class_name, new_break->class_len, 0);
+		zend_class_entry *ce = zend_class_table_find_ptr(EG(class_table), class_name, NULL);
+		zend_string_release(class_name);
+		if (!ce) {
 			return FAILURE;
 		}
-		func_table = &ce->function_table;
+		zend_string *method = zend_string_init(new_break->func_name, new_break->func_len, 0);
+		func = zend_class_find_method(ce, method);
+		zend_string_release(method);
+	} else {
+		func = zend_hash_str_find_ptr_lc(EG(function_table), new_break->func_name, new_break->func_len);
 	}
 
-	if (!(func = zend_hash_str_find_ptr_lc(func_table, new_break->func_name, new_break->func_len))) {
+	if (!func) {
 		if (new_break->class_name != NULL && new_break->func_name != NULL) {
 			phpdbg_error("Method %s doesn't exist in class %s", new_break->func_name, new_break->class_name);
 			return 2;
@@ -980,22 +994,45 @@ static inline phpdbg_breakbase_t *phpdbg_find_breakpoint_symbol(zend_function *f
 	}
 } /* }}} */
 
+/* Whether `written`, a name as a breakpoint writes it, names `declared`: exactly when `exact` holds, and in any case
+ * otherwise. */
+static bool phpdbg_breakpoint_names(const zend_string *written, const zend_string *declared, bool exact)
+{
+	return exact ? zend_string_equals(written, declared) : zend_string_equals_ci(written, declared);
+}
+
 static inline phpdbg_breakbase_t *phpdbg_find_breakpoint_method(zend_op_array *ops) /* {{{ */
 {
 	HashTable *class_table;
-	phpdbg_breakbase_t *brake = NULL;
-	zend_string *class_lcname = zend_string_tolower(ops->scope->name);
+	phpdbg_breakbase_t *brake;
+	zend_string *class_name, *func_name;
+	/* PHP#: a PHP# class is named by its exact name, and the methods of a class below one by theirs, spec section 24,
+	 * so a breakpoint written in another case is another class's or method's. A breakpoint is kept under the names it is
+	 * written with, or in lowercase for a plain PHP class loaded when it was set, so a method written as declared is
+	 * found at once, and a plain PHP class's in any case. */
+	bool exact_class = ops->scope->sharp_flags & SHARP_CLASS_EXACT_KEY;
+	bool exact_method = ops->scope->sharp_flags & SHARP_CLASS_EXACT_NAMES;
 
-	if ((class_table = zend_hash_find_ptr(&PHPDBG_G(bp)[PHPDBG_BREAK_METHOD], class_lcname))) {
-		zend_string *lcname = zend_string_tolower(ops->function_name);
-
-		brake = zend_hash_find_ptr(class_table, lcname);
-
-		zend_string_release(lcname);
+	if ((class_table = zend_hash_find_ptr(&PHPDBG_G(bp)[PHPDBG_BREAK_METHOD], ops->scope->name))
+			&& (brake = zend_hash_find_ptr(class_table, ops->function_name))) {
+		return brake;
+	}
+	if (exact_class && exact_method) {
+		return NULL;
 	}
 
-	zend_string_release(class_lcname);
-	return brake;
+	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&PHPDBG_G(bp)[PHPDBG_BREAK_METHOD], class_name, class_table) {
+		if (!phpdbg_breakpoint_names(class_name, ops->scope->name, exact_class)) {
+			continue;
+		}
+		ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(class_table, func_name, brake) {
+			if (phpdbg_breakpoint_names(func_name, ops->function_name, exact_method)) {
+				return brake;
+			}
+		} ZEND_HASH_FOREACH_END();
+	} ZEND_HASH_FOREACH_END();
+
+	return NULL;
 } /* }}} */
 
 static inline phpdbg_breakbase_t *phpdbg_find_breakpoint_opline(phpdbg_opline_ptr_t opline) /* {{{ */

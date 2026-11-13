@@ -99,6 +99,8 @@ function keep(string $key, ?\Closure $compute = null): mixed {}
 
 function equals(mixed $value, mixed $other): bool {}
 
+function jsonEncode(mixed $value, int $flags, int $indent): string {}
+
 function arrayOf(mixed $value, mixed $receiver = null): mixed {}
 
 function returned(mixed $result, object|string|null $implementer, string $method, string $types, string $target): mixed {}
@@ -106,6 +108,8 @@ function returned(mixed $result, object|string|null $implementer, string $method
 function elements(object $object, bool $pairs): Sequence {}
 
 function properties(string $type): array {}
+
+function methods(string $type): array {}
 
 function typeArguments(string $type): array {}
 

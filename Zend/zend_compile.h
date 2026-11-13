@@ -362,16 +362,8 @@ typedef struct _zend_oparray_context {
 #define ZEND_ACC_SHARP_GENERIC           (1U << 31) /* X  |     |     |     */
 /*                                                        |     |     |     */
 /* PHP# Class Flags, in sharp_flags of zend_class_entry,  |     |     |     */
-/* since ce_flags has no free bit (unused: 2-7)           |     |     |     */
-/* ====================                                   |     |     |     */
-/*                                                        |     |     |     */
-/* PHP#: a property of the class, its own or inherited,   |     |     |     */
-/* has ZEND_ACC_SHARP_CROSSING                            |     |     |     */
-#define SHARP_CLASS_HAS_CROSSING_PROPS   (1 <<  0) /*  X  |     |     |     */
-/*                                                        |     |     |     */
-/* PHP#: a property of the class, its own or inherited,   |     |     |     */
-/* has ZEND_ACC_SHARP_TYPED                               |     |     |     */
-#define SHARP_CLASS_HAS_TYPED_PROPS      (1 <<  1) /*  X  |     |     |     */
+/* are the SHARP_CLASS_* of Zend/zend.h, which            |     |     |     */
+/* zend_object_handlers.h reads before this file          |     |     |     */
 /*                                                        |     |     |     */
 /* Function Flags (unused: 30)                            |     |     |     */
 /* ==============                                         |     |     |     */

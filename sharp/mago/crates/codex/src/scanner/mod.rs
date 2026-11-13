@@ -71,6 +71,7 @@ use crate::defaults_trait_name;
 use crate::identifier::method::MethodIdentifier;
 use crate::metadata::CodebaseMetadata;
 use crate::metadata::class_like::ClassLikeMetadata;
+use crate::metadata::class_like::class_like_key;
 use crate::metadata::r#extern::ExternMetadata;
 use crate::metadata::r#extern::ExternNamespaceMetadata;
 use crate::metadata::flags::MetadataFlags;
@@ -329,7 +330,7 @@ impl Scanner {
         let mut class_like_metadata =
             self.codebase.class_likes.remove(&current_class).expect("Expected class-like metadata to be present");
 
-        let name = ascii_lowercase_word(method.name);
+        let name = class_like_metadata.method_key(method.name);
 
         if class_like_metadata.methods.contains(&name) {
             if class_like_metadata.pseudo_methods.contains(&name)
@@ -458,7 +459,7 @@ impl Scanner {
         };
         let interface_name = interface_metadata.name;
         let original_name = defaults_trait_name(interface_metadata.original_name.as_bytes());
-        let name = ascii_lowercase_word(original_name.as_bytes());
+        let name = class_like_key(original_name.as_bytes(), true);
         let mut defaults = ClassLikeMetadata::new(
             name,
             original_name,
@@ -506,7 +507,8 @@ impl Scanner {
                 continue;
             }
 
-            let method_name = ascii_lowercase_word(method.name.value);
+            // The interface and its trait are PHP#'s, so each keys the method by its exact name.
+            let method_name = defaults.method_key(method.name.value);
             let Some(signature) = self.codebase.function_likes.get(&(interface_name, method_name)) else {
                 continue;
             };
@@ -535,7 +537,7 @@ impl Scanner {
         let gives_property =
             interface.members.iter().any(|member| matches!(member, ClassLikeMember::Property(Property::Computed(_))));
         if !defaults.methods.is_empty() || gives_property {
-            self.codebase.symbols.add_symbol_name(name, SymbolKind::Trait);
+            self.codebase.symbols.add_class_like(name, SymbolKind::Trait, true);
             self.codebase.class_likes.insert(name, defaults.into());
         }
     }
@@ -556,8 +558,8 @@ impl Scanner {
         };
         self.register_method(&parts, context);
 
-        let name = ascii_lowercase_word(parts.name);
         if let Some(class) = self.stack.last().and_then(|class| self.codebase.class_likes.get(class))
+            && let name = class.method_key(parts.name)
             && let Some(method) = self.codebase.function_likes.get_mut(&(class.name, name))
             && method.span == parts.span
         {
@@ -1122,7 +1124,7 @@ where
         self.register_method(&parts, context);
 
         if let Some(class) = self.stack.last().and_then(|class| self.codebase.class_likes.get(class))
-            && let Some(method) = self.codebase.function_likes.get_mut(&(class.name, ascii_lowercase_word(parts.name)))
+            && let Some(method) = self.codebase.function_likes.get_mut(&(class.name, class.method_key(parts.name)))
         {
             method.flags |= MetadataFlags::OPERATOR;
             // `operator ==` runs as `op_Equality(?Money $a, ?Money $b)`, which lifts `null` itself, so the PHP method
@@ -1156,7 +1158,7 @@ where
         self.register_method(&parts, context);
 
         if let Some(class) = self.stack.last().and_then(|class| self.codebase.class_likes.get(class))
-            && let Some(method) = self.codebase.function_likes.get_mut(&(class.name, ascii_lowercase_word(parts.name)))
+            && let Some(method) = self.codebase.function_likes.get_mut(&(class.name, class.method_key(parts.name)))
             && let Some(method_metadata) = &mut method.method_metadata
         {
             method_metadata.is_static = true;
@@ -1732,11 +1734,9 @@ mod tests {
             .get(&ascii_lowercase_word(b"PHPUnit\\Framework\\TestCase"))
             .expect("TestCase should be present in merged codebase");
 
+        // The scan keeps the parent as written, and the populator keys it.
         assert!(!tc.flags.is_polyfill(), "merged TestCase should be the real definition");
-        assert_eq!(
-            tc.direct_parent_class.map(|p| p.to_string()),
-            Some("PHPUnit\\Framework\\Assert".to_ascii_lowercase()),
-        );
+        assert_eq!(tc.direct_parent_class.map(|p| p.to_string()), Some("PHPUnit\\Framework\\Assert".to_owned()));
     }
 
     #[test]

@@ -1,0 +1,15 @@
+namespace FixedStrings;
+
+public enum Weights
+{
+    case One;
+
+    private const int COUNT = 3;
+    private const float SHARE = 0.5;
+    private const string TOUCHES = "COUNT(*) OVER (PARTITION BY order_id)";
+    private const string LINEAR = `1.0 / ${Weights.COUNT} as weight`;
+    private const string SHARED = `${Weights.SHARE} / ${Weights.TOUCHES}`;
+    private const string PER = "1.0 / " + Weights.TOUCHES;
+
+    public static List<string> texts() => [Weights.LINEAR, Weights.SHARED, Weights.PER, `${Weights.COUNT} rows`];
+}

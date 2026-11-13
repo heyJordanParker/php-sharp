@@ -2607,6 +2607,25 @@ ZEND_API ZEND_COLD zval* ZEND_FASTCALL zend_undefined_index_write(HashTable *ht,
 
 ZEND_API ZEND_COLD void ZEND_FASTCALL zend_undefined_method(const zend_class_entry *ce, const zend_string *method)
 {
+	/* PHP#: a class with SHARP_CLASS_EXACT_NAMES finds a method only by its exact name, so a call that writes it in
+	 * another case names the method it meant, of twins as `total` and `Total` the one whose name sorts first, as mago
+	 * does. The search runs only here, once the call has failed. */
+	if (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) {
+		const zend_string *meant = NULL;
+		zend_function *declared;
+		ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, declared) {
+			const zend_string *name = declared->common.function_name;
+			if (zend_string_equals_ci(name, method)
+			 && (!meant || zend_binary_strcmp(ZSTR_VAL(name), ZSTR_LEN(name), ZSTR_VAL(meant), ZSTR_LEN(meant)) < 0)) {
+				meant = name;
+			}
+		} ZEND_HASH_FOREACH_END();
+		if (meant) {
+			zend_throw_error(NULL, "Call to undefined method %s::%s(); did you mean %s()?",
+				ZSTR_VAL(ce->name), ZSTR_VAL(method), ZSTR_VAL(meant));
+			return;
+		}
+	}
 	zend_throw_error(NULL, "Call to undefined method %s::%s()", ZSTR_VAL(ce->name), ZSTR_VAL(method));
 }
 

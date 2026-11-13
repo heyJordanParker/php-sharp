@@ -6,12 +6,14 @@ use foldhash::HashMap;
 use mago_allocator::Arena;
 use mago_codex::identifier::function_like::FunctionLikeIdentifier;
 use mago_codex::metadata::CodebaseMetadata;
+use mago_codex::metadata::class_like::ClassLikeMetadata;
 use mago_codex::metadata::r#extern::ExternMetadata;
 use mago_codex::metadata::function_like::FunctionLikeMetadata;
 use mago_codex::metadata::parameter::FunctionLikeParameterMetadata;
 use mago_codex::ttype::atomic::TAtomic;
 use mago_codex::ttype::atomic::callable::TCallable;
 use mago_codex::ttype::atomic::callable::TCallableSignature;
+use mago_codex::ttype::atomic::object::TObject;
 use mago_codex::ttype::get_array_parameters;
 use mago_codex::ttype::union::TUnion;
 use mago_names::binding::Binding;
@@ -153,6 +155,113 @@ pub(crate) fn record_behaviors<A>(
     }
 }
 
+/// Records the `parse` and `tryParse` spec section 10 gives the struct or PHP# class `class`, whose bodies the bridge
+/// writes, so each one's function type lists the effects of what it runs. `parse` calls the main constructor, writes
+/// each property field through its `set` accessor, and calls the `parse` of each struct or class a field's type holds,
+/// and `tryParse` calls `parse`. Each makes the object it gives, so neither changes state. A call that reaches a
+/// `foreign` object has its class's effect, as a written call does.
+pub(crate) fn record_parse<A>(
+    context: &Context<'_, '_, A>,
+    artifacts: &mut AnalysisArtifacts,
+    class: &ClassLikeMetadata,
+) where
+    A: Arena,
+{
+    let codebase = context.codebase;
+    let span = class.span;
+    let summary = |body, member: &[u8]| {
+        // Each member of a `foreign` class has its class's effect, as `record` gives a written one.
+        let effects = foreign_class(codebase, class.name)
+            .map(|effect| (Effect::Foreign(effect), span, member_of_foreign_class()))
+            .into_iter()
+            .collect();
+
+        EffectSummary {
+            body,
+            member: word(member),
+            effects,
+            calls: Vec::new(),
+            changes: Vec::new(),
+            function_values: Vec::new(),
+            readonly_calls: Vec::new(),
+            imports: Arc::clone(&context.imported_names),
+            scope: Arc::clone(&context.scope),
+        }
+    };
+    // `callee`, a member of an object of `object` that messages name `member`, runs as a written call of it does.
+    let reach = |summary: &mut EffectSummary, object: Word, callee: Body, member: &[u8]| {
+        if let Some(effect) = foreign_class(codebase, object) {
+            let class_name =
+                codebase.get_class_like(object.as_bytes()).map_or(object, |metadata| metadata.original_name);
+            summary.effects.push((Effect::Foreign(effect), span, (class_name, word(member))));
+        } else {
+            summary.calls.push(Call { callee, span, receiver: Roots::new(), arguments: Vec::new() });
+        }
+    };
+    let parse = Body::Method(class.name, class.method_key(b"parse"));
+
+    let mut parsing = summary(parse, b"parse");
+    let constructor = codebase
+        .get_declaring_method_class(class.name.as_bytes(), b"__construct")
+        .and_then(|declaring| codebase.get_class_like(declaring.as_bytes()));
+    if let Some(constructor) = constructor {
+        if constructor.flags.is_sharp() {
+            reach(&mut parsing, class.name, Body::Method(constructor.name, word(b"__construct")), b"__construct");
+        } else {
+            let callee = (constructor.original_name, empty_word());
+            let declaration = extern_of(codebase, class.name, word(b"__construct"));
+            parsing
+                .effects
+                .extend(plain_php_effects(declaration, callee).into_iter().map(|effect| (effect, span, callee)));
+        }
+    }
+    let mut nested = Vec::new();
+    for field in codebase.struct_parse_fields(class.name.as_bytes()) {
+        if !field.is_parameter {
+            let property = word([b"$".as_slice(), field.name].concat());
+            let Some(declaring) = class.declaring_property_ids.get(&property) else {
+                unreachable!("a property field is one of its class's properties, each of which has a declaring class");
+            };
+            let set = Body::Accessor(codebase.class_key(declaring.as_bytes()), property, word(b"set"));
+            reach(&mut parsing, class.name, set, field.name);
+        }
+        parsed_classes(codebase, field.r#type, &mut nested);
+    }
+    for nested in nested {
+        reach(&mut parsing, nested.name, Body::Method(nested.name, nested.method_key(b"parse")), b"parse");
+    }
+
+    let mut trying = summary(Body::Method(class.name, class.method_key(b"tryParse")), b"tryParse");
+    reach(&mut trying, class.name, parse, b"parse");
+
+    artifacts.effect_summaries.push(parsing);
+    artifacts.effect_summaries.push(trying);
+}
+
+/// Pushes onto `parsed` each struct or PHP# class `r#type` holds, also as a collection's element, once each, whose
+/// `parse` the bridge writes. A `parse` that reads a field of `r#type` calls each one's `parse`, as the bridge's
+/// `parse_build` writes it.
+fn parsed_classes<'codebase>(
+    codebase: &'codebase CodebaseMetadata,
+    r#type: &TUnion,
+    parsed: &mut Vec<&'codebase ClassLikeMetadata>,
+) {
+    for atomic in r#type.types.iter() {
+        match atomic {
+            TAtomic::Object(TObject::Named(object)) if codebase.parses(object.name.as_bytes()) => {
+                let Some(class) = codebase.get_class_like(object.name.as_bytes()) else {
+                    unreachable!("a class that parses is in the codebase");
+                };
+                if !parsed.iter().any(|seen| seen.name == class.name) {
+                    parsed.push(class);
+                }
+            }
+            TAtomic::Array(array) => parsed_classes(codebase, &get_array_parameters(array, codebase).1, parsed),
+            _ => {}
+        }
+    }
+}
+
 /// Records each lambda and method value `value` holds where a `.sharp` file gives it the place of type `declared` at
 /// `span`, when `declared`'s function types list effects. Only the solve knows the effects of the body such a value
 /// runs, so it holds the value to the effects every one of those types lists, and refuses it with `code`, the code a
@@ -260,7 +369,7 @@ fn method_value_runs(codebase: &CodebaseMetadata, class: Word, method: &[u8]) ->
     } else if declaring.flags.is_sharp() && metadata.method_metadata.as_ref().is_some_and(|m| m.is_abstract) {
         Runs::Foreign { callee, effects: metadata.uses.iter().map(|effect| Effect::Foreign(*effect)).collect() }
     } else if declaring.flags.is_sharp() {
-        Runs::Body(Body::Method(ascii_lowercase_word(declaring_class.as_bytes()), lowercase_method))
+        Runs::Body(Body::Method(declaring.name, declaring.method_key(method)))
     } else if is_prelude_stub(declaring_class) {
         Runs::Foreign { callee, effects: Vec::new() }
     } else {
@@ -637,7 +746,7 @@ where
         let property = php_variable_name(property);
         let declaring = *self.codebase().get_class_like(class.as_bytes())?.declaring_property_ids.get(&property)?;
 
-        Some(Body::Accessor(ascii_lowercase_word(declaring.as_bytes()), property, word(accessor)))
+        Some(Body::Accessor(self.codebase().class_key(declaring.as_bytes()), property, word(accessor)))
     }
 
     fn read_property(&mut self, object: &Expression<'arena>, property: &ClassLikeMemberSelector<'arena>, span: Span) {
@@ -926,7 +1035,8 @@ where
                 continue;
             };
 
-            let callee = Body::Method(ascii_lowercase_word(class.as_bytes()), ascii_lowercase_word(method.as_bytes()));
+            let class = self.codebase().class_key(class.as_bytes());
+            let callee = Body::Method(class, self.codebase().method_key(class, method.as_bytes()));
             let arguments = operands.iter().map(|operand| self.roots(operand)).collect();
             self.summary.calls.push(Call { callee, span, receiver: Roots::new(), arguments });
         }
@@ -981,10 +1091,8 @@ where
                 return;
             }
 
-            let callee = Body::Method(
-                ascii_lowercase_word(declaring_class.as_bytes()),
-                ascii_lowercase_word(method_name.as_bytes()),
-            );
+            let declaring_class = codebase.class_key(declaring_class.as_bytes());
+            let callee = Body::Method(declaring_class, codebase.method_key(declaring_class, method_name.as_bytes()));
             self.summary.calls.push(Call { callee, span, receiver: receiver_roots, arguments: roots });
 
             return;
@@ -1074,7 +1182,7 @@ where
 
         let span = instantiation.span();
         let (declaring, constructor) = match &instantiation.constructor {
-            Some(constructor) => (class, ascii_lowercase_word(constructor.name.value)),
+            Some(constructor) => (class, class.method_key(constructor.name.value)),
             None => {
                 let constructor = word(b"__construct");
                 let declaring = codebase
@@ -1095,7 +1203,7 @@ where
                 roots = self.argument_roots(arguments, &metadata.parameters);
                 self.passed_functions(arguments, &metadata.parameters, &Roots::new(), &roots);
             }
-            let callee = Body::Method(ascii_lowercase_word(declaring.name.as_bytes()), constructor);
+            let callee = Body::Method(declaring.name, constructor);
             self.summary.calls.push(Call { callee, span, receiver: Roots::new(), arguments: roots });
         } else if !is_prelude_stub(class.name) {
             let declaration = extern_of(codebase, class.name, constructor);
@@ -1412,11 +1520,13 @@ pub(crate) fn extern_of(codebase: &CodebaseMetadata, class: Word, member: Word) 
         });
     }
 
-    let mut current = Some(ascii_lowercase_word(class.as_bytes()));
+    // The chain goes by the class-likes' keys, spec section 24, and an `extern` names a plain PHP class in lowercase.
+    let mut current = Some(codebase.class_key(class.as_bytes()));
     let mut remaining =
         codebase.get_class_like(class.as_bytes()).map_or(0, |metadata| metadata.all_parent_classes.len());
     while let Some(class) = current {
-        if let Some(declaration) = declared((class, member)).or_else(|| declared((class, empty_word()))) {
+        let named = ascii_lowercase_word(class.as_bytes());
+        if let Some(declaration) = declared((named, member)).or_else(|| declared((named, empty_word()))) {
             return Some(declaration);
         }
 
@@ -1424,10 +1534,7 @@ pub(crate) fn extern_of(codebase: &CodebaseMetadata, class: Word, member: Word) 
             break;
         }
         remaining -= 1;
-        current = codebase
-            .get_class_like(class.as_bytes())
-            .and_then(|metadata| metadata.direct_parent_class)
-            .map(|parent| ascii_lowercase_word(parent.as_bytes()));
+        current = codebase.get_class_like(class.as_bytes()).and_then(|metadata| metadata.direct_parent_class);
     }
 
     None

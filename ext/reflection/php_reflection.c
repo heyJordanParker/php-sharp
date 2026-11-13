@@ -2681,7 +2681,8 @@ ZEND_METHOD(ReflectionParameter, __construct)
 				{
 					/* nothing to do. don't set is_closure since is the invoke handler,
 					   not the closure itself */
-				} else if ((fptr = zend_hash_find_ptr(&ce->function_table, lcname)) == NULL) {
+				} else if ((fptr = zend_hash_find_ptr(&ce->function_table,
+						(ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? name : lcname)) == NULL) {
 					// %S is used for zend_string pointers by smart str printing, but normally
 					// is for wide character strings and so compilers complain if this is inline
 					const char *format = "Method %S::%S() does not exist";
@@ -3481,7 +3482,8 @@ static void instantiate_reflection_method(INTERNAL_FUNCTION_PARAMETERS, bool is_
 		&& (mptr = zend_get_closure_invoke_method(orig_obj)) != NULL)
 	{
 		/* do nothing, mptr already set */
-	} else if ((mptr = zend_hash_str_find_ptr(&ce->function_table, lcname, method_name_len)) == NULL) {
+	} else if ((mptr = zend_hash_str_find_ptr(&ce->function_table,
+			(ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? method_name : lcname, method_name_len)) == NULL) {
 		efree(lcname);
 		// %S is used for zend_string pointers by smart str printing, but normally
 		// is for wide character strings and so compilers complain if this is inline
@@ -4660,7 +4662,8 @@ ZEND_METHOD(ReflectionClass, hasMethod)
 
 	GET_REFLECTION_OBJECT_PTR(ce);
 	lc_name = zend_string_tolower(name);
-	RETVAL_BOOL(zend_hash_exists(&ce->function_table, lc_name) || is_closure_invoke(ce, lc_name));
+	RETVAL_BOOL(zend_hash_exists(&ce->function_table, (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? name : lc_name)
+		|| is_closure_invoke(ce, lc_name));
 	zend_string_release(lc_name);
 }
 /* }}} */
@@ -4692,7 +4695,8 @@ ZEND_METHOD(ReflectionClass, getMethod)
 		   method and not the closure definition itself */
 		reflection_method_factory(ce, mptr, NULL, return_value);
 		zval_ptr_dtor(&obj_tmp);
-	} else if ((mptr = zend_hash_find_ptr(&ce->function_table, lc_name)) != NULL) {
+	} else if ((mptr = zend_hash_find_ptr(&ce->function_table,
+			(ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? name : lc_name)) != NULL) {
 		reflection_method_factory(ce, mptr, NULL, return_value);
 	} else {
 		// %S is used for zend_string pointers by smart str printing, but normally
@@ -5658,18 +5662,16 @@ ZEND_METHOD(ReflectionClass, getTraitAliases)
 
 				if (!class_name) {
 					uint32_t j = 0;
-					zend_string *lcname = zend_string_tolower(cur_ref->method_name);
 
 					for (j = 0; j < ce->num_traits; j++) {
-						zend_class_entry *trait =
-							zend_hash_find_ptr(CG(class_table), ce->trait_names[j].lc_name);
+						zend_class_entry *trait = zend_class_table_find_ptr(
+							CG(class_table), ce->trait_names[j].name, ce->trait_names[j].lc_name);
 						ZEND_ASSERT(trait && "Trait must exist");
-						if (zend_hash_exists(&trait->function_table, lcname)) {
+						if (zend_class_find_method(trait, cur_ref->method_name)) {
 							class_name = trait->name;
 							break;
 						}
 					}
-					zend_string_release_ex(lcname, 0);
 					ZEND_ASSERT(class_name != NULL);
 				}
 

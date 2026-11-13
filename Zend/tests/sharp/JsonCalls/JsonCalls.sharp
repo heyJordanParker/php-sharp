@@ -22,6 +22,24 @@ class JsonCalls
         return [Json.encode(none), Json.encode(empty), Json.encode(loose), Json.encode(numbered), Json.encode(tagged), Json.encode(1.0), Json.encode("a/é")];
     }
 
+    // Nested Maps and Lists, empty ones, and strings holding spaces, a newline, a `/` and a character outside ASCII,
+    // at `indent`.
+    public static string indented(int indent)
+    {
+        Map<string, int> none = [:];
+        List<int> empty = [];
+        Map<string, Any> nested = [
+            "name": "two words",
+            "note": "line one\nline two",
+            "path": "a/é",
+            "total": 1.0,
+            "lists": [[1, 2], empty],
+            "maps": ["inner": ["deep": none]],
+            "none": none,
+        ];
+        return Json.encode(nested, indent: indent);
+    }
+
     public static string untagged()
     {
         Map<string, Any> points = ["at": [new JsonPoint(1): 1]];

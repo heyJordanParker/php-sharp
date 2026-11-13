@@ -1,0 +1,11 @@
+namespace Polymorphic;
+
+// A PHP# override's Map comes back as it is, where the crossing of a plain PHP result would put a Sequence over it.
+public class Tally : Shelf
+{
+    private Map<string, int> counts = ["tea": 3, "pie": 7];
+
+    public override Map<string, int> counted() => this.counts;
+
+    public override List<string> names() => ["tally"];
+}

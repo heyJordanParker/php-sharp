@@ -5,7 +5,6 @@ use mago_reporting::Issue;
 use mago_word::Word;
 use mago_word::WordMap;
 use mago_word::WordSet;
-use mago_word::ascii_lowercase_word;
 use mago_word::word;
 
 use crate::identifier::method::MethodIdentifier;
@@ -156,7 +155,7 @@ pub fn populate_class_like_metadata_iterative(
     for attribute_metadata in &metadata.attributes {
         symbol_references.add_symbol_reference_to_symbol(
             metadata.name,
-            ascii_lowercase_word(attribute_metadata.name.as_bytes()),
+            codebase.class_key(attribute_metadata.name.as_bytes()),
             true,
         );
     }
@@ -164,6 +163,8 @@ pub fn populate_class_like_metadata_iterative(
     for property_name in metadata.get_property_names() {
         metadata.add_declaring_property_id(property_name, classlike_name);
     }
+
+    inherit_exact_names(metadata, codebase);
 
     for method_name in &metadata.methods {
         let method_id = MethodIdentifier::new(classlike_name, *method_name);
@@ -309,7 +310,7 @@ pub fn populate_class_like_metadata_iterative(
     }
 
     if (metadata.kind.is_class() || metadata.kind.is_enum())
-        && metadata.appearing_method_ids.contains_key(&word(b"__tostring"))
+        && metadata.appearing_method_ids.contains_key(&metadata.method_key(b"__toString"))
         && !metadata.all_parent_interfaces.contains(&word(b"stringable"))
     {
         metadata.add_direct_parent_interface(word(b"stringable"));
@@ -319,17 +320,59 @@ pub fn populate_class_like_metadata_iterative(
     codebase.class_likes.insert(classlike_name, entry);
 }
 
+/// Gives a plain PHP class-like `exact_names` when its parent class or an interface it implements has them, as the
+/// engine passes `SHARP_CLASS_EXACT_NAMES` down, spec section 24, and keys each method it declares by its exact name
+/// then. Its ancestors are populated first, so each already knows its own.
+fn inherit_exact_names(metadata: &mut ClassLikeMetadata, codebase: &mut CodebaseMetadata) {
+    if metadata.exact_names
+        || !metadata
+            .direct_parent_class
+            .iter()
+            .chain(metadata.direct_parent_interfaces.iter())
+            .any(|ancestor| codebase.get_class_like_by_word(*ancestor).is_some_and(|ancestor| ancestor.exact_names))
+    {
+        return;
+    }
+
+    metadata.exact_names = true;
+    let class = metadata.name;
+    for key in std::mem::take(&mut metadata.methods) {
+        let exact = match codebase.function_likes.remove(&(class, key)) {
+            Some(mut method) => {
+                let exact = method.original_name;
+                method.name = exact;
+                codebase.function_likes.insert((class, exact), method);
+                exact
+            }
+            None => key,
+        };
+        metadata.methods.insert(exact);
+        if metadata.pseudo_methods.remove(&key) {
+            metadata.pseudo_methods.insert(exact);
+        }
+        for ids in [
+            &mut metadata.appearing_method_ids,
+            &mut metadata.declaring_method_ids,
+            &mut metadata.inheritable_method_ids,
+        ] {
+            if ids.remove(&key).is_some() {
+                ids.insert(exact, MethodIdentifier::new(class, exact));
+            }
+        }
+    }
+}
+
 /// Gives the `parse` and `tryParse` the scanner gives a PHP# class, spec section 10, up to the pair its parent class
 /// declares when the parent declares either, as a plain PHP date class declares `parse(string)`: the class then
 /// inherits the parent's pair, as it inherits any static method, and has no `tryParse` where the parent has none. The
 /// scanner's pair stays in the class's methods, so each population decides again.
 fn inherit_declared_parse(metadata: &mut ClassLikeMetadata, codebase: &CodebaseMetadata, parent_classname: Word) {
-    let names = [word(b"parse"), word(b"tryparse")];
-    let generated = |class: Word, name: Word| {
+    let names: [&[u8]; 2] = [b"parse", b"tryParse"];
+    let generated = |id: &MethodIdentifier| {
         codebase
             .function_likes
-            .get(&(class, name))
-            .zip(codebase.class_likes.get(&class))
+            .get(&id.get_key())
+            .zip(codebase.class_likes.get(&id.get_class_name()))
             .is_some_and(|(method, class_like)| method.span == class_like.span)
     };
     let Some(parent) = codebase.get_class_like_by_word(parent_classname) else {
@@ -337,23 +380,26 @@ fn inherit_declared_parse(metadata: &mut ClassLikeMetadata, codebase: &CodebaseM
     };
     let parent_declares = names
         .iter()
-        .any(|name| parent.declaring_method_ids.get(name).is_some_and(|id| !generated(id.get_class_name(), *name)));
+        .any(|name| parent.declaring_method_ids.get(&parent.method_key(name)).is_some_and(|id| !generated(id)));
     // The class being populated is out of the codebase until it is done.
-    let own_generated =
-        codebase.function_likes.get(&(metadata.name, names[0])).is_some_and(|parse| parse.span == metadata.span);
+    let own_generated = codebase
+        .function_likes
+        .get(&(metadata.name, metadata.method_key(names[0])))
+        .is_some_and(|parse| parse.span == metadata.span);
     if !metadata.flags.is_sharp() || !own_generated || !parent_declares {
         return;
     }
 
     for name in names {
+        let (key, parent_key) = (metadata.method_key(name), parent.method_key(name));
         for (ids, parent_ids) in [
             (&mut metadata.declaring_method_ids, &parent.declaring_method_ids),
             (&mut metadata.appearing_method_ids, &parent.appearing_method_ids),
             (&mut metadata.inheritable_method_ids, &parent.inheritable_method_ids),
         ] {
-            match parent_ids.get(&name) {
-                Some(id) => ids.insert(name, *id),
-                None => ids.remove(&name),
+            match parent_ids.get(&parent_key) {
+                Some(id) => ids.insert(key, *id),
+                None => ids.remove(&key),
             };
         }
     }
@@ -579,7 +625,7 @@ pub fn populate_class_like_types(
         for attribute_metadata in &constant.attributes {
             symbol_references.add_class_member_reference_to_symbol(
                 (name, *constant_name),
-                ascii_lowercase_word(attribute_metadata.name.as_bytes()),
+                codebase_symbols.class_key(attribute_metadata.name.as_bytes()),
                 true,
             );
         }
@@ -611,7 +657,7 @@ pub fn populate_class_like_types(
         for attribute_metadata in &enum_case.attributes {
             symbol_references.add_class_member_reference_to_symbol(
                 (name, *enum_case_name),
-                ascii_lowercase_word(attribute_metadata.name.as_bytes()),
+                codebase_symbols.class_key(attribute_metadata.name.as_bytes()),
                 true,
             );
         }

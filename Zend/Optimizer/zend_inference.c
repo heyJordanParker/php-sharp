@@ -2392,7 +2392,7 @@ static uint32_t zend_convert_type(const zend_script *script, zend_type type, zen
 			if (ZEND_TYPE_HAS_NAME(type)) {
 				zend_string *lcname = zend_string_tolower(ZEND_TYPE_NAME(type));
 				// TODO: Pass through op_array.
-				*pce = zend_optimizer_get_class_entry(script, NULL, lcname);
+				*pce = zend_optimizer_get_class_entry(script, NULL, ZEND_TYPE_NAME(type), lcname);
 				zend_string_release_ex(lcname, 0);
 			}
 		}
@@ -2491,7 +2491,7 @@ static const zend_property_info *zend_fetch_static_prop_info(const zend_script *
 			}
 		} else if (opline->op2_type == IS_CONST) {
 			zval *zv = CRT_CONSTANT(opline->op2);
-			ce = zend_optimizer_get_class_entry(script, op_array, Z_STR_P(zv + 1));
+			ce = zend_optimizer_get_class_entry(script, op_array, Z_STR_P(zv), Z_STR_P(zv + 1));
 		}
 
 		if (ce) {
@@ -3383,7 +3383,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 			} else if (opline->op2_type == IS_CONST) {
 				zval *zv = CRT_CONSTANT(opline->op2);
 				if (Z_TYPE_P(zv) == IS_STRING) {
-					ce = zend_optimizer_get_class_entry(script, op_array, Z_STR_P(zv+1));
+					ce = zend_optimizer_get_class_entry(script, op_array, Z_STR_P(zv), Z_STR_P(zv+1));
 					UPDATE_SSA_OBJ_TYPE(ce, 0, ssa_op->result_def);
 				} else {
 					UPDATE_SSA_OBJ_TYPE(NULL, 0, ssa_op->result_def);

@@ -168,29 +168,23 @@ PHPDBG_API const char *phpdbg_current_file(void) /* {{{ */
 PHPDBG_API const zend_function *phpdbg_get_function(const char *fname, const char *cname) /* {{{ */
 {
 	zend_function *func = NULL;
-	zend_string *lfname = zend_string_init(fname, strlen(fname), 0);
-	zend_string *tmp = zend_string_tolower(lfname);
-	zend_string_release(lfname);
-	lfname = tmp;
+	zend_string *name = zend_string_init(fname, strlen(fname), 0);
 
 	if (cname) {
-		zend_class_entry *ce;
-		zend_string *lcname = zend_string_init(cname, strlen(cname), 0);
-		tmp = zend_string_tolower(lcname);
-		zend_string_release(lcname);
-		lcname = tmp;
-		ce = zend_lookup_class(lcname);
+		/* A PHP# class is found by its exact name, and its methods too, spec section 24. */
+		zend_string *class_name = zend_string_init(cname, strlen(cname), 0);
+		zend_class_entry *ce = zend_lookup_class(class_name);
 
-		zend_string_release(lcname);
+		zend_string_release(class_name);
 
 		if (ce) {
-			func = zend_hash_find_ptr(&ce->function_table, lfname);
+			func = zend_class_find_method(ce, name);
 		}
 	} else {
-		func = zend_hash_find_ptr(EG(function_table), lfname);
+		func = zend_hash_find_ptr_lc(EG(function_table), name);
 	}
 
-	zend_string_release(lfname);
+	zend_string_release(name);
 	return func;
 } /* }}} */
 
@@ -407,7 +401,9 @@ int phpdbg_safe_class_lookup(const char *name, int name_length, zend_class_entry
 		}
 
 		phpdbg_try_access {
-			*ce = zend_hash_str_find_ptr_lc(EG(class_table), name, name_length);
+			zend_string *str_name = zend_string_init(name, name_length, 0);
+			*ce = zend_class_table_find_ptr(EG(class_table), str_name, NULL);
+			zend_string_release(str_name);
 		} phpdbg_catch_access {
 			phpdbg_error("Could not fetch class %.*s, invalid data source", name_length, name);
 		} phpdbg_end_try_access();

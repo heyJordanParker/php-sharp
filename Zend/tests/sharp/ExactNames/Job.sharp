@@ -1,0 +1,10 @@
+namespace ExactNames;
+
+import Lib.Framework;
+
+public class Job : Framework
+{
+    protected override string handle() => "job";
+
+    public string describeit() => "a second method beside describeIt";
+}

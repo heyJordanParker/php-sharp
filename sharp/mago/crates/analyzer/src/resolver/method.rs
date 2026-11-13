@@ -49,7 +49,6 @@ use mago_syntax::cst::Expression;
 use mago_syntax::cst::NullSafePropertyAccess;
 use mago_syntax::cst::PropertyAccess;
 use mago_word::Word;
-use mago_word::ascii_lowercase_word;
 use mago_word::concat_word;
 use mago_word::word;
 
@@ -132,7 +131,8 @@ pub struct ResolvedMethod {
 pub struct UndocumentedMethod {
     /// The class on which the undocumented method was requested.
     pub classname: Word,
-    /// The requested method name, rather than `__call` or `__callStatic`.
+    /// The requested method name, rather than `__call` or `__callStatic`, as the class keys a method: as written on a
+    /// class with exact names, spec section 24, and lowercase on any other, as PHP folds it.
     pub method_name: Word,
     /// The span of the receiver or class expression.
     pub target_span: Span,
@@ -357,7 +357,8 @@ where
         }
 
         if let Some(name) = resolved_selector.name() {
-            method_names.push(ascii_lowercase_word(name.as_bytes()));
+            // As written: each receiver's class keys it, see `get_method_candidates_from_object`.
+            method_names.push(word(name.as_bytes()));
         } else {
             result.has_invalid_target = true;
         }
@@ -570,7 +571,10 @@ where
                                 result.undocumented_methods.extend(resolved_magic_call_method.iter().cloned().map(
                                     |magic_method| UndocumentedMethod {
                                         classname,
-                                        method_name,
+                                        method_name: context.codebase.method_key(
+                                            context.codebase.class_key(classname.as_bytes()),
+                                            method_name.as_bytes(),
+                                        ),
                                         target_span: object.span(),
                                         selector_span: selector.span(),
                                         magic_method,
@@ -684,7 +688,7 @@ where
     }
 
     for method_id in asserted_descendant_method_references {
-        artifacts.symbol_references.add_reference_for_method_call(&block_context.scope, &method_id);
+        artifacts.symbol_references.add_reference_for_method_call(context.codebase, &block_context.scope, &method_id);
     }
     artifacts.readonly_calls.append(&mut readonly_calls);
 
@@ -736,7 +740,7 @@ pub(crate) fn check_call_through_readonly<A>(
     }
 
     readonly_calls.push(ReadonlyCall {
-        callee: Body::Method(ascii_lowercase_word(declaring_class.as_bytes()), identifier.get_method_name()),
+        callee: Body::Method(context.codebase.class_key(declaring_class.as_bytes()), identifier.get_method_name()),
         span: selector.span(),
         caller,
         call,
@@ -846,7 +850,8 @@ where
         } else if !magic_call.is_empty() {
             result.undocumented_methods.extend(magic_call.into_iter().map(|magic_method| UndocumentedMethod {
                 classname: name,
-                method_name,
+                method_name:
+                    context.codebase.method_key(context.codebase.class_key(name.as_bytes()), method_name.as_bytes()),
                 target_span,
                 selector_span: selector.span(),
                 magic_method,
@@ -1168,6 +1173,9 @@ where
         return candidates;
     };
 
+    // The call's name as the class keys it: as written for a class with `exact_names`, so another case of it reaches
+    // nothing, spec section 24, and in lowercase for any other.
+    let method_name = class_metadata.method_key(method_name.as_bytes());
     let mut method_id = MethodIdentifier::new(class_metadata.original_name, method_name);
     if !context.codebase.method_identifier_exists(&method_id) {
         method_id = context.codebase.get_declaring_method_identifier(&method_id);
@@ -1204,13 +1212,11 @@ where
         }
 
         if function_like_metadata.flags.is_magic_method() {
-            let lowercase_method = ascii_lowercase_word(method_name.as_bytes());
-            let is_pseudo = class_metadata.pseudo_methods.contains(&lowercase_method)
+            let is_pseudo = class_metadata.pseudo_methods.contains(&method_name)
                 || class_metadata.all_parent_classes.iter().any(|parent_name| {
-                    context
-                        .codebase
-                        .get_class_like(parent_name.as_bytes())
-                        .is_some_and(|parent| parent.pseudo_methods.contains(&lowercase_method))
+                    context.codebase.get_class_like(parent_name.as_bytes()).is_some_and(|parent| {
+                        parent.pseudo_methods.contains(&parent.method_key(method_name.as_bytes()))
+                    })
                 });
 
             let mut is_inherited = false;
@@ -1218,8 +1224,9 @@ where
             if is_pseudo {
                 for parent_class_name in &class_metadata.all_parent_classes {
                     if let Some(parent_metadata) = context.codebase.get_class_like(parent_class_name.as_bytes())
-                        && parent_metadata.methods.contains(&lowercase_method)
-                        && !parent_metadata.pseudo_methods.contains(&lowercase_method)
+                        && let parent_key = parent_metadata.method_key(method_name.as_bytes())
+                        && parent_metadata.methods.contains(&parent_key)
+                        && !parent_metadata.pseudo_methods.contains(&parent_key)
                     {
                         is_inherited = true;
                         break;
@@ -1427,11 +1434,13 @@ pub(crate) fn untyped_implementations(
     if method.flags.is_sharp() || method.return_type_declaration_metadata.is_some() {
         return Vec::new();
     }
-    let name = ascii_lowercase_word(method.name.as_bytes());
     let mut members: Vec<MethodIdentifier> = class
         .all_parent_interfaces
         .iter()
-        .filter_map(|interface| codebase.get_class_like(interface.as_bytes())?.declaring_method_ids.get(&name).copied())
+        .filter_map(|interface| {
+            let interface = codebase.get_class_like(interface.as_bytes())?;
+            interface.declaring_method_ids.get(&interface.method_key(method.original_name.as_bytes())).copied()
+        })
         .filter(|member| {
             codebase.get_class_like(member.get_class_name().as_bytes()).is_some_and(|interface| {
                 codebase.get_method_by_id(member).is_some_and(|member| interface.checks_results_at_call(member))
@@ -1799,7 +1808,7 @@ fn report_non_existent_collection_member<A>(
     let collection = display_type(context, parts);
     // A member of the kind's collections of narrower elements, as a `List<int>`'s `max()`, names the elements it needs.
     let codebase = context.codebase;
-    let needed = codebase.extensions.get(&ascii_lowercase_word(method_name.as_bytes())).and_then(|members| {
+    let needed = codebase.extensions.get(&method_name).and_then(|members| {
         members.iter().find_map(|(_, member)| {
             let metadata = codebase.get_method_by_id(member)?;
             let array = metadata.parameters.first()?.get_type_metadata()?.type_union.get_single_array()?;
@@ -1982,7 +1991,7 @@ pub(crate) fn report_non_existent_method<A>(
     // Spec section 28: a law is checked and never runs, so the class keeps it apart from its methods, and only a law's
     // call statement in a law's body calls it.
     if let Some(class) = context.codebase.get_class_like(classname.as_bytes())
-        && let Some(law) = class.laws.get(&ascii_lowercase_word(method_name.as_bytes()))
+        && let Some(law) = class.laws.get(&class.method_key(method_name.as_bytes()))
     {
         context
             .collector
@@ -1995,6 +2004,25 @@ pub(crate) fn report_non_existent_method<A>(
     if !context.codebase.class_like_exists(classname.as_bytes())
         && report_unknown_sharp_class(context, classname.as_bytes(), obj_span)
     {
+        return;
+    }
+
+    // Spec section 24: a class with exact names finds a method only as declared, so a call in another case names the
+    // method it meant, as the engine's `Error` does.
+    if let Some(declared) = context
+        .codebase
+        .get_method_in_another_case(classname.as_bytes(), method_name.as_bytes())
+        .map(|method| method.original_name)
+    {
+        let class = display_class_like_name(context, classname);
+        context.collector.report_with_code(
+            IssueCode::NonExistentMethod,
+            Issue::error(format!("`{class}` has no member `{method_name}`; did you mean `{declared}`?"))
+                .with_annotation(Annotation::primary(selector_span).with_message(format!("Declared as `{declared}`.")))
+                .with_note("PHP# names are case-sensitive: code reaches a method only by the name it declares.")
+                .with_help(format!("Write `{declared}`.")),
+        );
+
         return;
     }
 
@@ -2309,10 +2337,10 @@ fn collect_mixin_types_into(
         for mixin_atomic in mixin_type.type_union.types.as_ref() {
             match mixin_atomic {
                 TAtomic::Object(obj @ TObject::Named(named)) => {
-                    direct.push((ascii_lowercase_word(named.name.as_bytes()), obj));
+                    direct.push((codebase.class_key(named.name.as_bytes()), obj));
                 }
                 TAtomic::Object(obj @ TObject::Enum(enum_type)) => {
-                    direct.push((ascii_lowercase_word(enum_type.name.as_bytes()), obj));
+                    direct.push((codebase.class_key(enum_type.name.as_bytes()), obj));
                 }
                 TAtomic::GenericParameter(TGenericParameter {
                     parameter_name, constraint, defining_entity, ..
@@ -2322,18 +2350,19 @@ fn collect_mixin_types_into(
                     if let TObject::Named(named_object) = outer_object
                         && let Some(type_params) = named_object.get_type_parameters()
                         && let GenericParent::ClassLike(defining_class) = defining_entity
-                        && named_object.name.as_bytes().eq_ignore_ascii_case(defining_class.as_bytes())
+                        && codebase.class_key(named_object.name.as_bytes())
+                            == codebase.class_key(defining_class.as_bytes())
                         && let Some(index) = class_metadata.get_template_index_for_name(*parameter_name)
                         && let Some(concrete_type) = type_params.get(index)
                     {
                         for atomic in concrete_type.types.as_ref() {
                             match atomic {
                                 TAtomic::Object(obj @ TObject::Named(named)) => {
-                                    direct.push((ascii_lowercase_word(named.name.as_bytes()), obj));
+                                    direct.push((codebase.class_key(named.name.as_bytes()), obj));
                                     resolved = true;
                                 }
                                 TAtomic::Object(obj @ TObject::Enum(enum_type)) => {
-                                    direct.push((ascii_lowercase_word(enum_type.name.as_bytes()), obj));
+                                    direct.push((codebase.class_key(enum_type.name.as_bytes()), obj));
                                     resolved = true;
                                 }
                                 _ => {}
@@ -2345,10 +2374,10 @@ fn collect_mixin_types_into(
                         for constraint_atomic in constraint.types.as_ref() {
                             match constraint_atomic {
                                 TAtomic::Object(obj @ TObject::Named(named)) => {
-                                    direct.push((ascii_lowercase_word(named.name.as_bytes()), obj));
+                                    direct.push((codebase.class_key(named.name.as_bytes()), obj));
                                 }
                                 TAtomic::Object(obj @ TObject::Enum(enum_type)) => {
-                                    direct.push((ascii_lowercase_word(enum_type.name.as_bytes()), obj));
+                                    direct.push((codebase.class_key(enum_type.name.as_bytes()), obj));
                                 }
                                 _ => {}
                             }

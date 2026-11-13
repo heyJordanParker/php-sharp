@@ -265,11 +265,7 @@ static zend_class_entry *lookup_class_ex(
 	bool in_preload = CG(compiler_options) & ZEND_COMPILE_PRELOAD;
 
 	if (UNEXPECTED(!EG(active) && !in_preload)) {
-		zend_string *lc_name = zend_string_tolower(name);
-
-		ce = zend_hash_find_ptr(CG(class_table), lc_name);
-
-		zend_string_release(lc_name);
+		ce = zend_class_table_find_ptr(CG(class_table), name, NULL);
 
 		if (register_unresolved && !ce) {
 			zend_error_noreturn(
@@ -1260,8 +1256,46 @@ static inheritance_status do_inheritance_check_on_method(
 }
 /* }}} */
 
+/* PHP#: gives `ce` SHARP_CLASS_EXACT_NAMES when `ancestor`, its parent or an interface it implements, has it. A plain
+ * PHP class compiled its own methods under their lowercase names, so they move to their exact names, and every method
+ * it gains after this is keyed by exact name too. A plain PHP class holds no two names that differ only in case. */
+static void zend_inherit_exact_names(zend_class_entry *ce, const zend_class_entry *ancestor) /* {{{ */
+{
+	if (!(ancestor->sharp_flags & SHARP_CLASS_EXACT_NAMES) || (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES)) {
+		return;
+	}
+	ce->sharp_flags |= SHARP_CLASS_EXACT_NAMES;
+
+	uint32_t count = zend_hash_num_elements(&ce->function_table);
+	if (count == 0) {
+		return;
+	}
+	zend_function **functions = emalloc(count * sizeof(zend_function *));
+	uint32_t i = 0;
+	zend_function *func;
+	ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, func) {
+		functions[i++] = func;
+	} ZEND_HASH_FOREACH_END();
+
+	dtor_func_t destructor = ce->function_table.pDestructor;
+	ce->function_table.pDestructor = NULL;
+	zend_hash_clean(&ce->function_table);
+	ce->function_table.pDestructor = destructor;
+	for (i = 0; i < count; i++) {
+		zend_hash_add_new_ptr(&ce->function_table, functions[i]->common.function_name, functions[i]);
+	}
+	efree(functions);
+}
+/* }}} */
+
 static void do_inherit_method(zend_string *key, zend_function *parent, zend_class_entry *ce, bool is_interface, uint32_t flags) /* {{{ */
 {
+	/* PHP#: a class with SHARP_CLASS_EXACT_NAMES keys an inherited method by its declared name, so a plain PHP
+	 * parent's `doThing` stays `doThing`, and only a method of that exact name overrides it. */
+	if (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) {
+		key = parent->common.function_name;
+		zend_string_hash_val(key);
+	}
 	zval *child = zend_hash_find_known_hash(&ce->function_table, key);
 
 	if (child) {
@@ -2041,6 +2075,7 @@ ZEND_API void zend_do_inheritance_ex(zend_class_entry *ce, zend_class_entry *par
 		} ZEND_HASH_FOREACH_END();
 	}
 
+	zend_inherit_exact_names(ce, parent_ce);
 	if (zend_hash_num_elements(&parent_ce->function_table)) {
 		zend_hash_extend(&ce->function_table,
 			zend_hash_num_elements(&ce->function_table) +
@@ -2208,6 +2243,7 @@ static void do_interface_implementation(zend_class_entry *ce, zend_class_entry *
 		do_inherit_iface_constant(key, c, ce, iface);
 	} ZEND_HASH_FOREACH_END();
 
+	zend_inherit_exact_names(ce, iface);
 	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&iface->function_table, key, func) {
 		do_inherit_method(key, func, ce, 1, flags);
 	} ZEND_HASH_FOREACH_END();
@@ -2390,7 +2426,10 @@ static void zend_add_trait_method(zend_class_entry *ce, zend_string *name, zend_
 	zend_function *existing_fn = NULL;
 	zend_function *new_fn;
 
-	if ((existing_fn = zend_hash_find_ptr(&ce->function_table, key)) != NULL) {
+	/* PHP#: a class with SHARP_CLASS_EXACT_NAMES keys the method by the name it takes, the alias's when it has one. */
+	zend_string *table_key = (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? name : key;
+
+	if ((existing_fn = zend_hash_find_ptr(&ce->function_table, table_key)) != NULL) {
 		/* if it is the same function with the same visibility and has not been assigned a class scope yet, regardless
 		 * of where it is coming from there is no conflict and we do not need to add it again */
 		if (existing_fn->op_array.opcodes == fn->op_array.opcodes &&
@@ -2439,7 +2478,7 @@ static void zend_add_trait_method(zend_class_entry *ce, zend_string *name, zend_
 	/* Reassign method name, in case it is an alias. */
 	new_fn->common.function_name = name;
 	function_add_ref(new_fn);
-	fn = zend_hash_update_ptr(&ce->function_table, key, new_fn);
+	fn = zend_hash_update_ptr(&ce->function_table, table_key, new_fn);
 	zend_add_magic_method(ce, fn, key);
 }
 /* }}} */
@@ -2473,6 +2512,14 @@ static void zend_traits_check_private_final_inheritance(uint32_t original_fn_fla
 	}
 }
 
+/* PHP#: whether `reference`, a method name a trait's use clause writes, names the method `trait` keys `key`. A trait
+ * with SHARP_CLASS_EXACT_NAMES is named only exactly. */
+static bool zend_trait_method_named(const zend_class_entry *trait, const zend_string *reference, const zend_string *key) /* {{{ */
+{
+	return (trait->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? zend_string_equals(reference, key) : zend_string_equals_ci(reference, key);
+}
+/* }}} */
+
 static void zend_traits_copy_functions(zend_string *fnname, zend_function *fn, zend_class_entry *ce, HashTable *exclude_table, zend_class_entry **aliases) /* {{{ */
 {
 	zend_trait_alias  *alias, **alias_ptr;
@@ -2488,7 +2535,7 @@ static void zend_traits_copy_functions(zend_string *fnname, zend_function *fn, z
 			/* Scope unset or equal to the function we compare to, and the alias applies to fn */
 			if (alias->alias != NULL
 				&& fn->common.scope == aliases[i]
-				&& zend_string_equals_ci(alias->trait_method.method_name, fnname)
+				&& zend_trait_method_named(fn->common.scope, alias->trait_method.method_name, fnname)
 			) {
 				fn_copy = *fn;
 				if (alias->modifiers & ZEND_ACC_PPP_MASK) {
@@ -2522,7 +2569,7 @@ static void zend_traits_copy_functions(zend_string *fnname, zend_function *fn, z
 				/* Scope unset or equal to the function we compare to, and the alias applies to fn */
 				if (alias->alias == NULL && alias->modifiers != 0
 					&& fn->common.scope == aliases[i]
-					&& zend_string_equals_ci(alias->trait_method.method_name, fnname)
+					&& zend_trait_method_named(fn->common.scope, alias->trait_method.method_name, fnname)
 				) {
 					if (alias->modifiers & ZEND_ACC_PPP_MASK) {
 						fn_copy.common.fn_flags = alias->modifiers | (fn->common.fn_flags & ~ZEND_ACC_PPP_MASK);
@@ -2565,7 +2612,6 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce, zend_class_e
 	size_t i, j = 0;
 	zend_trait_precedence *cur_precedence;
 	zend_trait_method_reference *cur_method_ref;
-	zend_string *lc_trait_name;
 	zend_string *lcname;
 	HashTable **exclude_tables = NULL;
 	zend_class_entry **aliases = NULL;
@@ -2580,9 +2626,7 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce, zend_class_e
 		while ((cur_precedence = precedences[i])) {
 			/** Resolve classes for all precedence operations. */
 			cur_method_ref = &cur_precedence->trait_method;
-			lc_trait_name = zend_string_tolower(cur_method_ref->class_name);
-			trait = zend_hash_find_ptr(EG(class_table), lc_trait_name);
-			zend_string_release_ex(lc_trait_name, 0);
+			trait = zend_class_table_find_ptr(EG(class_table), cur_method_ref->class_name, NULL);
 			if (!trait || !(trait->ce_flags & ZEND_ACC_LINKED)) {
 				zend_error_noreturn(E_COMPILE_ERROR, "Could not find trait %s", ZSTR_VAL(cur_method_ref->class_name));
 			}
@@ -2590,7 +2634,7 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce, zend_class_e
 
 			/** Ensure that the preferred method is actually available. */
 			lcname = zend_string_tolower(cur_method_ref->method_name);
-			if (!zend_hash_exists(&trait->function_table, lcname)) {
+			if (!zend_class_find_method(trait, cur_method_ref->method_name)) {
 				zend_error_noreturn(E_COMPILE_ERROR,
 						   "A precedence rule was defined for %s::%s but this method does not exist",
 						   ZSTR_VAL(trait->name),
@@ -2609,9 +2653,7 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce, zend_class_e
 				zend_class_entry *exclude_ce;
 				uint32_t trait_num;
 
-				lc_trait_name = zend_string_tolower(class_name);
-				exclude_ce = zend_hash_find_ptr(EG(class_table), lc_trait_name);
-				zend_string_release_ex(lc_trait_name, 0);
+				exclude_ce = zend_class_table_find_ptr(EG(class_table), class_name, NULL);
 				if (!exclude_ce || !(exclude_ce->ce_flags & ZEND_ACC_LINKED)) {
 					zend_error_noreturn(E_COMPILE_ERROR, "Could not find trait %s", ZSTR_VAL(class_name));
 				}
@@ -2620,7 +2662,10 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce, zend_class_e
 					ALLOC_HASHTABLE(exclude_tables[trait_num]);
 					zend_hash_init(exclude_tables[trait_num], 0, NULL, NULL, 0);
 				}
-				if (zend_hash_add_empty_element(exclude_tables[trait_num], lcname) == NULL) {
+				/* PHP#: the key the excluded trait gives the method, see zend_class_find_method. */
+				zend_string *excluded = (exclude_ce->sharp_flags & SHARP_CLASS_EXACT_NAMES)
+					? cur_method_ref->method_name : lcname;
+				if (zend_hash_add_empty_element(exclude_tables[trait_num], excluded) == NULL) {
 					zend_error_noreturn(E_COMPILE_ERROR, "Failed to evaluate a trait precedence (%s). Method of trait %s was defined to be excluded multiple times", ZSTR_VAL(precedences[i]->trait_method.method_name), ZSTR_VAL(exclude_ce->name));
 				}
 
@@ -2651,12 +2696,9 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce, zend_class_e
 		while (ce->trait_aliases[i]) {
 			const zend_trait_alias *cur_alias = ce->trait_aliases[i];
 			cur_method_ref = &ce->trait_aliases[i]->trait_method;
-			lcname = zend_string_tolower(cur_method_ref->method_name);
 			if (cur_method_ref->class_name) {
 				/* For all aliases with an explicit class name, resolve the class now. */
-				lc_trait_name = zend_string_tolower(cur_method_ref->class_name);
-				trait = zend_hash_find_ptr(EG(class_table), lc_trait_name);
-				zend_string_release_ex(lc_trait_name, 0);
+				trait = zend_class_table_find_ptr(EG(class_table), cur_method_ref->class_name, NULL);
 				if (!trait || !(trait->ce_flags & ZEND_ACC_LINKED)) {
 					zend_error_noreturn(E_COMPILE_ERROR, "Could not find trait %s", ZSTR_VAL(cur_method_ref->class_name));
 				}
@@ -2664,7 +2706,7 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce, zend_class_e
 				aliases[i] = trait;
 
 				/* And, ensure that the referenced method is resolvable, too. */
-				if (!zend_hash_exists(&trait->function_table, lcname)) {
+				if (!zend_class_find_method(trait, cur_method_ref->method_name)) {
 					zend_error_noreturn(E_COMPILE_ERROR, "An alias was defined for %s::%s but this method does not exist", ZSTR_VAL(trait->name), ZSTR_VAL(cur_method_ref->method_name));
 				}
 			} else {
@@ -2672,7 +2714,7 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce, zend_class_e
 				trait = NULL;
 				for (j = 0; j < ce->num_traits; j++) {
 					if (traits[j]) {
-						if (zend_hash_exists(&traits[j]->function_table, lcname)) {
+						if (zend_class_find_method(traits[j], cur_method_ref->method_name)) {
 							if (!trait) {
 								trait = traits[j];
 								continue;
@@ -2704,7 +2746,6 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce, zend_class_e
 
 				aliases[i] = trait;
 			}
-			zend_string_release_ex(lcname, 0);
 			i++;
 		}
 	}
@@ -3860,9 +3901,12 @@ static inheritance_status zend_can_early_bind(zend_class_entry *ce, const zend_c
 	inheritance_status overall_status = INHERITANCE_SUCCESS;
 
 	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&parent_ce->function_table, key, parent_func) {
-		zval *zv = zend_hash_find_known_hash(&ce->function_table, key);
-		if (zv) {
-			zend_function *child_func = Z_FUNC_P(zv);
+		/* PHP#: in a class with SHARP_CLASS_EXACT_NAMES, or a plain PHP one that gains it from this parent, only a
+		 * method of the parent's exact name overrides it, see do_inherit_method. */
+		zend_function *child_func = (ce->sharp_flags | parent_ce->sharp_flags) & SHARP_CLASS_EXACT_NAMES
+			? zend_class_find_method_spelled(ce, parent_func->common.function_name)
+			: zend_hash_find_ptr(&ce->function_table, key);
+		if (child_func) {
 			inheritance_status status =
 				do_inheritance_check_on_method(
 					child_func, child_func->common.scope,

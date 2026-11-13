@@ -270,7 +270,7 @@ static int spl_autoload(zend_string *class_name, zend_string *lc_name, const cha
 
 			zend_destroy_file_handle(&file_handle);
 			zend_string_release(class_file);
-			return zend_hash_exists(EG(class_table), lc_name);
+			return zend_class_table_find(EG(class_table), class_name, lc_name) != NULL;
 		}
 	}
 	zend_destroy_file_handle(&file_handle);
@@ -443,7 +443,7 @@ static zend_class_entry *spl_perform_autoload(zend_string *class_name, zend_stri
 		if (ZSTR_HAS_CE_CACHE(class_name) &&  ZSTR_GET_CE_CACHE(class_name)) {
 			return (zend_class_entry*)ZSTR_GET_CE_CACHE(class_name);
 		} else {
-			zend_class_entry *ce = zend_hash_find_ptr(EG(class_table), lc_name);
+			zend_class_entry *ce = zend_class_table_find_ptr(EG(class_table), class_name, lc_name);
 			if (ce) {
 				return ce;
 			}

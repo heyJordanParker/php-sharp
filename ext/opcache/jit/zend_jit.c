@@ -2934,8 +2934,7 @@ static int zend_jit(const zend_op_array *op_array, zend_ssa *ssa, const zend_op 
 							if (opline->op1_type == IS_CONST) {
 								zval *zv = RT_CONSTANT(opline, opline->op1);
 								if (Z_TYPE_P(zv) == IS_STRING) {
-									zval *lc = zv + 1;
-									ce = (zend_class_entry*)zend_hash_find_ptr(EG(class_table), Z_STR_P(lc));
+									ce = zend_class_table_find_ptr(EG(class_table), Z_STR_P(zv), Z_STR_P(zv + 1));
 								}
 							}
 						}

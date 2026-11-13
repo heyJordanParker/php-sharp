@@ -43,7 +43,6 @@ use mago_syntax::cst::PartialArgumentList;
 use mago_syntax::cst::TypeArgumentList;
 use mago_word::Word;
 use mago_word::WordMap;
-use mago_word::ascii_lowercase_word;
 use mago_word::word;
 
 use crate::analyzable::Analyzable;
@@ -681,7 +680,7 @@ where
         // A `required` one passes down, spec section 11, so a class below the one that requires it has its own, which
         // `new TItem.fromJson(…)` and `new Self.fromJson(…)` call, whether or not the class they name declares one.
         Some(constructor) => {
-            let constructor_name = ascii_lowercase_word(constructor.name.value);
+            let constructor_name = metadata.method_key(constructor.name.value);
             let declared = context
                 .codebase
                 .get_method_by_id(&MethodIdentifier::new(metadata.name, constructor_name))
@@ -723,7 +722,7 @@ where
     };
     let constructor_declraing_id = context.codebase.get_declaring_method_identifier(&constructor_id);
 
-    artifacts.symbol_references.add_reference_for_method_call(&block_context.scope, &constructor_id);
+    artifacts.symbol_references.add_reference_for_method_call(context.codebase, &block_context.scope, &constructor_id);
 
     let mut has_inconsistent_constructor =
         !metadata.flags.is_final() && metadata.name_span.is_some() && !metadata.flags.has_consistent_constructor();
@@ -778,7 +777,11 @@ where
             has_inconsistent_constructor && !constructor.method_metadata.as_ref().is_some_and(|meta| meta.is_final);
         constructor_span = Some(constructor.name_span.unwrap_or(constructor.span));
 
-        artifacts.symbol_references.add_reference_for_method_call(&block_context.scope, &constructor_declraing_id);
+        artifacts.symbol_references.add_reference_for_method_call(
+            context.codebase,
+            &block_context.scope,
+            &constructor_declraing_id,
+        );
 
         let mut constructor_call = Invocation {
             target: InvocationTarget::FunctionLike {
@@ -1140,10 +1143,14 @@ where
     let constructor_id = MethodIdentifier::new(classlike_name, word("__construct"));
     let constructor_declaring_id = context.codebase.get_declaring_method_identifier(&constructor_id);
 
-    artifacts.symbol_references.add_reference_for_method_call(&block_context.scope, &constructor_id);
+    artifacts.symbol_references.add_reference_for_method_call(context.codebase, &block_context.scope, &constructor_id);
 
     if let Some(constructor) = context.codebase.get_method_by_id(&constructor_declaring_id) {
-        artifacts.symbol_references.add_reference_for_method_call(&block_context.scope, &constructor_declaring_id);
+        artifacts.symbol_references.add_reference_for_method_call(
+            context.codebase,
+            &block_context.scope,
+            &constructor_declaring_id,
+        );
 
         let mut constructor_call = Invocation {
             target: InvocationTarget::FunctionLike {

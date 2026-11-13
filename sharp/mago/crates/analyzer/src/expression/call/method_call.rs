@@ -334,8 +334,9 @@ where
     if block_context.flags.collect_initializations()
         && let ClassLikeMemberSelector::Identifier(method_ident) = selector
         && is_this_or_self_returning_chain(object, context, block_context)
+        && let Some(class_like) = block_context.scope.get_class_like()
     {
-        let method_name = mago_word::ascii_lowercase_word(method_ident.value);
+        let method_name = class_like.method_key(method_ident.value);
         block_context.definitely_called_methods.insert(method_name);
         block_context.called_methods.insert(method_name);
     }
@@ -940,6 +941,7 @@ where
     let mut has_invalid_targets = false;
     for property in called_properties {
         artifacts.symbol_references.add_reference_for_property_read(
+            context.codebase,
             &block_context.scope,
             property.declaring_class,
             property.property_name,
@@ -1190,8 +1192,7 @@ where
                 return false;
             };
 
-            let method_name = mago_word::ascii_lowercase_word(method_ident.value);
-            method_returns_self_or_static(context, class_like.name, method_name)
+            method_returns_self_or_static(context, class_like.name, class_like.method_key(method_ident.value))
         }
         Expression::Call(Call::NullSafeMethod(method_call)) => {
             if !is_this_or_self_returning_chain(method_call.object, context, block_context) {
@@ -1206,8 +1207,7 @@ where
                 return false;
             };
 
-            let method_name = mago_word::ascii_lowercase_word(method_ident.value);
-            method_returns_self_or_static(context, class_like.name, method_name)
+            method_returns_self_or_static(context, class_like.name, class_like.method_key(method_ident.value))
         }
         Expression::Parenthesized(paren) => is_this_or_self_returning_chain(paren.expression, context, block_context),
         _ => false,

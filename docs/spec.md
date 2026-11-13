@@ -1099,7 +1099,7 @@ Point origin = new Point { x: 0 };    // compile error: y has no initial value, 
 
 **A struct keys a `Map` when every field has `==`, by its whole value with nothing declared, or when it declares `==` with `hash()`, by that pair,** as Swift's `Hashable` structs, Rust's `Hash` derive, C#'s record structs, Java's records, Kotlin's data classes and Go's structs are. It is the general rule for keys (section 12): a struct whose every field has `==` has `==` and `hash()`, and a struct with a field that has none, such as a function, declares both (section 19). Two structs are one key when they are `==`. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, as Jackson writes a key through `toString` and serde and Go refuse a key that is not text.
 
-**Every struct has a static `parse`,** which reads a `Map<string, Any?>` or an object's public properties and throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Every class gets both the same way.
+**Every struct has a static `parse`,** which takes a `Map<string, Any?>|Object`, reads the `Map`'s keys or the object's public properties and throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Every class gets both the same way, and `methods()` (section 25) gives each with that parameter type.
 
 <!-- example struct-parse: statements
 Map<string, Any?> payload = ["customerId": "abc"];
@@ -2503,7 +2503,7 @@ public class Booking : Model
 new Booking().guestName();    // "guest"
 -->
 
-**A field or property holding a `Function` is called like a method** when the class has no method with that name. A `.sharp` class cannot declare a method and a field or property with the same name, so `this.discount(…)` always has one meaning.
+**A field or property holding a `Function` is called like a method** when the class has no method with that name. A `.sharp` class cannot declare a method and a field or property with the same name, or inherit one from a `.sharp` class and declare the other, so `this.discount(…)` always has one meaning. A plain PHP class may declare both, as Eloquent's `Model` declares the field `$casts` and the method `casts()`. PHP runs a call of the name as the method and a read as the field, PHP# code does too, and a `.sharp` class below it overrides either one.
 
 <!-- example function-fields: statements
 int price = 900;
@@ -4803,6 +4803,16 @@ public event InvoicePaid(int invoiceId, Money amount);         // event
 
 A name that breaks the rule is a warning, as in "Method name `TotalIn` should be in camel case."
 
+**Names are case-sensitive,** as in C#, Java and Kotlin, so names that differ only in case are two names: `total()` and `Total()` are two methods, and `Order` and `order` are two classes. Code reaches a declaration only by the name it declares, plain PHP code that calls PHP# code included. PHP's own classes and functions keep PHP's rule. A call written in another case reaches nothing, and the error names the declaration, as PHP# code's compile error "`App\Billing\Invoice` has no member `TotalIn`; did you mean `totalIn`?" and plain PHP's `Error` "Call to undefined method App\Billing\Invoice::TotalIn(); did you mean totalIn()?" do. A type written in another case names nothing either, as the compile error "Cannot find type `INVOICE`; did you mean `Invoice`?" says, and plain PHP's `new`, `instanceof`, `class_exists`, reflection, `unserialize` and autoloader find no class by it. A method that differs from an inherited one only in case is a second method, and an override names its parent's method exactly:
+
+<!-- example exact-names: statements
+public int totalIn(string currency) => 1;
+-->
+```csharp
+this.totalIn("EUR");        // compiles
+this.TotalIn("EUR");        // compile error: no member TotalIn; did you mean totalIn?
+```
+
 **A type holds null only when it is written with `?`,** for parameters, return types, properties and locals alike: `Customer?` may hold null, and `Customer` never does. Section 14.4 lists the compile errors for a `?` or a null check that cannot matter.
 
 A `null` default needs the `?` too, for every type, on a field, a property or a parameter:
@@ -5131,7 +5141,7 @@ Json.parse("{\"a\":[1,2]}") != Json.parse("{\"a\":[2,1]}");       // true
 Json.parse("{\"a\":1,\"b\":2}") == Json.parse("{\"b\":2,\"a\":1}"); // true: an object's keys in any order
 ```
 
-**`Json.encode` takes `escapeSlashes`, `escapeUnicode` and `keepZeroFraction`,** which default to `false`, `false` and `true`, its output without them. `escapeSlashes` writes `/` as `\/`, `escapeUnicode` writes each character outside ASCII as `\u` and its code, and `keepZeroFraction: false` writes `1.0` as `1`, so a payload can match the bytes another system signs:
+**`Json.encode` takes `escapeSlashes`, `escapeUnicode`, `keepZeroFraction` and `indent`,** which default to `false`, `false`, `true` and `0`, its output without them. `escapeSlashes` writes `/` as `\/`, `escapeUnicode` writes each character outside ASCII as `\u` and its code, and `keepZeroFraction: false` writes `1.0` as `1`, so a payload can match the bytes another system signs. `indent` writes each nested value on its own line, `indent` spaces deeper than its parent, with `": "` after a key and `[]` and `{}` for an empty value, as JavaScript's `JSON.stringify(value, null, 2)`, Python's `json.dumps(value, indent=2)` and Go's `json.MarshalIndent` do, so `indent: 4` writes the bytes of PHP's `JSON_PRETTY_PRINT`. A negative `indent` throws a `ValueError`:
 
 <!-- example json-switches: statements
 import Sharp.Encoding.Json;
@@ -5141,6 +5151,8 @@ Map<string, Any> payload = ["url": "https://example.com/a", "name": "école", "t
 Json.encode(payload);                                                              // "{\"url\":\"https://example.com/a\",\"name\":\"école\",\"total\":1.0}"
 Json.encode(payload, escapeSlashes: true, escapeUnicode: true, keepZeroFraction: false); // "{\"url\":\"https:\\/\\/example.com\\/a\",\"name\":\"\\u00e9cole\",\"total\":1}"
 Json.encode(payload, keepZeroFraction: false);                                     // "{\"url\":\"https://example.com/a\",\"name\":\"école\",\"total\":1}"
+Json.encode(["tags": ["a"], "none": [:]], indent: 2);                              // "{\n  \"tags\": [\n    \"a\"\n  ],\n  \"none\": {}\n}"
+Json.encode(payload, indent: -1);                                                  // throws: "Json.encode: indent is -1, and it must be 0 or more"
 ```
 
 **`Sql.identifier(name, allowed)` gives `name` as SQL only when it is one of `allowed`,** and throws a `ValueError` for any other, so a column or a table chosen while the code runs reaches a plain PHP `literal-string` parameter, as Laravel's `orderByRaw` declares one, as one of the application's own names. Values still go through a query's bindings:
@@ -5156,6 +5168,27 @@ Sql.identifier("name", ["name", "created_at"]);                      // "name"
 Sql.identifier("drop", ["name"]);                                    // throws: "`Sql.identifier` takes a name the query allows, and \"drop\" is none of them."
 query.orderByRaw(Sql.identifier(column, ["name", "created_at"]));    // compiles
 query.orderByRaw(column);                                            // compile error: column is composed while the code runs
+```
+
+**A string fixed while the code compiles is a `literal-string` too,** as Psalm and PHPStan read one: a string literal, a constant, and a template or a `+` join whose parts are all literals or constants of type `int`, `float` or `string`:
+
+<!-- example fixed-strings: statements
+import Illuminate.Database.Query.Builder;
+public enum Weights
+{
+    case One;
+
+    public const int COUNT = 3;
+    public const string LINEAR = `1.0 / ${Weights.COUNT} as weight`;
+}
+Builder query = new Builder();
+string column = "created_at";
+-->
+```csharp
+Weights.LINEAR;                                          // "1.0 / 3 as weight"
+query.selectRaw(Weights.LINEAR);                         // compiles
+query.selectRaw(`1.0 / ${Weights.COUNT} as weight`);     // compiles
+query.selectRaw(`max(${column})`);                       // compile error: column is composed while the code runs
 ```
 
 **`Object` holds any object, and nothing else.** It compiles to PHP's `object`, and `Object?` adds null. Like `Any`, it has no members until `is` narrows it. An `Object` passes where `Any` is expected, and a plain PHP value typed `object` arrives as `Object`.
@@ -5298,6 +5331,32 @@ properties[1].type.typeArguments() == [];                   // true
 properties[1].nullable;                                     // true
 properties[1].attributes<Field>().count();                  // 1
 typeof(Map<string, int>).typeArguments() == [typeof(string), typeof(int)];   // true
+```
+
+**`methods()` reads the methods a class declares,** as .NET's `Type.GetMethods()` does. It gives a `List<Method>` of every instance and static method, private ones included, the class's own first and then those it inherits, in the order they are declared, without the constructor. A `Method` has its `name`, its result `type` as a `Class<Any?>` without `?`, `nullable`, `attributes<TAttribute : Object>()`, and `parameters()`, a `List<Parameter>`. A `Parameter` has its `name`, `type`, `nullable`, `optional`, which holds when it has a default value, and `attributes<TAttribute : Object>()`. The type arguments of the class value stand for the class's type parameters, and a plain PHP method gives its PHP types as PHP# writes them, as `properties()` does:
+
+<!-- example declared-methods -->
+```csharp
+// app/Shelf/Crate.sharp
+namespace App.Shelf;
+
+public class Crate<TItem>
+{
+    public TItem? first(List<TItem> items, int limit = 1) => null;
+}
+```
+
+<!-- example declared-methods: statements
+import App.Shelf.Crate;
+-->
+```csharp
+const methods = typeof(Crate<string>).methods();
+methods[0].name;                                              // "first"
+methods[0].type == typeof(string);                            // true
+methods[0].nullable;                                          // true
+methods[0].parameters().map(parameter => parameter.name);     // ["items", "limit"]
+methods[0].parameters()[0].type == typeof(List<string>);      // true
+methods[0].parameters()[1].optional;                          // true
 ```
 
 **A class value works wherever a class name works.** `typeof` and `Class.of` give one, and a `Class<T>` field, parameter or local holds one:

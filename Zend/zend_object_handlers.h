@@ -282,6 +282,27 @@ ZEND_API ZEND_COLD zend_never_inline void zend_abstract_method_call(const zend_f
 /* PHP#: see ext/sharp/php_sharp.h. */
 void sharp_object_exposed(zend_object *object);
 
+/* PHP#: the method `name` of `ce`, or NULL. A class with SHARP_CLASS_EXACT_NAMES keys each method by its exact name, so
+ * `name` and `Name` are two methods and one probe finds either. Any other class keys it by its lowercase name, as PHP
+ * does. */
+static zend_always_inline zend_function *zend_class_find_method(const zend_class_entry *ce, zend_string *name)
+{
+	if (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) {
+		return (zend_function *) zend_hash_find_ptr(&ce->function_table, name);
+	}
+	return (zend_function *) zend_hash_find_ptr_lc(&ce->function_table, name);
+}
+
+/* PHP#: the method of `ce` that the engine or an extension calls by `name`, such as ArrayAccess's `offsetget`, or NULL.
+ * A plain PHP class keys it by the lowercase name, which `name` is then. A class with SHARP_CLASS_EXACT_NAMES keys it by
+ * the name its plain PHP or internal declarer gives it, `offsetGet`. */
+ZEND_API zend_function *zend_class_find_protocol_method(const zend_class_entry *ce, const char *name, size_t length);
+
+/* PHP#: the method of `ce` declared as exactly `name`, or NULL. The compiler, the optimizer and the JIT bind a call
+ * only to it, because a plain PHP class finds a method by any case of its name only until it links to an ancestor
+ * with SHARP_CLASS_EXACT_NAMES, and then by its exact name alone. */
+ZEND_API zend_function *zend_class_find_method_spelled(const zend_class_entry *ce, zend_string *name);
+
 static zend_always_inline HashTable *zend_std_get_properties_ex(zend_object *object)
 {
 	if (UNEXPECTED(zend_lazy_object_must_init(object))) {
@@ -290,7 +311,7 @@ static zend_always_inline HashTable *zend_std_get_properties_ex(zend_object *obj
 	/* PHP#: every path to the properties table comes here, a lazy proxy's with its instance and ArrayIterator's too,
 	 * and code that reads the table can take the reference a slot holds. An object of a class with no PHP# flag, as
 	 * each plain PHP class, pays this one test, see SHARP_CLASS_HAS_TYPED_PROPS. */
-	if (UNEXPECTED(object->ce->sharp_flags)) {
+	if (UNEXPECTED(object->ce->sharp_flags & (SHARP_CLASS_HAS_CROSSING_PROPS|SHARP_CLASS_HAS_TYPED_PROPS))) {
 		sharp_object_exposed(object);
 	}
 	if (!object->properties) {

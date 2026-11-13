@@ -1,0 +1,16 @@
+namespace Polymorphic;
+
+public class Reader
+{
+    // Two call sites, whose receiver's class changes each turn. The first gives a PHP# method's Map as it is, and the
+    // second renumbers a plain PHP method's array into the List Shelf declares.
+    public static List<string> read(List<Shelf> shelves)
+    {
+        List<string> seen = [];
+        for (const shelf of shelves) {
+            const kind = shelf.counted() is Map<string, int> ? "map" : "entries";
+            seen.add(`${kind} ${shelf.names()[0]}`);
+        }
+        return seen;
+    }
+}

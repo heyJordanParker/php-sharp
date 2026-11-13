@@ -1,0 +1,11 @@
+namespace Polymorphic;
+
+public class Shelf
+{
+    public virtual Iterable<[string, int]> counted()
+    {
+        yield ["tea", 3];
+    }
+
+    public virtual List<string> names() => ["shelf"];
+}
