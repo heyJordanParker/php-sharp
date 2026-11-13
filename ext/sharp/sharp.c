@@ -4753,37 +4753,49 @@ static const zend_string *sharp_method_bounds(const zend_function *func)
 	return NULL;
 }
 
-/* The types the method `func` declares, read on a class value of `ce` whose type arguments are `arguments`, as
- * sharp_declared_types reads them: a list of its result type, then each parameter's type, from the whole type a PHP#
- * method carries, or else from its PHP types as PHP# writes them, after the result type a PHP# method carries alone. */
+/* Appends the function type the PHP declaration of `func` gives it, spec section 21: `result`, or else its PHP result
+ * type, then each parameter's PHP type, a variadic one's last, each as sharp_php_type_text writes it, so a type it
+ * leaves out is `Any?`. It lists no effects, as the checker gives a PHP signature none, which fits every function
+ * type's `uses`. */
+static void sharp_php_function_type_text(smart_str *text, const zend_function *func, const zend_string *result)
+{
+	smart_str_appends(text, "Function<");
+	if (result) {
+		smart_str_append(text, result);
+	} else if (func->common.fn_flags & ZEND_ACC_HAS_RETURN_TYPE) {
+		sharp_php_type_text(text, func->common.arg_info[-1].type);
+	} else {
+		smart_str_appends(text, "Any?");
+	}
+	smart_str_appendc(text, '(');
+	uint32_t count = func->common.num_args + !!(func->common.fn_flags & ZEND_ACC_VARIADIC);
+	for (uint32_t i = 0; i < count; i++) {
+		if (i) {
+			smart_str_appends(text, ", ");
+		}
+		sharp_php_type_text(text, func->common.arg_info[i].type);
+	}
+	smart_str_appends(text, ")>");
+}
+
+/* The function type the method `func` declares, read on a class value of `ce` whose type arguments are `arguments`, as
+ * sharp_declared_types reads it: the whole type a PHP# method carries, or else its PHP declaration's, with the result
+ * type a PHP# method carries alone. Its members are its result type, its parameters' types, then the effects it uses. */
 static const sharp_type *sharp_method_declared_types(
 	const zend_function *func, const zend_class_entry *ce, const sharp_type *arguments)
 {
-	uint32_t count = func->common.num_args + !!(func->common.fn_flags & ZEND_ACC_VARIADIC);
 	const zend_string *carried = func->type == ZEND_USER_FUNCTION ? func->op_array.sharp_type : NULL;
-	bool whole = carried && zend_string_starts_with_literal(carried, "Function<");
 	smart_str written = {0};
-	if (whole) {
+	if (carried && zend_string_starts_with_literal(carried, "Function<")) {
 		smart_str_append(&written, carried);
 	} else {
-		if (carried) {
-			smart_str_append(&written, carried);
-		} else if (func->common.fn_flags & ZEND_ACC_HAS_RETURN_TYPE) {
-			sharp_php_type_text(&written, func->common.arg_info[-1].type);
-		} else {
-			smart_str_appends(&written, "Any?");
-		}
-		for (uint32_t i = 0; i < count; i++) {
-			smart_str_appends(&written, ", ");
-			sharp_php_type_text(&written, func->common.arg_info[i].type);
-		}
+		sharp_php_function_type_text(&written, func, carried);
 	}
 	smart_str_0(&written);
 	const sharp_type *types = sharp_declared_types(written.s, func->common.scope, ce, arguments, sharp_method_bounds(func));
 	smart_str_free(&written);
 
-	/* A whole type's members are its result type, its parameters' types, then the effects it uses. */
-	return types && whole ? types->members[0] : types;
+	return types ? types->members[0] : NULL;
 }
 
 /* The class a class value `value` names, with the type arguments it carries in `arguments`, or NULL with an exception
@@ -5184,10 +5196,10 @@ static const sharp_type *sharp_type_walked(const sharp_type *type, const zval *v
 
 /* How sharp_type_holds takes a value. */
 typedef enum {
-	/* As `is` tests it: a closure plain PHP made, with no PHP# type, is of no function type. */
+	/* As `is` tests it: a closure plain PHP made is of the function types its PHP declaration's can be assigned to. */
 	SHARP_HOLDS_TEST,
-	/* As a value from plain PHP enters PHP#: such a closure is of every function type, since PHP's own check of
-	 * `Closure` is all plain PHP gives it, as a raw generic object has its bounds. */
+	/* As a value from plain PHP enters PHP#: a closure plain PHP made is of every function type, as PHP's own check of
+	 * `Closure` takes it, as a raw generic object has its bounds. */
 	SHARP_HOLDS_ENTRY,
 	/* As SHARP_HOLDS_ENTRY, with an int of `float`, which entry then converts. */
 	SHARP_HOLDS_ENTRY_INT_AS_FLOAT,
@@ -6765,20 +6777,31 @@ static const sharp_type *sharp_generator_yields(zend_object *object)
 }
 
 /* Whether `value` is a closure whose function's type can be assigned to the function type `type`, spec section 21, as
- * sharp_type_function_fits decides. A closure with no type sharp_closure_type finds has no type to compare, so `mode`
- * decides. */
+ * sharp_type_function_fits decides. A PHP# closure's type is the one sharp_closure_type finds, and one with none has no
+ * type to compare, so `mode` decides. A plain PHP closure's type is its PHP declaration's, which `is` tests, and which
+ * entry leaves to PHP's own check of `Closure`. */
 static bool sharp_closure_is(const zval *value, const sharp_type *type, sharp_holds_mode mode)
 {
 	if (Z_TYPE_P(value) != IS_OBJECT || Z_OBJCE_P(value) != zend_ce_closure) {
 		return false;
 	}
-	const sharp_type *own = sharp_closure_type(value);
-	if (!own) {
-		return !EG(exception) && mode != SHARP_HOLDS_TEST;
+	const zend_function *func = zend_get_closure_method_def(Z_OBJ_P(value));
+	smart_str declared = {0};
+	const zend_string *spelled;
+	if (sharp_function_is_sharp(func)) {
+		const sharp_type *own = sharp_closure_type(value);
+		if (!own) {
+			return !EG(exception) && mode != SHARP_HOLDS_TEST;
+		}
+		spelled = own->text;
+	} else if (mode != SHARP_HOLDS_TEST) {
+		return true;
+	} else {
+		sharp_php_function_type_text(&declared, func, NULL);
+		smart_str_0(&declared);
+		spelled = declared.s;
 	}
 
-	const zend_function *func = zend_get_closure_method_def(Z_OBJ_P(value));
-	zend_string *spelled = own->text;
 	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(spelled), ZSTR_LEN(spelled), zend_arena_create(1024));
 	sharp_type_node *given = sharp_type_read(&reader);
 	sharp_type_reader tested = sharp_type_reader_of(ZSTR_VAL(type->text), ZSTR_LEN(type->text), reader.arena);
@@ -6787,6 +6810,7 @@ static bool sharp_closure_is(const zval *value, const sharp_type *type, sharp_ho
 	ZEND_ASSERT(given && given->kind == SHARP_TYPE_FUNCTION && wanted);
 	bool is = sharp_type_function_fits(given, wanted, func->common.required_num_args, &reader);
 	zend_arena_destroy(reader.arena);
+	smart_str_free(&declared);
 
 	return is;
 }

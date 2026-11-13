@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A plain PHP closure answers `is Function<…>` by its declared PHP signature, spec section 21, where 0.6.9 answered false for every one. `static fn (): ?Item => new Item()` and `static fn (): Item => new Item()` are a `Function<Item?() uses none>`, a parameter it declares no type for takes anything, and a result it declares no type for is `Any?`, so `static fn () => new Item()` is a `Function<Any?()>` and not a `Function<Item?()>`. Its type lists no effects, so it fits every `uses`, as the checker takes a plain PHP callable.
+
 ## [0.6.9] - 2026-11-13
 
 ### Upgrading from 0.6.8
