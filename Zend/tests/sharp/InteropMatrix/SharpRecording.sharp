@@ -1,0 +1,12 @@
+namespace InteropMatrix;
+
+import Lib.Interop.PlainRecording;
+
+public class SharpRecording : PlainRecording
+{
+    public int count() => 41;
+
+    public int recordEntry() => 42;
+
+    public int total() => 43;
+}

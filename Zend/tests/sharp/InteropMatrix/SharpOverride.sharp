@@ -1,0 +1,12 @@
+namespace InteropMatrix;
+
+import Lib.Interop.PlainAccount;
+
+public class SharpOverride : PlainAccount
+{
+    public override int count() => 41;
+
+    public override int recordEntry() => 42;
+
+    public override int total() => 43;
+}

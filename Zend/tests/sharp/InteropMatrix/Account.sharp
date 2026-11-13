@@ -1,0 +1,12 @@
+namespace InteropMatrix;
+
+public abstract class Account
+{
+    public virtual int count() => 1;
+
+    public virtual int recordEntry() => 2;
+
+    public virtual int total() => 3;
+
+    public virtual int Total() => 4;
+}

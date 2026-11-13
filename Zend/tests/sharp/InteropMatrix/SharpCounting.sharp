@@ -1,0 +1,7 @@
+namespace InteropMatrix;
+
+import Lib.Interop.PlainCounting;
+
+public class SharpCounting : PlainCounting
+{
+}

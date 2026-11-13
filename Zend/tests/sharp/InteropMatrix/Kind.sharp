@@ -1,0 +1,14 @@
+namespace InteropMatrix;
+
+public enum Kind
+{
+    case Open;
+
+    public int count() => 1;
+
+    public int recordEntry() => 2;
+
+    public int total() => 3;
+
+    public int Total() => 4;
+}

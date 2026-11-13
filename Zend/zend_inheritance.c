@@ -3721,6 +3721,15 @@ ZEND_API zend_class_entry *zend_do_link_class(zend_class_entry *ce, zend_string 
 		zend_class_entry **trait_aliases;
 		bool trait_contains_abstract_methods = false;
 		if (ce->num_traits) {
+			/* PHP#: a class gains exact names from its parent or an interface before its traits bind, so a plain PHP class
+			 * that implements a PHP# interface and uses its Defaults trait takes the twins `total` and `Total` as two
+			 * methods, and its own `Total` overrides only the trait's `Total`. */
+			if (parent) {
+				zend_inherit_exact_names(ce, parent);
+			}
+			for (i = 0; i < ce->num_interfaces; i++) {
+				zend_inherit_exact_names(ce, traits_and_interfaces[ce->num_traits + i]);
+			}
 			zend_traits_init_trait_structures(ce, traits_and_interfaces, &trait_exclude_tables, &trait_aliases);
 			zend_do_traits_method_binding(ce, traits_and_interfaces, trait_exclude_tables, trait_aliases, false, &trait_contains_abstract_methods);
 			zend_do_traits_constant_binding(ce, traits_and_interfaces);

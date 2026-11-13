@@ -1,0 +1,12 @@
+namespace InteropMatrix;
+
+public interface Recording
+{
+    int count() => 1;
+
+    int recordEntry() => 2;
+
+    int total() => 3;
+
+    int Total() => 4;
+}

@@ -4846,6 +4846,8 @@ this.totalIn("EUR");        // compiles
 this.TotalIn("EUR");        // compile error: no member TotalIn; did you mean totalIn?
 ```
 
+**A plain PHP class below a PHP# class overrides one twin by its exact name, and can't declare the other.** It is written in PHP, where two method names that differ only in case are one name. So a plain subclass of a class with `total()` and `Total()` may declare `Total()`, which overrides `Total()` alone, and declaring both is PHP's "Cannot redeclare". A plain class that implements a PHP# interface and uses its `Defaults` trait takes both twins from the trait, as two methods.
+
 **A type holds null only when it is written with `?`,** for parameters, return types, properties and locals alike: `Customer?` may hold null, and `Customer` never does. Section 14.4 lists the compile errors for a `?` or a null check that cannot matter.
 
 A `null` default needs the `?` too, for every type, on a field, a property or a parameter:
