@@ -1,4 +1,4 @@
-namespace App.Shared.Schema.Entities;
+namespace App.Shop.Records.Entities;
 
 public abstract class DatabaseEntity
 {

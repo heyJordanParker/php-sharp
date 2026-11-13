@@ -4494,7 +4494,7 @@ Namespace parts are separated with `.`, and imports use `import`. Every part of 
 <!-- example namespace-and-import -->
 ```csharp
 namespace App.Tenant.Store;
-import App.Shared.Schema.Entities.DatabaseEntity;
+import App.Shop.Records.Entities.DatabaseEntity;
 ```
 
 **Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or the namespace of a plain PHP library's functions and constants. A full class name inside code is a compile error that names the import to add. A module header names a namespace, as the `namespace` line does, so `module : App.Shop` compiles (section 32).
@@ -5836,7 +5836,7 @@ A PHP# file has no PHP tags, so `<?php`, `<?`, `<?=` and `?>` are compile errors
 ```csharp
 namespace App.Tenant.Store;
 
-import App.Shared.Schema.Entities.DatabaseEntity;
+import App.Shop.Records.Entities.DatabaseEntity;
 ```
 
 The extension is **`.sharp`**, as in `StoreService.sharp`.
@@ -6926,7 +6926,7 @@ namespace App.Tenant.Store;
 
 module
 {
-    imports App.Tenant.Community, App.Shared.Schema, Illuminate.Support;
+    imports App.Shop.Loyalty, App.Shop.Records, Illuminate.Support;
 }
 ```
 
@@ -6935,9 +6935,9 @@ module
 // app/Tenant/Store/StoreService.sharp
 namespace App.Tenant.Store;
 
-import App.Tenant.Community.Member;     // compiles
+import App.Shop.Loyalty.Member;         // compiles
 import Illuminate.Support.Facades.DB;   // compiles: Illuminate.Support lists every namespace below it
-import App.Shared.Ledger.Entry;         // compile error: App.Tenant.Store imports only App.Tenant.Community, App.Shared.Schema and Illuminate.Support
+import App.Shared.Ledger.Entry;         // compile error: App.Tenant.Store imports only App.Shop.Loyalty, App.Shop.Records and Illuminate.Support
 
 public class StoreService { … }
 ```
@@ -6958,18 +6958,18 @@ namespace App.Tenant.Store;
 
 module
 {
-    imports App.Tenant.Community, App.Shared.Schema;   // compile error: App.Tenant.Store and App.Shared.Schema import from each other
+    imports App.Shop.Loyalty, App.Shop.Records;        // compile error: App.Tenant.Store and App.Shop.Records import from each other
 }
 ```
 
 <!-- example module-imports-errors -->
 ```csharp
-// app/Shared/Schema/Module.sharp
-namespace App.Shared.Schema;
+// app/Shop/Records/Module.sharp
+namespace App.Shop.Records;
 
 module
 {
-    imports App.Tenant.Store, App.Shared.Ledgr;        // compile error: App.Shared.Ledgr names no namespace, and App.Shared.Schema and App.Tenant.Store import from each other
+    imports App.Tenant.Store, App.Shared.Ledgr;        // compile error: App.Shared.Ledgr names no namespace, and App.Shop.Records and App.Tenant.Store import from each other
 }
 ```
 

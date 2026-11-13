@@ -34,13 +34,13 @@ namespace App.Shared;
 
 module
 {
-    imports App.Tenant.Community;
+    imports App.Shop.Loyalty;
 }
 
 SHARP);
-mkdir("$root/app/Tenant/Community", recursive: true);
-file_put_contents("$root/app/Tenant/Community/Member.sharp", <<<'SHARP'
-namespace App.Tenant.Community;
+mkdir("$root/app/Shop/Loyalty", recursive: true);
+file_put_contents("$root/app/Shop/Loyalty/Member.sharp", <<<'SHARP'
+namespace App.Shop.Loyalty;
 
 public class Member
 {
@@ -55,6 +55,6 @@ remove_project($root);
 ?>
 --EXPECT--
 CompileError: app/Shared/Ledger.sharp has 1 error:
-line 3: `App.Shared` imports only `App.Tenant.Community`.
+line 3: `App.Shared` imports only `App.Shop.Loyalty`.
   The list is the `imports` line of app/Shared/Module.sharp.
 ran
