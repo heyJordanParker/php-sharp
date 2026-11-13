@@ -101,6 +101,8 @@ PHP_JSON_API zend_result php_json_encode_ex(smart_str *buf, zval *val, int optio
 PHP_JSON_API zend_result php_json_encode(smart_str *buf, zval *val, int options);
 PHP_JSON_API zend_result php_json_decode_ex(zval *return_value, const char *str, size_t str_len, zend_long options, zend_long depth);
 PHP_JSON_API bool php_json_validate_ex(const char *str, size_t str_len, zend_long options, zend_long depth);
+/* PHP#: the message of JsonException for `error_code`, which Sharp\Internal\jsonEncode throws as json_encode does. */
+PHP_JSON_API const char *php_json_get_error_msg(php_json_error_code error_code);
 
 static inline zend_result php_json_decode(zval *return_value, const char *str, size_t str_len, bool assoc, zend_long depth)
 {

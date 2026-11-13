@@ -26,6 +26,9 @@ struct _php_json_encoder {
 	int depth;
 	int max_depth;
 	php_json_error_code error_code;
+	/* PHP#: the spaces PHP_JSON_PRETTY_PRINT writes for each level, as Sharp.Encoding.Json.encode's indent, or 0 for
+	 * PHP's 4. */
+	int indent;
 };
 
 static inline void php_json_encode_init(php_json_encoder *encoder)

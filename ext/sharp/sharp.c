@@ -14,6 +14,7 @@
 #include "ext/hash/php_hash.h"
 #include "ext/hash/php_hash_xxhash.h"
 #include "ext/json/php_json.h"
+#include "ext/json/php_json_encoder.h"
 #include "ext/json/php_json_parser.h"
 #include "ext/spl/spl_exceptions.h"
 #include "ext/standard/basic_functions.h"
@@ -118,12 +119,6 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	zend_function *sort_comparison;
 	/* See sharp_equality_operators, NULL until the request compares an object. */
 	HashTable *equality_operators;
-	/* The method Sharp\Internal\returned found last, of the class returned_class by the interned name returned_name, or
-	 * NULL with no class until it finds one. A loop's call finds the same one each turn, and a class's methods stay
-	 * the same while the request runs. */
-	const zend_class_entry *returned_class;
-	const zend_string *returned_name;
-	const zend_function *returned_method;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
@@ -5740,11 +5735,10 @@ static const sharp_type *sharp_frame_method_type_arguments(const zend_execute_da
 	return NULL;
 }
 
-/* Whether the type text list `text`, which an internal function takes as its argument `argument`, holds `count` types,
- * or any number for 0, and names a type parameter of this only for an `object` and one of the method only for a
- * `method`. Plain PHP may pass any text, and sharp_type_list_of_frame reads only a text that passes. False after the
- * ValueError. */
-static bool sharp_caller_type_text(zend_string *text, uint32_t argument, uint32_t count, bool object, bool method)
+/* What is wrong with the type text list `text`, which an internal function takes as an argument, or NULL when it holds
+ * `count` types, or any number for 0, and names a type parameter of this only for an `object` and one of the method
+ * only for a `method`. Plain PHP may pass any text, and sharp_type_list_of_frame reads only a text that passes. */
+static const char *sharp_caller_type_text_problem(zend_string *text, uint32_t count, bool object, bool method)
 {
 	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(text), ZSTR_LEN(text), zend_arena_create(1024));
 	const sharp_type_node *read = sharp_type_read_list(&reader);
@@ -5752,15 +5746,13 @@ static bool sharp_caller_type_text(zend_string *text, uint32_t argument, uint32_
 	uint32_t names = reader.names;
 	zend_arena_destroy(reader.arena);
 	if (!is_list) {
-		zend_argument_value_error(argument, count == 1 ? "must be one PHP# type" : "must be a PHP# type list");
-		return false;
+		return count == 1 ? "must be one PHP# type" : "must be a PHP# type list";
 	}
 	if (((names & SHARP_TYPE_NAMES_THIS) && !object) || ((names & SHARP_TYPE_NAMES_METHOD) && !method)) {
-		zend_argument_value_error(argument, "must name only type parameters the calling code has type arguments for");
-		return false;
+		return "must name only type parameters the calling code has type arguments for";
 	}
 
-	return true;
+	return NULL;
 }
 
 /* The type text list `text` that the internal function `execute_data` runs takes as its argument `argument`, spelled
@@ -5774,7 +5766,9 @@ static const sharp_type *sharp_caller_type_list(
 	bool is_user_code = caller && caller->func && ZEND_USER_CODE(caller->func->type);
 	zend_object *object = is_user_code && Z_TYPE(caller->This) == IS_OBJECT ? Z_OBJ(caller->This) : NULL;
 	const sharp_type *method = is_user_code ? sharp_frame_method_type_arguments(caller) : NULL;
-	if (!sharp_caller_type_text(text, argument, count, object, method)) {
+	const char *problem = sharp_caller_type_text_problem(text, count, object, method);
+	if (problem) {
+		zend_argument_value_error(argument, "%s", problem);
 		return NULL;
 	}
 
@@ -6032,6 +6026,39 @@ ZEND_FUNCTION(Sharp_Internal_equals)
 	RETURN_BOOL(equal);
 }
 
+/* Spec section 24: the JSON text Sharp.Encoding.Json.encode writes, json_encode's with `$flags`, or with
+ * JSON_PRETTY_PRINT's layout at `$indent` spaces a level when `$indent` is above 0. It throws JsonException as
+ * json_encode does with JSON_THROW_ON_ERROR. */
+ZEND_FUNCTION(Sharp_Internal_jsonEncode)
+{
+	zval *value;
+	zend_long flags, indent;
+
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_ZVAL(value)
+		Z_PARAM_LONG(flags)
+		Z_PARAM_LONG(indent)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (indent < 0 || indent > INT_MAX) {
+		zend_argument_value_error(3, "must be between 0 and %d", INT_MAX);
+		RETURN_THROWS();
+	}
+	php_json_encoder encoder;
+	php_json_encode_init(&encoder);
+	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
+	encoder.indent = (int) indent;
+	smart_str text = {0};
+	php_json_encode_zval(&text, value, (int) (indent ? flags | PHP_JSON_PRETTY_PRINT : flags & ~PHP_JSON_PRETTY_PRINT),
+		&encoder);
+	if (encoder.error_code != PHP_JSON_ERROR_NONE) {
+		smart_str_free(&text);
+		zend_throw_exception(php_json_exception_ce, php_json_get_error_msg(encoder.error_code), encoder.error_code);
+		RETURN_THROWS();
+	}
+	RETURN_STR(smart_str_extract(&text));
+}
+
 /* Spec section 12: PHP# passes plain PHP `\Sharp\Internal\arrayOf($value)`, the PHP array sharp_array_of gives. Through
  * a function value, `$receiver` is the function the value goes to, and a closure of PHP# takes the value as it is. */
 ZEND_FUNCTION(Sharp_Internal_arrayOf)
@@ -6053,14 +6080,85 @@ ZEND_FUNCTION(Sharp_Internal_arrayOf)
 
 static bool sharp_type_verified(const sharp_type *type, const sharp_type *shown, zval *value, const char *target);
 
-/* Spec section 22: PHP# reads the result of each call whose implementation may be plain PHP as
- * `\Sharp\Internal\returned($result, $implementer, $method, $types, $target)`. `$implementer` is the object or the class
- * the method `$method`, as declared, ran on, or null with an empty `$method` for a call no PHP# function answers. A PHP#
- * method gives its result as its type says, so the result comes back as it is, after one lookup, and so does the null
- * a null-safe call gives where its receiver, `$implementer`, is null. Plain PHP's result, as a test double's or an
- * override's, crosses in as the first type the list `$types` spells for the calling frame, each PHP array a Map or Set
- * it holds becoming the object and a List renumbered, and is checked against the second, which may read less of the
- * value, the first where the list holds one, a TypeError naming `$target` and the first type. */
+/* Spec section 22: PHP# reads the result of each call whose implementation may be plain PHP, as a test double's or an
+ * override's, through `\Sharp\Internal\returned($result, $implementer, $method, $types, $target)`, which the compiler
+ * makes a ZEND_SHARP_RETURNED. A PHP# method gives its result as its type says. Plain PHP's result crosses in, each PHP
+ * array a Map or Set it holds becoming the object and a List renumbered, and is checked against the second type, which
+ * may read less of the value. A class's methods stay the same while the request runs, so `cache` keeps the method each
+ * class gives by the name. */
+bool sharp_returned(zend_execute_data *caller, zval *result, zval *value, zval *implementer, zend_string *method,
+	const zval *types, void **cache)
+{
+	ZVAL_DEREF(value);
+	ZVAL_DEREF(implementer);
+	zend_class_entry *ce = NULL;
+	if (Z_TYPE_P(implementer) == IS_OBJECT) {
+		ce = Z_OBJCE_P(implementer);
+	} else if (Z_TYPE_P(implementer) == IS_STRING) {
+		ce = zend_lookup_class(Z_STR_P(implementer));
+	} else if (Z_TYPE_P(implementer) == IS_NULL && ZSTR_LEN(method)) {
+		ZVAL_COPY(result, value);
+		return true;
+	}
+	if (ce) {
+		if (cache[0] != ce) {
+			const zend_function *ran = zend_class_find_method(ce, method);
+			cache[0] = ce;
+			cache[1] = sharp_function_is_sharp(ran) ? (void *) ran : NULL;
+		}
+		if (cache[1]) {
+			ZVAL_COPY(result, value);
+			return true;
+		}
+	}
+
+	bool is_user_code = caller && caller->func && ZEND_USER_CODE(caller->func->type);
+	zend_object *object = is_user_code && Z_TYPE(caller->This) == IS_OBJECT ? Z_OBJ(caller->This) : NULL;
+	/* The list is spelled for the calling frame as ZEND_SHARP_VERIFY_TYPE_ARGS spells its own, a method's own type
+	 * parameter as any type, since a call from plain PHP gives the method none. Plain PHP may write the call itself. */
+	const char *problem = sharp_caller_type_text_problem(Z_STR_P(types), 0, object, true);
+	if (problem) {
+		zend_value_error("Sharp\\Internal\\returned(): Argument #4 ($types) %s", problem);
+		ZVAL_UNDEF(result);
+		return false;
+	}
+	const sharp_type *expected = sharp_type_list_of_frame(types, object, NULL, true,
+		is_user_code ? sharp_type_scope(caller->func->common.scope, caller->func) : NULL, cache + 2);
+	if (!expected) {
+		if (EG(exception)) {
+			ZVAL_UNDEF(result);
+			return false;
+		}
+		ZVAL_COPY(result, value);
+		return true;
+	}
+
+	const sharp_type *crossing = expected->members[0];
+	const sharp_type *checked = expected->count > 1 ? expected->members[1] : crossing;
+	/* Each List the PHP arrays hold is renumbered before a Map or Set takes it. */
+	zval renumbered, plan;
+	ZVAL_COPY(&renumbered, value);
+	sharp_type_renumber(crossing, &renumbered);
+	sharp_type_plan(&plan, crossing);
+	bool crossed = sharp_crossed(result, &renumbered, &plan, crossing);
+	zval_ptr_dtor(&plan);
+	zval_ptr_dtor(&renumbered);
+	/* sharp_crossed released what it made when it failed. */
+	if (!crossed) {
+		ZVAL_UNDEF(result);
+		return false;
+	}
+	if (!sharp_type_verified(checked, crossing, result, Z_STRVAL_P(types + 1))) {
+		zval_ptr_dtor(result);
+		ZVAL_UNDEF(result);
+		return false;
+	}
+
+	return true;
+}
+
+/* A call of \Sharp\Internal\returned the compiler can't make a ZEND_SHARP_RETURNED, as call_user_func's, finds the
+ * method each time. */
 ZEND_FUNCTION(Sharp_Internal_returned)
 {
 	zval *result, *implementer;
@@ -6074,64 +6172,11 @@ ZEND_FUNCTION(Sharp_Internal_returned)
 		Z_PARAM_STR(target)
 	ZEND_PARSE_PARAMETERS_END();
 
-	zend_class_entry *ce = Z_TYPE_P(implementer) == IS_OBJECT ? Z_OBJCE_P(implementer)
-		: Z_TYPE_P(implementer) == IS_STRING ? zend_lookup_class(Z_STR_P(implementer)) : NULL;
-	const zend_function *ran = NULL;
-	if (ce && ce == SHARP_G(returned_class) && method == SHARP_G(returned_name)) {
-		ran = SHARP_G(returned_method);
-	} else if (ce) {
-		ran = zend_class_find_method(ce, method);
-		/* A name that isn't interned may be freed, and another string take its address. */
-		if (ZSTR_IS_INTERNED(method)) {
-			SHARP_G(returned_class) = ce;
-			SHARP_G(returned_name) = method;
-			SHARP_G(returned_method) = ran;
-		}
-	}
-	if ((ran && sharp_function_is_sharp(ran)) || (Z_TYPE_P(implementer) == IS_NULL && ZSTR_LEN(method))) {
-		RETURN_COPY_DEREF(result);
-	}
-
-	const zend_execute_data *caller = EX(prev_execute_data);
-	bool is_user_code = caller && caller->func && ZEND_USER_CODE(caller->func->type);
-	zend_object *object = is_user_code && Z_TYPE(caller->This) == IS_OBJECT ? Z_OBJ(caller->This) : NULL;
-	/* The list is spelled for the calling frame as ZEND_SHARP_VERIFY_TYPE_ARGS spells its own, a method's own type
-	 * parameter as any type, since a call from plain PHP gives the method none. */
-	if (!sharp_caller_type_text(types, 4, 0, object, true)) {
-		RETURN_THROWS();
-	}
-	zval spelled;
-	ZVAL_STR(&spelled, types);
-	void *cache[4] = {NULL};
-	const sharp_type *expected = sharp_type_list_of_frame(&spelled, object, NULL, true,
-		is_user_code ? sharp_type_scope(caller->func->common.scope, caller->func) : NULL, cache);
-	if (!expected) {
-		if (EG(exception)) {
-			RETURN_THROWS();
-		}
-		RETURN_COPY_DEREF(result);
-	}
-
-	const sharp_type *crossing = expected->members[0];
-	const sharp_type *checked = expected->count > 1 ? expected->members[1] : crossing;
-	/* Each List the PHP arrays hold is renumbered before a Map or Set takes it. */
-	zval renumbered, plan;
-	ZVAL_COPY_DEREF(&renumbered, result);
-	sharp_type_renumber(crossing, &renumbered);
-	sharp_type_plan(&plan, crossing);
-	bool crossed = sharp_crossed(return_value, &renumbered, &plan, crossing);
-	zval_ptr_dtor(&plan);
-	zval_ptr_dtor(&renumbered);
-	/* sharp_crossed released what it made when it failed. */
-	if (!crossed) {
-		ZVAL_UNDEF(return_value);
-		RETURN_THROWS();
-	}
-	if (!sharp_type_verified(checked, crossing, return_value, ZSTR_VAL(target))) {
-		zval_ptr_dtor(return_value);
-		ZVAL_UNDEF(return_value);
-		RETURN_THROWS();
-	}
+	zval texts[2];
+	ZVAL_STR(&texts[0], types);
+	ZVAL_STR(&texts[1], target);
+	void *cache[6] = {NULL};
+	sharp_returned(EX(prev_execute_data), return_value, result, implementer, method, texts, cache);
 }
 
 /* Throws the Error for the type arguments of a frame that ZEND_SHARP_TYPE_ARGS could not spell. */
@@ -10357,8 +10402,6 @@ static PHP_RINIT_FUNCTION(sharp)
 	sharp_fiber_scopes_start(&SHARP_G(container_main_scopes), sharp_scope_start());
 	EG(main_fiber_context)->reserved[sharp_fiber_slot] = &SHARP_G(container_main_scopes);
 
-	/* A class of the last request may be freed, and another take its address. */
-	SHARP_G(returned_class) = NULL;
 	/* The CLI names the script in argv[0] only while the request starts, as PHP's $argv does. */
 	zval *arguments = &SHARP_G(arguments);
 
