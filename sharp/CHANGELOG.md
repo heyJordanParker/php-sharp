@@ -10,6 +10,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 The booleans `Class<T>.methods()` and `properties()` give are named as the standard library names every boolean, as `List.isEmpty()` and Kotlin's `KParameter.isOptional` are, spec section 25. `Method.nullable`, `Property.nullable` and `Parameter.nullable` are `isNullable`, and `Parameter.optional` is `isOptional`. `mago` refuses the old names with "Property `Parameter.optional` does not exist.". Write `isNullable` and `isOptional`.
 
+#### Mark the attribute classes a framework reads by reflection
+
+A public member with an attribute no longer escapes spec section 5's warning that it is too wide just for having one. Only an attribute whose class is marked `[ReachedByReflection]` turns the warning off, as .NET's `[DynamicallyAccessedMembers]` says reflection reaches a member. A member marked `[Deprecated]`, `[Import]` or `[Key]` that nothing outside its namespace uses now warns "`Hooks.voided` is public, and nothing outside `App.Payments` uses it.", where 0.6.10 said nothing. An `[Export]` method still never warns, since plain PHP calls it through its global function. Mark each attribute class whose framework reaches the member: `[ReachedByReflection]` on a PHP# class, and `#[\Sharp\ReachedByReflection]` on a plain PHP one.
+
 ### Added
 
 - `Class<T>.methods()` and `properties()` read what .NET's `MethodInfo` and Kotlin's `KFunction` read, spec section 25. A `Method` gives its `declaringClass`, `isStatic` and `visibility`, a `Property` its `declaringClass` and `visibility`, and a `Parameter` `isVariadic` and `defaultValue()`. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member, so an `internal` member reads `Internal` though plain PHP reaches it as a public one. `defaultValue()` evaluates the default on each read, a `new` in it included, and throws `OutOfRangeException` for a parameter without one.
@@ -17,6 +21,7 @@ The booleans `Class<T>.methods()` and `properties()` give are named as the stand
 
 ### Changed
 
+- Spec section 5's too-wide warning skips only a member whose attribute's class is marked `[ReachedByReflection]`, and an `[Export]` method, decision 95, where 0.6.10 skipped a member with any attribute.
 - `List.first(predicate)` that finds nothing throws `OutOfRangeException` with "`first` finds an element the predicate matches, and none does.", where 0.6.10 said "No element matches the predicate".
 - A refusal of an effect that code outside the standard library reaches through a standard library member names that member, as "`Calling.run` reaches `Method.invoke`, which may have every effect", and tells the code to call it where no `uses` limits the effects. 0.6.10 named the library's own plain PHP call, as `ReflectionMethod.getAttributes` for `Method.attributes<T>()`, and told the code to declare it with `extern`.
 
