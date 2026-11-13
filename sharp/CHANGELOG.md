@@ -21,6 +21,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
   - A host's method, property and class initializer provider for a plain PHP class serves a PHP# subclass.
   - A `class-initializers` entry such as `setUp` initializes the properties of a plain PHP class that has exact names from a PHP# interface.
   - A `class_alias()` of a PHP# class names it, and the references a string callable `'Probe\Box::openLid'`, a PHP first-class callable and an effect record name a PHP# class by its exact name.
+- `mago analyze --watch` and the language server drop the uses an edited method of a plain PHP class with exact names made, as the plain `Room` that implements a PHP# interface keys `syncedId`, spec section 24. An edit of the body or the signature of `Room::syncedId` that stops calling `Cart.total` brings back spec section 5's warning "`Cart.total` is public, and nothing outside `App.Shop` uses it.", as a full run reports it. 0.6.9 named the edited method `syncedid`, which no use of `syncedId` meets, and kept the uses its old body made.
 
 ## [0.6.9] - 2026-11-13
 
