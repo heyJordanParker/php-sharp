@@ -18,8 +18,8 @@ all(): List<App.Shop.Order>? fields=0
 count(label: string fields=0): int fields=0
 index(): Map<string, App.Shop.Order> fields=0
 tag(label: string fields=1): void fields=1
-parse(value: Map<int|string, Any?>|Object fields=0): App.Shop.Box fields=0
-tryParse(value: Map<int|string, Any?>|Object fields=0): App.Shop.Box? fields=0
+parse(value: Map<string, Any?>|Object fields=0): App.Shop.Box fields=0
+tryParse(value: Map<string, Any?>|Object fields=0): App.Shop.Box? fields=0
 weigh(grams: int? fields=0, tags: Map<int|string, Any?> optional fields=0): float? fields=0
 array(7) {
   [0]=>
