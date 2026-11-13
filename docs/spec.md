@@ -4532,7 +4532,7 @@ import Vendor.Pdf.render;                                     // compile error: 
 public class Draft { }
 ```
 
-**A function a library declares outside any namespace belongs to the namespace of the library's classes in the same folder,** as Laravel declares `abort()` beside the classes of `Illuminate\Foundation`, and as Kotlin's top-level functions belong to the package of their file. The namespace comes from the classes beside the file, never from the folder's name. After `import Illuminate.Foundation;`, the call is `Foundation.abort(404)`, the value is `Foundation.abort`, and `extern Foundation.now uses Clock;` declares the effect of `now()` (section 29). The call runs PHP's `\abort(404)`:
+**A function or constant a library declares outside any namespace has the namespace an `extern namespace` line gives its folder,** as C#'s `extern alias` gives an assembly a root namespace. `extern namespace Illuminate.Foundation for abort;` in a `.sharp` file of `extern` declarations gives the folder of Laravel's `abort()`, with every function and constant of PHP's root namespace in it, the namespace `Illuminate\Foundation`. After `import Illuminate.Foundation;`, the call is `Foundation.abort(404)`, the value is `Foundation.abort`, and `extern Foundation.now uses Clock;` declares the effect of the `now()` beside it (section 29). The call runs PHP's `\abort(404)`. The line writes its namespace in full, or through the file's import of it, as `Foundation` after `import Illuminate.Foundation;`:
 
 <!-- example library-root-functions -->
 ```php
@@ -4547,6 +4547,14 @@ namespace {
 
 <!-- example library-root-functions -->
 ```csharp
+// app/Stubs/Laravel.sharp
+namespace App.Stubs;
+
+extern namespace Illuminate.Foundation for abort;
+```
+
+<!-- example library-root-functions -->
+```csharp
 // app/Http/CartsController.sharp
 namespace App.Http;
 
@@ -4554,17 +4562,18 @@ import Illuminate.Foundation;
 
 public class CartsController
 {
-    public void missing() => Foundation.abort(404, "Cart not found.");   // compiles: abort belongs to Illuminate.Foundation, the namespace of the class beside it
+    public void missing() => Foundation.abort(404, "Cart not found.");   // compiles: the line gives abort's folder the namespace Illuminate.Foundation
     public void bare() => abort(404);                                    // compile error: no function abort exists
 }
 ```
 
-- **A folder whose classes have several namespaces gives its functions each of them,** and a message that names one of the functions writes it through the first in alphabetical order.
-- **A function with no class of the library beside it belongs to no namespace PHP# code imports,** so PHP# code never names it, as it never names PHP's own built-ins.
+- **The line names a class, function or constant a library declares outside any namespace,** or it is a compile error. One of PHP's built-ins is no library's.
+- **A namespace a class already has is one only a folder that holds a class of it takes,** as `helpers.php` sits beside the classes of `Illuminate\Foundation`, and giving it to another folder is a compile error.
+- **Without a line, a function of PHP's root namespace belongs to no namespace PHP# code imports,** whatever classes sit beside it, so `Foundation.abort(404)` is the error a missing function gets, as PHP's own built-ins are never named.
 - **An import of that namespace is an import like any other,** so a module's `imports` list holds it to the list (section 32).
 - **`global` is an ordinary name.** `global.levenshtein(a, b)` is a compile error that says `global` names no class, and no namespace the file imports, as `gadget.levenshtein(a, b)` is.
 
-**`extern namespace WordPress for WP_Post;` gives a library whose classes have no namespace the PHP# namespace `WordPress`,** as C#'s `extern alias` gives an assembly a root namespace and TypeScript's `declare module` names a library without types. The line stands in a `.sharp` file of `extern` declarations, and names a class of the library, which must be a plain PHP class outside any namespace, or it is a compile error. Its folder's namespace-less classes and functions are then `import WordPress;` and `WordPress.add_action(…)`, `import WordPress.WP_Post;` and `WP_Post`, and run PHP's `\add_action` and `\WP_Post`. `extern WordPress.get_post uses Database;` declares an effect as any `extern` does (section 29), after `import WordPress;`. Two lines that name one folder, one namespace given to two folders, and a namespace a class already has are compile errors:
+**`extern namespace WordPress for WP_Post;` gives a library whose classes have no namespace the PHP# namespace `WordPress`,** as C#'s `extern alias` gives an assembly a root namespace and TypeScript's `declare module` names a library without types. The line stands in a `.sharp` file of `extern` declarations, and names a class of the library, which must be a plain PHP class outside any namespace, or it is a compile error. Its folder's namespace-less classes and functions are then `import WordPress;` and `WordPress.add_action(…)`, `import WordPress.WP_Post;` and `WP_Post`, and run PHP's `\add_action` and `\WP_Post`. A root class of another folder of the library takes no namespace from it. `extern WordPress.get_post uses Database;` declares an effect as any `extern` does (section 29), after `import WordPress;`. Two lines that name one folder and one namespace given to two folders are compile errors:
 
 <!-- example extern-namespace -->
 ```php
@@ -6243,7 +6252,7 @@ extern StripeClient uses Http;
 ```
 
 - **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
-- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern Foundation.now uses Clock;` for a function a library declares outside any namespace, after `import Illuminate.Foundation;` (section 23). `extern namespace WordPress for WP_Post;` declares no effect: it gives a library whose classes have no namespace the namespace its functions are declared through, as `extern WordPress.get_post uses Database;` (section 23).
+- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern Foundation.now uses Clock;` for a function a library declares outside any namespace, after `import Illuminate.Foundation;` and the `extern namespace` line that gives its folder that namespace (section 23). `extern namespace WordPress for WP_Post;` declares no effect: it gives a library's folder of root names the namespace its functions are declared through, as `extern WordPress.get_post uses Database;` (section 23).
 - **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
 
 <!-- example extern-functions -->
@@ -6261,6 +6270,7 @@ namespace App.Stubs;
 import Illuminate.Foundation;
 import Vendor.Pdf;
 
+extern namespace Illuminate.Foundation for now;
 extern Pdf.render uses Files;        // compiles: Pdf.render(html) has the effect Files
 extern Foundation.now uses Clock;    // compiles: Foundation.now() has the effect Clock
 extern now uses Clock;               // compile error: no function now exists

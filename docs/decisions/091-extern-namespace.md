@@ -1,6 +1,6 @@
 # 91. `extern namespace`
 
-Jordan's ruling of 11-11. It extends [decision 83](083-php-through-the-standard-library.md).
+Jordan's ruling of 11-11. It extends [decision 83](083-php-through-the-standard-library.md). [Decision 97](097-one-way-to-name-a-library-s-root-names.md) amends it: the line may name a root function or constant as well as a class, writes its namespace in full or through an import, and may give a namespace a class has to the folder that holds such a class.
 
 ## Decision
 

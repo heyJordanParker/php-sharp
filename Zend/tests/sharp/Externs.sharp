@@ -1,0 +1,4 @@
+namespace Demo;
+
+extern namespace Lib for price_list;
+extern namespace Lib.Shipping for shipping_label;

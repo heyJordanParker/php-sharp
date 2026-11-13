@@ -1,5 +1,5 @@
 --TEST--
-PHP# calls a function a library declares in PHP's root namespace through the namespace of the library's classes, and a namespace function of the same name never replaces it. It reads a library's constant through its namespace, and PHP's own through the standard library
+PHP# calls a function a library declares in PHP's root namespace through the namespace the project's extern namespace line gives its folder, and a namespace function of the same name never replaces it. It reads a library's constant through its namespace, and PHP's own through the standard library
 --FILE--
 <?php
 

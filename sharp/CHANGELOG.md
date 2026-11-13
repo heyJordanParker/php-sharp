@@ -14,6 +14,26 @@ The booleans `Class<T>.methods()` and `properties()` give are named as the stand
 
 A public member with an attribute no longer escapes spec section 5's warning that it is too wide just for having one. Only an attribute whose class is marked `[ReachedByReflection]` turns the warning off, as .NET's `[DynamicallyAccessedMembers]` says reflection reaches a member. A member marked `[Deprecated]`, `[Import]` or `[Key]` that nothing outside its namespace uses now warns "`Hooks.voided` is public, and nothing outside `App.Payments` uses it.", where 0.6.10 said nothing. An `[Export]` method still never warns, since plain PHP calls it through its global function. Mark each attribute class whose framework reaches the member: `[ReachedByReflection]` on a PHP# class, and `#[\Sharp\ReachedByReflection]` on a plain PHP one.
 
+#### Give each library folder of root functions a namespace with `extern namespace`
+
+A function or constant a plain PHP library declares in PHP's root namespace no longer takes the namespace of the classes in its folder, decision 97. `extern namespace` is now the one way to give a library's root names a namespace: it names a class, function or constant of the folder, and gives that folder's root classes, functions and constants the namespace. Without a line, `Foundation.abort(404)` is refused with "Function `Foundation.abort` does not exist.", where 0.6.10 called Laravel's `abort()`. Add one line for each folder the code reaches, in a `.sharp` file of `extern` declarations, with the namespace written in full or through its import:
+
+```csharp
+// 0.6.10: no declaration
+import Illuminate.Foundation;
+
+Foundation.abort(404);
+```
+
+```csharp
+// 0.6.11: app/Stubs/Laravel.sharp
+namespace App.Stubs;
+
+extern namespace Illuminate.Foundation for abort;   // abort(), now() and every root name of helpers.php's folder
+```
+
+A line may give a namespace a class has only to a folder that holds such a class, as `helpers.php` sits beside `Illuminate\Foundation`'s classes. A line also gives its namespace only to the root classes of its own folder, so `WordPress.WP_Screen` of another WordPress folder names no class.
+
 ### Added
 
 - `Class<T>.methods()` and `properties()` read what .NET's `MethodInfo` and Kotlin's `KFunction` read, spec section 25. A `Method` gives its `declaringClass`, `isStatic` and `visibility`, a `Property` its `declaringClass` and `visibility`, and a `Parameter` `isVariadic` and `defaultValue()`. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member, so an `internal` member reads `Internal` though plain PHP reaches it as a public one. `defaultValue()` evaluates the default on each read, a `new` in it included, and throws `OutOfRangeException` for a parameter without one.
@@ -21,6 +41,7 @@ A public member with an attribute no longer escapes spec section 5's warning tha
 
 ### Changed
 
+- `mago convert` writes the `extern namespace` lines a converted file needs into `Externs.sharp` in the project's first PSR-4 folder, decision 97: one line for each library folder whose root functions, constants or classes the file reaches and no line of the project names, as `extern namespace Illuminate.Foundation for abort;`. The namespace is the first of the folder's classes' namespaces, or the one the library's Composer package name gives when it has no namespaced class, as `Acme.StringHelpers` for `acme/string-helpers`. The command creates the file or adds the missing lines in sorted order, never one twice. A plain PHP library's class of PHP's root namespace converts too, as `import Acme.Legacy.Legacy_Order;`, where 0.6.10 refused the file.
 - Spec section 5's too-wide warning skips only a member whose attribute's class is marked `[ReachedByReflection]`, and an `[Export]` method, decision 95, where 0.6.10 skipped a member with any attribute.
 - `List.first(predicate)` that finds nothing throws `OutOfRangeException` with "`first` finds an element the predicate matches, and none does.", where 0.6.10 said "No element matches the predicate".
 - A refusal of an effect that code outside the standard library reaches through a standard library member names that member, as "`Calling.run` reaches `Method.invoke`, which may have every effect", and tells the code to call it where no `uses` limits the effects. 0.6.10 named the library's own plain PHP call, as `ReflectionMethod.getAttributes` for `Method.attributes<T>()`, and told the code to declare it with `extern`.
