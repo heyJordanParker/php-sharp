@@ -5176,8 +5176,44 @@ static zend_result zend_compile_func_clone(znode *result, zend_ast_list *args)
 	return SUCCESS;
 }
 
+/* PHP#: a call of \Sharp\Internal\returned whose method, type text and target are literals is a ZEND_SHARP_RETURNED, so
+ * a PHP# method's result costs one comparison, see sharp_returned. */
+static zend_result zend_compile_func_sharp_returned(znode *result, zend_ast_list *args)
+{
+	if (args->children != 5) {
+		return FAILURE;
+	}
+	for (uint32_t i = 2; i < 5; i++) {
+		if (args->child[i]->kind != ZEND_AST_ZVAL || Z_TYPE_P(zend_ast_get_zval(args->child[i])) != IS_STRING) {
+			return FAILURE;
+		}
+	}
+
+	znode value_node, implementer_node;
+	zend_compile_expr(&value_node, args->child[0]);
+	zend_compile_expr(&implementer_node, args->child[1]);
+	zend_op *opline = zend_emit_op_tmp(result, ZEND_SHARP_RETURNED, &value_node, &implementer_node);
+	opline->extended_value = zend_alloc_cache_slots(6);
+
+	znode method_node;
+	method_node.op_type = IS_CONST;
+	ZVAL_STR_COPY(&method_node.u.constant, zend_ast_get_str(args->child[2]));
+	zend_op *data = zend_emit_op_data(&method_node);
+	zend_string *types = zend_string_copy(zend_ast_get_str(args->child[3]));
+	data->op2_type = IS_CONST;
+	data->op2.constant = zend_add_literal_string(&types);
+	zend_string *target = zend_string_copy(zend_ast_get_str(args->child[4]));
+	zend_add_literal_string(&target);
+
+	return SUCCESS;
+}
+
 static zend_result zend_try_compile_special_func_ex(znode *result, zend_string *lcname, zend_ast_list *args, zend_function *fbc, uint32_t type) /* {{{ */
 {
+	if (zend_string_equals_literal(lcname, "sharp\\internal\\returned")) {
+		return zend_compile_func_sharp_returned(result, args);
+	}
+
 	if (zend_string_equals_literal(lcname, "strlen")) {
 		return zend_compile_func_strlen(result, args);
 	} else if (zend_string_equals_literal(lcname, "is_null")) {

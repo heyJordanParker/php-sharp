@@ -322,6 +322,18 @@ ZEND_COLD void sharp_refuse_named_variadic(const zend_function *func, const Hash
  * a float. */
 bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval *text, void **cache);
 
+/* Spec section 22: puts in `result` what the code `caller` runs reads from `value`, the result of a call of the method
+ * `method`, as declared, on `implementer`, the object or the class it ran on, or null for a call no PHP# function
+ * answers, which passes an empty `method`. A PHP# method's result, and the null a null-safe call gives where its
+ * implementer is null, come back as they are. Plain PHP's result crosses in as the first type the type text list
+ * `types` spells for the frame, and is checked against the second, or the first where the list holds one, a TypeError
+ * naming the target the literal after `types` names. The first two of the six pointers at `cache` keep the class of
+ * the last implementer and its method of that name when that method is PHP#'s, or NULL, and the last four the list.
+ * ZEND_SHARP_RETURNED runs it, and so does a dynamic call of \Sharp\Internal\returned. False after the exception, with
+ * `result` UNDEF. */
+bool sharp_returned(zend_execute_data *caller, zval *result, zval *value, zval *implementer, zend_string *method,
+	const zval *types, void **cache);
+
 /* Whether the property `info`, whose sharp_type is set, takes `value`, as PHP checks a typed property on every write:
  * as sharp_type_accepts decides, with the type spelled for `object`, whose property it is, and an int it accepts for a
  * float becomes a float. A PHP array it takes crosses into the Map or Set object, as the property's #[\Sharp\Crossing]

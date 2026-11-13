@@ -9019,6 +9019,37 @@ ZEND_VM_HANDLER(217, ZEND_SHARP_RETURN_ARRAY, CONST|TMPVAR|CV, ANY)
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
+/* PHP#: `\Sharp\Internal\returned($result, $implementer, 'method', 'types', 'target')`, which reads the result of a call
+ * whose method may be plain PHP's, spec section 22, as sharp_returned gives it. op1 is the result and op2 the
+ * implementer. The OP_DATA after it holds the method's name in its CONST op1, and the type text in its CONST op2, with
+ * the target's name in the literal after it. The first two cache slots keep the implementer's class and its method of
+ * that name when that method is PHP#'s, or NULL, as ZEND_INIT_METHOD_CALL keeps the method it found for a class, so a
+ * PHP# method's result comes back as it is after one comparison. Four slots for the type text follow them. */
+ZEND_VM_HANDLER(218, ZEND_SHARP_RETURNED, CONST|TMP|VAR|CV, CONST|TMP|VAR|CV, CACHE_SLOT)
+{
+	USE_OPLINE
+	zval *value, *implementer;
+	zval *result = EX_VAR(opline->result.var);
+	void **cache = CACHE_ADDR(opline->extended_value);
+
+	SAVE_OPLINE();
+	value = GET_OP1_ZVAL_PTR_DEREF(BP_VAR_R);
+	implementer = GET_OP2_ZVAL_PTR_DEREF(BP_VAR_R);
+	if (EXPECTED(Z_TYPE_P(implementer) == IS_OBJECT)
+			&& EXPECTED(cache[0] == Z_OBJCE_P(implementer))
+			&& EXPECTED(cache[1] != NULL)) {
+		ZVAL_COPY(result, value);
+	} else {
+		const zend_op *data = opline + 1;
+
+		sharp_returned(execute_data, result, value, implementer, Z_STR_P(RT_CONSTANT(data, data->op1)),
+			RT_CONSTANT(data, data->op2), cache);
+	}
+	FREE_OP1();
+	FREE_OP2();
+	ZEND_VM_NEXT_OPCODE_EX(1, 2);
+}
+
 ZEND_VM_HANDLER(162, ZEND_FAST_CALL, JMP_ADDR, ANY)
 {
 	USE_OPLINE

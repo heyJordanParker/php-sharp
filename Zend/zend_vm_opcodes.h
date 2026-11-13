@@ -338,7 +338,8 @@ END_EXTERN_C()
 #define ZEND_SHARP_TYPE_OF                  215
 #define ZEND_SHARP_LEAVE                    216
 #define ZEND_SHARP_RETURN_ARRAY             217
+#define ZEND_SHARP_RETURNED                 218
 
-#define ZEND_VM_LAST_OPCODE                 217
+#define ZEND_VM_LAST_OPCODE                 218
 
 #endif
