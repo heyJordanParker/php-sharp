@@ -13,4 +13,13 @@ class Builder
     {
         return $this;
     }
+
+    /**
+     * @param literal-string $expression
+     * @param list<mixed> $bindings
+     */
+    public function selectRaw(string $expression, array $bindings = []): static
+    {
+        return $this;
+    }
 }

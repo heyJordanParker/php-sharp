@@ -16,7 +16,12 @@ Code finds a PHP# class, interface, enum or trait only by the name it declares, 
 
 ### Added
 
-- `Class<T>.methods()` gives a class's instance and static methods, its own first and then those it inherits, spec section 25, as `properties()` gives its properties. A `Method` has its `name`, its result `type`, `nullable`, `attributes<TAttribute : Object>()` and `parameters()`, and a `Parameter` its `name`, `type`, `nullable`, `optional` and `attributes<TAttribute : Object>()`. `typeof(Box<Order>).methods()` reads `Order` where `Box` writes its type parameter.
+- `Class<T>.methods()` gives a class's instance and static methods, its own first and then those it inherits, spec section 25, as `properties()` gives its properties. A `Method` has its `name`, its result `type`, `nullable`, `attributes<TAttribute : Object>()` and `parameters()`, and a `Parameter` its `name`, `type`, `nullable`, `optional` and `attributes<TAttribute : Object>()`. `typeof(Box<Order>).methods()` reads `Order` where `Box` writes its type parameter. The `parse` and `tryParse` a class gets take a `Map<string, Any?>|Object`.
+- `Json.encode` takes `indent`, spec section 24. `indent: 2` writes each nested value on its own line, 2 spaces deeper than its parent, with `": "` after a key and `[]` and `{}` for an empty value, as JavaScript's `JSON.stringify(value, null, 2)` does. `indent: 4` writes the bytes of PHP's `JSON_PRETTY_PRINT`, the default `0` writes one line, and a negative `indent` throws a `ValueError`.
+
+### Changed
+
+- A call whose result crosses into PHP#, as a PHP# call of a virtual method that plain PHP may override, finds the method that ran once per receiver class at each call site, where 0.6.8 looked it up on every call. A loop of camelCase method calls runs in about two thirds of the instructions.
 
 ### Fixed
 
@@ -27,6 +32,11 @@ Code finds a PHP# class, interface, enum or trait only by the name it declares, 
 - `Sharp\Container` knows a PHP# service class by its exact name, so `get('app\shop\stamp')` names no binding of `App\Shop\Stamp`, and a test file's module applies only to its class's exact name. A plain PHP class still matches in any case.
 - A law tells two fields whose names differ only in case apart, as PHP does, where 0.6.8 read a stored `raw` for an accessor `Raw`.
 - phpdbg finds a PHP# class by its exact name: `break App\Order::total#1` resolves in a loaded PHP# class where 0.6.8 left it pending, and `break App\Order::Total` no longer stops in its twin `total()`.
+- phpdbg keeps `break App\Order::total` and `break App\Order::Total` as two breakpoints of a PHP# class, each stopping in its own method, where 0.6.8 refused the second with "Breakpoint exists". A plain PHP class still names its methods in any case.
+- The `parse` and `tryParse` a struct or class gets list the effects of what they run in their function type: the main constructor, the `set` accessor of each property they write, and the `parse` of each struct or class a field holds, where 0.6.8 gave them none.
+- A constant's type is its declared type, which its value may only narrow, so `private const string LABEL = "1.0 / " + Weights.COUNT + " as weight";` reads as a `string` where 0.6.8 read it as an `int`. Its value is still refused at its declaration, and the help of a `+` that joins a string with a number now writes its whole chain as a template, as `` `1.0 / ${Weights.COUNT} as weight` ``.
+- A string fixed while the code compiles reaches a plain PHP `literal-string` parameter, as Laravel's `selectRaw` declares one: a template or a `+` join whose parts are all literals or constants of type `int`, `float` or `string`, and a constant that holds one. 0.6.8 refused `query.selectRaw(Weights.LINEAR)` for `` private const string LINEAR = `1.0 / ${Weights.TOUCHES} as weight`; ``.
+
 ## [0.6.8] - 2026-11-12
 
 ### Fixed
