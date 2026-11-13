@@ -25,18 +25,22 @@ public static class Report
         return lines;
     }
 
-    // Plain PHP closures whose results declare `static`, `self` and `never`.
+    // Plain PHP closures whose results declare `static`, `self` and `never`, and a PHP# lambda that never returns beside
+    // the plain one.
     public static List<bool> tests()
     {
         Any? made = Chain.maker();
         Any? same = new Chain().selfMaker();
         Any? failing = Linked.failer();
+        Any? throwing = () => throw new ValueError("never returns");
         return [
             made is Function<Chain()>,
             same is Function<Linked()>,
             same is Function<Chain()>,
             failing is Function<Chain()>,
             failing is Function<string()>,
+            throwing is Function<Chain()>,
+            throwing is Function<string()>,
         ];
     }
 }
