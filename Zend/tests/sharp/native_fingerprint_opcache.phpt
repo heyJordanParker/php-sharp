@@ -15,7 +15,8 @@ $files = [
     'mago.toml' => "[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n",
     'vendor/heyjordanparker/php-sharp-composer/composer.json' => '{"name": "heyjordanparker/php-sharp-composer"}',
     'vendor/heyjordanparker/php-sharp-composer/native.php' => file_get_contents("$package/native.php"),
-    'vendor/composer/installed.json' => '{"packages": [{"name": "heyjordanparker/php-sharp-composer", "version": "9.9.9"}]}',
+    // A dev version names no release, so mago compiles against it, and the engine's refusal names it.
+    'vendor/composer/installed.json' => '{"packages": [{"name": "heyjordanparker/php-sharp-composer", "version": "9.9.x-dev"}]}',
     'app/Clock.sharp' => "namespace App;\n\npublic class Clock\n{\n    public string now() => \"noon\";\n}\n",
 ];
 foreach (LIBRARY_MODULE as $library) {
@@ -69,5 +70,5 @@ the file cache, first: noon, in the file cache
 the file cache, again: noon, in the file cache
 shared memory, first: noon, cached
 shared memory, again: noon, cached
-the file cache, compiled against other native bodies: This project's PHP# library is 9.9.9, and the PHP# engine is <engine version>. Install PHP# 9.9.9, or require heyjordanparker/php-sharp-composer <engine version>., not in the file cache
-shared memory, compiled against other native bodies: This project's PHP# library is 9.9.9, and the PHP# engine is <engine version>. Install PHP# 9.9.9, or require heyjordanparker/php-sharp-composer <engine version>., not cached
+the file cache, compiled against other native bodies: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>., not in the file cache
+shared memory, compiled against other native bodies: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>., not cached

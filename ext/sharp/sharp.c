@@ -8654,7 +8654,7 @@ static zend_string *sharp_dispatcher_namespace(zend_class_entry *event, const ze
 /* emit hands the event to the app's dispatcher with one function per listener. The dispatcher sees every event, one
  * no listener hears included, whoever emits it: an app class, a PHP# package in vendor/ or plain PHP. id is the
  * dispatcher's service, the interface the standard library marks DispatchesEmits, which mago compile names at each
- * emit, so the engine names no class. It is null in a project without the standard library, which has no dispatcher. */
+ * emit, so the engine names no class. */
 ZEND_FUNCTION(Sharp_Internal_emit)
 {
 	zval *event, listeners, dispatcher;
@@ -8663,13 +8663,9 @@ ZEND_FUNCTION(Sharp_Internal_emit)
 
 	ZEND_PARSE_PARAMETERS_START(2, 2)
 		Z_PARAM_OBJECT(event)
-		Z_PARAM_STR_OR_NULL(id)
+		Z_PARAM_STR(id)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (!id) {
-		zend_throw_error(sharp_ce_container_error, "No module binds a dispatcher");
-		RETURN_THROWS();
-	}
 	if (!sharp_listeners_for(event, &listeners)) {
 		RETURN_THROWS();
 	}

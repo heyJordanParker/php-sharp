@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 2295258b6e92dcb70b1b9fe7ed47f07c3f740900 */
+ * Stub hash: e1f0dd3aa5a304fbfde4222385cd139c55de48c1 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -108,7 +108,7 @@ ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_emit, 0, 2, IS_VOID, 0)
 	ZEND_ARG_TYPE_INFO(0, event, IS_OBJECT, 0)
-	ZEND_ARG_TYPE_INFO(0, dispatcher, IS_STRING, 1)
+	ZEND_ARG_TYPE_INFO(0, dispatcher, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_listenersFor, 0, 1, IS_ARRAY, 0)

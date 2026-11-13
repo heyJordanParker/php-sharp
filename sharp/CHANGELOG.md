@@ -64,7 +64,15 @@ The 0.6.11 engine refuses every `.sharpc` file an older mago wrote, because `SHA
 Shop.sharp was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine.
 ```
 
-With `sharp.compile_command` set, the engine runs it and reads the files it writes. Otherwise, compile again after upgrading. mago 0.6.11 also needs the 0.6.11 standard library, whose `Dispatcher` carries the mark: against the 0.6.10 library, every `emit` throws `Sharp\ContainerError` with "No module binds a dispatcher".
+With `sharp.compile_command` set, the engine runs it and reads the files it writes. Otherwise, compile again after upgrading.
+
+mago now refuses to compile against a standard library of another release, since it reads the library it ships with, as the `Dispatcher` the library marks. mago 0.6.11 says so where 0.6.10 compiled:
+
+```text
+This project's PHP# standard library is 0.6.10, and mago is 0.6.11. Move mago and the standard library to the same release: require heyjordanparker/php-sharp-composer 0.6.11, or heyjordanparker/mago-sharp 0.6.10.
+```
+
+A Composer dev version of the library, as `dev-master`, names no release, so it compiles. An `emit` in a project without the standard library, which has no dispatcher, is refused with "`emit` hands its event to a dispatcher, and this project has none.", where 0.6.10 compiled it and it threw at run time.
 
 ```sh
 composer require "heyjordanparker/php-sharp-composer:^0.6.11"
