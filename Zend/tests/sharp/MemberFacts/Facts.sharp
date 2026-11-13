@@ -1,0 +1,63 @@
+namespace App.Facts;
+
+import Lib.PlainJournal;
+
+// Reads each fact `methods()` and `properties()` give about a class's members, inherited ones included, spec section 25.
+public static class Facts
+{
+    public static List<string> journal() => Facts.members(typeof(Journal));
+
+    public static List<string> tag() => Facts.members(typeof(Tag));
+
+    public static List<string> plainJournal() => Facts.members(typeof(PlainJournal));
+
+    private static List<string> members<T : Object>(Class<T> type)
+    {
+        List<string> lines = [];
+        for (const property of type.properties()) {
+            lines.add(`property ${property.declaringClass.name()}.${property.name} ${property.visibility.name}`);
+        }
+        for (const method of type.methods()) {
+            if (method.name == "parse" || method.name == "tryParse") {
+                continue;
+            }
+            const parameters = method.parameters().map(parameter => Facts.parameter(parameter));
+            const shared = method.isStatic ? " static" : "";
+            lines.add(
+                `method ${method.declaringClass.name()}.${method.name}(${parameters.join(", ")}) ${method.visibility.name}${shared}`
+            );
+        }
+        return lines;
+    }
+
+    // A `new` in a default creates a new object on each read.
+    public static bool readsANewDefaultEachTime()
+    {
+        const tag = typeof(Ledger).methods().first(method => method.name == "total").parameters()[1];
+        if (tag.defaultValue() is Tag first && tag.defaultValue() is Tag second) {
+            return first !== second;
+        }
+        return false;
+    }
+
+    // A parameter a call must give, which has no default value.
+    public static Parameter required() => typeof(Ledger).methods().first(method => method.name == "reset").parameters()[0];
+
+    private static string parameter(Parameter parameter)
+    {
+        const variadic = parameter.isVariadic ? "..." : "";
+        const value = parameter.isOptional && !parameter.isVariadic ? ` = ${Facts.shown(parameter.defaultValue())}` : "";
+        return `${variadic}${parameter.name}${value}`;
+    }
+
+    private static string shown(Any? value)
+    {
+        if (value is Tag tag) {
+            return `new Tag(${tag.label})`;
+        }
+        if (value is int number) {
+            return `${number}`;
+        }
+        return "other";
+    }
+}

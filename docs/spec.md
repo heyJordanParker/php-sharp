@@ -5325,7 +5325,7 @@ Class.of(row).name();              // "App.Orders.Counted"
 typeof(Counted).name();            // "App.Orders.Counted"
 ```
 
-**`properties()` reads the properties a class declares, and `typeArguments()` a type's type arguments,** as .NET's `Type.GetProperties()` and `GetGenericArguments()` do, so an ORM, a serializer or a form builder reads a class's declared types without plain PHP reflection. `properties()` gives a `List<Property>` of every instance property and field, private ones included, the class's own first and then those it inherits, in the order they are declared. A `Property` has its `name`, its `type` as a `Class<Any?>` without `?`, `nullable`, and `attributes<TAttribute : Object>()`, as `Class<T>`'s own:
+**`properties()` reads the properties a class declares, and `typeArguments()` a type's type arguments,** as .NET's `Type.GetProperties()` and `GetGenericArguments()` do, so an ORM, a serializer or a form builder reads a class's declared types without plain PHP reflection. `properties()` gives a `List<Property>` of every instance property and field, private ones included, the class's own first and then those it inherits, in the order they are declared. A `Property` has its `name`, its `type` as a `Class<Any?>` without `?`, `isNullable`, the `declaringClass` that declares it, its `visibility`, and `attributes<TAttribute : Object>()`, as `Class<T>`'s own. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member (section 5), as Kotlin's `KVisibility` gives it, so an `internal` member reads `Internal` though plain PHP reaches it as a public one:
 
 <!-- example declared-types -->
 ```csharp
@@ -5352,12 +5352,15 @@ properties.map(property => property.name);                  // ["tags", "stock",
 properties[0].type == typeof(List<string>);                  // true
 properties[0].type.typeArguments() == [typeof(string)];     // true
 properties[1].type.typeArguments() == [];                   // true
-properties[1].nullable;                                     // true
+properties[1].isNullable;                                   // true
 properties[1].attributes<Field>().count();                  // 1
+properties[1].declaringClass == typeof(Product);            // true
+properties[1].visibility == Visibility.Private;             // true
+properties[2].visibility == Visibility.Public;              // true
 typeof(Map<string, int>).typeArguments() == [typeof(string), typeof(int)];   // true
 ```
 
-**`methods()` reads the methods a class declares,** as .NET's `Type.GetMethods()` does. It gives a `List<Method>` of every instance and static method, private ones included, the class's own first and then those it inherits, in the order they are declared, without the constructor. A `Method` has its `name`, its result `type` as a `Class<Any?>` without `?`, `nullable`, `attributes<TAttribute : Object>()`, and `parameters()`, a `List<Parameter>`. A `Parameter` has its `name`, `type`, `nullable`, `optional`, which holds when it has a default value, and `attributes<TAttribute : Object>()`. The type arguments of the class value stand for the class's type parameters, and a plain PHP method gives its PHP types as PHP# writes them, as `properties()` does:
+**`methods()` reads the methods a class declares,** as .NET's `Type.GetMethods()` does. It gives a `List<Method>` of every instance and static method, private ones included, the class's own first and then those it inherits, in the order they are declared, without the constructor. A `Method` has its `name`, its result `type` as a `Class<Any?>` without `?`, `isNullable`, `isStatic`, its `declaringClass` and `visibility`, as a `Property` has them, `attributes<TAttribute : Object>()`, and `parameters()`, a `List<Parameter>`, as .NET's `MethodInfo` and Kotlin's `KFunction` give them. A `Parameter` has its `name`, `type`, `isNullable`, `isOptional`, which holds when a call may leave it out, `isVariadic`, `defaultValue()`, and `attributes<TAttribute : Object>()`, as .NET's `ParameterInfo` and Kotlin's `KParameter` give them. `defaultValue()` evaluates the default each time, so a `new` in it creates a new object on each read, and a parameter without one throws `OutOfRangeException`, as `first` does when nothing matches. The type arguments of the class value stand for the class's type parameters, and a plain PHP method gives its PHP types as PHP# writes them, as `properties()` does:
 
 <!-- example declared-methods -->
 ```csharp
@@ -5377,10 +5380,15 @@ import App.Shelf.Crate;
 const methods = typeof(Crate<string>).methods();
 methods[0].name;                                              // "first"
 methods[0].type == typeof(string);                            // true
-methods[0].nullable;                                          // true
+methods[0].isNullable;                                        // true
+methods[0].isStatic;                                          // false
+methods[0].declaringClass.name();                             // "App.Shelf.Crate"
+methods[0].visibility == Visibility.Public;                   // true
 methods[0].parameters().map(parameter => parameter.name);     // ["items", "limit"]
 methods[0].parameters()[0].type == typeof(List<string>);      // true
-methods[0].parameters()[1].optional;                          // true
+methods[0].parameters()[1].isOptional;                        // true
+methods[0].parameters()[1].isVariadic;                        // false
+methods[0].parameters()[1].defaultValue();                    // 1
 ```
 
 **A class value works wherever a class name works.** `typeof` and `Class.of` give one, and a `Class<T>` field, parameter or local holds one:

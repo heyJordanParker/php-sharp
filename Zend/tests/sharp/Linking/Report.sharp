@@ -9,7 +9,7 @@ public static class Report
     {
         List<string> lines = [];
         for (const property of typeof(Chain).properties()) {
-            const nullable = property.nullable ? "?" : "";
+            const nullable = property.isNullable ? "?" : "";
             lines.add(`${property.name}: ${property.type.name()}${nullable}`);
         }
         return lines;

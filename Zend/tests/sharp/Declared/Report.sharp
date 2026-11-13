@@ -10,7 +10,7 @@ public class Report
         for (const property of typeof(Product).properties()) {
             const arguments = property.type.typeArguments().map(type => type.name());
             const fields = property.attributes<Field>().map(field => `Field(${field.label ?? ""})`);
-            const nullable = property.nullable ? "true" : "false";
+            const nullable = property.isNullable ? "true" : "false";
             lines.add(`${property.name}: ${property.type.name()} nullable=${nullable} arguments=[${arguments.join(", ")}] attributes=[${fields.join(", ")}]`);
         }
         return lines;

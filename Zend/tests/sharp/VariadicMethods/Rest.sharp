@@ -1,0 +1,10 @@
+namespace App.Rest;
+
+// A class with a method whose last parameter takes the rest of a call's arguments.
+public static class Rest
+{
+    public static int join(string ...parts) => parts.count();
+
+    public static List<string> parameters()
+        => typeof(Rest).methods().first(method => method.name == "join").parameters().map(parameter => parameter.name);
+}

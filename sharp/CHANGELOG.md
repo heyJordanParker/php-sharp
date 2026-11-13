@@ -4,8 +4,19 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.10
+
+#### Read a reflection boolean by its `is` name
+
+The booleans `Class<T>.methods()` and `properties()` give are named as the standard library names every boolean, as `List.isEmpty()` and Kotlin's `KParameter.isOptional` are, spec section 25. `Method.nullable`, `Property.nullable` and `Parameter.nullable` are `isNullable`, and `Parameter.optional` is `isOptional`. `mago` refuses the old names with "Property `Parameter.optional` does not exist.". Write `isNullable` and `isOptional`.
+
+### Added
+
+- `Class<T>.methods()` and `properties()` read what .NET's `MethodInfo` and Kotlin's `KFunction` read, spec section 25. A `Method` gives its `declaringClass`, `isStatic` and `visibility`, a `Property` its `declaringClass` and `visibility`, and a `Parameter` `isVariadic` and `defaultValue()`. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member, so an `internal` member reads `Internal` though plain PHP reaches it as a public one. `defaultValue()` evaluates the default on each read, a `new` in it included, and throws `OutOfRangeException` for a parameter without one.
+
 ### Fixed
 
+- `Class<T>.methods()` reads a method whose last parameter is variadic, as `join(string ...parts)`, and gives that parameter as `parts`, where 0.6.10's engine crashed.
 - `mago analyze --watch` and the language server drop the uses an edited method of a plain PHP class with exact names made, as the plain `Room` that implements a PHP# interface keys `syncedId`, spec section 24. An edit of the body or the signature of `Room::syncedId` that stops calling `Cart.total` brings back spec section 5's warning "`Cart.total` is public, and nothing outside `App.Shop` uses it.", as a full run reports it. 0.6.10 named the edited method `syncedid`, which no use of `syncedId` meets, and kept the uses its old body made.
 - Two PHP# names that differ only in case name two things everywhere, spec section 24, where 0.6.10 still compared some names ignoring case and took one twin for the other. Each compare now keys a name by the engine's rule, a PHP# class-like and the methods of a class with exact names as written, and any other in any case:
   - A host's return-type, assertion, signature and call-forwarding provider, its method-call hook and its entry point of `Demo\Box::total` reach `total` and never its twin `Total`, and a class-like pattern names a PHP# class-like as written. The SDK's `FunctionLikeIdentifier` carries its class's rule as Mago answers it, so `equals` tells `Box::total` from `Box::Total`, and a worker accepts one hook of both `Box::open` and `Box::Open`, where 0.6.10 refused it as a target named twice. The analyzer protocol moves to 1.14, so a mixed pair is refused at its first message.

@@ -1,0 +1,7 @@
+namespace App.Facts;
+
+// A class that inherits each member of `Ledger`.
+public class Journal : Ledger
+{
+    public string title() => "journal";
+}

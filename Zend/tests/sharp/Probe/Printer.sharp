@@ -8,7 +8,7 @@ public static class Printer
         List<string> lines = [];
         for (const property of type.properties()) {
             const arguments = property.type.typeArguments().map(argument => argument.name());
-            const nullable = property.nullable ? "true" : "false";
+            const nullable = property.isNullable ? "true" : "false";
             lines.add(`${property.name}: ${property.type.name()} nullable=${nullable} arguments=[${arguments.join(", ")}]`);
         }
         return lines;

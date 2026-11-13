@@ -4858,9 +4858,36 @@ static void sharp_add_declared_type(zval *entry, const sharp_type *type)
 	add_next_index_string(entry, nullable ? "?" : "");
 }
 
+/* The name of the parameter at `offset` of `func`, as get_function_arg_name reads it, and also a variadic one's, which
+ * PHP keeps after the others, outside num_args, where get_function_arg_name gives NULL. */
+static const char *sharp_parameter_name(const zend_function *func, uint32_t offset)
+{
+	if (func->type == ZEND_USER_FUNCTION || (func->common.fn_flags & ZEND_ACC_USER_ARG_INFO)) {
+		return ZSTR_VAL(func->common.arg_info[offset].name);
+	}
+
+	return ((const zend_internal_arg_info *) func->common.arg_info)[offset].name;
+}
+
+/* Adds to `entry` the access modifier that declares a member of the PHP flags `flags` and the attributes `attributes`,
+ * spec section 5. PHP has no namespace reach, so an `internal` member runs as public, and the bridge marks it with
+ * #[\Sharp\Internal\Internal]. */
+static void sharp_add_visibility(zval *entry, uint32_t flags, HashTable *attributes)
+{
+	if (flags & ZEND_ACC_PRIVATE) {
+		add_next_index_string(entry, "private");
+	} else if (flags & ZEND_ACC_PROTECTED) {
+		add_next_index_string(entry, "protected");
+	} else if (attributes && zend_get_attribute_str(attributes, ZEND_STRL("sharp\\internal\\internal"))) {
+		add_next_index_string(entry, "internal");
+	} else {
+		add_next_index_string(entry, "public");
+	}
+}
+
 /* Spec section 25: what `Class<T>.properties()` reads, the instance properties and fields of the class `type` names, its
  * own first and then those it inherits, in the order they are declared. Each is the list of the class that declares
- * it, its name, and its type as sharp_add_declared_type adds it. */
+ * it, its name, its type as sharp_add_declared_type adds it, and its access modifier as sharp_add_visibility adds it. */
 ZEND_FUNCTION(Sharp_Internal_properties)
 {
 	zend_string *value;
@@ -4891,10 +4918,11 @@ ZEND_FUNCTION(Sharp_Internal_properties)
 			RETURN_THROWS();
 		}
 		zval property;
-		array_init_size(&property, 4);
+		array_init_size(&property, 5);
 		add_next_index_str(&property, zend_string_copy(info->ce->name));
 		add_next_index_string(&property, zend_get_unmangled_property_name(info->name));
 		sharp_add_declared_type(&property, type);
+		sharp_add_visibility(&property, info->flags, info->attributes);
 		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &property);
 	} ZEND_HASH_FOREACH_END();
 }
@@ -4902,9 +4930,10 @@ ZEND_FUNCTION(Sharp_Internal_properties)
 /* Spec section 25: what `Class<T>.methods()` reads, the instance and static methods of the class `type` names, its own
  * first and then those it inherits, in the order they are declared, without its constructor, the magic methods PHP
  * names with `__`, and the methods PHP# runs a member's accessors as, whose names hold `#`. Each is a list of string
- * lists: first the class that declares it, its name, and its result type as sharp_add_declared_type adds it, then one
- * per parameter, its name, its type as sharp_add_declared_type adds it, and "optional" for one a call may leave out, or
- * "". */
+ * lists: first the class that declares it, its name, its result type as sharp_add_declared_type adds it, "static" for a
+ * static method or "", and its access modifier as sharp_add_visibility adds it, then one per parameter, its name, its
+ * type as sharp_add_declared_type adds it, "optional" for one a call may leave out or "", and "variadic" for the one
+ * that takes the rest of a call's arguments or "". */
 ZEND_FUNCTION(Sharp_Internal_methods)
 {
 	zend_string *value;
@@ -4938,17 +4967,21 @@ ZEND_FUNCTION(Sharp_Internal_methods)
 		uint32_t count = func->common.num_args + !!(func->common.fn_flags & ZEND_ACC_VARIADIC);
 		zval method, declared;
 		array_init_size(&method, count + 1);
-		array_init_size(&declared, 4);
+		array_init_size(&declared, 6);
 		add_next_index_str(&declared, zend_string_copy(func->common.scope->name));
 		add_next_index_str(&declared, zend_string_copy(func->common.function_name));
 		sharp_add_declared_type(&declared, types->members[0]);
+		add_next_index_string(&declared, (func->common.fn_flags & ZEND_ACC_STATIC) ? "static" : "");
+		sharp_add_visibility(&declared, func->common.fn_flags, func->common.attributes);
 		zend_hash_next_index_insert_new(Z_ARRVAL(method), &declared);
 		for (uint32_t i = 0; i < count; i++) {
 			zval parameter;
-			array_init_size(&parameter, 4);
-			add_next_index_string(&parameter, get_function_arg_name(func, i + 1));
+			array_init_size(&parameter, 5);
+			add_next_index_string(&parameter, sharp_parameter_name(func, i));
 			sharp_add_declared_type(&parameter, types->members[i + 1]);
 			add_next_index_string(&parameter, i >= func->common.required_num_args ? "optional" : "");
+			/* PHP keeps a variadic parameter after the others, outside num_args. */
+			add_next_index_string(&parameter, i == func->common.num_args ? "variadic" : "");
 			zend_hash_next_index_insert_new(Z_ARRVAL(method), &parameter);
 		}
 		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &method);
@@ -10354,6 +10387,25 @@ static void register_class_Sharp_Crossing(void)
 	ZVAL_LONG(&attribute->args[0].value, ZEND_ATTRIBUTE_TARGET_PROPERTY);
 }
 
+/* #[\Sharp\Internal\Internal], the mark the bridge puts on a member written `internal`, spec section 5, which runs as
+ * public, so `methods()` and `properties()` give its `Visibility.Internal`, spec section 25. The engine declares it, as
+ * #[\Sharp\Crossing], so plain PHP that makes an object of each attribute it reads makes one of it too, and reading
+ * attributes of a class finds it without an autoloader. A parameter a constructor promotes carries it as PHP gives it
+ * the property's attributes. */
+static void register_class_Sharp_Internal_Internal(void)
+{
+	zend_class_entry ce;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp\\Internal", "Internal", NULL);
+	zend_class_entry *internal = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL);
+
+	zend_string *attribute_name = zend_string_init_interned("Attribute", sizeof("Attribute") - 1, true);
+	zend_attribute *attribute = zend_add_class_attribute(internal, attribute_name, 1);
+	zend_string_release(attribute_name);
+	ZVAL_LONG(&attribute->args[0].value,
+		ZEND_ATTRIBUTE_TARGET_METHOD | ZEND_ATTRIBUTE_TARGET_PROPERTY | ZEND_ATTRIBUTE_TARGET_PARAMETER);
+}
+
 static PHP_MINIT_FUNCTION(sharp)
 {
 	REGISTER_INI_ENTRIES();
@@ -10373,6 +10425,7 @@ static PHP_MINIT_FUNCTION(sharp)
 	sharp_ce_struct = register_class_Sharp_Struct();
 	register_sharp_tables();
 	register_class_Sharp_Crossing();
+	register_class_Sharp_Internal_Internal();
 
 	register_class_Sharp_Container();
 	sharp_ce_container_error = register_class_Sharp_ContainerError(zend_ce_error);
