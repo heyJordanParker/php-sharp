@@ -66,7 +66,7 @@ Shop.sharp was compiled for a different PHP# engine. Install the mago-sharp rele
 
 With `sharp.compile_command` set, the engine runs it and reads the files it writes. Otherwise, compile again after upgrading.
 
-mago now refuses to compile against a standard library of another release, since it reads the library it ships with, as the `Dispatcher` the library marks. mago 0.6.11 says so where 0.6.10 compiled:
+mago now refuses to compile against a standard library of another release, since it reads the library it ships with, as the `Dispatcher` the library marks. So does the compile for the extension hosts that `mago analyze`, `lint` and `convert` run, which 0.6.10 ran against no library when it couldn't read the installed one. mago 0.6.11 says so where 0.6.10 compiled:
 
 ```text
 This project's PHP# standard library is 0.6.10, and mago is 0.6.11. Move mago and the standard library to the same release: require heyjordanparker/php-sharp-composer 0.6.11, or heyjordanparker/mago-sharp 0.6.10.
