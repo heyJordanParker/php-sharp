@@ -8,6 +8,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 - A plain PHP closure answers `is Function<…>` by its declared PHP signature, spec section 21, where 0.6.9 answered false for every one. `static fn (): ?Item => new Item()` and `static fn (): Item => new Item()` are a `Function<Item?() uses none>`, a parameter it declares no type for takes anything, and a result it declares no type for is `Any?`, so `static fn () => new Item()` is a `Function<Any?()>` and not a `Function<Item?()>`. Its type lists no effects, so it fits every `uses`, as the checker takes a plain PHP callable.
 - `mago` names a method that a plain PHP class's `__call` serves as the call writes it, so a call of `whereKey` that the `__call` of a `ForwardedQuery` serves warns "Ambiguous method call to `whereKey` on class `ForwardedQuery`.", where 0.6.9 wrote `wherekey`.
+- A lazy `map` of a plain PHP closure is an `Iterable` of the result type the closure declares, spec section 12, so `ids.map(label)` with `static fn (int $id): string => "#$id"` is an `Iterable<string>` without running it, where 0.6.9 read every plain closure's result as `Any?`. A closure that declares no result type still gives an `Iterable<Any?>`.
 
 ## [0.6.9] - 2026-11-13
 

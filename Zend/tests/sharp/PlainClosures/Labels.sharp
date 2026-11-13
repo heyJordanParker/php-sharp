@@ -1,0 +1,8 @@
+namespace App.PlainClosures;
+
+public class Labels
+{
+    public static Iterable<string> of(Iterable<int> ids, Function<string(int) uses none> label) => ids.map(label);
+
+    public static bool areStrings(Any? value) => value is Iterable<string>;
+}
