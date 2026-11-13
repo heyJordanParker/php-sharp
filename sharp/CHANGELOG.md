@@ -116,6 +116,7 @@ vendor/bin/mago compile
   - `use …\Defaults { recordEntry as entry; Total as grandTotal; }` gives the class `entry` and `grandTotal`, and `grandTotal` is the twin `Total`, never `total`. 0.6.10 keyed the names of an `as` in lowercase before the class had exact names, so it reported `entry` and `grandTotal` as methods that don't exist, and `Codebase::findMethods()` named an alias by the trait's method.
   - A call in another case of a method the class takes from the trait names the method it meant, as "`Demo\TakesDefaults` has no member `Count`; did you mean `count`?", where 0.6.10 said only "Method `Count` does not exist".
   - A value of an intersection with a PHP# part, as `Ledger&Countable`, is of a class with the part's exact names, so `$o->Count()` is the error the engine throws, where 0.6.10 took the plain `Countable`'s `count` for it. The error names the PHP# part, in either order of the intersection.
+- `mago` reads a class's trait adaptations as PHP applies them. `B::m insteadof A` gives the class `B`'s `m`, where 0.6.10 kept the first trait's. A qualified `A::m as am` aliases only `A`'s `m`, where 0.6.10 aliased every used trait's `m`, and a method keeps each of its aliases, as `am` and `amAgain`, where 0.6.10 kept only the last alias of each method name. A visibility change applies only to the trait method the class takes, so `A::n as protected` after `B::n insteadof A`, or `k as protected` beside the class's own `k`, leaves `n` and `k` public, where 0.6.10 refused their calls as calls of a protected method.
 
 ## [0.6.10] - 2026-11-13
 
