@@ -5188,19 +5188,23 @@ Json.encode(["tags": ["a"], "none": [:]], indent: 2);                           
 Json.encode(payload, indent: -1);                                                  // throws: "Json.encode: indent is -1, and it must be 0 or more"
 ```
 
-**`Sql.identifier(name, allowed)` gives `name` as SQL only when it is one of `allowed`,** and throws a `ValueError` for any other, so a column or a table chosen while the code runs reaches a plain PHP `literal-string` parameter, as Laravel's `orderByRaw` declares one, as one of the application's own names. Values still go through a query's bindings:
+**A string-backed enum case's `value` is a `literal-string`,** wherever the case comes from, a parameter, a variable or a collection's element included, since every case's backing value is a literal. So the columns or tables a query may name are an enum, and the one chosen while the code runs reaches a plain PHP `literal-string` parameter, as Laravel's `orderByRaw` declares one, as one of the application's own names. Values still go through a query's bindings:
 
-<!-- example sql-identifiers: statements
+<!-- example allow-list-enums: statements
 import Illuminate.Database.Query.Builder;
-import Sharp.Data.Sql;
+public enum SortColumn : string
+{
+    case Name = "name";
+    case CreatedAt = "created_at";
+}
 Builder query = new Builder();
-string column = "created_at";
+SortColumn column = SortColumn.CreatedAt;
+string chosen = "created_at";
 -->
 ```csharp
-Sql.identifier("name", ["name", "created_at"]);                      // "name"
-Sql.identifier("drop", ["name"]);                                    // throws: "`Sql.identifier` takes a name the query allows, and \"drop\" is none of them."
-query.orderByRaw(Sql.identifier(column, ["name", "created_at"]));    // compiles
-query.orderByRaw(column);                                            // compile error: column is composed while the code runs
+query.orderByRaw(column.value);                  // compiles: "created_at", one of the enum's own names
+query.orderByRaw(SortColumn.Name.value);         // compiles
+query.orderByRaw(chosen);                        // compile error: chosen is composed while the code runs
 ```
 
 **A string fixed while the code compiles is a `literal-string` too,** as Psalm and PHPStan read one: a string literal, a constant, and a template or a `+` join whose parts are all literals or constants of type `int`, `float` or `string`:

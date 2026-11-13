@@ -1,6 +1,6 @@
 # 89. Bytes, exact JSON and SQL identifiers
 
-Jordan's rulings of 11-07 and 11-08, approved 11-11.
+Jordan's rulings of 11-07 and 11-08, approved 11-11. [Decision 98](098-an-allow-list-is-a-type.md) amends it: `Sql.identifier` and the `Sharp.Data.Sql` class are deleted, and a string-backed enum is the allow-list.
 
 ## Decision
 

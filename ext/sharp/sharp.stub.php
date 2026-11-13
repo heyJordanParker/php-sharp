@@ -44,19 +44,6 @@ final class Listening
     private function __construct() {}
 }
 
-namespace Sharp\Data;
-
-/**
- * @strict-properties
- * @not-serializable
- */
-final class Sql
-{
-    private function __construct() {}
-
-    public static function identifier(string $name, array $allowed): string {}
-}
-
 namespace Sharp\Internal;
 
 /**

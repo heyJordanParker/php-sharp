@@ -34,6 +34,28 @@ extern namespace Illuminate.Foundation for abort;   // abort(), now() and every 
 
 A line may give a namespace a class has only to a folder that holds such a class, as `helpers.php` sits beside `Illuminate\Foundation`'s classes. A line also gives its namespace only to the root classes of its own folder, so `WordPress.WP_Screen` of another WordPress folder names no class.
 
+#### Name a query's allowed columns with a string-backed enum
+
+`Sql.identifier` and the `Sharp.Data.Sql` class are deleted, decision 98, since a string-backed enum's `value` is a `literal-string` wherever the case comes from, and the enum holds the allow-list as a type. `import Sharp.Data.Sql;` is refused with "Imported class, interface, trait, or enum `Sharp.Data.Sql` does not exist.". Declare the allowed names as an enum, and pass its case's `value`:
+
+```csharp
+// 0.6.10
+import Sharp.Data.Sql;
+
+query.orderByRaw(Sql.identifier(column, ["name", "created_at"]));
+```
+
+```csharp
+// 0.6.11
+public enum SortColumn : string
+{
+    case Name = "name";
+    case CreatedAt = "created_at";
+}
+
+query.orderByRaw(column.value);   // column is a SortColumn
+```
+
 ### Added
 
 - `Class<T>.methods()` and `properties()` read what .NET's `MethodInfo` and Kotlin's `KFunction` read, spec section 25. A `Method` gives its `declaringClass`, `isStatic` and `visibility`, a `Property` its `declaringClass` and `visibility`, and a `Parameter` `isVariadic` and `defaultValue()`. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member, so an `internal` member reads `Internal` though plain PHP reaches it as a public one. `defaultValue()` evaluates the default on each read, a `new` in it included, and throws `OutOfRangeException` for a parameter without one.

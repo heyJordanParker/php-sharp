@@ -2969,35 +2969,6 @@ ZEND_FUNCTION(Sharp_Internal_sortedBy)
 	sharp_sorted_by(elements, &fci, &fcc, comparison, return_value);
 }
 
-/* Spec section 24: `Sql.identifier(name, allowed)` gives `name`, a column or a table a query writes as SQL, only when it
- * is one of `allowed`, so a name chosen while the code runs reaches a `literal-string` parameter, as Laravel's
- * `orderByRaw` declares one, as one of the application's own names. It throws a ValueError for any other name. */
-ZEND_METHOD(Sharp_Data_Sql, identifier)
-{
-	zend_string *name;
-	HashTable *allowed;
-
-	ZEND_PARSE_PARAMETERS_START(2, 2)
-		Z_PARAM_STR(name)
-		Z_PARAM_ARRAY_HT(allowed)
-	ZEND_PARSE_PARAMETERS_END();
-
-	zval *entry;
-	ZEND_HASH_FOREACH_VAL(allowed, entry) {
-		ZVAL_DEREF(entry);
-		if (Z_TYPE_P(entry) == IS_STRING && zend_string_equals(Z_STR_P(entry), name)) {
-			RETURN_STR_COPY(Z_STR_P(entry));
-		}
-	} ZEND_HASH_FOREACH_END();
-
-	zend_value_error("`Sql.identifier` takes a name the query allows, and \"%s\" is none of them.", ZSTR_VAL(name));
-}
-
-ZEND_METHOD(Sharp_Data_Sql, __construct)
-{
-	ZEND_PARSE_PARAMETERS_NONE();
-}
-
 ZEND_METHOD(Sharp_Internal_Sequence, getIterator)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
@@ -10636,7 +10607,6 @@ static PHP_MINIT_FUNCTION(sharp)
 
 	register_class_Sharp_Container();
 	sharp_ce_container_error = register_class_Sharp_ContainerError(zend_ce_error);
-	register_class_Sharp_Data_Sql();
 	sharp_fiber_slot = zend_get_resource_handle("sharp");
 	if (sharp_fiber_slot < 0) {
 		return FAILURE;
