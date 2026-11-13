@@ -1,0 +1,6 @@
+namespace Probe;
+
+public interface Recorded
+{
+    void recordEntry(int id) { }
+}

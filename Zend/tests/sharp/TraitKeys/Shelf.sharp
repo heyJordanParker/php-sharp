@@ -1,0 +1,8 @@
+namespace Probe;
+
+import Lib.Stocking;
+
+public class Shelf : Stocking
+{
+    public override string stockLabel() => "sharp shelf";
+}

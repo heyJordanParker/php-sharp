@@ -2426,8 +2426,12 @@ static void zend_add_trait_method(zend_class_entry *ce, zend_string *name, zend_
 	zend_function *existing_fn = NULL;
 	zend_function *new_fn;
 
-	/* PHP#: a class with SHARP_CLASS_EXACT_NAMES keys the method by the name it takes, the alias's when it has one. */
-	zend_string *table_key = (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? name : key;
+	/* PHP#: the class that takes the method keys it by its own rule, never the trait's: by the name it takes, the
+	 * alias's when it has one, in a class with SHARP_CLASS_EXACT_NAMES, and in lowercase in any other. `key` is the
+	 * trait's key, the exact name when the trait has SHARP_CLASS_EXACT_NAMES, so a plain PHP class lowercases it, and
+	 * its own `recordentry` overrides a PHP# trait's `recordEntry`. */
+	zend_string *lcname = zend_string_tolower(key);
+	zend_string *table_key = (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? name : lcname;
 
 	if ((existing_fn = zend_hash_find_ptr(&ce->function_table, table_key)) != NULL) {
 		/* if it is the same function with the same visibility and has not been assigned a class scope yet, regardless
@@ -2435,6 +2439,7 @@ static void zend_add_trait_method(zend_class_entry *ce, zend_string *name, zend_
 		if (existing_fn->op_array.opcodes == fn->op_array.opcodes &&
 			(existing_fn->common.fn_flags & ZEND_ACC_PPP_MASK) == (fn->common.fn_flags & ZEND_ACC_PPP_MASK) &&
 			(existing_fn->common.scope->ce_flags & ZEND_ACC_TRAIT)) {
+			zend_string_release_ex(lcname, 0);
 			return;
 		}
 
@@ -2448,11 +2453,13 @@ static void zend_add_trait_method(zend_class_entry *ce, zend_string *name, zend_
 			do_inheritance_check_on_method(
 				existing_fn, fixup_trait_scope(existing_fn, ce), fn, fixup_trait_scope(fn, ce),
 				ce, NULL, ZEND_INHERITANCE_CHECK_PROTO | ZEND_INHERITANCE_RESET_CHILD_OVERRIDE);
+			zend_string_release_ex(lcname, 0);
 			return;
 		}
 
 		if (existing_fn->common.scope == ce) {
 			/* members from the current class override trait methods */
+			zend_string_release_ex(lcname, 0);
 			return;
 		} else if (UNEXPECTED((existing_fn->common.scope->ce_flags & ZEND_ACC_TRAIT)
 				&& !(existing_fn->common.fn_flags & ZEND_ACC_ABSTRACT))) {
@@ -2479,7 +2486,8 @@ static void zend_add_trait_method(zend_class_entry *ce, zend_string *name, zend_
 	new_fn->common.function_name = name;
 	function_add_ref(new_fn);
 	fn = zend_hash_update_ptr(&ce->function_table, table_key, new_fn);
-	zend_add_magic_method(ce, fn, key);
+	zend_add_magic_method(ce, fn, lcname);
+	zend_string_release_ex(lcname, 0);
 }
 /* }}} */
 

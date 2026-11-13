@@ -1,0 +1,6 @@
+namespace Probe;
+
+public interface Tally
+{
+    int count() => 0;
+}

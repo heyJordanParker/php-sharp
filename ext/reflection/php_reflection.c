@@ -891,7 +891,6 @@ static void _function_string(smart_str *str, zend_function *fptr, zend_class_ent
 {
 	smart_str param_indent = {0};
 	zend_function *overwrites;
-	zend_string *lc_name;
 
 	/* TBD: Repair indenting of doc comment (or is this to be done in the parser?)
 	 * What's "wrong" is that any whitespace before the doc comment start is
@@ -921,13 +920,12 @@ static void _function_string(smart_str *str, zend_function *fptr, zend_class_ent
 		if (fptr->common.scope != scope) {
 			smart_str_append_printf(str, ", inherits %s", ZSTR_VAL(fptr->common.scope->name));
 		} else if (fptr->common.scope->parent) {
-			lc_name = zend_string_tolower(fptr->common.function_name);
-			if ((overwrites = zend_hash_find_ptr(&fptr->common.scope->parent->function_table, lc_name)) != NULL) {
+			/* PHP#: the parent finds the method by its own rule, see zend_class_find_method. */
+			if ((overwrites = zend_class_find_method(fptr->common.scope->parent, fptr->common.function_name)) != NULL) {
 				if (fptr->common.scope != overwrites->common.scope && !(overwrites->common.fn_flags & ZEND_ACC_PRIVATE)) {
 					smart_str_append_printf(str, ", overwrites %s", ZSTR_VAL(overwrites->common.scope->name));
 				}
 			}
-			zend_string_release_ex(lc_name, 0);
 		}
 	}
 	if (fptr->common.prototype && fptr->common.prototype->common.scope) {
