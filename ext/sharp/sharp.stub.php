@@ -113,6 +113,12 @@ function methods(string $type): array {}
 
 function typeArguments(string $type): array {}
 
+function invoke(object $receiver, string $class, string $method, array $arguments): mixed {}
+
+function read(object $receiver, string $class, string $property): mixed {}
+
+function write(object $receiver, string $class, string $property, mixed $value): void {}
+
 function readModule(string $path): void {}
 
 function testModule(string $class, array $bindings): void {}

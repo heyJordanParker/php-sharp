@@ -1,0 +1,14 @@
+namespace App.Elsewhere;
+
+import App.Calls.Calls;
+import App.Calls.Till;
+
+// PHP# code outside `Till`'s namespace, which reaches no `internal` member of it, through reflection as directly.
+public static class Outside
+{
+    public static Any? near(Till till) => Calls.method("near").invoke(till, []);
+
+    public static Any? stock(Till till) => Calls.property("stock").get(till);
+
+    public static void restock(Till till) => Calls.property("stock").set(till, 4);
+}

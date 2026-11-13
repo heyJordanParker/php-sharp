@@ -1564,7 +1564,7 @@ static void sharp_first(zend_array *elements, zend_fcall_info *fci, zend_fcall_i
 	if (element) {
 		ZVAL_COPY_DEREF(return_value, element);
 	} else if (!EG(exception)) {
-		zend_throw_exception(spl_ce_OutOfRangeException, "No element matches the predicate", 0);
+		zend_throw_exception(spl_ce_OutOfRangeException, "`first` finds an element the predicate matches, and none does.", 0);
 	}
 	zend_array_release(elements);
 }
@@ -4986,6 +4986,213 @@ ZEND_FUNCTION(Sharp_Internal_methods)
 		}
 		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &method);
 	} ZEND_HASH_FOREACH_END();
+}
+
+/* The frame of the code that called the standard library member whose body called this function, as
+ * zend_get_executed_scope finds the code that runs: the first frame below that member's that runs user code or a
+ * method. */
+static const zend_execute_data *sharp_reflection_caller(const zend_execute_data *execute_data)
+{
+	const zend_execute_data *frame = EX(prev_execute_data) ? EX(prev_execute_data)->prev_execute_data : NULL;
+	while (frame && !(frame->func && (ZEND_USER_CODE(frame->func->type) || frame->func->common.scope))) {
+		frame = frame->prev_execute_data;
+	}
+
+	return frame;
+}
+
+/* The class or function whose code `caller` runs, as an Error names it, or "global scope". */
+static const char *sharp_code_name(const zend_execute_data *caller)
+{
+	const zend_string *name = !caller ? NULL
+		: caller->func->common.scope ? caller->func->common.scope->name : caller->func->common.function_name;
+
+	return name ? ZSTR_VAL(name) : "global scope";
+}
+
+/* The length of the namespace of the class `ce`, 0 in PHP's root namespace. */
+static int sharp_namespace_length(const zend_class_entry *ce)
+{
+	const char *separator = zend_memrchr(ZSTR_VAL(ce->name), '\\', ZSTR_LEN(ce->name));
+
+	return separator ? (int) (separator - ZSTR_VAL(ce->name)) : 0;
+}
+
+/* Whether `caller` reaches a member that `ce` declares `internal`, spec section 5, as a direct use does: plain PHP
+ * reaches it as a public member, and PHP# code only from the class's namespace or one below it. Namespaces compare in
+ * any case, spec section 24. */
+static bool sharp_reaches_internal(const zend_execute_data *caller, const zend_class_entry *ce)
+{
+	size_t length = sharp_namespace_length(ce);
+	const char *code = sharp_code_name(caller);
+
+	return !caller || !sharp_function_is_sharp(caller->func) || length == 0
+		|| (strlen(code) > length && code[length] == '\\'
+			&& zend_binary_strncasecmp(code, length, ZSTR_VAL(ce->name), length, length) == 0);
+}
+
+/* The class `name` names, of which `receiver` must be an instance for `member`, or NULL with a TypeError. */
+static zend_class_entry *sharp_reflected_class(zend_object *receiver, zend_string *name, const char *member)
+{
+	zend_class_entry *ce = zend_lookup_class(name);
+	if (!ce) {
+		zend_throw_error(NULL, "Class \"%s\" not found", ZSTR_VAL(name));
+		return NULL;
+	}
+	if (!instanceof_function(receiver->ce, ce)) {
+		zend_type_error("`%s` takes a receiver of `%s`, and was given `%s`.", member, ZSTR_VAL(ce->name),
+			ZSTR_VAL(receiver->ce->name));
+		return NULL;
+	}
+
+	return ce;
+}
+
+/* The method `name` of `ce`, by the key the engine gives it: as written in a class with exact names, spec section 24,
+ * and in lowercase in any other. */
+static zend_function *sharp_method_named(const zend_class_entry *ce, zend_string *name)
+{
+	if (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) {
+		return zend_hash_find_ptr(&ce->function_table, name);
+	}
+	zend_string *key = zend_string_tolower(name);
+	zend_function *func = zend_hash_find_ptr(&ce->function_table, key);
+	zend_string_release(key);
+
+	return func;
+}
+
+/* Spec section 25: `Method.invoke(receiver, arguments)`, the call of the method `method` that `class` declares on
+ * `receiver`, as .NET's MethodInfo.Invoke and Kotlin's KCallable.call make it. The caller of `invoke` reaches the
+ * method as a direct call would, by its access modifier, a private one only from its class, so a call it can't make
+ * throws PHP's Error for it. A method that isn't private runs the receiver's override, and a static one runs on the
+ * receiver's class. Each argument is checked against its parameter's type as a direct PHP# call's is, since `invoke`
+ * runs in strict mode (PHP_MINIT_FUNCTION), and more arguments than the method takes throw ArgumentCountError. */
+ZEND_FUNCTION(Sharp_Internal_invoke)
+{
+	zend_object *receiver;
+	zend_string *class_name;
+	zend_string *name;
+	HashTable *arguments;
+
+	ZEND_PARSE_PARAMETERS_START(4, 4)
+		Z_PARAM_OBJ(receiver)
+		Z_PARAM_STR(class_name)
+		Z_PARAM_STR(name)
+		Z_PARAM_ARRAY_HT(arguments)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_class_entry *ce = sharp_reflected_class(receiver, class_name, "invoke");
+	if (!ce) {
+		RETURN_THROWS();
+	}
+	zend_function *func = sharp_method_named(ce, name);
+	if (!func) {
+		zend_throw_error(NULL, "Call to undefined method %s::%s()", ZSTR_VAL(ce->name), ZSTR_VAL(name));
+		RETURN_THROWS();
+	}
+
+	const zend_execute_data *caller = sharp_reflection_caller(execute_data);
+	zend_class_entry *scope = caller ? caller->func->common.scope : NULL;
+	uint32_t flags = func->common.fn_flags;
+	if (((flags & ZEND_ACC_PRIVATE) && func->common.scope != scope)
+			|| ((flags & ZEND_ACC_PROTECTED) && !zend_check_protected(zend_get_function_root_class(func), scope))) {
+		zend_bad_method_call(func, name, scope);
+		RETURN_THROWS();
+	}
+	if (!(flags & (ZEND_ACC_PRIVATE | ZEND_ACC_PROTECTED)) && func->common.attributes
+			&& zend_get_attribute_str(func->common.attributes, ZEND_STRL("sharp\\internal\\internal"))
+			&& !sharp_reaches_internal(caller, func->common.scope)) {
+		zend_throw_error(NULL, "Call to internal method %s::%s() from %s, outside namespace %.*s",
+			ZSTR_VAL(func->common.scope->name), ZSTR_VAL(name), sharp_code_name(caller),
+			sharp_namespace_length(func->common.scope), ZSTR_VAL(func->common.scope->name));
+		RETURN_THROWS();
+	}
+
+	uint32_t count = zend_hash_num_elements(arguments);
+	if (count > func->common.num_args && !(flags & ZEND_ACC_VARIADIC)) {
+		zend_argument_count_error("`invoke` passes %s::%s() at most %" PRIu32 " arguments, and was given %" PRIu32 ".",
+			ZSTR_VAL(func->common.scope->name), ZSTR_VAL(name), func->common.num_args, count);
+		RETURN_THROWS();
+	}
+	if (!(flags & ZEND_ACC_PRIVATE)) {
+		func = sharp_method_named(receiver->ce, name);
+	}
+	zend_call_known_function(func, (flags & ZEND_ACC_STATIC) ? NULL : receiver, receiver->ce, return_value, 0, NULL,
+		arguments);
+}
+
+/* The property `name` of `ce`, which the reflection functions read and write, with the Error PHP gives a direct use of
+ * an `internal` property from a namespace outside its class's when `caller` can't reach it. A private or protected
+ * property is checked by the object's handlers, which run in the caller's scope. */
+static bool sharp_reaches_property(const zend_execute_data *caller, const zend_class_entry *ce, zend_string *name)
+{
+	const zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, name);
+	if (info && !(info->flags & (ZEND_ACC_PRIVATE | ZEND_ACC_PROTECTED)) && info->attributes
+			&& zend_get_attribute_str(info->attributes, ZEND_STRL("sharp\\internal\\internal"))
+			&& !sharp_reaches_internal(caller, info->ce)) {
+		zend_throw_error(NULL, "Cannot access internal property %s::$%s from %s, outside namespace %.*s",
+			ZSTR_VAL(info->ce->name), ZSTR_VAL(name), sharp_code_name(caller), sharp_namespace_length(info->ce),
+			ZSTR_VAL(info->ce->name));
+		return false;
+	}
+
+	return true;
+}
+
+/* Spec section 25: `Property.get(receiver)`, the read of the property `name` that `class` declares on `receiver`, as
+ * .NET's PropertyInfo.GetValue and Kotlin's KProperty1.get make it. It runs a computed property's `get`, and the caller
+ * of `get` reaches the property as a direct read would. A caller with no class scope reads in the scope of the standard
+ * library's Property, which reaches no member of another class beyond a public one. */
+ZEND_FUNCTION(Sharp_Internal_read)
+{
+	zend_object *receiver;
+	zend_string *class_name;
+	zend_string *name;
+
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_OBJ(receiver)
+		Z_PARAM_STR(class_name)
+		Z_PARAM_STR(name)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_class_entry *ce = sharp_reflected_class(receiver, class_name, "get");
+	const zend_execute_data *caller = sharp_reflection_caller(execute_data);
+	if (!ce || !sharp_reaches_property(caller, ce, name)) {
+		RETURN_THROWS();
+	}
+	zval value;
+	zval *read = zend_read_property_ex(caller ? caller->func->common.scope : NULL, receiver, name, false, &value);
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+	RETURN_COPY_DEREF(read);
+}
+
+/* Spec section 25: `Property.set(receiver, value)`, the write of `value` into the property `name` that `class` declares
+ * on `receiver`, as .NET's PropertyInfo.SetValue and Kotlin's KMutableProperty1.set make it. The caller of `set`
+ * reaches the property as a direct write would, a get-only or readonly one included, and the value is checked against
+ * the property's type as a direct PHP# write's is, since `write` runs in strict mode (PHP_MINIT_FUNCTION). */
+ZEND_FUNCTION(Sharp_Internal_write)
+{
+	zend_object *receiver;
+	zend_string *class_name;
+	zend_string *name;
+	zval *value;
+
+	ZEND_PARSE_PARAMETERS_START(4, 4)
+		Z_PARAM_OBJ(receiver)
+		Z_PARAM_STR(class_name)
+		Z_PARAM_STR(name)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_class_entry *ce = sharp_reflected_class(receiver, class_name, "set");
+	const zend_execute_data *caller = sharp_reflection_caller(execute_data);
+	if (!ce || !sharp_reaches_property(caller, ce, name)) {
+		RETURN_THROWS();
+	}
+	zend_update_property_ex(caller ? caller->func->common.scope : NULL, receiver, name, value);
 }
 
 /* Spec section 25: `Class<T>.typeArguments()`, the class values of the type arguments of the type `type` holds, in
@@ -10458,6 +10665,14 @@ static PHP_MINIT_FUNCTION(sharp)
 	/* The module's own table is sharp/bin/native's, so the stub's Sharp\Internal functions register here, as
 	 * ext/zend_test registers its second table. */
 	zend_register_functions(NULL, ext_functions, NULL, type);
+	/* PHP checks a call's arguments and a property's write in the mode of the code that makes them, and an internal
+	 * function's is coercive. Reflection's call and write run in strict mode, as a .sharp file's direct ones do, so
+	 * `invoke` refuses "3" for an `int` as the direct call does. */
+	static const char *const strict[] = {"sharp\\internal\\invoke", "sharp\\internal\\write"};
+	for (size_t i = 0; i < sizeof(strict) / sizeof(strict[0]); i++) {
+		zend_function *func = zend_hash_str_find_ptr(CG(function_table), strict[i], strlen(strict[i]));
+		func->common.fn_flags |= ZEND_ACC_STRICT_TYPES;
+	}
 
 	zend_add_system_entropy("sharp", "SHARP_BUILD_ID", SHARP_BUILD_ID, sizeof(SHARP_BUILD_ID) - 1);
 

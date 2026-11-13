@@ -5391,6 +5391,62 @@ methods[0].parameters()[1].isVariadic;                        // false
 methods[0].parameters()[1].defaultValue();                    // 1
 ```
 
+**`invoke`, `get` and `set` use a member through its reflection,** as .NET's `MethodInfo.Invoke`, `PropertyInfo.GetValue` and `PropertyInfo.SetValue` and Kotlin's `KCallable.call`, `KProperty1.get` and `KMutableProperty1.set` do. They are the one way PHP# names a member by a value (decision 94). `method.invoke(receiver, arguments)` calls the method on `receiver` with the `List<Any?>` of arguments and gives its result as `Any?`, and a method that isn't private runs the receiver's override. `property.get(receiver)` gives the property's value as `Any?`, running a computed property's `get`, and `property.set(receiver, value)` writes it. Each reaches the member as a direct use from the calling code would: a private member only from its class, a protected one from the class and its subclasses, and an `internal` one from its namespace and those below it, which plain PHP reaches as a public one. A use the calling code can't make throws `Error`, as do a write of a get-only property and a call of a missing method. Each argument and value is checked against its type as a direct PHP# use's is, so a wrong one throws `TypeError`. More arguments than the method takes throw `ArgumentCountError`, and a receiver that isn't of the member's class throws `TypeError`. Each runs code its caller can't see, a method's body, a `get` or a `set`, so each may have every effect (section 29), and code that must keep to its `uses`, as an implementation of a pure interface method, can't call it:
+
+<!-- example reflection-calls -->
+```csharp
+// app/Shelf/Counter.sharp
+namespace App.Shelf;
+
+public class Counter
+{
+    public int count { get; set; } = 1;
+    public int doubled => this.count * 2;
+
+    public int add(int amount) => this.count + amount;
+}
+```
+
+<!-- example reflection-calls: statements
+import App.Shelf.Counter;
+-->
+```csharp
+const counter = new Counter();
+const add = typeof(Counter).methods()[0];
+const properties = typeof(Counter).properties();
+add.invoke(counter, [2]);                                     // 3
+add.invoke(counter, ["2"]);                                   // throws TypeError
+add.invoke(counter, [2, 3]);                                  // throws ArgumentCountError
+properties[0].set(counter, 5);
+properties[0].get(counter);                                   // 5
+properties[1].get(counter);                                   // 10
+properties[1].set(counter, 4);                                // throws Error
+```
+
+<!-- example reflection-effects -->
+```csharp
+// app/Shelf/Audit.sharp
+namespace App.Shelf;
+
+public interface Audit
+{
+    Any? read(Object target);
+}
+```
+
+<!-- example reflection-effects -->
+```csharp
+// app/Shelf/FieldAudit.sharp
+namespace App.Shelf;
+
+public class FieldAudit : Audit
+{
+    public int count { get; } = 1;
+
+    public Any? read(Object target) => typeof(FieldAudit).properties()[0].get(target);   // compile error: read must be pure, and get may have every effect
+}
+```
+
 **A class value works wherever a class name works.** `typeof` and `Class.of` give one, and a `Class<T>` field, parameter or local holds one:
 
 <!-- example class-values -->

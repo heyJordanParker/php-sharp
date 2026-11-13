@@ -1,0 +1,13 @@
+namespace App.Calls;
+
+// `Till`'s members by name, and calls of them from `Till`'s own namespace, which reaches its `internal` members.
+public static class Calls
+{
+    public static Method method(string name) => typeof(Till).methods().first(method => method.name == name);
+
+    public static Property property(string name) => typeof(Till).properties().first(property => property.name == name);
+
+    public static Any? nearFromInside(Till till) => Calls.method("near").invoke(till, []);
+
+    public static Any? stockFromInside(Till till) => Calls.property("stock").get(till);
+}

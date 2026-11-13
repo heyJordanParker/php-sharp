@@ -39,7 +39,7 @@ method Lib.PlainLedger.open() Public static
 method Lib.PlainLedger.reset(depth) Protected
 method Lib.PlainLedger.total(limit = 2, tag = new Tag(plain), ...notes) Private
 bool(true)
-Parameter.defaultValue: the parameter depth of reset has no default value
+`defaultValue` reads a parameter that has a default, and `depth` of `reset` has none.
 bool(true)
 bool(true)
 array(1) {

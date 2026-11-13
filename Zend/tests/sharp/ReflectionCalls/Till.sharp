@@ -1,0 +1,25 @@
+namespace App.Calls;
+
+// A member at each access level, a static method, a method the subclass `Register` overrides, and a stored, a
+// get-only, a computed and a typed collection property, for `Method.invoke`, `Property.get` and `Property.set`.
+public class Till
+{
+    int count = 1;
+    public int total { get; set; } = 0;
+    public string label { get; } = "till";
+    public int doubled => this.count * 2;
+    public List<int> amounts { get; set; } = [];
+    internal int stock { get; set; } = 3;
+
+    public int add(int amount, List<int> more) => amount + more.sumOf(item => item) + this.count;
+
+    public virtual string name() => "till";
+
+    public static string kind() => "till";
+
+    internal int near() => 9;
+
+    protected int guarded() => 8;
+
+    private int secret() => 7;
+}

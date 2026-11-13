@@ -412,7 +412,7 @@ The rest of the example compiled with no error, the untyped `for (const [status,
 
 ## The rest of section 12's names
 
-- **`first` throws `OutOfRangeException` when nothing matches.** Works: `ZEND_METHOD(Sharp_Collection, first)` throws "No element matches the predicate".
+- **`first` throws `OutOfRangeException` when nothing matches.** Works: `sharp_first` throws "`first` finds an element the predicate matches, and none does.".
 - **A `sortedBy` key compiles exactly when `<` compiles.** Works: `check_sorted_by_key`.
 - **`Set<T>` needs `==` on `T`.** Works as a refusal: `report_unsupported_set_elements` refuses a `Set` of anything but an `int`, a `string` or a backed enum with "This type is not supported yet in PHP#."
 - **`Iterable<T>`'s `filter`, `map`, `take` and `toList`.** Refused, by the type. `app/Lazy.sharp`, `public List<int> firstTen(Iterable<int> numbers) => numbers.filter(n => n > 0).map(n => n * 2).take(10).toList();`, printed `app/Lazy.sharp:5:31:error - semantics: This type is not supported yet in PHP#.` They are task #454's (Iterable lazy chains), not this Slice's.

@@ -2,7 +2,7 @@
 
 ## Decision
 
-A class value works wherever a class name works. `new (type)(key)` needs a `required` constructor, or for a plain PHP class its own constructor. `type.defaultTag()` and `type.find(id)` call the static on the class the value holds. `Class`'s own members, such as `attributes`, win, and a class cannot declare a static named like one of them. A property named by a variable stays refused, and `order.getAttribute(column)` replaces `$order->$column`.
+A class value works wherever a class name works. `new (type)(key)` needs a `required` constructor, or for a plain PHP class its own constructor. `type.defaultTag()` and `type.find(id)` call the static on the class the value holds. `Class`'s own members, such as `attributes`, win, and a class cannot declare a static named like one of them. A property named by a variable stays refused, and `order.getAttribute(column)` replaces `$order->$column`. [Decision 94](094-reflection-calls-and-sets-members.md) amends this: a `Method` or `Property` that `methods()` or `properties()` gives calls, reads and writes the member it names, the one way PHP# names a member by a value.
 
 ## Options
 

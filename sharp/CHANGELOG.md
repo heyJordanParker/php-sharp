@@ -13,6 +13,12 @@ The booleans `Class<T>.methods()` and `properties()` give are named as the stand
 ### Added
 
 - `Class<T>.methods()` and `properties()` read what .NET's `MethodInfo` and Kotlin's `KFunction` read, spec section 25. A `Method` gives its `declaringClass`, `isStatic` and `visibility`, a `Property` its `declaringClass` and `visibility`, and a `Parameter` `isVariadic` and `defaultValue()`. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member, so an `internal` member reads `Internal` though plain PHP reaches it as a public one. `defaultValue()` evaluates the default on each read, a `new` in it included, and throws `OutOfRangeException` for a parameter without one.
+- `Method.invoke(receiver, arguments)`, `Property.get(receiver)` and `Property.set(receiver, value)` call, read and write the member, as .NET's `MethodInfo.Invoke` and `PropertyInfo.GetValue`/`SetValue` and Kotlin's `KCallable.call` and `KProperty1.get`/`KMutableProperty1.set` do, spec section 25 and decision 94. Each reaches the member as a direct use from the calling code would, a private member only from its class and an `internal` one only from its namespace, and throws `Error` otherwise. Each argument and value is checked against its type, so `add.invoke(counter, ["2"])` for `add(int amount)` throws `TypeError`. A method that isn't private runs the receiver's override, and `get` runs a computed property's `get`. All three may have every effect, so an implementation of a pure interface method can't call them.
+
+### Changed
+
+- `List.first(predicate)` that finds nothing throws `OutOfRangeException` with "`first` finds an element the predicate matches, and none does.", where 0.6.10 said "No element matches the predicate".
+- A refusal of an effect that code outside the standard library reaches through a standard library member names that member, as "`Calling.run` reaches `Method.invoke`, which may have every effect", and tells the code to call it where no `uses` limits the effects. 0.6.10 named the library's own plain PHP call, as `ReflectionMethod.getAttributes` for `Method.attributes<T>()`, and told the code to declare it with `extern`.
 
 ### Fixed
 
