@@ -20,7 +20,9 @@ target="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/m
 # rebuild every crate. sharp/docker/run doesn't pass GITHUB_ACTIONS into the container, so a hosted Linux job shows by that manifest.
 # A profile folder in use stays. Cargo holds the flock on the folder's .cargo-lock while it builds there, and releases
 # it before it runs the test binaries, which run from the folder, as each mago the tests start does. So the prune
-# skips the folder while it can't take that flock without waiting, or while a process runs from the build.
+# skips the folder while it can't take that flock without waiting, or while a process runs from the build. Each
+# sharp/docker/run is its own container with its own processes, so a prune there can't see a test binary another
+# container runs from the same folder: run one sharp/docker/run at a time per slot.
 if [[ -z ${GITHUB_ACTIONS:-} && ! -e $target/sources && -d $target ]]; then
   # Runs the rest of the line while it holds the flock on the lock file, or exits 75 at once when another process
   # holds it: util-linux's flock on Linux, and BSD's lockf on macOS, which has no flock command.
