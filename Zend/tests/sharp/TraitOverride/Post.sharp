@@ -1,0 +1,14 @@
+namespace App.TraitOverride;
+
+import Lib.Defaulted;
+
+public class Post : Defaulted
+{
+    protected static override string status() => "published";
+
+    protected override string label() => "published";
+
+    public static string shownStatus() => Post.status();
+
+    public string shownLabel() => this.label();
+}
