@@ -292,8 +292,10 @@ static zend_class_entry *lookup_class_ex(
 			return ce;
 		}
 
-		/* The current class may not be registered yet, so check for it explicitly. */
-		if (zend_string_equals_ci(scope->name, name)) {
+		/* The current class may not be registered yet, so check for it explicitly, by the name the class table keys it
+		 * by: a class of a .sharp file only as written, spec section 24, so `BOX` is not `Box`. */
+		if ((scope->sharp_flags & SHARP_CLASS_EXACT_KEY)
+				? zend_string_equals(scope->name, name) : zend_string_equals_ci(scope->name, name)) {
 			return scope;
 		}
 	}
@@ -439,7 +441,9 @@ static inheritance_status zend_is_intersection_subtype_of_class(
 		if (ZEND_TYPE_HAS_NAME(*single_type)) {
 			fe_class_name =
 				resolve_class_name(fe_scope, ZEND_TYPE_NAME(*single_type));
-			if (zend_string_equals_ci(fe_class_name, proto_class_name)) {
+			/* Two names are one type when they resolve to one class. Only an exact match skips the lookup: names that
+			 * differ in case are one plain class, or two PHP# classes, spec section 24. */
+			if (zend_string_equals(fe_class_name, proto_class_name)) {
 				return INHERITANCE_SUCCESS;
 			}
 
@@ -542,7 +546,8 @@ static inheritance_status zend_is_class_subtype_of_type(
 		if (ZEND_TYPE_HAS_NAME(*single_type)) {
 			proto_class_name =
 				resolve_class_name(proto_scope, ZEND_TYPE_NAME(*single_type));
-			if (zend_string_equals_ci(fe_class_name, proto_class_name)) {
+			/* As in zend_is_intersection_subtype_of_class, only an exact match skips the lookup. */
+			if (zend_string_equals(fe_class_name, proto_class_name)) {
 				if (!is_intersection) {
 					return INHERITANCE_SUCCESS;
 				}

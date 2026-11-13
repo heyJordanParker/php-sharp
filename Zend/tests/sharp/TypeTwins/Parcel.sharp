@@ -1,0 +1,9 @@
+namespace Twins;
+
+public enum Parcel
+{
+    case Box(int size);
+    case BOX(int size);
+
+    public static string label(Parcel.Box | Parcel.BOX parcel) => parcel is Parcel.Box ? "small" : "large";
+}

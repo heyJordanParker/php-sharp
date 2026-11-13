@@ -7663,6 +7663,13 @@ static zend_type zend_compile_single_typename(zend_ast *ast)
 	}
 }
 
+/* Whether a declared type names `left` and `right` as one class. A .sharp file names a class as written, spec section
+ * 24, so `Box|BOX` is two classes there, and plain PHP names a class in any case. */
+static bool zend_type_names_same_class(const zend_string *left, const zend_string *right)
+{
+	return zend_compiling_sharp_file() ? zend_string_equals(left, right) : zend_string_equals_ci(left, right);
+}
+
 static void zend_are_intersection_types_redundant(const zend_type left_type, const zend_type right_type)
 {
 	ZEND_ASSERT(ZEND_TYPE_IS_INTERSECTION(left_type));
@@ -7686,7 +7693,7 @@ static void zend_are_intersection_types_redundant(const zend_type left_type, con
 	ZEND_TYPE_LIST_FOREACH(smaller_type_list, outer_type)
 		const zend_type *inner_type;
 		ZEND_TYPE_LIST_FOREACH(larger_type_list, inner_type)
-			if (zend_string_equals_ci(ZEND_TYPE_NAME(*inner_type), ZEND_TYPE_NAME(*outer_type))) {
+			if (zend_type_names_same_class(ZEND_TYPE_NAME(*inner_type), ZEND_TYPE_NAME(*outer_type))) {
 				sum++;
 				break;
 			}
@@ -7720,7 +7727,7 @@ static void zend_is_intersection_type_redundant_by_single_type(const zend_type i
 
 	const zend_type *single_intersection_type = NULL;
 	ZEND_TYPE_FOREACH(intersection_type, single_intersection_type)
-		if (zend_string_equals_ci(ZEND_TYPE_NAME(*single_intersection_type), ZEND_TYPE_NAME(single_type))) {
+		if (zend_type_names_same_class(ZEND_TYPE_NAME(*single_intersection_type), ZEND_TYPE_NAME(single_type))) {
 			zend_string *single_type_str = zend_type_to_string(single_type);
 			zend_string *complete_type = zend_type_to_string(intersection_type);
 			zend_error_noreturn(E_COMPILE_ERROR, "Type %s is redundant as it is more restrictive than type %s",
@@ -7738,7 +7745,7 @@ static void zend_is_type_list_redundant_by_single_type(const zend_type_list *typ
 			zend_is_intersection_type_redundant_by_single_type(type_list->types[i], type);
 			continue;
 		}
-		if (zend_string_equals_ci(ZEND_TYPE_NAME(type_list->types[i]), ZEND_TYPE_NAME(type))) {
+		if (zend_type_names_same_class(ZEND_TYPE_NAME(type_list->types[i]), ZEND_TYPE_NAME(type))) {
 			zend_string *single_type_str = zend_type_to_string(type);
 			zend_error_noreturn(E_COMPILE_ERROR, "Duplicate type %s is redundant", ZSTR_VAL(single_type_str));
 		}
