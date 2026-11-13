@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.9] - 2026-11-13
+
 ### Upgrading from 0.6.8
 
 #### Call a PHP# method by its exact name
@@ -745,7 +747,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.8...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.9...HEAD
+[0.6.9]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.8...v0.6.9
 [0.6.8]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.5...v0.6.6
