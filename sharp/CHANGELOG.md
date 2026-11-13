@@ -4,6 +4,12 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.10] - 2026-11-13
+
+### Upgrading from 0.6.9
+
+0.6.10 fixes regressions 0.6.9 shipped with exact names, among them a plain PHP class whose override of a camelCase default body of a PHP# interface never ran. Upgrade from 0.6.9 straight away. From 0.6.8, follow 0.6.9's upgrade notes. 0.6.9 left out one rule there: a plain PHP class that implements a PHP# interface has exact names, as a class below a PHP# class does, so every method of it, inherited from a plain parent too, is reached only by the name it declares.
+
 ### Fixed
 
 - A plain PHP closure answers `is Function<…>` by its declared PHP signature, spec section 21, where 0.6.9 answered false for every one. `static fn (): ?Item => new Item()` and `static fn (): Item => new Item()` are a `Function<Item?() uses none>`, a parameter it declares no type for takes anything, and a result it declares no type for is `Any?`, so `static fn () => new Item()` is a `Function<Any?()>` and not a `Function<Item?()>`. Its type lists no effects, so it fits every `uses`, as the checker takes a plain PHP callable.
@@ -765,7 +771,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.9...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.10...HEAD
+[0.6.10]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.9...v0.6.10
 [0.6.9]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.8...v0.6.9
 [0.6.8]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.6...v0.6.7
