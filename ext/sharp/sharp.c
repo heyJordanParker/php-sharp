@@ -609,12 +609,15 @@ static bool sharp_stamp_current(zend_string *path, uint64_t size, int64_t mtime_
 	return stamp->hashed && memcmp(stamp->hash, hash, sizeof(stamp->hash)) == 0;
 }
 
+/* Whether an input is as it was compiled. mago compile records an input inside the project by its path under the root,
+ * and one outside it, as a file of an includes folder that is a symlink to a folder elsewhere, by its absolute path,
+ * which it reads as is, so the engine does too. */
 static bool sharp_input_current(const sharp_compiled *compiled, const sharp_input *input)
 {
-	zend_string *path = zend_string_concat3(
-		ZSTR_VAL(compiled->source), compiled->root_length,
-		"/", 1,
-		compiled->unit.texts + input->path.offset, input->path.len);
+	const char *recorded = compiled->unit.texts + input->path.offset;
+	zend_string *path = IS_ABSOLUTE_PATH(recorded, input->path.len)
+		? zend_string_init(recorded, input->path.len, 0)
+		: zend_string_concat3(ZSTR_VAL(compiled->source), compiled->root_length, "/", 1, recorded, input->path.len);
 	bool current = sharp_stamp_current(path, input->size, input->mtime_ns, input->hash);
 
 	zend_string_release(path);
