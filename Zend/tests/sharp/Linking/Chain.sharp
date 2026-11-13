@@ -1,0 +1,5 @@
+namespace App.Linking;
+
+import Lib.Linked;
+
+public class Chain : Linked { }

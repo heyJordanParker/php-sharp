@@ -1,0 +1,34 @@
+namespace App.PlainClosures;
+
+public class Holder
+{
+    private static Function<Item?() uses Database>? loader = null;
+
+    private static Function<Item?() uses none>? pureLoader = null;
+
+    public static void setLoader(Function<Item?() uses Database>? loader)
+    {
+        Holder.loader = loader;
+    }
+
+    public static void setPureLoader(Function<Item?() uses none>? loader)
+    {
+        Holder.pureLoader = loader;
+    }
+
+    public static string loaderMatches() => Holder.testDatabase(Holder.loader);
+
+    public static string pureLoaderMatches() => Holder.testAny(Holder.pureLoader);
+
+    public static string testAny(Any? value) => value is Function<Item?() uses none> f ? "matched" : "not matched";
+
+    public static string testDatabase(Any? value) => value is Function<Item?() uses Database> ? "matched" : "not matched";
+
+    public static string testAnyResult(Any? value) => value is Function<Any?()> ? "matched" : "not matched";
+
+    public static string testTakesInt(Any? value) => value is Function<Item?(int)> ? "matched" : "not matched";
+
+    public static string testLength(Any? value) => value is Function<int(string)> ? "matched" : "not matched";
+
+    public static Any? lambda() => () => new Item();
+}

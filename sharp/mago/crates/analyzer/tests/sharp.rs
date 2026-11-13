@@ -39,6 +39,7 @@ use mago_analyzer::plugin::provider::ProviderMeta;
 use mago_analyzer::plugin::provider::function::FunctionTarget;
 use mago_analyzer::plugin::provider::method::MethodReturnTypeProvider;
 use mago_analyzer::plugin::provider::method::MethodTarget;
+use mago_analyzer::settings::ClassInitializer;
 use mago_analyzer::settings::Settings;
 use mago_codex::identifier::function_like::FunctionLikeIdentifier;
 use mago_codex::metadata::CodebaseMetadata;
@@ -6554,6 +6555,15 @@ fn a_lambda_reads_and_writes_the_locals_around_it_as_its_php_closure_does() {
     let sharp = "namespace Demo;\n\nclass Report\n{\n    public int run(int extra)\n    {\n        let count = 0;\n        const add = (int a, int b) => a + b + extra;\n        const increment = () => { count += 1; };\n        increment();\n        return add(count, 1);\n    }\n}\n";
 
     assert_eq!(issues(("src/Demo/Report.sharp", sharp), &[]), Vec::<String>::new());
+}
+
+/// Spec section 8: a lambda whose every path ends in `return;` returns nothing, so its result is `void`, which no
+/// `Function<int()>` takes, and one whose every path throws returns `never`, which every result type takes.
+#[test]
+fn a_lambda_that_ends_in_a_bare_return_returns_void_and_one_that_always_throws_returns_never() {
+    let sharp = "namespace Demo;\n\nclass Report\n{\n    public void run(ValueError error)\n    {\n        Function<int()> skip = () => { return; };\n        Function<int()> fail = () => { throw error; };\n    }\n}\n";
+
+    assert_eq!(issues(("src/Demo/Report.sharp", sharp), &[]), ["7:32 invalid-local-assignment-value"]);
 }
 
 #[test]
@@ -18404,6 +18414,106 @@ fn an_intersection_takes_a_value_of_every_type_it_joins() {
     );
 }
 
+/// Spec section 24: an intersection or a union reaches each member of a part by that part's own name for it, exact for
+/// a PHP# interface and in any case for a plain PHP one, so a camelCase PHP# method is found whichever part is first,
+/// by a PHP# call or method value and by a plain PHP call or first-class callable.
+#[test]
+fn an_intersection_or_union_reaches_each_parts_method_by_its_own_name() {
+    let declared = [
+        (
+            "src/Probe/Named.php",
+            "<?php\n\nnamespace Probe;\n\ninterface Named\n{\n    public function name(): string;\n\n    public function itemCount(): int;\n}\n",
+        ),
+        (
+            "src/Probe/Priced.sharp",
+            "namespace Probe;\n\npublic interface Priced\n{\n    int priceInCents();\n\n    int itemCount();\n}\n",
+        ),
+    ];
+    let sharp = "namespace Probe.Shop;\n\nimport Probe.Named;\nimport Probe.Priced;\n\npublic class Label\n{\n    public static string first(Named & Priced item) => `${item.name()} ${item.priceInCents()} ${item.itemCount()}`;\n\n    public static string second(Priced & Named item) => `${item.name()} ${item.priceInCents()} ${item.itemCount()}`;\n\n    public static int firstValue(Named & Priced item)\n    {\n        Function<int()> price = item.priceInCents;\n        Function<string()> name = item.name;\n        return name() == \"\" ? 0 : price();\n    }\n\n    public static int secondValue(Priced & Named item)\n    {\n        Function<int()> price = item.priceInCents;\n        Function<string()> name = item.name;\n        return name() == \"\" ? 0 : price();\n    }\n\n    public static int firstUnion(Named | Priced item) => item.itemCount();\n\n    public static int secondUnion(Priced | Named item) => item.itemCount();\n}\n";
+    let php = "<?php\n\nnamespace Probe\\Shop;\n\nuse Probe\\Named;\nuse Probe\\Priced;\n\nfinal class Tag\n{\n    public static function first(Named&Priced $item): int\n    {\n        $price = $item->priceInCents(...);\n        return $item->priceInCents() + $price();\n    }\n\n    public static function second(Priced&Named $item): int\n    {\n        $price = $item->priceInCents(...);\n        return $item->priceInCents() + $price();\n    }\n}\n";
+
+    assert_eq!(issues(("src/Probe/Shop/Label.sharp", sharp), &declared), Vec::<String>::new());
+    assert_eq!(issues(("src/Probe/Shop/Tag.php", php), &declared), Vec::<String>::new());
+}
+
+/// Spec section 24: a plain PHP class that implements a PHP# interface has exact names, as the engine's
+/// `zend_inherit_exact_names` gives it, so it keys a plain PHP parent's `findOrFail` by that declared name. A
+/// first-class callable of it through the class is the class's `findOrFail`, as one through a plain PHP sibling is.
+#[test]
+fn a_first_class_callable_of_an_inherited_method_reaches_it_through_a_class_with_exact_names() {
+    let declared = [
+        ("src/Probe/Synced.sharp", "namespace Probe;\n\npublic interface Synced\n{\n    int? syncedId();\n}\n"),
+        (
+            "src/Probe/Base.php",
+            "<?php\n\nnamespace Probe;\n\nabstract class Base\n{\n    public static function findOrFail(int $key): static\n    {\n        return new static();\n    }\n}\n",
+        ),
+        (
+            "src/Probe/Room.php",
+            "<?php\n\nnamespace Probe;\n\nfinal class Room extends Base implements Synced\n{\n    public function syncedId(): ?int\n    {\n        return null;\n    }\n}\n",
+        ),
+        ("src/Probe/Hall.php", "<?php\n\nnamespace Probe;\n\nfinal class Hall extends Base\n{\n}\n"),
+    ];
+    let php = "<?php\n\nnamespace Probe;\n\nfinal class Rooms\n{\n    /** @return list<Room> */\n    public static function rooms(): array\n    {\n        return array_map(Room::findOrFail(...), [1, 2]);\n    }\n\n    /** @return list<Hall> */\n    public static function halls(): array\n    {\n        return array_map(Hall::findOrFail(...), [1, 2]);\n    }\n}\n";
+
+    assert_eq!(issues(("src/Probe/Rooms.php", php), &declared), Vec::<String>::new());
+}
+
+/// Spec section 24: `class_alias()` names its target as written, which the codebase keys once it holds every class-like,
+/// so an alias of a PHP# class names it, and a plain PHP call reaches its camelCase method through the alias.
+#[test]
+fn a_class_alias_of_a_sharp_class_names_it() {
+    let declared = [
+        ("src/Probe/Box.sharp", "namespace Probe;\n\npublic class Box\n{\n    public void openLid() { }\n}\n"),
+        (
+            "src/Probe/aliases.php",
+            "<?php\n\nclass_alias(\\Probe\\Box::class, 'Probe\\Crate');\nclass_alias('Probe\\Box', 'Probe\\Chest');\n",
+        ),
+    ];
+    let php = "<?php\n\nnamespace Probe;\n\nfinal class Opener\n{\n    public static function open(Crate $crate, Chest $chest): void\n    {\n        $crate->openLid();\n        $chest->openLid();\n    }\n}\n";
+
+    assert_eq!(issues(("src/Probe/Opener.php", php), &declared), Vec::<String>::new());
+}
+
+/// Spec section 24: a configured class initializer names its method as written, and each class keys it by its own rule,
+/// so `setUp` initializes the properties of a plain PHP test that has exact names from a PHP# interface, as of one that
+/// has none.
+#[test]
+fn a_class_initializer_initializes_the_properties_of_a_class_with_exact_names() {
+    let declared = [
+        ("src/Probe/Synced.sharp", "namespace Probe;\n\npublic interface Synced\n{\n    int? syncedId();\n}\n"),
+        (
+            "src/Probe/TestCase.php",
+            "<?php\n\nnamespace Probe;\n\nabstract class TestCase\n{\n    protected function setUp(): void\n    {\n    }\n}\n",
+        ),
+    ];
+    let php = |implements: &str| {
+        format!(
+            "<?php\n\nnamespace Probe;\n\nfinal class RoomTest extends TestCase{implements}\n{{\n    private \\stdClass $room;\n\n    protected function setUp(): void\n    {{\n        $this->room = new \\stdClass();\n    }}\n\n    public function room(): \\stdClass\n    {{\n        return $this->room;\n    }}\n\n    public function syncedId(): ?int\n    {{\n        return null;\n    }}\n}}\n"
+        )
+    };
+    // An entry that names a class names it by its key: the PHP# `Synced` exactly, and the plain PHP `TestCase` in any
+    // case.
+    for initializer in ["setUp", "Probe\\Synced::setUp", "probe\\testcase::setUp"] {
+        let mut settings = Settings { check_property_initialization: true, ..Default::default() };
+        settings.class_initializers.push(ClassInitializer::parse(initializer).expect("the initializer parses"));
+
+        for implements in [" implements Synced", ""] {
+            let code: &'static str = php(implements).leak();
+            let expected: &[&str] = if initializer.contains("Synced") && implements.is_empty() {
+                &["5:13 missing-constructor"]
+            } else {
+                &[]
+            };
+
+            assert_eq!(
+                issues_with(settings.clone(), ("src/Probe/RoomTest.php", code), &declared),
+                expected,
+                "{initializer}"
+            );
+        }
+    }
+}
+
 /// Spec section 24: `&` joins at most one class with interfaces, as Swift and Java do, so two classes in one `&` are
 /// refused wherever the type is written: a parameter, a return type, a property, a local, a type test and a type
 /// argument. A class with interfaces, or interfaces alone, are an intersection.
@@ -20402,18 +20512,20 @@ fn recorded_callees(
 /// name the call wrote, so the lowering reads the method the analysis checked the call against.
 #[test]
 fn a_call_a_magic_method_serves_records_the_magic_method_and_the_called_name() {
-    let sharp = "namespace Demo;\n\nimport Lib.Bag;\nimport Lib.Calc;\n\nclass Report\n{\n    public int run(Bag bag, int extra)\n    {\n        Calc.remember(extra);\n        return strlen(gettype(bag.untagged()));\n    }\n}\n";
+    let sharp = "namespace Demo;\n\nimport Lib.Bag;\nimport Lib.Calc;\n\nclass Report\n{\n    public int run(Bag bag, int extra)\n    {\n        Calc.rememberAll(extra);\n        return strlen(gettype(bag.untaggedItems()));\n    }\n}\n";
     let library = "<?php namespace Lib; final class Bag { public function __call(string $name, array $arguments): mixed { return 1; } } final class Calc { public static function __callStatic(string $name, array $arguments): mixed { return null; } }";
 
     assert_eq!(
         recorded_callees(
             ("src/Demo/Report.sharp", sharp),
             &[("src/Lib/Bag.php", library)],
-            &["bag.untagged()", "Calc.remember(extra)"]
+            &["bag.untaggedItems()", "Calc.rememberAll(extra)"]
         ),
         [
-            [r#"MagicMethod { callee: Method("Lib\\Bag", "__call"), class: "Lib\\Bag", method: "untagged" }"#],
-            [r#"MagicMethod { callee: Method("lib\\calc", "__callstatic"), class: "Lib\\Calc", method: "remember" }"#],
+            [r#"MagicMethod { callee: Method("Lib\\Bag", "__call"), class: "Lib\\Bag", method: "untaggedItems" }"#],
+            [
+                r#"MagicMethod { callee: Method("lib\\calc", "__callstatic"), class: "Lib\\Calc", method: "rememberAll" }"#
+            ],
         ]
     );
 }

@@ -3929,6 +3929,30 @@ doubled is Function<string(string)>;         // false: the parameter and result 
 Legacy.doubler() is Function<int(int)>;      // compile error: the type of Legacy.doubler()'s function is unknown
 ```
 
+**A plain PHP closure's type is its declared PHP signature,** as a plain PHP property's type is its declared one (section 25). A parameter it declares no type for takes anything, and a result it declares no type for is `Any?`, so `fn () => new Order()` is a `Function<Any?()>`, never a `Function<Order?()>`. Its type lists no effects, so it fits every `uses`, as the checker takes a plain PHP callable:
+
+<!-- example plain-closure-type-tests -->
+```php
+class Orders
+{
+    public static function typed(): \Closure { return static fn (int $id): ?Order => new Order(); }
+    public static function untyped(): \Closure { return static fn ($id) => new Order(); }
+}
+```
+
+<!-- example plain-closure-type-tests: statements -->
+```csharp
+import Sharp.Data.Database;
+
+Any? typed = Orders.typed();
+Any? untyped = Orders.untyped();
+typed is Function<Order?(int)>;                // true: the types it declares
+typed is Function<Order?(int) uses Database>;  // true: it lists no effects
+typed is Function<Order?(string)>;             // false: it takes an int
+untyped is Function<Order?(int)>;              // false: its result is Any?
+untyped is Function<Any?(string)>;             // true: a parameter with no type takes anything
+```
+
 **A tuple type tests the number of elements and each element's type,** as `List<int>` tests each element. A pattern that starts with `[` is a list pattern, which tests the same, so a tuple type is written in `as` and as a member of a union:
 
 <!-- example tuple-tests: statements -->

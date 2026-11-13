@@ -1,0 +1,46 @@
+namespace App.Linking;
+
+import Lib.Linked;
+
+public static class Report
+{
+    // Each property of `Chain`, with the class value of its type.
+    public static List<string> describeProperties()
+    {
+        List<string> lines = [];
+        for (const property of typeof(Chain).properties()) {
+            const nullable = property.nullable ? "?" : "";
+            lines.add(`${property.name}: ${property.type.name()}${nullable}`);
+        }
+        return lines;
+    }
+
+    // Each method of `Chain`, with the class value of its result type.
+    public static List<string> describeMethods()
+    {
+        List<string> lines = [];
+        for (const method of typeof(Chain).methods()) {
+            lines.add(`${method.name}(): ${method.type.name()}`);
+        }
+        return lines;
+    }
+
+    // Plain PHP closures whose results declare `static`, `self` and `never`, and a PHP# lambda that never returns beside
+    // the plain one.
+    public static List<bool> tests()
+    {
+        Any? made = Chain.maker();
+        Any? same = new Chain().selfMaker();
+        Any? failing = Linked.failer();
+        Any? throwing = () => throw new ValueError("never returns");
+        return [
+            made is Function<Chain()>,
+            same is Function<Linked()>,
+            same is Function<Chain()>,
+            failing is Function<Chain()>,
+            failing is Function<string()>,
+            throwing is Function<Chain()>,
+            throwing is Function<string()>,
+        ];
+    }
+}

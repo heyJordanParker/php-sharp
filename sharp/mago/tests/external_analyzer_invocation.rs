@@ -370,8 +370,8 @@ function take_proxy(DynamicProxy $_proxy): void {}
 
 function take_facade(DynamicFacade $_facade): void {}
 
-take_proxy((new DynamicProxy())->dynamic('instance'));
-take_facade(DynamicFacade::dynamic('static'));
+take_proxy((new DynamicProxy())->dynamicCall('instance'));
+take_facade(DynamicFacade::dynamicCall('static'));
 ";
 
 /// A model whose `__call` the fixture's forwarding provider forwards to a query, whose own `__call` answers the query.
@@ -554,11 +554,11 @@ fn declined_dynamic_methods_preserve_non_documented_method_diagnostics() -> Resu
         [
             (
                 Some("non-documented-method".to_owned()),
-                "Ambiguous method call to `dynamic` on class `DynamicProxy`.".to_owned()
+                "Ambiguous method call to `dynamicCall` on class `DynamicProxy`.".to_owned()
             ),
             (
                 Some("non-documented-method".to_owned()),
-                "Ambiguous method call to `dynamic` on class `DynamicFacade`.".to_owned()
+                "Ambiguous method call to `dynamicCall` on class `DynamicFacade`.".to_owned()
             ),
         ]
     );
@@ -583,7 +583,7 @@ fn a_forwarded_call_reaches_the_magic_method_of_the_object_it_is_forwarded_to() 
         observation.issues,
         [(
             Some("non-documented-method".to_owned()),
-            "Ambiguous method call to `wherekey` on class `ForwardedQuery`.".to_owned()
+            "Ambiguous method call to `whereKey` on class `ForwardedQuery`.".to_owned()
         )]
     );
     assert_eq!(observation.invocations, ["forwarded-ForwardingModel::whereKey"]);
@@ -819,6 +819,38 @@ fn node_hooks_see_a_sharp_call_of_a_namespace_function_as_a_call_of_that_functio
         assert_eq!(functions.invocations, ["call-kind-render-function"], "{files:?}");
         assert_eq!(methods.invocations, [] as [&str; 0], "{files:?}");
     }
+
+    Ok(())
+}
+
+/// A method search names each attribute as the hook writes it, and the host keys it as the codebase does, spec section
+/// 24: the PHP# `Marked` by its exact name, and the plain PHP `Tagged` in any case. So a search for either finds the
+/// method that carries it.
+#[test]
+fn a_method_search_finds_a_method_by_a_sharp_attribute_as_by_a_plain_one() -> Result<(), Box<dyn std::error::Error>> {
+    if !php_sdk_is_available() {
+        return Ok(());
+    }
+
+    // The analysis here runs without PHP's stubs, so neither class is marked `Attribute`, and each use is reported as
+    // one: a method search reads the name of each attribute a method carries, whatever class it names.
+    const MARKED: (&str, &str) = ("src/Probe/Marked.sharp", "namespace Probe;\n\npublic class Marked\n{\n}\n");
+    const TAGGED: (&str, &str) = ("src/Probe/Tagged.php", "<?php\n\nnamespace Probe;\n\nfinal class Tagged\n{\n}\n");
+    const HOLDER: (&str, &str) = (
+        "src/Probe/Holder.php",
+        "<?php\n\nnamespace Probe;\n\nfinal class Holder\n{\n    #[Marked]\n    public function markedMethod(): void\n    {\n    }\n\n    #[Tagged]\n    public function taggedMethod(): void\n    {\n        $this->markedMethod();\n    }\n}\n",
+    );
+
+    let observation = analyze_files_with_fixture(&[MARKED, TAGGED, HOLDER], &["MAGO_INVOCATION_ATTRIBUTED_METHODS"])?;
+
+    assert_eq!(
+        observation.issues.iter().map(|(code, _)| code.as_deref()).collect::<Vec<_>>(),
+        [Some("class-not-marked-as-attribute"); 2]
+    );
+    assert_eq!(
+        observation.invocations,
+        ["attributed-Probe\\Marked-markedMethod", "attributed-Probe\\Tagged-taggedMethod"]
+    );
 
     Ok(())
 }
