@@ -1,5 +1,5 @@
 --TEST--
-PHP# type.attributes<TAttribute>() gives the attributes a class value's class declares itself, subclasses of TAttribute included
+PHP# type.attributes<TAttribute>() gives the attributes a class value's class declares itself, subclasses of TAttribute included, and every one of them for the root bound Object
 --FILE--
 <?php
 
@@ -11,6 +11,7 @@ fixture('ClassValues');
 var_dump(Classes\ClassValues::topics(Classes\Badge::class));
 var_dump(Classes\ClassValues::topics(Classes\GoldBadge::class));
 var_dump(Classes\ClassValues::loud());
+var_dump(Classes\ClassValues::every());
 ?>
 --EXPECT--
 array(2) {
@@ -22,3 +23,4 @@ array(2) {
 array(0) {
 }
 int(1)
+int(2)

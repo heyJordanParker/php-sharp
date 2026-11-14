@@ -36,6 +36,8 @@ public static class Report
             methods[1].type == typeof(List<Order>),
             typeof(Box<Shipment>).methods()[0].type == typeof(Shipment),
             typeof(Box<Shipment>).methods()[1].type == typeof(List<Shipment>),
+            methods[4].attributes<Object>().count() == 1,
+            methods[4].parameters()[0].attributes<Object>().count() == 1,
         ];
     }
 }

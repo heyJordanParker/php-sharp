@@ -17,10 +17,12 @@ mod strings;
 pub(crate) use locals::Captures;
 pub(crate) use locals::Locals;
 
+use mago_codex::misc::GenericParent;
 use mago_codex::ttype::SharpType;
 use mago_codex::ttype::TType;
 use mago_codex::ttype::atomic::TAtomic;
 use mago_codex::ttype::atomic::array::TArray;
+use mago_codex::ttype::atomic::generic::TGenericParameter;
 use mago_codex::ttype::atomic::object::TObject;
 use mago_codex::ttype::atomic::scalar::TScalar;
 use mago_codex::ttype::comparator::ComparisonResult;
@@ -29,6 +31,7 @@ use mago_codex::ttype::get_sharp_type;
 use mago_codex::ttype::union::TUnion;
 use mago_span::HasSpan;
 use mago_syntax::cst::Access;
+use mago_syntax::cst::ArrayAccess;
 use mago_syntax::cst::Block;
 use mago_syntax::cst::ClassLikeMemberSelector;
 use mago_syntax::cst::Expression;
@@ -41,6 +44,8 @@ use mago_syntax::cst::Try;
 use mago_syntax::cst::Variable;
 
 use crate::Converter;
+use crate::types::narrowing;
+use crate::types::type_text;
 use matching::MatchPlace;
 
 /// What a value of an atomic type is to the operators PHP and PHP# share.
@@ -176,17 +181,11 @@ impl<'input> Converter<'input, '_> {
                     if let Some(returning) = &returning {
                         self.narrowed(value, returning);
                     }
-                    // PHP returns a value its declared type doesn't hold, and PHP# refuses it (spec section 7).
+                    // PHP checks a returned value its declared type may not hold, and throws a `TypeError` for one it
+                    // doesn't, as PHP# does after `as`. PHP# refuses any other such value (spec section 7).
                     if let (Some(returning), Some(returned)) = (&returning, self.type_of(value))
-                        && !is_contained_by(
-                            self.input.codebase,
-                            returned,
-                            returning,
-                            false,
-                            false,
-                            false,
-                            &mut ComparisonResult::new(),
-                        )
+                        && self.wider(returned, returning)
+                        && !self.checked(value, returned, returning, "Return value")
                     {
                         let (returned, returning) = (returned.get_id(), returning.get_id());
                         self.refuse(
@@ -371,6 +370,42 @@ impl<'input> Converter<'input, '_> {
         })
     }
 
+    /// `read`, the read of the `Map` `access` names at a key it may lack, as `(sizes[name] ?? throw new
+    /// OutOfRangeException("Undefined array key \"small\""))`. PHP warns on a missing key and gives null, and PHP#
+    /// throws there instead, as a converted file may where PHP warns (spec section 12). It converts where the `Map`'s
+    /// values are never null, so `??` throws for a missing key alone, and refuses where a stored null would throw too.
+    fn key_read(&mut self, read: &Expression<'_>, access: &ArrayAccess<'_>) {
+        let values_never_null = self.type_of(access.array).is_some_and(|union| {
+            union.types.iter().all(|atomic| {
+                matches!(atomic, TAtomic::Array(TArray::Keyed(keyed))
+                    if keyed.parameters.as_ref().is_some_and(|(_, value)| !value.can_be_null()))
+            })
+        });
+        if !values_never_null {
+            return self.refuse(read.span(), MISSING_KEY);
+        }
+        if self.numeric_key(access.array, access.index) {
+            return;
+        }
+        let error = match self.imports.name_of("OutOfRangeException") {
+            Ok(error) => error,
+            Err(reason) => return self.refuse(read.span(), reason),
+        };
+        // PHP's warning, which names a literal key as PHP writes it.
+        let message = match access.index {
+            Expression::Literal(Literal::String(string)) => {
+                format!("Undefined array key \"{}\"", String::from_utf8_lossy(string.value.unwrap_or_default()))
+            }
+            Expression::Literal(Literal::Integer(integer)) => {
+                format!("Undefined array key {}", String::from_utf8_lossy(self.text(integer.span)))
+            }
+            _ => "Undefined array key".to_owned(),
+        };
+        let message = message.replace('\\', "\\\\").replace('"', "\\\"");
+        let rendered = self.render(read);
+        self.edits.replace(read.span(), format!("({rendered} ?? throw new {error}(\"{message}\"))"));
+    }
+
     /// The analysis's type of `expression`, as a refusal names it.
     fn shown(&self, expression: &Expression<'_>) -> String {
         self.type_of(expression).map_or_else(|| "no type".to_owned(), |union| union.get_id().to_string())
@@ -449,7 +484,7 @@ impl<'input> Converter<'input, '_> {
                 self.untyped(access.array, "an index");
                 self.untyped(access.index, "a key");
                 if self.is(access.array, &[Kind::Map]) {
-                    self.refuse(expression.span(), MISSING_KEY);
+                    self.key_read(expression, access);
                 }
             }
             Expression::Conditional(conditional) => {
@@ -562,6 +597,116 @@ impl<'input> Converter<'input, '_> {
                 declared.get_id()
             ),
         );
+    }
+
+    /// Writes `value`, converted already, as `value as T ?? throw new TypeError("…")`, where the analysis types it wider
+    /// than `place`, the declared type of the parameter or the return it lands in, as `mixed` or `array|string` for a
+    /// `string`. PHP checks the value there and throws a `TypeError` for one `place` doesn't hold, and `as` gives null
+    /// for the same values (spec section 21), so the converted file throws where strict PHP does, as each converted
+    /// file is strict (spec section 27). The error says what PHP's does of `subject`, as `Argument #1 ($name)` or
+    /// `Return value`: "Argument #1 ($name) must be of type string". `passed` is the analysis's type of `value`.
+    ///
+    /// Gives whether it took the value: it writes it where `as` tests what PHP does, and refuses it where the file
+    /// can't name the type `as` tests, as a class of PHP's root namespace, or a type parameter whose bound holds null.
+    /// `as` tests what PHP does where `place` is one `int`, `string`, `bool`, object, enum, class with no type
+    /// parameters, or type parameter whose bound excludes null, which PHP# checks as PHPDoc gives it, `passed` may hold
+    /// one, as a `Shape` may be the `Square` `place` takes, and `place` allows null only where `passed` never is, as
+    /// `as` gives null for a value it refuses.
+    pub(super) fn checked(&mut self, value: &Expression<'_>, passed: &TUnion, place: &TUnion, subject: &str) -> bool {
+        let codebase = self.input.codebase;
+        let tested = TUnion::from_vec(place.get_non_nullable_types());
+        let [atomic] = tested.types.as_ref() else {
+            return false;
+        };
+        if place.has_null() && passed.can_be_null() {
+            return false;
+        }
+        let tests = match get_sharp_type(atomic) {
+            Some(SharpType::Int | SharpType::String | SharpType::Bool | SharpType::Object | SharpType::Enum(_)) => {
+                !matches!(atomic, TAtomic::Scalar(scalar) if scalar.is_literal_value())
+            }
+            Some(SharpType::Class(name, arguments)) => {
+                arguments.is_empty()
+                    && !matches!(atomic, TAtomic::Object(TObject::Named(object)) if object.is_static)
+                    && codebase.get_class_like(name.as_bytes()).is_some_and(|class| class.template_types.is_empty())
+            }
+            // A callee's own type parameter stands for the type its call gives it, which `T` doesn't name here.
+            Some(SharpType::Parameter(parameter)) if !self.declares(parameter) => false,
+            // `as T` tests a type argument while the code runs, and gives null for a null `T` as for a value that is no
+            // `T`, so it tests what a `T` is only where `T`'s bound, which `place` holds whole, excludes null.
+            Some(SharpType::Parameter(parameter))
+                if place.types.iter().any(
+                    |atomic| matches!(atomic, TAtomic::GenericParameter(declared) if declared.constraint.can_be_null()),
+                ) =>
+            {
+                let (shown, name) = (passed.get_id(), parameter.parameter_name);
+                self.refuse(
+                    value.span(),
+                    format!("`{shown}` is wider than `{name}`, a type parameter whose bound holds null, which has no PHP# test: `as {name}` gives null for a null `{name}` as for a value that is no `{name}`, so `?? throw` would throw for a null, which PHP lets through (spec section 21)"),
+                );
+                return true;
+            }
+            Some(SharpType::Parameter(_)) => true,
+            _ => false,
+        };
+        let holds = |inner: &TUnion, outer: &TUnion| {
+            is_contained_by(codebase, inner, outer, false, false, false, &mut ComparisonResult::new())
+        };
+        let may_hold = passed.types.iter().any(|passed| {
+            let passed = TUnion::from_atomic(passed.clone());
+            passed.is_mixed() || holds(&passed, &tested) || holds(&tested, &passed)
+        });
+        if !tests || !may_hold || narrowing(&tested).is_some() {
+            return false;
+        }
+        // PHP names the declared type as PHP writes it, as `?App\Square`, and a type parameter by its name.
+        let declared = match atomic {
+            TAtomic::GenericParameter(parameter) => parameter.parameter_name.as_str_lossy().into_owned(),
+            _ => tested.get_id().to_string(),
+        };
+        let php = format!("{}{declared}", if place.has_null() { "?" } else { "" });
+        let named = type_text(&tested, codebase, &mut self.imports)
+            .and_then(|tested| Ok((tested, self.imports.name_of("TypeError")?)));
+        let (tested, error) = match named {
+            Ok(named) => named,
+            Err(reason) => {
+                self.refuse(value.span(), reason);
+                return true;
+            }
+        };
+        let rendered = self.render(value);
+        let rendered = if is_primary(value) { rendered } else { format!("({rendered})") };
+        let message = format!("{subject} must be of type {php}").replace('\\', "\\\\");
+        self.edits.replace(value.span(), format!("{rendered} as {tested} ?? throw new {error}(\"{message}\")"));
+
+        true
+    }
+
+    /// Whether the analysis types `passed` wider than `place`, the declared type of the parameter or the return it
+    /// lands in. The analysis takes a type parameter as holding each value its bound holds, as `T` holds `mixed`, where
+    /// only a `T` is one, so where `place` is a type parameter of the converted class, only a `T` lands in it, and null
+    /// where `place` allows null.
+    pub(super) fn wider(&self, passed: &TUnion, place: &TUnion) -> bool {
+        if let [TAtomic::GenericParameter(parameter)] = place.get_non_nullable_types().as_slice()
+            && self.declares(parameter)
+        {
+            return !passed.types.iter().all(|atomic| match atomic {
+                TAtomic::GenericParameter(passed) => {
+                    passed.parameter_name == parameter.parameter_name
+                        && passed.defining_entity == parameter.defining_entity
+                }
+                atomic => atomic.is_null() && place.has_null(),
+            });
+        }
+
+        !is_contained_by(self.input.codebase, passed, place, false, false, false, &mut ComparisonResult::new())
+    }
+
+    /// Whether the converted class declares `parameter`, which then means the same type wherever its methods name it,
+    /// where a callee's own, as `new Box<Spec>(…)`'s `T`, stands for the type its call gives it.
+    fn declares(&self, parameter: &TGenericParameter) -> bool {
+        matches!(parameter.defining_entity, GenericParent::ClassLike(name)
+            if self.class.as_ref().is_some_and(|class| class.metadata.name == name))
     }
 
     /// Refuses `object`, whose member `operation` reaches, when the analysis gives it `mixed` or `object`, and gives

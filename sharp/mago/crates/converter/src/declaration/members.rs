@@ -687,6 +687,14 @@ impl Converter<'_, '_> {
         let returning = (!is_constructor).then(|| {
             declared.return_type_metadata.as_ref().map_or_else(get_mixed, |metadata| metadata.type_union.clone())
         });
+        // A method PHP declares no return type for returns `null` where its body runs on past its last statement, as the
+        // analysis finds it. A method the analysis didn't check keeps its body, and its proof decides.
+        let reaches_end =
+            self.input.artifacts.method_reaches_end_of_body.get(&(metadata.name, metadata.method_key(name)));
+        let gives_null = method.return_type_hint.is_none()
+            && !declared.flags.has_yield()
+            && returning.as_ref().is_some_and(|returning| returning.is_mixed() || returning.has_null())
+            && reaches_end == Some(&true);
         match &method.body {
             MethodBody::Concrete(block) => {
                 let resolution = declared.type_resolution_context.clone().unwrap_or_default();
@@ -708,6 +716,9 @@ impl Converter<'_, '_> {
                 }
                 self.block(block);
                 self.declare_locals();
+                if gives_null {
+                    self.returns_null(block);
+                }
                 let closed = class_is_final
                     || has(&method.modifiers, |modifier| matches!(modifier, Modifier::Final(_) | Modifier::Private(_)))
                         .is_some();
@@ -775,6 +786,18 @@ impl Converter<'_, '_> {
         }
 
         false
+    }
+
+    /// Ends `block`, the body of a method PHP declares no return type for, which runs on past its last statement and
+    /// gives `null` there, with `return null;`, since a PHP# method returns on every path (spec section 7).
+    fn returns_null(&mut self, block: &Block<'_>) {
+        if let Some(last) = block.statements.last() {
+            let indentation = self.indentation(last.span().start.offset);
+            return self.edits.insert(last.span().end.offset, format!("\n{indentation}return null;"));
+        }
+        let outer = self.indentation(block.right_brace.start.offset);
+        let opened = if block.left_brace.end == block.right_brace.start { format!("\n{outer}") } else { String::new() };
+        self.edits.insert(block.right_brace.start.offset, format!("{opened}    return null;\n{outer}"));
     }
 
     /// Refuses `method`, which no subclass replaces, when its declared return holds `null` and no `return` of its

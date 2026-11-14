@@ -1,5 +1,5 @@
 --TEST--
-Class<T>.methods() gives each instance and static method of a class, its own first and then those it inherits, with its result type and each parameter's type, nullable and optional, the type arguments of the class value substituted, a plain PHP method's PHP types as PHP# writes them, and the attributes of each method and parameter
+Class<T>.methods() gives each instance and static method of a class, its own first and then those it inherits, with its result type and each parameter's type, nullable and optional, the type arguments of the class value substituted, a plain PHP method's PHP types as PHP# writes them, and the attributes of each method and parameter, every one of them for the root bound Object
 --FILE--
 <?php
 require __DIR__ . '/harness/Attributes.inc';
@@ -21,7 +21,7 @@ tag(label: string fields=1): void fields=1
 parse(value: Map<string, Any?>|Object fields=0): App.Shop.Box fields=0
 tryParse(value: Map<string, Any?>|Object fields=0): App.Shop.Box? fields=0
 weigh(grams: int? fields=0, tags: Map<int|string, Any?> optional fields=0): float? fields=0
-array(7) {
+array(9) {
   [0]=>
   bool(true)
   [1]=>
@@ -35,5 +35,9 @@ array(7) {
   [5]=>
   bool(true)
   [6]=>
+  bool(true)
+  [7]=>
+  bool(true)
+  [8]=>
   bool(true)
 }

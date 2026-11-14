@@ -1,0 +1,14 @@
+namespace RootBound;
+
+// The members of the class value of a type that is no class: the root bound `Object`, `int` and `List<int>`.
+public static class Members
+{
+    public static List<int> ofObject()
+        => [typeof(Object).properties().count(), typeof(Object).methods().count(), typeof(Object).attributes<Object>().count()];
+
+    public static List<int> ofInt()
+        => [typeof(int).properties().count(), typeof(int).methods().count(), typeof(int).attributes<Object>().count()];
+
+    public static List<int> ofList()
+        => [typeof(List<int>).properties().count(), typeof(List<int>).methods().count(), typeof(List<int>).attributes<Object>().count()];
+}

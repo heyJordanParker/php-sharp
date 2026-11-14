@@ -26,6 +26,7 @@ public class Report
             properties[1].type.typeArguments() == [],
             typeof(Map<string, int>).typeArguments() == [typeof(string), typeof(int)],
             typeof(Product).typeArguments() == [],
+            properties[1].attributes<Object>().count() == 1,
         ];
     }
 }

@@ -44,6 +44,7 @@ use mago_analyzer::settings::Settings;
 use mago_codex::identifier::function_like::FunctionLikeIdentifier;
 use mago_codex::metadata::CodebaseMetadata;
 use mago_codex::metadata::r#extern::extern_namespace_classes;
+use mago_codex::metadata::flags::MetadataFlags;
 use mago_codex::reference::SymbolReferences;
 use mago_codex::scanner::scan_program;
 use mago_codex::ttype::TType;
@@ -205,6 +206,19 @@ fn analyze_with_references(
     others: &[(&'static str, &'static str)],
     library: &[(&'static str, &'static str)],
 ) -> (Vec<Issue>, AnalysisArtifacts, SymbolReferences) {
+    analyze_refined(registry, settings, analyzed, others, library, |_| {})
+}
+
+/// [`analyze_with_references`], with `refine` run on the scanned codebase before population, where an external
+/// analyzer's metadata reaches it, as the PHP SDK's metadata codec sets a flag no source sets, such as `UNCHECKED`.
+fn analyze_refined(
+    registry: &PluginRegistry,
+    settings: Settings,
+    analyzed: (&'static str, &'static str),
+    others: &[(&'static str, &'static str)],
+    library: &[(&'static str, &'static str)],
+    refine: impl FnOnce(&mut CodebaseMetadata),
+) -> (Vec<Issue>, AnalysisArtifacts, SymbolReferences) {
     let Prelude { mut database, mut metadata, mut symbol_references } = PRELUDE.clone();
 
     let file_ids: Vec<_> = std::iter::once(&analyzed)
@@ -264,6 +278,7 @@ fn analyze_with_references(
         programs.push((file, program, names));
     }
 
+    refine(&mut metadata);
     populate_on_prelude(&mut metadata, &mut symbol_references);
 
     let (file, program, names) = &programs[0];
@@ -20138,6 +20153,34 @@ fn as_gives_its_target_type_or_null_for_every_target() {
     );
 }
 
+/// Spec section 21: `as` converts a value, and only `is` narrows one, so the local an `as` converts keeps its own type
+/// after it. `n as TAny` of an `Event` is a `TAny` narrowed to `Event` where it holds and null where it doesn't, and `n`
+/// is still an `Event` below it, as it is after `m as Paid`, for an unbounded type parameter and a bounded one alike.
+#[test]
+fn as_leaves_the_local_it_converts_its_own_type() {
+    let event = ("src/Demo/Event.sharp", "namespace Demo;\n\npublic interface Event\n{\n}\n");
+    let paid = ("src/Demo/Paid.sharp", "namespace Demo;\n\npublic class Paid : Event\n{\n}\n");
+    let sweep = "namespace Demo;\n\npublic class Sweep<TAny, TDue : Event>\n{\n    public List<Any?> run(Event n, Event m, Event k)\n    {\n        const converted = n as TAny;\n        const afterAny = n;\n        const paid = m as Paid;\n        const afterPaid = m;\n        const due = k as TDue;\n        const afterDue = k;\n        return [converted, afterAny, paid, afterPaid, due, afterDue];\n    }\n}\n";
+    let (_, artifacts) =
+        analyze_with_artifacts(&PLUGIN_REGISTRY, settings(), ("src/Demo/Sweep.sharp", sweep), &[event, paid]);
+    let type_of = |expression: &str| {
+        let start = sweep.find(expression).unwrap() as u32;
+        artifacts.expression_types[&(start, start + expression.len() as u32)].get_id().to_string()
+    };
+
+    assert_eq!(
+        ["n as TAny", "afterAny = n", "m as Paid", "afterPaid = m", "k as TDue", "afterDue = k"].map(type_of),
+        [
+            "('TAny.Demo\\Sweep extends Demo\\Event)|null",
+            "Demo\\Event",
+            "Demo\\Paid|null",
+            "Demo\\Event",
+            "('TDue.Demo\\Sweep extends Demo\\Event)|null",
+            "Demo\\Event",
+        ]
+    );
+}
+
 /// Spec section 11: a type parameter holds only itself, so a value of its bound, or of any type for an unbounded one,
 /// may or may not be of it. `is` narrows the value to the type parameter, `is not` leaves it its own type, and neither
 /// test is always true or always false.
@@ -20163,6 +20206,64 @@ fn a_value_of_another_type_narrowed_to_a_type_parameter_is_of_the_type_parameter
         "(('T.Demo\\Sweep extends int)&'T.Demo\\Sweep extends mixed)"
     );
     assert_eq!(explained(("src/Demo/Sweep.sharp", sweep), &[]), Vec::<String>::new());
+}
+
+/// The analysis records whether each method body runs past its last statement, where PHP returns `null`, as its check
+/// for a missing return decides, for a plain PHP method with no return type too: a `while`, a `switch` and a `try`
+/// whose every path returns end only by returning, and one with a path that leaves without a return runs past its end.
+#[test]
+fn the_analysis_records_whether_a_method_body_runs_past_its_last_statement() {
+    let shapes = "<?php\n\nnamespace App;\n\nfinal class Shapes\n{\n    public function loops_forever() { while (true) { return 1; } }\n\n    public function loops_while($n) { while ($n > 0) { return 1; } }\n\n    public function switches_fully($n) { switch ($n) { case 1: return 1; default: return 2; } }\n\n    public function switches_partly($n) { switch ($n) { case 1: return 1; } }\n\n    public function tries_fully() { try { return 1; } catch (\\Exception $e) { return 2; } }\n\n    public function tries_partly() { try { return 1; } catch (\\Exception $e) { } }\n\n    public function throws() { throw new \\Exception(); }\n\n    public function assigns() { $x = 1; }\n}\n";
+    let (_, artifacts) = analyze_with_artifacts(&PLUGIN_REGISTRY, settings(), ("src/App/Shapes.php", shapes), &[]);
+    let mut reaches_end: Vec<(String, bool)> = artifacts
+        .method_reaches_end_of_body
+        .iter()
+        .map(|((_, method), reaches)| (method.to_string(), *reaches))
+        .collect();
+    reaches_end.sort();
+
+    assert_eq!(
+        reaches_end,
+        [
+            ("assigns", true),
+            ("loops_forever", false),
+            ("loops_while", true),
+            ("switches_fully", false),
+            ("switches_partly", true),
+            ("throws", false),
+            ("tries_fully", false),
+            ("tries_partly", true),
+        ]
+        .map(|(method, reaches)| (method.to_string(), reaches))
+    );
+}
+
+/// The analysis never runs an unchecked method's body, as an external analyzer marks one through the PHP SDK, so it
+/// knows nothing about where the body ends and records no entry for it, where a checked method beside it records one.
+#[test]
+fn an_unchecked_method_records_nothing_about_its_end() {
+    let shapes = "<?php\n\nnamespace App;\n\nfinal class Shapes\n{\n    public function checked() { $x = 1; }\n\n    public function skipped() { return 1; }\n}\n";
+    let (_, artifacts, _) = analyze_refined(
+        &PLUGIN_REGISTRY,
+        settings(),
+        ("src/App/Shapes.php", shapes),
+        &[],
+        &EFFECT_CLASSES,
+        |codebase| {
+            for ((_, method), metadata) in &mut codebase.function_likes {
+                if method.as_bytes() == b"skipped" {
+                    metadata.flags |= MetadataFlags::UNCHECKED;
+                }
+            }
+        },
+    );
+    let reaches_end: Vec<(String, bool)> = artifacts
+        .method_reaches_end_of_body
+        .iter()
+        .map(|((_, method), reaches)| (method.to_string(), *reaches))
+        .collect();
+
+    assert_eq!(reaches_end, [("checked".to_string(), true)]);
 }
 
 /// The PHP# side of the interop matrix: a class, an abstract class, an interface with default bodies and an enum, each
@@ -29174,7 +29275,8 @@ fn reflection_gives_each_member_fact_its_type() {
 /// Spec section 25: `Class.of(value)` of a value of type `T` is a `Class<T>`, so of an `Object` it is a `Class<Object>`,
 /// and every member of a class value, `name()` and `methods()` included, is a member of it, as of a `Class<Event>` and
 /// the `Class<TObject>` of a type parameter bounded by `Object`. The checker needs no extension host for it. A value that
-/// may hold no object, an `Any`, an `Object?` or a type parameter with no bound, is refused by `Class.of`'s bound alone.
+/// may hold no object, an `Any`, an `Object?` or a type parameter with no bound, is refused by `Class.of`'s bound alone,
+/// which names the type that falls outside it, as C#'s CS0311 does.
 #[test]
 fn class_of_any_object_has_every_member_of_a_class_value() {
     let event = ("src/Demo/Event.sharp", "namespace Demo;\n\npublic interface Event\n{\n}\n");
@@ -29187,7 +29289,7 @@ fn class_of_any_object_has_every_member_of_a_class_value() {
         [
             "13:50 template-constraint-violation `Any` does not satisfy the bound `Object` of type parameter `T`. Ensure the argument's type satisfies the bound.",
             "15:52 template-constraint-violation `Object?` does not satisfy the bound `Object` of type parameter `T`. Ensure the argument's type satisfies the bound.",
-            "17:51 invalid-argument Invalid argument type for argument #1 of `Class.of`: expected `T`, but found `TValue`. Change the argument value to match `T`, or update the parameter's type declaration.",
+            "17:51 template-constraint-violation `TValue` does not satisfy the bound `Object` of type parameter `T`. Ensure the argument's type satisfies the bound.",
         ]
     );
 }
@@ -29227,6 +29329,25 @@ fn a_reflection_call_read_or_write_may_have_every_effect() {
             "app/Shop/Calling.sharp:5:34 incompatible-effects: `Calling.run` reaches `Method.invoke`, which may have every effect, so the pure `Audit.run` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
             "app/Shop/Reading.sharp:5:34 incompatible-effects: `Reading.run` reaches `Property.get`, which may have every effect, so the pure `Audit.run` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
             "app/Shop/Writing.sharp:5:34 incompatible-effects: `Writing.run` reaches `Property.set`, which may have every effect, so the pure `Audit.run` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
+        ]
+    );
+}
+
+/// Spec section 24: a string names a class-like by its key, so plain PHP's `'Demo\BOX'` is never the PHP# class
+/// `Demo\Box`'s name, on either side of `===`, while `'lib\words'` is the plain `Lib\Words`'s.
+#[test]
+fn a_string_in_another_case_is_never_a_sharp_class_name() {
+    let r#box = ("src/Box.sharp", "namespace Demo;\n\npublic class Box\n{\n}\n");
+    let check = (
+        "src/Check.php",
+        "<?php\n\nnamespace App;\n\nfinal class Check\n{\n    public function twin(): bool\n    {\n        return 'Demo\\BOX' === \\Demo\\Box::class;\n    }\n\n    public function swapped(): bool\n    {\n        return \\Demo\\Box::class === 'Demo\\BOX';\n    }\n\n    public function plain(): bool\n    {\n        return 'lib\\words' === \\Lib\\Words::class;\n    }\n\n    public function loose(): bool\n    {\n        return 'Demo\\BOX' == \\Demo\\Box::class;\n    }\n\n    public function looseSwapped(): bool\n    {\n        return \\Demo\\Box::class == 'Demo\\BOX';\n    }\n\n    public function plainSwapped(): bool\n    {\n        return \\Lib\\Words::class === 'lib\\words';\n    }\n}\n",
+    );
+
+    assert_eq!(
+        messages(check, &[r#box, WORDS]),
+        [
+            "Redundant `===` comparison: left-hand side is never identical to right-hand side.",
+            "Redundant `===` comparison: left-hand side is never identical to right-hand side.",
         ]
     );
 }
