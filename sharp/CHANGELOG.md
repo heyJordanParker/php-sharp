@@ -7,6 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - `attributes<Object>()` gives every attribute of a class, a method, a property or a parameter, spec section 25, as any other bound gives the attributes of its class. 0.6.11 threw `Error` with "Class "Object" not found", since PHP's `getAttributes` takes a class to filter by, and `Object` is the root bound and no class.
+- The class value of a type that is no class, as `typeof(Object)`, `typeof(int)` or `typeof(List<int>)`, has no `properties()`, no `methods()` and no `attributes<T>()`, spec section 25, as .NET's `typeof(object).GetProperties()` gives none. 0.6.11 threw `Error` with "Class "Object" not found" from the first two and `ReflectionException` from the third.
 
 ### Upgrading from 0.6.10
 
