@@ -81,11 +81,12 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	/* For the request: each listener table emit read, by its path, and each event class's listeners, by its entry. */
 	HashTable listener_tables;
 	HashTable event_listeners;
-	/* Spec section 29: for the request, the attributes reflection reads of each class an `extern` line gives
-	 * attributes, by its entry. See sharp_class_attributes. */
+	/* Spec section 29: for the request, the attributes reflection reads of each class, method and function, by the
+	 * key sharp_extern_key gives it, or NULL for one whose own attributes are all it has. See
+	 * sharp_extern_attributes. */
 	HashTable class_attributes;
-	/* The plain PHP class whose `extern` lines sharp_parse_extern_attributes compiles, or NULL. */
-	zend_class_entry *extern_class;
+	/* The key of the declaration whose `extern` lines sharp_parse_extern_attributes compiles, or NULL. */
+	zend_string *extern_key;
 	/* Spec section 15: for the request, each listener Sharp\Internal\listen started whose handle lives, under the number
 	 * its handle holds, in the order they started, as [the type it listens to, its function]. */
 	HashTable scoped_listeners;
@@ -8600,9 +8601,30 @@ static void sharp_free_attribute_table(zval *entry)
 	}
 }
 
-/* The parser of a .sharp file whose `extern` lines give SHARP_G(extern_class) attributes, spec section 29. In place of
- * the file's code it gives, for each such line, `new class {}` with the line's attributes, so the anonymous class the
- * compile declares holds them as PHP compiles a class's attributes, and the file's own classes stay undeclared. */
+/* The name the listener table gives the declaration an `extern` line names, by which the line is found: a class's full
+ * name, `Class::method` for a method, and `function()` for a function, each in lowercase, as PHP looks it up. target
+ * is the line's ZEND_ATTRIBUTE_TARGET_CLASS, _METHOD or _FUNCTION. */
+static zend_string *sharp_extern_key(zend_string *name, uint32_t target)
+{
+	zend_string *lowercase = zend_string_tolower(name);
+	zend_string *key;
+
+	if (target != ZEND_ATTRIBUTE_TARGET_FUNCTION) {
+		return lowercase;
+	}
+	key = zend_string_concat2(ZSTR_VAL(lowercase), ZSTR_LEN(lowercase), "()", 2);
+	zend_string_release(lowercase);
+
+	return key;
+}
+
+/* The name of the method of an anonymous class that holds a method's or a function's `extern` attributes. */
+#define SHARP_EXTERN_HOLDER "holder"
+
+/* The parser of a .sharp file whose `extern` lines give the declaration SHARP_G(extern_key) names attributes, spec
+ * section 29. In place of the file's code it gives, for each such line, `new class {}` that holds the line's
+ * attributes: on the class for a class's line, and on its one method, SHARP_EXTERN_HOLDER, for a method's or a
+ * function's. PHP compiles them as it compiles a declaration's attributes, and the file's own classes stay undeclared. */
 static int sharp_parse_extern_attributes(void)
 {
 	const char *filename = ZSTR_VAL(zend_get_compiled_filename());
@@ -8621,18 +8643,30 @@ static int sharp_parse_extern_attributes(void)
 
 		for (uint32_t i = 0; i < root->child_count; i++) {
 			uint32_t child = compiled.unit.children[root->first_child + i];
-			zend_ast *line, *holder;
+			zend_ast *line, *holder, *members;
+			zend_string *key;
+			bool named;
 
 			if (compiled.unit.nodes[child].kind != SHARP_AST_SHARP_EXTERN) {
 				continue;
 			}
 			line = sharp_translate(&compiled.unit, child);
-			if (!zend_string_equals_ci(zend_ast_get_str(line->child[0]), SHARP_G(extern_class)->name)) {
+			key = sharp_extern_key(zend_ast_get_str(line->child[0]), line->attr);
+			named = zend_string_equals(key, SHARP_G(extern_key));
+			zend_string_release(key);
+			if (!named) {
 				zend_ast_destroy(line);
 				continue;
 			}
+			members = zend_ast_create_list(0, ZEND_AST_STMT_LIST);
+			if (line->attr != ZEND_ATTRIBUTE_TARGET_CLASS) {
+				members = zend_ast_list_add(members, zend_ast_create_decl(ZEND_AST_METHOD, ZEND_ACC_PUBLIC,
+					zend_ast_get_lineno(line), NULL, ZSTR_INIT_LITERAL(SHARP_EXTERN_HOLDER, 0),
+					zend_ast_create_list(0, ZEND_AST_PARAM_LIST), NULL, zend_ast_create_list(0, ZEND_AST_STMT_LIST),
+					NULL, line->child[1]));
+			}
 			holder = zend_ast_create_decl(ZEND_AST_CLASS, ZEND_ACC_ANON_CLASS, zend_ast_get_lineno(line), NULL, NULL,
-				NULL, NULL, zend_ast_create_list(0, ZEND_AST_STMT_LIST), line->child[1], NULL);
+				NULL, NULL, members, line->attr == ZEND_ATTRIBUTE_TARGET_CLASS ? line->child[1] : NULL, NULL);
 			zend_ast_destroy(line->child[0]);
 			statements = zend_ast_list_add(statements, zend_ast_create(ZEND_AST_NEW, holder, zend_ast_create_list(0, ZEND_AST_ARG_LIST)));
 		}
@@ -8649,24 +8683,24 @@ static int sharp_parse_extern_attributes(void)
 	return SUCCESS;
 }
 
-/* Appends to attributes the attributes the `extern` lines of the .sharp file source give ce, compiled as the anonymous
- * classes of sharp_parse_extern_attributes, which the request's class table keeps. Throws and returns false when the
- * file is not compiled. */
-static bool sharp_add_extern_attributes(HashTable *attributes, zend_class_entry *ce, zend_string *source)
+/* Appends to attributes the attributes the `extern` lines of the .sharp file source give the declaration key names,
+ * compiled as the anonymous classes of sharp_parse_extern_attributes, which the request's class table keeps. Throws and
+ * returns false when the file is not compiled. */
+static bool sharp_add_extern_attributes(HashTable *attributes, zend_string *key, zend_string *source)
 {
-	zend_class_entry *previous = SHARP_G(extern_class);
+	zend_string *previous = SHARP_G(extern_key);
 	zend_file_handle handle;
 	zend_op_array *op_array;
 
-	SHARP_G(extern_class) = ce;
+	SHARP_G(extern_key) = key;
 	zend_stream_init_filename_ex(&handle, source);
 	op_array = zend_compile_file_with(&handle, ZEND_INCLUDE, sharp_parse_extern_attributes);
 	zend_destroy_file_handle(&handle);
-	SHARP_G(extern_class) = previous;
+	SHARP_G(extern_key) = previous;
 	if (!op_array) {
 		if (!EG(exception)) {
 			zend_throw_exception_ex(zend_ce_compile_error, 0,
-				"%s gives %s attributes and is not compiled. Run vendor/bin/mago compile.", ZSTR_VAL(source), ZSTR_VAL(ce->name));
+				"%s gives %s attributes and is not compiled. Run vendor/bin/mago compile.", ZSTR_VAL(source), ZSTR_VAL(key));
 		}
 		return false;
 	}
@@ -8674,14 +8708,21 @@ static bool sharp_add_extern_attributes(HashTable *attributes, zend_class_entry 
 	for (uint32_t i = 0; i < op_array->last; i++) {
 		const zend_op *opline = &op_array->opcodes[i];
 		zend_class_entry *holder;
+		zend_function *method;
+		HashTable *held;
 		zend_attribute *attribute;
 
 		if (opline->opcode != ZEND_DECLARE_ANON_CLASS) {
 			continue;
 		}
 		holder = zend_hash_find_ptr(CG(class_table), Z_STR_P(RT_CONSTANT(opline, opline->op1)));
-		if (holder && holder->attributes) {
-			ZEND_HASH_PACKED_FOREACH_PTR(holder->attributes, attribute) {
+		if (!holder) {
+			continue;
+		}
+		method = zend_hash_str_find_ptr(&holder->function_table, SHARP_EXTERN_HOLDER, sizeof(SHARP_EXTERN_HOLDER) - 1);
+		held = method ? method->common.attributes : holder->attributes;
+		if (held) {
+			ZEND_HASH_PACKED_FOREACH_PTR(held, attribute) {
 				zend_hash_next_index_insert_ptr(attributes, attribute);
 			} ZEND_HASH_FOREACH_END();
 		}
@@ -8692,59 +8733,97 @@ static bool sharp_add_extern_attributes(HashTable *attributes, zend_class_entry 
 	return true;
 }
 
-HashTable *sharp_class_attributes(zend_class_entry *ce)
+/* The attributes reflection reads of the declaration key names, whose own are own: those and then the ones of each
+ * `extern` line the listener table of the .sharp folder above file lists for key, kept for the request by key, since
+ * a method's closure copies the method. A library's declaration in vendor/ finds its project's lines, as an extern
+ * event finds its listeners. Throws and returns NULL when the table is damaged or a file that holds a line is not
+ * compiled. */
+static HashTable *sharp_extern_attributes(HashTable *own, zend_string *file, zend_string *key)
 {
-	zend_ulong key = (zend_ulong) (uintptr_t) ce;
-	zval *known = zend_hash_index_find(&SHARP_G(class_attributes), key);
-	zval entry, *files, *file;
+	zval *known = zend_hash_find(&SHARP_G(class_attributes), key);
+	zval entry, *files, *listed;
 	HashTable *table, *attributes;
-	zend_attribute *own;
-	zend_string *name;
+	zend_attribute *attribute;
 	size_t root_length;
 
 	if (known) {
-		return Z_PTR_P(known) ? Z_PTR_P(known) : ce->attributes;
+		return Z_PTR_P(known) ? Z_PTR_P(known) : own;
 	}
-	/* The listener table of the .sharp folder above the class's file names each file whose `extern` line gives it
-	 * attributes, so a library class in vendor/ finds its project's lines, as an extern event finds its listeners. */
-	if (ce->type != ZEND_USER_CLASS || !sharp_find_root(ce->info.user.filename, &root_length)) {
-		return ce->attributes;
+	if (!sharp_find_root(file, &root_length)) {
+		return own;
 	}
-	table = sharp_listener_table(ZSTR_VAL(ce->info.user.filename), root_length);
+	table = sharp_listener_table(ZSTR_VAL(file), root_length);
 	if (!table) {
 		return NULL;
 	}
 	files = zend_hash_str_find(table, "attributes", sizeof("attributes") - 1);
-	name = zend_string_tolower(ce->name);
-	files = files ? zend_hash_find(Z_ARRVAL_P(files), name) : NULL;
-	zend_string_release(name);
+	files = files ? zend_hash_find(Z_ARRVAL_P(files), key) : NULL;
 	ZVAL_PTR(&entry, NULL);
 	if (!files) {
-		zend_hash_index_add_new(&SHARP_G(class_attributes), key, &entry);
-		return ce->attributes;
+		zend_hash_add_new(&SHARP_G(class_attributes), key, &entry);
+		return own;
 	}
 
 	ALLOC_HASHTABLE(attributes);
 	zend_hash_init(attributes, 8, NULL, NULL, false);
 	zend_hash_real_init_packed(attributes);
-	if (ce->attributes) {
-		ZEND_HASH_PACKED_FOREACH_PTR(ce->attributes, own) {
-			zend_hash_next_index_insert_ptr(attributes, own);
+	if (own) {
+		ZEND_HASH_PACKED_FOREACH_PTR(own, attribute) {
+			zend_hash_next_index_insert_ptr(attributes, attribute);
 		} ZEND_HASH_FOREACH_END();
 	}
 	ZVAL_PTR(&entry, attributes);
-	zend_hash_index_add_new(&SHARP_G(class_attributes), key, &entry);
-	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(files), file) {
-		zend_string *source = zend_string_concat3(ZSTR_VAL(ce->info.user.filename), root_length, "/", 1,
-			Z_STRVAL_P(file), Z_STRLEN_P(file));
-		bool added = sharp_add_extern_attributes(attributes, ce, source);
+	zend_hash_add_new(&SHARP_G(class_attributes), key, &entry);
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(files), listed) {
+		zend_string *source = zend_string_concat3(ZSTR_VAL(file), root_length, "/", 1, Z_STRVAL_P(listed), Z_STRLEN_P(listed));
+		bool added = sharp_add_extern_attributes(attributes, key, source);
 
 		zend_string_release(source);
 		if (!added) {
-			zend_hash_index_del(&SHARP_G(class_attributes), key);
+			zend_hash_del(&SHARP_G(class_attributes), key);
 			return NULL;
 		}
 	} ZEND_HASH_FOREACH_END();
+
+	return attributes;
+}
+
+HashTable *sharp_class_attributes(zend_class_entry *ce)
+{
+	zend_string *key;
+	HashTable *attributes;
+
+	if (ce->type != ZEND_USER_CLASS) {
+		return ce->attributes;
+	}
+	key = sharp_extern_key(ce->name, ZEND_ATTRIBUTE_TARGET_CLASS);
+	attributes = sharp_extern_attributes(ce->attributes, ce->info.user.filename, key);
+	zend_string_release(key);
+
+	return attributes;
+}
+
+HashTable *sharp_function_attributes(zend_function *function)
+{
+	zend_string *key, *name;
+	HashTable *attributes;
+
+	/* A closure is no declaration an `extern` line names, and a method's closure, as Closure::fromCallable gives, is. */
+	if (function->type != ZEND_USER_FUNCTION
+			|| (function->common.fn_flags & (ZEND_ACC_CLOSURE | ZEND_ACC_FAKE_CLOSURE)) == ZEND_ACC_CLOSURE) {
+		return function->common.attributes;
+	}
+	if (function->common.scope) {
+		name = zend_string_concat3(ZSTR_VAL(function->common.scope->name), ZSTR_LEN(function->common.scope->name),
+			"::", 2, ZSTR_VAL(function->common.function_name), ZSTR_LEN(function->common.function_name));
+		key = sharp_extern_key(name, ZEND_ATTRIBUTE_TARGET_METHOD);
+	} else {
+		name = zend_string_copy(function->common.function_name);
+		key = sharp_extern_key(name, ZEND_ATTRIBUTE_TARGET_FUNCTION);
+	}
+	zend_string_release(name);
+	attributes = sharp_extern_attributes(function->common.attributes, function->op_array.filename, key);
+	zend_string_release(key);
 
 	return attributes;
 }
@@ -11108,7 +11187,7 @@ static PHP_RINIT_FUNCTION(sharp)
 	zend_hash_init(&SHARP_G(listener_tables), 0, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(event_listeners), 0, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(class_attributes), 0, NULL, sharp_free_attribute_table, false);
-	SHARP_G(extern_class) = NULL;
+	SHARP_G(extern_key) = NULL;
 	/* Each entry points at a live Sharp\Listening, which removes it when it stops, and holds no reference. */
 	zend_hash_init(&SHARP_G(scoped_listeners), 0, NULL, NULL, false);
 	SHARP_G(next_scoped_listener) = 0;

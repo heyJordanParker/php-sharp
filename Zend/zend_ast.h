@@ -164,8 +164,9 @@ enum _zend_ast_kind {
 	ZEND_AST_SHARP_TYPE_ARGS,
 	/* PHP#: whether child 0 is of the type child 1, a type text, spells, type arguments included. */
 	ZEND_AST_SHARP_IS_TYPE,
-	/* PHP#: an `extern` line's attributes, child 1, which the plain PHP class child 0 names carries as its own. A file
-	 * runs nothing for it: ext/sharp compiles child 1 when reflection reads the class's attributes. */
+	/* PHP#: an `extern` line's attributes, child 1, which the plain PHP class, method (`Class::method`) or function
+	 * child 0 names carries as its own, and whose ZEND_ATTRIBUTE_TARGET_* is the attr. A file runs nothing for it:
+	 * ext/sharp compiles child 1 when reflection reads the declaration's attributes. */
 	ZEND_AST_SHARP_EXTERN,
 
 	/* 3 child nodes */

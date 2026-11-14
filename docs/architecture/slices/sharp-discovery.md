@@ -13,7 +13,7 @@ Every state below was observed on master 754ab7ce08, in the `php-sharp:754ab7ce0
 
 ## Where compiled output lives today
 
-**`mago compile` writes one binary unit per accepted PHP# file into one `.sharp/` folder at the workspace root.** The unit sits at the source's path relative to the root, with `.sharp` replaced by `.sharpc`. Vendor packages mirror into the same folder. `.sharp/listeners.php` holds the listener table, and under `'attributes'` the files whose `extern` lines give a plain PHP class attributes, which the engine compiles when reflection reads the class's attributes (spec section 29). `sharp/mago/src/commands/compile.rs` deletes every other file in the folder on each run.
+**`mago compile` writes one binary unit per accepted PHP# file into one `.sharp/` folder at the workspace root.** The unit sits at the source's path relative to the root, with `.sharp` replaced by `.sharpc`. Vendor packages mirror into the same folder. `.sharp/listeners.php` holds the listener table, and under `'attributes'` the files whose `extern` lines give a plain PHP class, method or function attributes, which the engine compiles when reflection reads its attributes (spec section 29). `sharp/mago/src/commands/compile.rs` deletes every other file in the folder on each run.
 
 ```text
 fixture/

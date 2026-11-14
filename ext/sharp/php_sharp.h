@@ -28,6 +28,9 @@ HashTable *sharp_equality_operators(void);
  * an exception thrown when they can't be read. */
 HashTable *sharp_class_attributes(zend_class_entry *ce);
 
+/* The same of a method or a function. */
+HashTable *sharp_function_attributes(zend_function *function);
+
 /* Whether `func` is PHP# code, a function a .sharp file declares. Plain PHP code and an internal function are not. */
 static zend_always_inline bool sharp_function_is_sharp(const zend_function *func)
 {
