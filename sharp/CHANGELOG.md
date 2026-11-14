@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- `attributes<Object>()` gives every attribute of a class, a method, a property or a parameter, spec section 25, as any other bound gives the attributes of its class. 0.6.11 threw `Error` with "Class "Object" not found", since PHP's `getAttributes` takes a class to filter by, and `Object` is the root bound and no class.
+
 ### Upgrading from 0.6.10
 
 #### Read a reflection boolean by its `is` name
