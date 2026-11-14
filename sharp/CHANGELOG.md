@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Added
+
+- `mago convert` converts an argument or a returned value the analysis types wider than the declared type it lands in, as Laravel's `trans()`, typed `array|string`, passed to a `string` parameter, or a `mixed` value returned as an `int`, where it kept the file plain PHP. It writes `title as string ?? throw new TypeError("Argument #1 ($title) must be of type string")`, which throws where PHP's own check of the parameter or the return throws a `TypeError`. It writes it for a declared type `as` tests as PHP checks it: one `int`, `string`, `bool`, object, enum or class with no type parameters, and a nullable one only for a value that is never null.
+
 ### Fixed
 
 - `attributes<Object>()` gives every attribute of a class, a method, a property or a parameter, spec section 25, as any other bound gives the attributes of its class. 0.6.11 threw `Error` with "Class "Object" not found", since PHP's `getAttributes` takes a class to filter by, and `Object` is the root bound and no class.
