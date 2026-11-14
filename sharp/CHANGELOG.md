@@ -7,6 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Added
 
 - `mago convert` converts an argument or a returned value the analysis types wider than the declared type it lands in, as Laravel's `trans()`, typed `array|string`, passed to a `string` parameter, or a `mixed` value returned as an `int`, where it kept the file plain PHP. It writes `title as string ?? throw new TypeError("Argument #1 ($title) must be of type string")`, which throws where PHP's own check of the parameter or the return throws a `TypeError`. It writes it for a declared type `as` tests as PHP checks it: one `int`, `string`, `bool`, object, enum or class with no type parameters, and a nullable one only for a value that is never null.
+- `mago convert` converts a file with a `use` line of a class of PHP's root namespace, as `use Closure;` beside a `Closure(int): int` parameter, which becomes `Function<int(int)> next`, or `use RuntimeException as Failure;`, where it refused the line. The line goes, and the file names each such class where it uses it: bare for a root class of `Builtins.sharp`, through its folder's namespace for a library's, and a refusal there for any other, as `new DateTimeImmutable()`.
 
 ### Fixed
 
