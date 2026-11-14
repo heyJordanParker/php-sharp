@@ -440,9 +440,10 @@ jobs:
     env:
       REGISTRY: ghcr.io/heyjordanparker
       EXTENSIONS: bcmath exif gd imagick intl pcntl pdo_pgsql pgsql redis zip
-      # The same extensions, with imagick and redis built from the release tags the image adds from GitHub, because
-      # pecl.php.net outages failed this job.
-      INSTALL: bcmath exif gd /usr/src/imagick intl pcntl pdo_pgsql pgsql /usr/src/phpredis zip
+      # The same extensions but intl, which both images build, so sharp/bin/php-extensions checks the image's own.
+      # imagick and redis build from the release tags the image adds from GitHub, because pecl.php.net outages failed
+      # this job.
+      INSTALL: bcmath exif gd /usr/src/imagick pcntl pdo_pgsql pgsql /usr/src/phpredis zip
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
