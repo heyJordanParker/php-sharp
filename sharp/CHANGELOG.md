@@ -19,6 +19,16 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - `mago convert` keeps an enum plain PHP where one of its methods calls plain PHP that PHPDoc doesn't mark `@pure`, with "`Translator::get` is plain PHP whose effects no declaration gives, and a PHP# enum has no effects", spec section 29, since such a call may have effects or emit an event. 0.6.12 converted the enum.
 - In a project, whose `composer.json` says `"type": "project"`, `mago convert` keeps a file plain PHP where a public member's signature would name `Any`, `Any?` or `Object` at any depth, from a PHP `mixed`, an `array` no PHPDoc types, a missing type, an `object` or a `class-string` of no class, which is `Class<Object>`, with "`Store::checkoutPayload` returns `mixed`, and a public member of an application names its types". A narrower PHPDoc type still converts, as does a library's member and a private or protected one. 0.6.12 converted such a member.
 - `mago convert` checks a value wider than a nullable or a union type that PHP declares for a parameter or a return, as `?string` or `string|Loggable`, with one read through `match`, as `match (this.raw()) { string value => value, null => null, default => throw new TypeError("Return value must be of type ?string") }`, spec section 21, so the value's call runs once and the converted file throws PHP's `TypeError` where PHP does. A type only PHPDoc gives, which PHP never checks, still keeps the file plain PHP. 0.6.12 refused each such value with "`mixed` reaches a parameter of a known type" or "is wider than".
+- `mago convert` converts more of PHP, where 0.6.12 kept the file plain PHP with "is not converted yet" or a reason the converter gave for its own limit:
+  - `$value ?: $other` of a call or an index, with one read, as `match (this.find()) { string value when value != "" && value != "0" => value, default => 'untitled' }`, and as `this.parent() ?? this` for an object that may be null, spec section 21. A `?:` of a value that is never null and of a scalar type still refuses, since its `match` arm tests a type the value already has, which the checker warns on.
+  - `never` as a whole type, as a return and as a type argument, as `List<never>`, spec section 7.
+  - a value wider than a `float` PHP declares, as `match (v) { float value => value, int value => (float) value, default => throw new TypeError(…) }`, since PHP passes an `int` there as that number.
+  - a public method of a project that declares `mixed`, or no return type, as the join of the values its body returns, as `public string label()`, and a closed method whose `?` return never gives `null` without the `?`.
+  - a body between `:` and `endif`, `endforeach`, `endfor` or `endwhile`, in braces.
+  - `break 2` and `continue 2`, as the name of the loop they leave, `outer: for (…)` and `break outer;`, spec section 17, and `break 1` as `break`.
+  - a method with `yield`, which returns an `Iterable` of what it yields, and `yield from items` as `yield ...items`, spec section 12.
+  - an integer literal past `PHP_INT_MAX`, as the `float` PHP reads it as.
+  - `__FUNCTION__` and `__METHOD__` outside a method, as `""`, and in a property's accessor, as `"$label::get"`.
 
 ## [0.6.12] - 2026-11-14
 
