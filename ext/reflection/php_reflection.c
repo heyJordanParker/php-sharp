@@ -4621,11 +4621,18 @@ ZEND_METHOD(ReflectionClass, getAttributes)
 {
 	reflection_object *intern;
 	zend_class_entry *ce;
+	HashTable *attributes;
 
 	GET_REFLECTION_OBJECT_PTR(ce);
 
+	/* PHP#: a class's attributes include those of each `extern` line that names it, spec section 29. */
+	attributes = sharp_class_attributes(ce);
+	if (UNEXPECTED(EG(exception))) {
+		RETURN_THROWS();
+	}
+
 	reflect_attributes(INTERNAL_FUNCTION_PARAM_PASSTHRU,
-		ce->attributes, 0, ce, ZEND_ATTRIBUTE_TARGET_CLASS,
+		attributes, 0, ce, ZEND_ATTRIBUTE_TARGET_CLASS,
 		ce->type == ZEND_USER_CLASS ? ce->info.user.filename : NULL);
 }
 /* }}} */

@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: e1f0dd3aa5a304fbfde4222385cd139c55de48c1 */
+ * Stub hash: 155970310ebf9fb17e73404ebbab0f20fe5603bd */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -185,6 +185,12 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_put, 0, 3, IS_VOI
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_getOrPut, 0, 3, IS_MIXED, 0)
+	ZEND_ARG_OBJ_INFO(1, map, Sharp\\Map, 0)
+	ZEND_ARG_TYPE_INFO(0, key, IS_MIXED, 0)
+	ZEND_ARG_OBJ_INFO(0, defaultValue, Closure, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_keys, 0, 1, IS_ARRAY, 0)
 	ZEND_ARG_OBJ_TYPE_MASK(0, table, Sharp\\Map|Sharp\\Set, 0, NULL)
 ZEND_END_ARG_INFO()
@@ -267,11 +273,28 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_Sharp_Internal_associateBy arginfo_Sharp_Internal_groupBy
 
+#define arginfo_Sharp_Internal_firstOrNull arginfo_Sharp_Internal_first
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_sortedBy, 0, 2, IS_ARRAY, 0)
 	ZEND_ARG_OBJ_TYPE_MASK(0, collection, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY, NULL)
 	ZEND_ARG_OBJ_INFO(0, selector, Closure, 0)
-	ZEND_ARG_OBJ_INFO_WITH_DEFAULT_VALUE(0, comparison, Closure, 1, "null")
+	ZEND_ARG_OBJ_TYPE_MASK(0, order, Closure, MAY_BE_ARRAY|MAY_BE_NULL, "null")
 ZEND_END_ARG_INFO()
+
+#define arginfo_Sharp_Internal_sortedByDescending arginfo_Sharp_Internal_sortedBy
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_sortedWith, 0, 2, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, list, IS_ARRAY, 0)
+	ZEND_ARG_OBJ_INFO(0, comparison, Closure, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_minBy, 0, 2, IS_MIXED, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, collection, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY, NULL)
+	ZEND_ARG_OBJ_INFO(0, selector, Closure, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, order, Closure, MAY_BE_ARRAY|MAY_BE_NULL, "null")
+ZEND_END_ARG_INFO()
+
+#define arginfo_Sharp_Internal_maxBy arginfo_Sharp_Internal_minBy
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Sharp_Position___construct, 0, 0, 4)
 	ZEND_ARG_TYPE_INFO(0, file, IS_STRING, 0)
@@ -358,6 +381,7 @@ ZEND_FUNCTION(Sharp_Internal_containsKey);
 ZEND_FUNCTION(Sharp_Internal_removeKey);
 ZEND_FUNCTION(Sharp_Internal_addKey);
 ZEND_FUNCTION(Sharp_Internal_put);
+ZEND_FUNCTION(Sharp_Internal_getOrPut);
 ZEND_FUNCTION(Sharp_Internal_keys);
 ZEND_FUNCTION(Sharp_Internal_values);
 ZEND_FUNCTION(Sharp_Internal_pairs);
@@ -376,7 +400,12 @@ ZEND_FUNCTION(Sharp_Internal_first);
 ZEND_FUNCTION(Sharp_Internal_any);
 ZEND_FUNCTION(Sharp_Internal_groupBy);
 ZEND_FUNCTION(Sharp_Internal_associateBy);
+ZEND_FUNCTION(Sharp_Internal_firstOrNull);
 ZEND_FUNCTION(Sharp_Internal_sortedBy);
+ZEND_FUNCTION(Sharp_Internal_sortedByDescending);
+ZEND_FUNCTION(Sharp_Internal_sortedWith);
+ZEND_FUNCTION(Sharp_Internal_minBy);
+ZEND_FUNCTION(Sharp_Internal_maxBy);
 ZEND_METHOD(Sharp_Position, __construct);
 ZEND_METHOD(Sharp_Container, get);
 ZEND_METHOD(Sharp_Container, has);
@@ -429,6 +458,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "removeKey"), zif_Sharp_Internal_removeKey, arginfo_Sharp_Internal_removeKey, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "addKey"), zif_Sharp_Internal_addKey, arginfo_Sharp_Internal_addKey, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "put"), zif_Sharp_Internal_put, arginfo_Sharp_Internal_put, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "getOrPut"), zif_Sharp_Internal_getOrPut, arginfo_Sharp_Internal_getOrPut, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "keys"), zif_Sharp_Internal_keys, arginfo_Sharp_Internal_keys, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "values"), zif_Sharp_Internal_values, arginfo_Sharp_Internal_values, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "pairs"), zif_Sharp_Internal_pairs, arginfo_Sharp_Internal_pairs, 0, NULL, NULL)
@@ -447,7 +477,12 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "any"), zif_Sharp_Internal_any, arginfo_Sharp_Internal_any, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "groupBy"), zif_Sharp_Internal_groupBy, arginfo_Sharp_Internal_groupBy, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "associateBy"), zif_Sharp_Internal_associateBy, arginfo_Sharp_Internal_associateBy, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "firstOrNull"), zif_Sharp_Internal_firstOrNull, arginfo_Sharp_Internal_firstOrNull, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "sortedBy"), zif_Sharp_Internal_sortedBy, arginfo_Sharp_Internal_sortedBy, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "sortedByDescending"), zif_Sharp_Internal_sortedByDescending, arginfo_Sharp_Internal_sortedByDescending, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "sortedWith"), zif_Sharp_Internal_sortedWith, arginfo_Sharp_Internal_sortedWith, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "minBy"), zif_Sharp_Internal_minBy, arginfo_Sharp_Internal_minBy, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "maxBy"), zif_Sharp_Internal_maxBy, arginfo_Sharp_Internal_maxBy, 0, NULL, NULL)
 	ZEND_FE_END
 };
 

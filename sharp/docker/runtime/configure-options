@@ -27,6 +27,8 @@ echo --with-pic
 
 # --enable-mbstring is included here because otherwise there's no way to get pecl to use it properly (see https://github.com/docker-library/php/issues/195)
 echo --enable-mbstring
+# PHP#: the standard library's string.normalized() runs on intl's Normalizer, so every engine builds it
+echo --enable-intl
 # --enable-mysqlnd is included here because it's harder to compile after the fact than extensions are (since it's a plugin for several extensions, not an extension in itself)
 echo --enable-mysqlnd
 # https://wiki.php.net/rfc/argon2_password_hash

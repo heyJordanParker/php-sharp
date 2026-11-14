@@ -12463,6 +12463,8 @@ static void zend_compile_stmt(zend_ast *ast) /* {{{ */
 		case ZEND_AST_SHARP_CLASS_METADATA:
 			zend_compile_sharp_class_metadata(ast);
 			break;
+		case ZEND_AST_SHARP_EXTERN:
+			break;
 		case ZEND_AST_CLASS_CONST_GROUP:
 			zend_compile_class_const_group(ast);
 			break;

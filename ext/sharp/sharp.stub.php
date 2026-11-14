@@ -152,6 +152,8 @@ function addKey(\Sharp\Set &$table, mixed $key): bool {}
 
 function put(\Sharp\Map &$map, mixed $key, mixed $value): void {}
 
+function getOrPut(\Sharp\Map &$map, mixed $key, \Closure $defaultValue): mixed {}
+
 function keys(\Sharp\Map|\Sharp\Set $table): array {}
 
 function values(\Sharp\Map $map): array {}
@@ -188,4 +190,14 @@ function groupBy(array|\Sharp\Map|\Sharp\Set $collection, \Closure $key, ?string
 
 function associateBy(array|\Sharp\Map|\Sharp\Set $collection, \Closure $key, ?string $type = null): \Sharp\Map {}
 
-function sortedBy(array|\Sharp\Map|\Sharp\Set $collection, \Closure $selector, ?\Closure $comparison = null): array {}
+function firstOrNull(array|\Sharp\Map|\Sharp\Set $collection, \Closure $predicate): mixed {}
+
+function sortedBy(array|\Sharp\Map|\Sharp\Set $collection, \Closure $selector, \Closure|array|null $order = null): array {}
+
+function sortedByDescending(array|\Sharp\Map|\Sharp\Set $collection, \Closure $selector, \Closure|array|null $order = null): array {}
+
+function sortedWith(array $list, \Closure $comparison): array {}
+
+function minBy(array|\Sharp\Map|\Sharp\Set $collection, \Closure $selector, \Closure|array|null $order = null): mixed {}
+
+function maxBy(array|\Sharp\Map|\Sharp\Set $collection, \Closure $selector, \Closure|array|null $order = null): mixed {}

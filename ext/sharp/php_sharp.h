@@ -24,6 +24,10 @@ static zend_always_inline bool sharp_is_sharp_file(const zend_string *filename)
  * sharp_table.c fills and the request frees when it ends. */
 HashTable *sharp_equality_operators(void);
 
+/* Spec section 29: the attributes reflection reads of class `ce`, its own and those `extern` lines give it, or NULL with
+ * an exception thrown when they can't be read. */
+HashTable *sharp_class_attributes(zend_class_entry *ce);
+
 /* Whether `func` is PHP# code, a function a .sharp file declares. Plain PHP code and an internal function are not. */
 static zend_always_inline bool sharp_function_is_sharp(const zend_function *func)
 {

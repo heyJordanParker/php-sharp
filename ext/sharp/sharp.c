@@ -81,6 +81,11 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	/* For the request: each listener table emit read, by its path, and each event class's listeners, by its entry. */
 	HashTable listener_tables;
 	HashTable event_listeners;
+	/* Spec section 29: for the request, the attributes reflection reads of each class an `extern` line gives
+	 * attributes, by its entry. See sharp_class_attributes. */
+	HashTable class_attributes;
+	/* The plain PHP class whose `extern` lines sharp_parse_extern_attributes compiles, or NULL. */
+	zend_class_entry *extern_class;
 	/* Spec section 15: for the request, each listener Sharp\Internal\listen started whose handle lives, under the number
 	 * its handle holds, in the order they started, as [the type it listens to, its function]. */
 	HashTable scoped_listeners;
@@ -115,8 +120,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	HashTable *container_test;
 	HashTable container_singletons;
 	sharp_fiber_scopes container_main_scopes;
-	/* The operator <=> the running sortedBy orders two keys by, spec section 19, or NULL when the keys declare none. */
-	zend_function *sort_comparison;
+	/* The sort that runs now, which sharp_compare_sort_keys reads, or NULL. See sharp_sort. */
+	struct sharp_sort *sort;
 	/* See sharp_equality_operators, NULL until the request compares an object. */
 	HashTable *equality_operators;
 ZEND_END_MODULE_GLOBALS(sharp)
@@ -1631,51 +1636,100 @@ static void sharp_key_by(zend_execute_data *execute_data, zend_array *elements, 
 	RETURN_COPY_VALUE(&map);
 }
 
-/* Orders two [key, element] pairs by key. A null key sorts before every other key, as Kotlin's sortedBy puts it, since
- * PHP's <=> compares null with a number as two bools, which is no order. Two other keys order as PHP#'s < on two keys
- * of the key type does: by SHARP_G(sort_comparison), the operator <=> the checker chose for that type, two strings by
- * their bytes, and other keys as PHP's <=> does. Equal keys keep their original order, which zend_hash_sort keeps in
- * each bucket's extra space, so the sort is stable as Kotlin's is. A call that throws leaves the exception for sortedBy
- * to throw. */
+/* Orders two keys as PHP#'s < on two keys of the key type does, spec sections 12 and 19, -1, 0 or 1. A null key sorts
+ * before every other key, as Kotlin's sortedBy puts it, since PHP's <=> compares null with a number as two bools, which
+ * is no order. `order` is what the bridge passes for the key type: the operator <=> the checker chose for it, a list of
+ * one order per element for a tuple key, or NULL. Two tuples order element by element, as Rust orders tuples, two other
+ * keys by the operator, two strings by their bytes, and the rest as PHP's <=> does. A call that throws leaves the
+ * exception for the caller to throw. */
+static int sharp_order_keys(zval *left, zval *right, zval *order)
+{
+	if (Z_TYPE_P(left) == IS_NULL || Z_TYPE_P(right) == IS_NULL) {
+		return (Z_TYPE_P(left) != IS_NULL) - (Z_TYPE_P(right) != IS_NULL);
+	}
+	if (Z_TYPE_P(left) == IS_ARRAY && Z_TYPE_P(right) == IS_ARRAY) {
+		HashTable *orders = order && Z_TYPE_P(order) == IS_ARRAY ? Z_ARRVAL_P(order) : NULL;
+		uint32_t left_count = zend_hash_num_elements(Z_ARRVAL_P(left));
+		uint32_t right_count = zend_hash_num_elements(Z_ARRVAL_P(right));
+		for (uint32_t index = 0; index < MIN(left_count, right_count); index++) {
+			int result = sharp_order_keys(zend_hash_index_find(Z_ARRVAL_P(left), index),
+				zend_hash_index_find(Z_ARRVAL_P(right), index), orders ? zend_hash_index_find(orders, index) : NULL);
+			if (result || EG(exception)) {
+				return result;
+			}
+		}
+
+		return ZEND_THREEWAY_COMPARE(left_count, right_count);
+	}
+	if (order && Z_TYPE_P(order) == IS_OBJECT) {
+		zend_function *operator = (zend_function *) zend_get_closure_method_def(Z_OBJ_P(order));
+		zval keys[2], result;
+		ZVAL_COPY_VALUE(&keys[0], left);
+		ZVAL_COPY_VALUE(&keys[1], right);
+		ZVAL_UNDEF(&result);
+		zend_call_known_function(operator, NULL, operator->common.scope, &result, 2, keys, NULL);
+
+		return Z_TYPE(result) == IS_LONG ? ZEND_NORMALIZE_BOOL(Z_LVAL(result)) : 0;
+	}
+	if (Z_TYPE_P(left) == IS_STRING && Z_TYPE_P(right) == IS_STRING) {
+		return ZEND_NORMALIZE_BOOL(zend_binary_zval_strcmp(left, right));
+	}
+
+	return zend_compare(left, right);
+}
+
+/* What one sort orders by, spec section 12: by its keys, as sharp_order_keys orders them with `order`, or, for
+ * sortedWith, by `comparison`, the function it takes, called on two elements. `descending` sorts the largest first. */
+typedef struct sharp_sort {
+	zval *order;
+	zend_fcall_info *comparison;
+	zend_fcall_info_cache *comparison_cache;
+	bool descending;
+} sharp_sort;
+
+/* Orders two [key, element] pairs by key, as SHARP_G(sort) says. Equal keys keep their original order, which
+ * zend_hash_sort keeps in each bucket's extra space, so the sort is stable as Kotlin's is, descending too. A call that
+ * throws leaves the exception for the sort to throw. */
 static int sharp_compare_sort_keys(Bucket *a, Bucket *b)
 {
 	zval *left = zend_hash_index_find(Z_ARRVAL(a->val), 0);
 	zval *right = zend_hash_index_find(Z_ARRVAL(b->val), 0);
-	zend_function *comparison = SHARP_G(sort_comparison);
+	sharp_sort *sort = SHARP_G(sort);
 	int result;
 
-	if (Z_TYPE_P(left) == IS_NULL || Z_TYPE_P(right) == IS_NULL) {
-		result = (Z_TYPE_P(left) != IS_NULL) - (Z_TYPE_P(right) != IS_NULL);
-	} else if (comparison) {
+	if (sort->comparison) {
 		zval keys[2], order;
 		ZVAL_COPY_VALUE(&keys[0], left);
 		ZVAL_COPY_VALUE(&keys[1], right);
-		ZVAL_UNDEF(&order);
-		zend_call_known_function(comparison, NULL, comparison->common.scope, &order, 2, keys, NULL);
+		sort->comparison->retval = &order;
+		sort->comparison->params = keys;
+		sort->comparison->param_count = 2;
+		zend_call_function(sort->comparison, sort->comparison_cache);
 		result = Z_TYPE(order) == IS_LONG ? ZEND_NORMALIZE_BOOL(Z_LVAL(order)) : 0;
-	} else if (Z_TYPE_P(left) == IS_STRING && Z_TYPE_P(right) == IS_STRING) {
-		result = ZEND_NORMALIZE_BOOL(zend_binary_zval_strcmp(left, right));
+		zval_ptr_dtor(&order);
 	} else {
-		result = zend_compare(left, right);
+		result = sharp_order_keys(left, right, sort->order);
 	}
 
 	if (result) {
-		return result;
+		return sort->descending ? -result : result;
 	}
 
 	return Z_EXTRA(a->val) < Z_EXTRA(b->val) ? -1 : Z_EXTRA(a->val) > Z_EXTRA(b->val);
 }
 
-/* `elements`, which it releases, in ascending order of the key the function gives each, by `comparison`, the operator
- * <=> the checker chose for the key type, when the key type declares one. */
-static void sharp_sorted_by(zend_array *elements, zend_fcall_info *fci, zend_fcall_info_cache *fcc,
-	zend_object *comparison, zval *return_value)
+/* `elements`, which it releases, ordered as `sort` says, by the key the function gives each, or by each element itself
+ * where `fci` is NULL. */
+static void sharp_sorted_by(zend_array *elements, zend_fcall_info *fci, zend_fcall_info_cache *fcc, sharp_sort *sort,
+	zval *return_value)
 {
 	zval pairs, pair, key;
 	zval *element;
 	array_init_size(&pairs, zend_hash_num_elements(elements));
 	ZEND_HASH_FOREACH_VAL(elements, element) {
-		if (!sharp_call_on_element(fci, fcc, element, &key)) {
+		if (!fci) {
+			ZVAL_COPY_DEREF(&key, element);
+		} else if (!sharp_call_on_element(fci, fcc, element, &key)) {
 			break;
 		}
 		array_init_size(&pair, 2);
@@ -1686,11 +1740,11 @@ static void sharp_sorted_by(zend_array *elements, zend_fcall_info *fci, zend_fca
 	zend_array_release(elements);
 
 	if (!EG(exception)) {
-		/* A key's operator may sort a list of its own, so the outer sort's comparison comes back after it. */
-		zend_function *outer = SHARP_G(sort_comparison);
-		SHARP_G(sort_comparison) = comparison ? (zend_function *) zend_get_closure_method_def(comparison) : NULL;
+		/* A key's operator may sort a list of its own, so the outer sort comes back after it. */
+		sharp_sort *outer = SHARP_G(sort);
+		SHARP_G(sort) = sort;
 		zend_hash_sort(Z_ARRVAL(pairs), sharp_compare_sort_keys, true);
-		SHARP_G(sort_comparison) = outer;
+		SHARP_G(sort) = outer;
 	}
 	if (EG(exception)) {
 		zval_ptr_dtor(&pairs);
@@ -2599,6 +2653,46 @@ ZEND_FUNCTION(Sharp_Internal_put)
 	}
 }
 
+/* `getOrPut`: the value of the key, or, when the Map holds no equal key, what the function gives, put under the key
+ * first, as Kotlin's getOrPut. */
+ZEND_FUNCTION(Sharp_Internal_getOrPut)
+{
+	zval *map, *key;
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_OBJECT_OF_CLASS_EX(map, sharp_ce_map, 0, 1)
+		Z_PARAM_ZVAL(key)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_table *table = sharp_table_entries(Z_OBJ_P(map));
+	sharp_table_bucket *bucket = table ? sharp_table_find(table, key) : NULL;
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+	if (bucket) {
+		RETURN_COPY_DEREF(&bucket->value);
+	}
+
+	zval value;
+	fci.retval = &value;
+	fci.params = NULL;
+	fci.param_count = 0;
+	zend_call_function(&fci, &fcc);
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+	/* The function may have changed the Map, so it separates only now. */
+	SHARP_SEPARATE(map);
+	if (!sharp_table_put(sharp_table_of(Z_OBJ_P(map)), key, &value)) {
+		zval_ptr_dtor(&value);
+		RETURN_THROWS();
+	}
+	RETURN_COPY_VALUE(&value);
+}
+
 /* A Map's `keys()` and a Set's `toList()`: the List of its keys, which are a Set's elements. */
 ZEND_FUNCTION(Sharp_Internal_keys)
 {
@@ -2951,25 +3045,162 @@ ZEND_FUNCTION(Sharp_Internal_associateBy)
 	sharp_internal_key_by(INTERNAL_FUNCTION_PARAM_PASSTHRU, false);
 }
 
-ZEND_FUNCTION(Sharp_Internal_sortedBy)
+/* `firstOrNull`: the first element the function returns true for, or null when none is, as Kotlin's. */
+ZEND_FUNCTION(Sharp_Internal_firstOrNull)
 {
 	zval *collection;
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
-	zend_object *comparison = NULL;
 
-	ZEND_PARSE_PARAMETERS_START(2, 3)
+	ZEND_PARSE_PARAMETERS_START(2, 2)
 		Z_PARAM_ZVAL(collection)
 		Z_PARAM_FUNC(fci, fcc)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_OBJ_OF_CLASS_OR_NULL(comparison, zend_ce_closure)
 	ZEND_PARSE_PARAMETERS_END();
 
 	zend_array *elements = sharp_elements_of(collection);
 	if (!elements) {
 		RETURN_THROWS();
 	}
-	sharp_sorted_by(elements, &fci, &fcc, comparison, return_value);
+	zval *element = sharp_find(elements, &fci, &fcc);
+	if (element) {
+		ZVAL_COPY_DEREF(return_value, element);
+	}
+	zend_array_release(elements);
+}
+
+/* The key order a sorting function takes last, which the bridge passes, spec section 12: the operator <=> of the key
+ * type as a Closure, a list of the orders of a tuple key's elements, or null. False after the error for any other
+ * value. */
+static bool sharp_key_order_argument(zval *order)
+{
+	if (Z_TYPE_P(order) == IS_NULL || Z_TYPE_P(order) == IS_ARRAY
+			|| (Z_TYPE_P(order) == IS_OBJECT && Z_OBJCE_P(order) == zend_ce_closure)) {
+		return true;
+	}
+	zend_argument_type_error(3, "must be of type Closure|array|null, %s given", zend_zval_value_name(order));
+
+	return false;
+}
+
+/* `sortedBy` and `sortedByDescending`: the elements in the order of the key the function gives each, by the key order
+ * the bridge passes, equal keys in their order. */
+static void sharp_internal_sorted_by(INTERNAL_FUNCTION_PARAMETERS, bool descending)
+{
+	zval *collection;
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+	zval *order = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(2, 3)
+		Z_PARAM_ZVAL(collection)
+		Z_PARAM_FUNC(fci, fcc)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL(order)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (order && !sharp_key_order_argument(order)) {
+		RETURN_THROWS();
+	}
+	zend_array *elements = sharp_elements_of(collection);
+	if (!elements) {
+		RETURN_THROWS();
+	}
+	sharp_sort sort = {.order = order, .descending = descending};
+	sharp_sorted_by(elements, &fci, &fcc, &sort, return_value);
+}
+
+ZEND_FUNCTION(Sharp_Internal_sortedBy)
+{
+	sharp_internal_sorted_by(INTERNAL_FUNCTION_PARAM_PASSTHRU, false);
+}
+
+ZEND_FUNCTION(Sharp_Internal_sortedByDescending)
+{
+	sharp_internal_sorted_by(INTERNAL_FUNCTION_PARAM_PASSTHRU, true);
+}
+
+/* `sortedWith`: the elements of a List in the order the comparison gives two of them, equal ones in their order, as
+ * Kotlin's sortedWith and Rust's sort_by. */
+ZEND_FUNCTION(Sharp_Internal_sortedWith)
+{
+	zval *list;
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY(list)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	sharp_sort sort = {.comparison = &fci, .comparison_cache = &fcc};
+	sharp_sorted_by(sharp_list_elements(list), NULL, NULL, &sort, return_value);
+}
+
+/* `minBy` and `maxBy`: the first element whose key is the smallest, or the largest where `sign` is -1, by the key order
+ * the bridge passes, and OutOfRangeException for an empty collection, as `max()` throws. */
+static void sharp_internal_extreme_by(INTERNAL_FUNCTION_PARAMETERS, int sign)
+{
+	zval *collection;
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+	zval *order = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(2, 3)
+		Z_PARAM_ZVAL(collection)
+		Z_PARAM_FUNC(fci, fcc)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL(order)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (order && !sharp_key_order_argument(order)) {
+		RETURN_THROWS();
+	}
+	zend_array *elements = sharp_elements_of(collection);
+	if (!elements) {
+		RETURN_THROWS();
+	}
+	if (zend_hash_num_elements(elements) == 0) {
+		zend_array_release(elements);
+		sharp_throw_empty_list();
+		RETURN_THROWS();
+	}
+
+	zval best_key, key;
+	zval *element, *best = NULL;
+	ZVAL_UNDEF(&best_key);
+	ZEND_HASH_FOREACH_VAL(elements, element) {
+		if (!sharp_call_on_element(&fci, &fcc, element, &key)) {
+			break;
+		}
+		if (best && sharp_order_keys(&key, &best_key, order) * sign >= 0) {
+			zval_ptr_dtor(&key);
+		} else {
+			zval_ptr_dtor(&best_key);
+			ZVAL_COPY_VALUE(&best_key, &key);
+			best = element;
+		}
+		if (EG(exception)) {
+			break;
+		}
+	} ZEND_HASH_FOREACH_END();
+	if (!EG(exception)) {
+		ZVAL_COPY_DEREF(return_value, best);
+	}
+	zval_ptr_dtor(&best_key);
+	zend_array_release(elements);
+}
+
+ZEND_FUNCTION(Sharp_Internal_minBy)
+{
+	sharp_internal_extreme_by(INTERNAL_FUNCTION_PARAM_PASSTHRU, 1);
+}
+
+ZEND_FUNCTION(Sharp_Internal_maxBy)
+{
+	sharp_internal_extreme_by(INTERNAL_FUNCTION_PARAM_PASSTHRU, -1);
 }
 
 ZEND_METHOD(Sharp_Internal_Sequence, getIterator)
@@ -8206,18 +8437,33 @@ static bool sharp_listener_input_fits(const zval *input)
 }
 
 /* Whether table is a table mago compile wrote: ['inputs' => [input, ...], 'listeners' => [row, ...], 'dispatcher' =>
- * null or [the workspace-relative path of the app's module that binds the dispatcher, its namespace in lowercase]]. */
+ * null or [the workspace-relative path of the app's module that binds the dispatcher, its namespace in lowercase],
+ * 'attributes' => [the lowercase name of a plain PHP class an `extern` line gives attributes => [the workspace-relative
+ * path of each .sharp file whose line does, ...], ...]]. */
 static bool sharp_listener_table_fits(const zval *table)
 {
 	const zval *inputs = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "inputs", sizeof("inputs") - 1) : NULL;
 	const zval *listeners = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "listeners", sizeof("listeners") - 1) : NULL;
 	const zval *dispatcher = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "dispatcher", sizeof("dispatcher") - 1) : NULL;
-	const zval *element;
+	const zval *attributes = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "attributes", sizeof("attributes") - 1) : NULL;
+	const zval *element, *file;
+	zend_string *class;
 
 	if (!inputs || Z_TYPE_P(inputs) != IS_ARRAY || !listeners || Z_TYPE_P(listeners) != IS_ARRAY || !dispatcher
-			|| (Z_TYPE_P(dispatcher) != IS_NULL && (!sharp_element(dispatcher, 0, IS_STRING) || !sharp_element(dispatcher, 1, IS_STRING)))) {
+			|| (Z_TYPE_P(dispatcher) != IS_NULL && (!sharp_element(dispatcher, 0, IS_STRING) || !sharp_element(dispatcher, 1, IS_STRING)))
+			|| !attributes || Z_TYPE_P(attributes) != IS_ARRAY) {
 		return false;
 	}
+	ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(attributes), class, element) {
+		if (!class || Z_TYPE_P(element) != IS_ARRAY) {
+			return false;
+		}
+		ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(element), file) {
+			if (Z_TYPE_P(file) != IS_STRING) {
+				return false;
+			}
+		} ZEND_HASH_FOREACH_END();
+	} ZEND_HASH_FOREACH_END();
 	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(inputs), element) {
 		if (!sharp_listener_input_fits(element)) {
 			return false;
@@ -8341,6 +8587,166 @@ static HashTable *sharp_listener_table(const char *path, size_t root_length)
 	zend_string_release(table_path);
 
 	return Z_ARRVAL_P(known);
+}
+
+/* Frees a table of attributes sharp_class_attributes joined, which owns none of the attributes it points at. */
+static void sharp_free_attribute_table(zval *entry)
+{
+	HashTable *attributes = Z_PTR_P(entry);
+
+	if (attributes) {
+		zend_hash_destroy(attributes);
+		FREE_HASHTABLE(attributes);
+	}
+}
+
+/* The parser of a .sharp file whose `extern` lines give SHARP_G(extern_class) attributes, spec section 29. In place of
+ * the file's code it gives, for each such line, `new class {}` with the line's attributes, so the anonymous class the
+ * compile declares holds them as PHP compiles a class's attributes, and the file's own classes stay undeclared. */
+static int sharp_parse_extern_attributes(void)
+{
+	const char *filename = ZSTR_VAL(zend_get_compiled_filename());
+	zend_ast *statements = zend_ast_create_list(0, ZEND_AST_STMT_LIST);
+	sharp_compiled compiled;
+	bool failed = false;
+
+	sharp_locate(&compiled, filename);
+	if (sharp_check(&compiled, NULL, 0) != SHARP_CURRENT) {
+		sharp_release(&compiled);
+		return FAILURE;
+	}
+
+	zend_try {
+		const sharp_node *root = &compiled.unit.nodes[compiled.unit.root];
+
+		for (uint32_t i = 0; i < root->child_count; i++) {
+			uint32_t child = compiled.unit.children[root->first_child + i];
+			zend_ast *line, *holder;
+
+			if (compiled.unit.nodes[child].kind != SHARP_AST_SHARP_EXTERN) {
+				continue;
+			}
+			line = sharp_translate(&compiled.unit, child);
+			if (!zend_string_equals_ci(zend_ast_get_str(line->child[0]), SHARP_G(extern_class)->name)) {
+				zend_ast_destroy(line);
+				continue;
+			}
+			holder = zend_ast_create_decl(ZEND_AST_CLASS, ZEND_ACC_ANON_CLASS, zend_ast_get_lineno(line), NULL, NULL,
+				NULL, NULL, zend_ast_create_list(0, ZEND_AST_STMT_LIST), line->child[1], NULL);
+			zend_ast_destroy(line->child[0]);
+			statements = zend_ast_list_add(statements, zend_ast_create(ZEND_AST_NEW, holder, zend_ast_create_list(0, ZEND_AST_ARG_LIST)));
+		}
+	} zend_catch {
+		failed = true;
+	} zend_end_try();
+
+	sharp_release(&compiled);
+	if (failed) {
+		zend_bailout();
+	}
+	CG(ast) = statements;
+
+	return SUCCESS;
+}
+
+/* Appends to attributes the attributes the `extern` lines of the .sharp file source give ce, compiled as the anonymous
+ * classes of sharp_parse_extern_attributes, which the request's class table keeps. Throws and returns false when the
+ * file is not compiled. */
+static bool sharp_add_extern_attributes(HashTable *attributes, zend_class_entry *ce, zend_string *source)
+{
+	zend_class_entry *previous = SHARP_G(extern_class);
+	zend_file_handle handle;
+	zend_op_array *op_array;
+
+	SHARP_G(extern_class) = ce;
+	zend_stream_init_filename_ex(&handle, source);
+	op_array = zend_compile_file_with(&handle, ZEND_INCLUDE, sharp_parse_extern_attributes);
+	zend_destroy_file_handle(&handle);
+	SHARP_G(extern_class) = previous;
+	if (!op_array) {
+		if (!EG(exception)) {
+			zend_throw_exception_ex(zend_ce_compile_error, 0,
+				"%s gives %s attributes and is not compiled. Run vendor/bin/mago compile.", ZSTR_VAL(source), ZSTR_VAL(ce->name));
+		}
+		return false;
+	}
+
+	for (uint32_t i = 0; i < op_array->last; i++) {
+		const zend_op *opline = &op_array->opcodes[i];
+		zend_class_entry *holder;
+		zend_attribute *attribute;
+
+		if (opline->opcode != ZEND_DECLARE_ANON_CLASS) {
+			continue;
+		}
+		holder = zend_hash_find_ptr(CG(class_table), Z_STR_P(RT_CONSTANT(opline, opline->op1)));
+		if (holder && holder->attributes) {
+			ZEND_HASH_PACKED_FOREACH_PTR(holder->attributes, attribute) {
+				zend_hash_next_index_insert_ptr(attributes, attribute);
+			} ZEND_HASH_FOREACH_END();
+		}
+	}
+	destroy_op_array(op_array);
+	efree_size(op_array, sizeof(zend_op_array));
+
+	return true;
+}
+
+HashTable *sharp_class_attributes(zend_class_entry *ce)
+{
+	zend_ulong key = (zend_ulong) (uintptr_t) ce;
+	zval *known = zend_hash_index_find(&SHARP_G(class_attributes), key);
+	zval entry, *files, *file;
+	HashTable *table, *attributes;
+	zend_attribute *own;
+	zend_string *name;
+	size_t root_length;
+
+	if (known) {
+		return Z_PTR_P(known) ? Z_PTR_P(known) : ce->attributes;
+	}
+	/* The listener table of the .sharp folder above the class's file names each file whose `extern` line gives it
+	 * attributes, so a library class in vendor/ finds its project's lines, as an extern event finds its listeners. */
+	if (ce->type != ZEND_USER_CLASS || !sharp_find_root(ce->info.user.filename, &root_length)) {
+		return ce->attributes;
+	}
+	table = sharp_listener_table(ZSTR_VAL(ce->info.user.filename), root_length);
+	if (!table) {
+		return NULL;
+	}
+	files = zend_hash_str_find(table, "attributes", sizeof("attributes") - 1);
+	name = zend_string_tolower(ce->name);
+	files = files ? zend_hash_find(Z_ARRVAL_P(files), name) : NULL;
+	zend_string_release(name);
+	ZVAL_PTR(&entry, NULL);
+	if (!files) {
+		zend_hash_index_add_new(&SHARP_G(class_attributes), key, &entry);
+		return ce->attributes;
+	}
+
+	ALLOC_HASHTABLE(attributes);
+	zend_hash_init(attributes, 8, NULL, NULL, false);
+	zend_hash_real_init_packed(attributes);
+	if (ce->attributes) {
+		ZEND_HASH_PACKED_FOREACH_PTR(ce->attributes, own) {
+			zend_hash_next_index_insert_ptr(attributes, own);
+		} ZEND_HASH_FOREACH_END();
+	}
+	ZVAL_PTR(&entry, attributes);
+	zend_hash_index_add_new(&SHARP_G(class_attributes), key, &entry);
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(files), file) {
+		zend_string *source = zend_string_concat3(ZSTR_VAL(ce->info.user.filename), root_length, "/", 1,
+			Z_STRVAL_P(file), Z_STRLEN_P(file));
+		bool added = sharp_add_extern_attributes(attributes, ce, source);
+
+		zend_string_release(source);
+		if (!added) {
+			zend_hash_index_del(&SHARP_G(class_attributes), key);
+			return NULL;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return attributes;
 }
 
 /* Whether a listener of the type type hears the event: an object of the type's class, or of a class that extends it or
@@ -10701,10 +11107,12 @@ static PHP_RINIT_FUNCTION(sharp)
 	zend_hash_init(&SHARP_G(request_stamps), 8, NULL, sharp_free_pointer, false);
 	zend_hash_init(&SHARP_G(listener_tables), 0, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(event_listeners), 0, NULL, ZVAL_PTR_DTOR, false);
+	zend_hash_init(&SHARP_G(class_attributes), 0, NULL, sharp_free_attribute_table, false);
+	SHARP_G(extern_class) = NULL;
 	/* Each entry points at a live Sharp\Listening, which removes it when it stops, and holds no reference. */
 	zend_hash_init(&SHARP_G(scoped_listeners), 0, NULL, NULL, false);
 	SHARP_G(next_scoped_listener) = 0;
-	SHARP_G(sort_comparison) = NULL;
+	SHARP_G(sort) = NULL;
 	ZVAL_UNDEF(&SHARP_G(compile_command_report));
 	SHARP_G(compile_command_failure) = NULL;
 	zend_hash_init(&SHARP_G(container_bindings), 8, NULL, ZVAL_PTR_DTOR, false);
@@ -10748,6 +11156,7 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 	zend_hash_destroy(&SHARP_G(container_tests));
 	zend_hash_destroy(&SHARP_G(listener_tables));
 	zend_hash_destroy(&SHARP_G(event_listeners));
+	zend_hash_destroy(&SHARP_G(class_attributes));
 	/* A handle whose destructor didn't run, as after a fatal error, is freed after this, with no table to leave. */
 	sharp_listening *listening;
 	ZEND_HASH_FOREACH_PTR(&SHARP_G(scoped_listeners), listening) {

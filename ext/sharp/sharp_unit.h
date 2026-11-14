@@ -12,7 +12,7 @@
 #endif
 
 #define SHARP_UNIT_MAGIC "\x53\x48\x41\x52\x50\x43\x00\x00"
-#define SHARP_UNIT_ABI "\x35\xc9\x6c\x90\xf2\x28\x41\x5c\x1c\xf8\x07\x2a\xcd\xd0\xad\x32"
+#define SHARP_UNIT_ABI "\xa6\xe9\x14\xc3\x86\x05\x02\x2b\xbc\x8b\x1d\x6b\xbb\x67\x16\x8f"
 
 #define SHARP_KINDS(X) \
   X(ZVAL) \
@@ -126,6 +126,7 @@
   X(PIPE) \
   X(SHARP_TYPE_ARGS) \
   X(SHARP_IS_TYPE) \
+  X(SHARP_EXTERN) \
   X(METHOD_CALL) \
   X(NULLSAFE_METHOD_CALL) \
   X(STATIC_CALL) \
@@ -264,6 +265,7 @@ enum sharp_kind
   SHARP_AST_PIPE = 551,
   SHARP_AST_SHARP_TYPE_ARGS = 552,
   SHARP_AST_SHARP_IS_TYPE = 553,
+  SHARP_AST_SHARP_EXTERN = 554,
   SHARP_AST_METHOD_CALL = 768,
   SHARP_AST_NULLSAFE_METHOD_CALL = 769,
   SHARP_AST_STATIC_CALL = 770,

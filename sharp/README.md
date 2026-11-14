@@ -320,11 +320,11 @@ A source build on Debian or Ubuntu needs the packages `sharp/docker/runtime/Dock
 
 ```sh
 apt-get install --no-install-recommends autoconf bison ca-certificates dpkg-dev file g++ gcc git libargon2-dev libc-dev \
-  libcurl4-openssl-dev libonig-dev libreadline-dev libsodium-dev libsqlite3-dev libssl-dev libxml2-dev make pkg-config \
-  re2c rustup zlib1g-dev
+  libcurl4-openssl-dev libicu-dev libonig-dev libreadline-dev libsodium-dev libsqlite3-dev libssl-dev libxml2-dev make \
+  pkg-config re2c rustup zlib1g-dev
 ```
 
-On a fresh Debian trixie or Ubuntu 24.04 with only these, `./buildconf --force`, then `./configure $(sharp/docker/runtime/configure-options fpm)`, the options that Dockerfile and CI's `UBUNTU_WERROR` configure with, and `make`, build `sapi/cli/php` and `sapi/fpm/php-fpm`, and `php --ri sharp` prints the tree's version. `rustup` downloads the Rust toolchain `ext/sharp/rust-toolchain.toml` names at the first build. `sharp/bin/build` also configures `--enable-intl`, `--with-zip` and `--with-pgsql`, so it needs `libicu-dev`, `libzip-dev` and `libpq-dev` as well, which `sharp/docker/Dockerfile` installs.
+On a fresh Debian trixie or Ubuntu 24.04 with only these, `./buildconf --force`, then `./configure $(sharp/docker/runtime/configure-options fpm)`, the options that Dockerfile and CI's `UBUNTU_WERROR` configure with, and `make`, build `sapi/cli/php` and `sapi/fpm/php-fpm`, and `php --ri sharp` prints the tree's version. `rustup` downloads the Rust toolchain `ext/sharp/rust-toolchain.toml` names at the first build. Every engine builds `intl`, since the standard library's `string.normalized()` runs on it. `sharp/bin/build` also configures `--with-zip` and `--with-pgsql`, so it needs `libzip-dev` and `libpq-dev` as well, which `sharp/docker/Dockerfile` installs.
 
 ## CI
 

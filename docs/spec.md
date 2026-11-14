@@ -22,6 +22,7 @@ Attributes use square brackets and follow C#'s rules:
 - explicit targets, which name the part of the declaration a bracket goes on, as in C#: `type:` on a type, `type:` or `event:` on an event, `method:` on a method, an operator, a named constructor, a lambda or an accessor, `param:` on a parameter and on the value `set` or `init` takes, `field:` on a field, a constant or an enum case, `property:` and `field:` on a property, and `param:`, `property:` and `field:` on a parameter that declares a property, a constructor's, an event's or a data case's, where an untargeted bracket goes on both the parameter and the property
 - an attribute always describes a declaration, so a return value takes none, and `[return: NotNull]` is a parse error
 - on every declaration C# takes one on: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, an operator, a named constructor, a parameter, a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`, and an accessor, as in `[Searchable] get;`, a static or get-only auto-property's included
+- on an `extern` line of a plain PHP class, whose attributes the class carries as its own, `type:` its one target (section 29)
 - `willSet` and `didSet` take none, since they run inside `set`: put the attribute on `set`
 - a type parameter takes no attributes, so `<[Marker] T>` is a parse error
 
@@ -1889,17 +1890,26 @@ lines.contains(line);
 lines.groupBy(l => l.product.id);
 lines.associateBy(l => l.id);
 lines.sortedBy(l => l.amount);
+lines.sortedBy(l => [l.product.id, l.amount]);
+lines.sortedByDescending(l => l.amount);
+lines.sortedWith((a, b) => a.amount <=> b.amount);
+lines.minBy(l => l.amount);
+lines.firstOrNull(l => l.free);
+lines.indexOfFirst(l => l.free);
+lines.partition(l => l.free);
 lines.all(l => l.amount > 0);
 lines.fold(0, (total, l) => total + l.amount);
 lines.reversed();
 lines.distinct();
 lines.slice(1, 3);
 lines.chunked(2);
+lines.windowed(2);
 ```
 
 - Methods that read return a new collection.
-- `first` throws `OutOfRangeException` when nothing matches, as a bare index read does, and so does a `slice` range outside the list. A `chunked` size below 1 throws `ValueError`.
-- A `sortedBy` key of type `T` or `T?` compiles exactly when `<` compiles on two non-null `T` values. The nullable part is allowed, and it sorts first.
+- `first` throws `OutOfRangeException` when nothing matches, as a bare index read does, and so does a `slice` range outside the list. `firstOrNull` gives null instead. `minBy` and `maxBy` throw `OutOfRangeException` on an empty list, as `max()` does. A `chunked` or `windowed` size below 1 throws `ValueError`.
+- A `sortedBy` key of type `T` or `T?` compiles exactly when `<` compiles on two non-null `T` values. The nullable part is allowed, and it sorts first. So does a key of `minBy`, `maxBy` and `sortedByDescending`. Every sort is stable, so equal keys keep their order.
+- **A tuple key orders element by element,** as Rust orders tuples and Kotlin's `compareBy(a, b)` does: `[l.product.id, l.amount]` sorts by the product, then by the amount. It compiles exactly when each element's type is a key, and a null element sorts first. A `List` that is no tuple has no order. `sortedWith` takes a comparison of two elements, below 0 when the first goes first, for any other order.
 - A method takes on the effects of each function it is given (section 29), so `lines.map(l => l.name)` is pure.
 - Methods that change a collection change it in place:
 
@@ -3216,6 +3226,25 @@ email.toString();                      // "ada@example.com"
 "a:b".split(":", -1);                     // throws: "`split` takes a limit of 0 or more, and it is negative."
 "hello".contains(1);                      // compile error: contains takes a string
 str_contains("hello", "ell");             // compile error: no function str_contains exists
+```
+
+**Ignoring case:** `compareTo`, `equals`, `indexOf`, `lastIndexOf`, `contains`, `startsWith` and `endsWith` take `ignoreCase`, `false` by default, as Kotlin's do. It compares each character folded by Unicode's simple case folding, so an index stays an index into the text. `titlecase()` capitalizes each word, `replace` takes a `limit` of how many matches it replaces, a code point's `toCharacter()` gives its character, a `List<int>`'s `toByteString()` gives the text of its bytes, and `normalized()` gives the text in a Unicode normalization form, `NormalizationForm.C` by default. `isLetter()`, `isDigit()`, `isLetterOrDigit()`, `isWhitespace()`, `isUppercase()` and `isLowercase()` are true when the text holds a character and each one is in the class, as Kotlin's and Rust's `char` members are for one. A code point that is no Unicode scalar value, a byte outside 0 to 255, and text that is not UTF-8 throw `ValueError`:
+
+<!-- example text-case-and-classes: statements
+import Sharp.Text.NormalizationForm;
+-->
+```csharp
+"Apple".equals("APPLE", ignoreCase: true);        // true
+"Zebra".compareTo("apple", ignoreCase: true);     // 1
+"Hello hello".lastIndexOf("HELLO", true);         // 6
+"hello world".titlecase();                        // "Hello World"
+"banana".replace("a", "o", 1);                    // "bonana"
+0x1F600.toCharacter();                            // "😀"
+[104, 105].toByteString();                        // "hi"
+"Ωmega".isLetter();                               // true
+"".isLetter();                                    // false
+"é".normalized(NormalizationForm.D).length();     // 2: "e" and a combining accent
+0xD800.toCharacter();                             // throws ValueError
 ```
 
 **Bytes:** `byteLength()`, `byteSubstring(start, end)` and `bytes()` read a `string` as its bytes, as `length()`, `substring()` and `codePoints()` read it as characters, so binary data, as `Ip.toBinary` gives, and the bytes another system counts or signs are read in PHP#. `byteSubstring` counts in bytes and throws `OutOfRangeException` for a range outside the bytes, and `bytes()` gives each byte as an `int` from 0 to 255:
@@ -5044,7 +5073,10 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 - `(int)` truncates a `float` toward zero. A `float` too large for an `int`, or NaN, throws `ArithmeticError`.
 - A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, as C#'s `int.Parse(string)` and Kotlin's `String.toInt()` do, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. Spaces around the number count too, as in Rust and Kotlin: `Int.parse(" 12 ")` throws, and its error says to call `trim()` first. An `Any?` is checked with `as string` first.
 - `Int.tryParse(s)` and `Float.tryParse(s)` take a `string` too, and give null where `parse` throws.
-- An `int` and a `float` have Kotlin's and Rust's number methods, from the standard library's extensions: `abs()`, `clamp(min, max)` and `format()`, which groups the digits in thousands. An `int` has `toHex()`, and `floorDiv(divisor)` and `mod(divisor)`, which round down where `/` and `%` round toward zero, so `(-7).floorDiv(2)` is -4 and `(-7).mod(2)` is 1. A `float` has `round(decimals)`, `floor()`, `ceil()` and `isFinite()`, as in `price.round(2)` and `total.format()`. `abs()` of the smallest `int` throws `ArithmeticError`, and a `clamp` whose minimum is above its maximum throws `ValueError`.
+- `Int.parse(s, radix)` and `Int.tryParse(s, radix)` read a number in a base from 2 to 36, with the letters `a` to `z` in either case past 9, as Kotlin's `toInt(radix)`: `Int.parse("ff", 16)` is 255. A base outside 2 to 36 throws `ValueError` from both.
+- An `int` and a `float` have Kotlin's and Rust's number methods, from the standard library's extensions: `abs()`, `clamp(min, max)` and `format()`, which groups the digits in thousands. An `int` has `toHex()`, and `floorDiv(divisor)` and `mod(divisor)`, which round down where `/` and `%` round toward zero, so `(-7).floorDiv(2)` is -4 and `(-7).mod(2)` is 1. A `float` has `round(decimals)`, `floor()`, `ceil()`, `isFinite()` and `isNaN()`, as in `price.round(2)` and `total.format()`. `abs()` of the smallest `int` throws `ArithmeticError`, and a `clamp` whose minimum is above its maximum throws `ValueError`.
+- `+`, `-` and `*` throw `ArithmeticError` past `Int.MAX` and `Int.MIN`. An `int`'s `checkedAdd`, `checkedSubtract` and `checkedMultiply` give null there instead, and `saturatingAdd`, `saturatingSubtract` and `saturatingMultiply` give `Int.MAX` or `Int.MIN`, as Rust's `checked_add` and `saturating_add` do: `Int.MAX.checkedAdd(1)` is null, and `Int.MAX.saturatingAdd(1)` is `Int.MAX`.
+- `Math` has `sqrt`, `pow`, `log`, `log10`, `exp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan` and `atan2`, which take radians, and the constants `Math.PI` and `Math.E`. Outside its domain a function gives NaN, as `Math.asin(2.0)` does, as Kotlin's and Rust's do.
 - A class or an interface narrows only with `as`, which gives null, or with `as … ?? throw` (section 21).
 - PHP# has no user-defined conversion operators, such as C#'s `implicit operator`. A type converts only through a property or method it declares, such as `username.value`.
 - `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`. `(array)` and `(object)` are compile errors that name their replacements, shown below.
@@ -5055,6 +5087,7 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 - An `Instant` is a point on the time line, which `Clock.now()` gives (section 29).
 - A `Duration` is a length of time in nanoseconds.
 - A `Date` is a day of the calendar, with no time and no time zone.
+- A `TimeOfDay` is a time on a clock, with no date and no time zone, as Kotlin's `LocalTime` and .NET's `TimeOnly`, which writes itself as `"21:30:00"`. A `DateTime`'s `timeOfDay` gives its own.
 - A `TimeZone` is a zone of the IANA time zone database, such as `Europe/Sofia`.
 - A `DateTime` is an `Instant` as the clocks of a `TimeZone` show it.
 
@@ -6287,6 +6320,19 @@ extern now uses Clock;               // compile error: no function now exists
 - **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
+- **An `extern` line of a class takes any attribute, which the class carries as its own,** as every declaration takes one (section 1). The checker reads it as the class's, so a `[ReachedByReflection]` written on the line marks a library's attribute class whose source carries no mark (section 5). At run time PHP#'s `typeof(X).attributes<T>()` and plain PHP's `ReflectionClass::getAttributes()` give the class's own attributes and then the line's, though no code loads the file that holds the line. A line of a method or a function has no class to give an attribute to, so an attribute on it is a compile error. `import` and `extern` stay separate lines.
+
+<!-- example extern-attributes -->
+```csharp
+// app/Stubs/Symfony.sharp
+namespace App.Stubs;
+
+import Symfony.Component.EventDispatcher.Attribute.AsEventListener;
+
+[ReachedByReflection]
+extern AsEventListener;          // compiles: AsEventListener carries [ReachedByReflection], so a method marked
+                                 // [AsEventListener] is never too wide
+```
 - **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package declares the effect of each built-in function the standard library calls, so `Files` has the effect `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
 
 **The standard library's ten effect classes replace PHP's built-ins for their effects.** Each lives in the namespace of its domain (section 23), and a `uses` names it by its class name with no import, whatever the file imports:
