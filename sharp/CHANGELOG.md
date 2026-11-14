@@ -4,6 +4,14 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.12] - 2026-11-14
+
+### Upgrading from 0.6.11
+
+#### Use the value `as` gives, never the local it converts
+
+`as` gives a converted value and leaves the local it converts as it was, spec section 21, since only `is` narrows. 0.6.11 also read the local as the type parameter `as` named, as `event` after `const due = event as TDue;`. Code that used `event` as a `TDue` after that line is now refused, with the error a value of `event`'s own type gets. Use `due`, or test with `if (event is TDue due)`.
+
 ### Added
 
 - `mago convert` converts an argument or a returned value the analysis types wider than the declared type it lands in, as Laravel's `trans()`, typed `array|string`, passed to a `string` parameter, or a `mixed` value returned as an `int`, where it kept the file plain PHP. It writes `title as string ?? throw new TypeError("Argument #1 ($title) must be of type string")`, which throws where PHP's own check of the parameter or the return throws a `TypeError`. It writes it for a declared type `as` tests as PHP checks it: one `int`, `string`, `bool`, object, enum or class with no type parameters, and a nullable one only for a value that is never null.
@@ -907,7 +915,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.11...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.12...HEAD
+[0.6.12]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.11...v0.6.12
 [0.6.11]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.10...v0.6.11
 [0.6.10]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.9...v0.6.10
 [0.6.9]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.8...v0.6.9
