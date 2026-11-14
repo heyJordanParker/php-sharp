@@ -35,6 +35,12 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
   - a method with `yield`, which returns an `Iterable` of what it yields, and `yield from items` as `yield ...items`, spec section 12.
   - an integer literal past `PHP_INT_MAX`, as the `float` PHP reads it as.
   - `__FUNCTION__` and `__METHOD__` outside a method, as `""`, and in a property's accessor, as `"$label::get"`.
+  - a `static` local, as a private static field before its method, `private static int count = 0;`, which the method reads and writes as `Ticker.count`, spec section 6. Its type joins the values written to it, and its initial value is one computed from constants. One in a lambda, a generic class or an enum still refuses.
+  - a `for` whose initialization declares a local beside others, as a statement of its own before the loop for each initialization, in its order, and `for (; index < last; index++)`, spec section 17.
+  - a `switch` with a `case` on a value that is no constant, as an `if … else if` chain of PHP's loose `==` tests, `if (code == limit) { … } else { … }`, where reading the value again runs nothing, spec section 21.
+  - a promoted parameter with hooks, as a parameter property whose accessors are its hooks, `public string label { get; private set => field = value + '!'; } = 'guest'`, spec section 9.
+  - a built-in function as a value, as the lambda that calls the standard library member that runs it, `(string value) => value.trim()` for `mb_trim(...)`, with as many parameters as the function type it lands in passes.
+- `mago convert` writes a static reached through a class value as PHP# reaches one, spec sections 11 and 25: through `class-string<T>` of a type parameter as `T.find(7)`, `T.find`, `T.count` and `T.MAX`, and a static call through a class held at run time as the call through reflection, `kind.methods().first(method => method.name == "label").invoke(null, [7])`, whose `Any?` result `as` checks into the call's type. 0.6.12 wrote `kind.find(7)`, which the checker now refuses, and typed the call's arguments against a method of the converted class of that name. A static property, a constant or a method value through a class held at run time keeps the file plain PHP.
 
 ## [0.6.12] - 2026-11-14
 
