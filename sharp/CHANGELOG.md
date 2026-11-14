@@ -14,6 +14,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - The class value of a type that is no class, as `typeof(Object)`, `typeof(int)` or `typeof(List<int>)`, has no `properties()`, no `methods()` and no `attributes<T>()`, spec section 25, as .NET's `typeof(object).GetProperties()` gives none. 0.6.11 threw `Error` with "Class "Object" not found" from the first two and `ReflectionException` from the third.
 - `Class.of(value)` of a value of a type parameter with no bound, as `TValue`, is refused with "`TValue` does not satisfy the bound `Object` of type parameter `T`.", spec section 11, as `Any` and `Object?` are, and as C#'s CS0314 names the type parameter. 0.6.11 said "Invalid argument type for argument #1 of `Class.of`: expected `T`, but found `TValue`.", which named no bound.
 
+## [0.6.11] - 2026-11-14
+
 ### Upgrading from 0.6.10
 
 #### Read a reflection boolean by its `is` name
@@ -895,7 +897,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.10...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.11...HEAD
+[0.6.11]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.10...v0.6.11
 [0.6.10]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.9...v0.6.10
 [0.6.9]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.8...v0.6.9
 [0.6.8]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.7...v0.6.8
