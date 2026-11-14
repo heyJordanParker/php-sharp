@@ -5,6 +5,7 @@ FROM ${GOLANG_IMAGE} AS golang
 
 FROM ${BASE_IMAGE}
 
+# procps gives sharp/bin/build-mago's prune pgrep and ps, which find a process running from the build folder.
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       autoconf \
@@ -19,6 +20,7 @@ RUN apt-get update \
       php-cli \
       php-xml \
       pkg-config \
+      procps \
       re2c \
       rustup \
       unzip \

@@ -46,7 +46,7 @@ foreach ([
     echo $name, ': ';
     echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n -r ' . escapeshellarg(
         'require ' . var_export(__DIR__ . '/Container.inc', true) . '; container_load(' . var_export($root, true) . ');'
-        . ' try { Sharp\Internal\emit(new App\Demo\Paid(7)); echo "heard ", App\Demo\Notices::$heard, "\n"; }'
+        . ' try { Sharp\Internal\emit(new App\Demo\Paid(7), "Sharp\\\\Dispatcher"); echo "heard ", App\Demo\Notices::$heard, "\n"; }'
         . ' catch (Error $e) { echo get_class($e), ": ", $e->getMessage(), "\n"; }'
     ));
 }

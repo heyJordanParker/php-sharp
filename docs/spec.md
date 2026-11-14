@@ -353,7 +353,7 @@ Checkout.maximum;
 - **Visibility is checked both ways.**
   - Too narrow is a compile error at the caller.
   - Too wide is a warning, for example a `public` member that nothing outside its namespace uses. It runs in a project, a package whose `composer.json` says `"type": "project"`, because a library's members are used by the projects that install it, which the checker never sees. A constructor never warns: `new` calls it, so it reaches as far as its class.
-  - A use from plain PHP counts as one from PHP#, a callable array such as `[Carts::class, 'show']` included. A member with an attribute never warns: the code that reads the attribute reaches it through reflection, as a framework reaches a `[Listen]` method.
+  - A use from plain PHP counts as one from PHP#, a callable array such as `[Carts::class, 'show']` included. A member whose attribute's class is marked `[ReachedByReflection]` never warns: the framework that reads the attribute reaches the member through reflection, as a router reaches a `[Route]` method, which the checker never sees. The mark says what .NET's `[DynamicallyAccessedMembers]` says, and a plain PHP attribute class takes it as `#[\Sharp\ReachedByReflection]`. An `[Export]` method never warns either, since plain PHP calls it through the global function it declares (section 23). Any other attribute, as PHP's `[Deprecated]`, `[Import]` or `[Key]`, says nothing about who uses the member, so the member warns as one without it does (decision 95).
 - **There is no named reach,** such as `internal(App\Tenant)`. A helper shared by sibling namespaces moves to their parent namespace.
 
 **An interface member is always public, so it takes no access modifier.** Writing one, `public` included, is a compile error, as in TypeScript, Swift and Go:
@@ -4494,7 +4494,7 @@ Namespace parts are separated with `.`, and imports use `import`. Every part of 
 <!-- example namespace-and-import -->
 ```csharp
 namespace App.Tenant.Store;
-import App.Shared.Schema.Entities.DatabaseEntity;
+import App.Shop.Records.Entities.DatabaseEntity;
 ```
 
 **Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or the namespace of a plain PHP library's functions and constants. A full class name inside code is a compile error that names the import to add. A module header names a namespace, as the `namespace` line does, so `module : App.Shop` compiles (section 32).
@@ -4532,7 +4532,7 @@ import Vendor.Pdf.render;                                     // compile error: 
 public class Draft { }
 ```
 
-**A function a library declares outside any namespace belongs to the namespace of the library's classes in the same folder,** as Laravel declares `abort()` beside the classes of `Illuminate\Foundation`, and as Kotlin's top-level functions belong to the package of their file. The namespace comes from the classes beside the file, never from the folder's name. After `import Illuminate.Foundation;`, the call is `Foundation.abort(404)`, the value is `Foundation.abort`, and `extern Foundation.now uses Clock;` declares the effect of `now()` (section 29). The call runs PHP's `\abort(404)`:
+**A function or constant a library declares outside any namespace has the namespace an `extern namespace` line gives its folder,** as C#'s `extern alias` gives an assembly a root namespace. `extern namespace Illuminate.Foundation for abort;` in a `.sharp` file of `extern` declarations gives the folder of Laravel's `abort()`, with every function and constant of PHP's root namespace in it, the namespace `Illuminate\Foundation`. After `import Illuminate.Foundation;`, the call is `Foundation.abort(404)`, the value is `Foundation.abort`, and `extern Foundation.now uses Clock;` declares the effect of the `now()` beside it (section 29). The call runs PHP's `\abort(404)`. The line writes its namespace in full, or through the file's import of it, as `Foundation` after `import Illuminate.Foundation;`:
 
 <!-- example library-root-functions -->
 ```php
@@ -4547,6 +4547,14 @@ namespace {
 
 <!-- example library-root-functions -->
 ```csharp
+// app/Stubs/Laravel.sharp
+namespace App.Stubs;
+
+extern namespace Illuminate.Foundation for abort;
+```
+
+<!-- example library-root-functions -->
+```csharp
 // app/Http/CartsController.sharp
 namespace App.Http;
 
@@ -4554,17 +4562,18 @@ import Illuminate.Foundation;
 
 public class CartsController
 {
-    public void missing() => Foundation.abort(404, "Cart not found.");   // compiles: abort belongs to Illuminate.Foundation, the namespace of the class beside it
+    public void missing() => Foundation.abort(404, "Cart not found.");   // compiles: the line gives abort's folder the namespace Illuminate.Foundation
     public void bare() => abort(404);                                    // compile error: no function abort exists
 }
 ```
 
-- **A folder whose classes have several namespaces gives its functions each of them,** and a message that names one of the functions writes it through the first in alphabetical order.
-- **A function with no class of the library beside it belongs to no namespace PHP# code imports,** so PHP# code never names it, as it never names PHP's own built-ins.
+- **The line names a class, function or constant a library declares outside any namespace,** or it is a compile error. One of PHP's built-ins is no library's.
+- **A namespace a class already has is one only a folder that holds a class of it takes,** as `helpers.php` sits beside the classes of `Illuminate\Foundation`, and giving it to another folder is a compile error.
+- **Without a line, a function of PHP's root namespace belongs to no namespace PHP# code imports,** whatever classes sit beside it, so `Foundation.abort(404)` is the error a missing function gets, as PHP's own built-ins are never named.
 - **An import of that namespace is an import like any other,** so a module's `imports` list holds it to the list (section 32).
 - **`global` is an ordinary name.** `global.levenshtein(a, b)` is a compile error that says `global` names no class, and no namespace the file imports, as `gadget.levenshtein(a, b)` is.
 
-**`extern namespace WordPress for WP_Post;` gives a library whose classes have no namespace the PHP# namespace `WordPress`,** as C#'s `extern alias` gives an assembly a root namespace and TypeScript's `declare module` names a library without types. The line stands in a `.sharp` file of `extern` declarations, and names a class of the library, which must be a plain PHP class outside any namespace, or it is a compile error. Its folder's namespace-less classes and functions are then `import WordPress;` and `WordPress.add_action(…)`, `import WordPress.WP_Post;` and `WP_Post`, and run PHP's `\add_action` and `\WP_Post`. `extern WordPress.get_post uses Database;` declares an effect as any `extern` does (section 29), after `import WordPress;`. Two lines that name one folder, one namespace given to two folders, and a namespace a class already has are compile errors:
+**`extern namespace WordPress for WP_Post;` gives a library whose classes have no namespace the PHP# namespace `WordPress`,** as C#'s `extern alias` gives an assembly a root namespace and TypeScript's `declare module` names a library without types. The line stands in a `.sharp` file of `extern` declarations, and names a class of the library, which must be a plain PHP class outside any namespace, or it is a compile error. Its folder's namespace-less classes and functions are then `import WordPress;` and `WordPress.add_action(…)`, `import WordPress.WP_Post;` and `WP_Post`, and run PHP's `\add_action` and `\WP_Post`. A root class of another folder of the library takes no namespace from it. `extern WordPress.get_post uses Database;` declares an effect as any `extern` does (section 29), after `import WordPress;`. Two lines that name one folder and one namespace given to two folders are compile errors:
 
 <!-- example extern-namespace -->
 ```php
@@ -4836,6 +4845,8 @@ public int totalIn(string currency) => 1;
 this.totalIn("EUR");        // compiles
 this.TotalIn("EUR");        // compile error: no member TotalIn; did you mean totalIn?
 ```
+
+**A plain PHP class below a PHP# class overrides one twin by its exact name, and can't declare the other.** It is written in PHP, where two method names that differ only in case are one name. So a plain subclass of a class with `total()` and `Total()` may declare `Total()`, which overrides `Total()` alone, and declaring both is PHP's "Cannot redeclare". A plain class that implements a PHP# interface and uses its `Defaults` trait takes both twins from the trait, as two methods.
 
 **A type holds null only when it is written with `?`,** for parameters, return types, properties and locals alike: `Customer?` may hold null, and `Customer` never does. Section 14.4 lists the compile errors for a `?` or a null check that cannot matter.
 
@@ -5179,19 +5190,23 @@ Json.encode(["tags": ["a"], "none": [:]], indent: 2);                           
 Json.encode(payload, indent: -1);                                                  // throws: "Json.encode: indent is -1, and it must be 0 or more"
 ```
 
-**`Sql.identifier(name, allowed)` gives `name` as SQL only when it is one of `allowed`,** and throws a `ValueError` for any other, so a column or a table chosen while the code runs reaches a plain PHP `literal-string` parameter, as Laravel's `orderByRaw` declares one, as one of the application's own names. Values still go through a query's bindings:
+**A string-backed enum case's `value` is a `literal-string`,** wherever the case comes from, a parameter, a variable or a collection's element included, since every case's backing value is a literal. So the columns or tables a query may name are an enum, and the one chosen while the code runs reaches a plain PHP `literal-string` parameter, as Laravel's `orderByRaw` declares one, as one of the application's own names. Values still go through a query's bindings:
 
-<!-- example sql-identifiers: statements
+<!-- example allow-list-enums: statements
 import Illuminate.Database.Query.Builder;
-import Sharp.Data.Sql;
+public enum SortColumn : string
+{
+    case Name = "name";
+    case CreatedAt = "created_at";
+}
 Builder query = new Builder();
-string column = "created_at";
+SortColumn column = SortColumn.CreatedAt;
+string chosen = "created_at";
 -->
 ```csharp
-Sql.identifier("name", ["name", "created_at"]);                      // "name"
-Sql.identifier("drop", ["name"]);                                    // throws: "`Sql.identifier` takes a name the query allows, and \"drop\" is none of them."
-query.orderByRaw(Sql.identifier(column, ["name", "created_at"]));    // compiles
-query.orderByRaw(column);                                            // compile error: column is composed while the code runs
+query.orderByRaw(column.value);                  // compiles: "created_at", one of the enum's own names
+query.orderByRaw(SortColumn.Name.value);         // compiles
+query.orderByRaw(chosen);                        // compile error: chosen is composed while the code runs
 ```
 
 **A string fixed while the code compiles is a `literal-string` too,** as Psalm and PHPStan read one: a string literal, a constant, and a template or a `+` join whose parts are all literals or constants of type `int`, `float` or `string`:
@@ -5325,7 +5340,7 @@ Class.of(row).name();              // "App.Orders.Counted"
 typeof(Counted).name();            // "App.Orders.Counted"
 ```
 
-**`properties()` reads the properties a class declares, and `typeArguments()` a type's type arguments,** as .NET's `Type.GetProperties()` and `GetGenericArguments()` do, so an ORM, a serializer or a form builder reads a class's declared types without plain PHP reflection. `properties()` gives a `List<Property>` of every instance property and field, private ones included, the class's own first and then those it inherits, in the order they are declared. A `Property` has its `name`, its `type` as a `Class<Any?>` without `?`, `nullable`, and `attributes<TAttribute : Object>()`, as `Class<T>`'s own:
+**`properties()` reads the properties a class declares, and `typeArguments()` a type's type arguments,** as .NET's `Type.GetProperties()` and `GetGenericArguments()` do, so an ORM, a serializer or a form builder reads a class's declared types without plain PHP reflection. `properties()` gives a `List<Property>` of every instance property and field, private ones included, the class's own first and then those it inherits, in the order they are declared. A `Property` has its `name`, its `type` as a `Class<Any?>` without `?`, `isNullable`, the `declaringClass` that declares it, its `visibility`, and `attributes<TAttribute : Object>()`, as `Class<T>`'s own. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member (section 5), as Kotlin's `KVisibility` gives it, so an `internal` member reads `Internal` though plain PHP reaches it as a public one:
 
 <!-- example declared-types -->
 ```csharp
@@ -5352,12 +5367,15 @@ properties.map(property => property.name);                  // ["tags", "stock",
 properties[0].type == typeof(List<string>);                  // true
 properties[0].type.typeArguments() == [typeof(string)];     // true
 properties[1].type.typeArguments() == [];                   // true
-properties[1].nullable;                                     // true
+properties[1].isNullable;                                   // true
 properties[1].attributes<Field>().count();                  // 1
+properties[1].declaringClass == typeof(Product);            // true
+properties[1].visibility == Visibility.Private;             // true
+properties[2].visibility == Visibility.Public;              // true
 typeof(Map<string, int>).typeArguments() == [typeof(string), typeof(int)];   // true
 ```
 
-**`methods()` reads the methods a class declares,** as .NET's `Type.GetMethods()` does. It gives a `List<Method>` of every instance and static method, private ones included, the class's own first and then those it inherits, in the order they are declared, without the constructor. A `Method` has its `name`, its result `type` as a `Class<Any?>` without `?`, `nullable`, `attributes<TAttribute : Object>()`, and `parameters()`, a `List<Parameter>`. A `Parameter` has its `name`, `type`, `nullable`, `optional`, which holds when it has a default value, and `attributes<TAttribute : Object>()`. The type arguments of the class value stand for the class's type parameters, and a plain PHP method gives its PHP types as PHP# writes them, as `properties()` does:
+**`methods()` reads the methods a class declares,** as .NET's `Type.GetMethods()` does. It gives a `List<Method>` of every instance and static method, private ones included, the class's own first and then those it inherits, in the order they are declared, without the constructor. A `Method` has its `name`, its result `type` as a `Class<Any?>` without `?`, `isNullable`, `isStatic`, its `declaringClass` and `visibility`, as a `Property` has them, `attributes<TAttribute : Object>()`, and `parameters()`, a `List<Parameter>`, as .NET's `MethodInfo` and Kotlin's `KFunction` give them. A `Parameter` has its `name`, `type`, `isNullable`, `isOptional`, which holds when a call may leave it out, `isVariadic`, `defaultValue()`, and `attributes<TAttribute : Object>()`, as .NET's `ParameterInfo` and Kotlin's `KParameter` give them. `defaultValue()` evaluates the default each time, so a `new` in it creates a new object on each read, and a parameter without one throws `OutOfRangeException`, as `first` does when nothing matches. The type arguments of the class value stand for the class's type parameters, and a plain PHP method gives its PHP types as PHP# writes them, as `properties()` does:
 
 <!-- example declared-methods -->
 ```csharp
@@ -5377,10 +5395,71 @@ import App.Shelf.Crate;
 const methods = typeof(Crate<string>).methods();
 methods[0].name;                                              // "first"
 methods[0].type == typeof(string);                            // true
-methods[0].nullable;                                          // true
+methods[0].isNullable;                                        // true
+methods[0].isStatic;                                          // false
+methods[0].declaringClass.name();                             // "App.Shelf.Crate"
+methods[0].visibility == Visibility.Public;                   // true
 methods[0].parameters().map(parameter => parameter.name);     // ["items", "limit"]
 methods[0].parameters()[0].type == typeof(List<string>);      // true
-methods[0].parameters()[1].optional;                          // true
+methods[0].parameters()[1].isOptional;                        // true
+methods[0].parameters()[1].isVariadic;                        // false
+methods[0].parameters()[1].defaultValue();                    // 1
+```
+
+**`invoke`, `get` and `set` use a member through its reflection,** as .NET's `MethodInfo.Invoke`, `PropertyInfo.GetValue` and `PropertyInfo.SetValue` and Kotlin's `KCallable.call`, `KProperty1.get` and `KMutableProperty1.set` do. They are the one way PHP# names a member by a value (decision 94). `method.invoke(receiver, arguments)` calls the method on `receiver` with the `List<Any?>` of arguments and gives its result as `Any?`, and a method that isn't private runs the receiver's override. `property.get(receiver)` gives the property's value as `Any?`, running a computed property's `get`, and `property.set(receiver, value)` writes it. Each reaches the member as a direct use from the calling code would: a private member only from its class, a protected one from the class and its subclasses, and an `internal` one from its namespace and those below it, which plain PHP reaches as a public one. A use the calling code can't make throws `Error`, as do a write of a get-only property and a call of a missing method. Each argument and value is checked against its type as a direct PHP# use's is, so a wrong one throws `TypeError`. More arguments than the method takes throw `ArgumentCountError`, and a receiver that isn't of the member's class throws `TypeError`. Each runs code its caller can't see, a method's body, a `get` or a `set`, so each may have every effect (section 29), and code that must keep to its `uses`, as an implementation of a pure interface method, can't call it:
+
+<!-- example reflection-calls -->
+```csharp
+// app/Shelf/Counter.sharp
+namespace App.Shelf;
+
+public class Counter
+{
+    public int count { get; set; } = 1;
+    public int doubled => this.count * 2;
+
+    public int add(int amount) => this.count + amount;
+}
+```
+
+<!-- example reflection-calls: statements
+import App.Shelf.Counter;
+-->
+```csharp
+const counter = new Counter();
+const add = typeof(Counter).methods()[0];
+const properties = typeof(Counter).properties();
+add.invoke(counter, [2]);                                     // 3
+add.invoke(counter, ["2"]);                                   // throws TypeError
+add.invoke(counter, [2, 3]);                                  // throws ArgumentCountError
+properties[0].set(counter, 5);
+properties[0].get(counter);                                   // 5
+properties[1].get(counter);                                   // 10
+properties[1].set(counter, 4);                                // throws Error
+```
+
+<!-- example reflection-effects -->
+```csharp
+// app/Shelf/Audit.sharp
+namespace App.Shelf;
+
+public interface Audit
+{
+    Any? read(Object target);
+}
+```
+
+<!-- example reflection-effects -->
+```csharp
+// app/Shelf/FieldAudit.sharp
+namespace App.Shelf;
+
+public class FieldAudit : Audit
+{
+    public int count { get; } = 1;
+
+    public Any? read(Object target) => typeof(FieldAudit).properties()[0].get(target);   // compile error: read must be pure, and get may have every effect
+}
 ```
 
 **A class value works wherever a class name works.** `typeof` and `Class.of` give one, and a `Class<T>` field, parameter or local holds one:
@@ -5757,7 +5836,7 @@ A PHP# file has no PHP tags, so `<?php`, `<?`, `<?=` and `?>` are compile errors
 ```csharp
 namespace App.Tenant.Store;
 
-import App.Shared.Schema.Entities.DatabaseEntity;
+import App.Shop.Records.Entities.DatabaseEntity;
 ```
 
 The extension is **`.sharp`**, as in `StoreService.sharp`.
@@ -6179,7 +6258,7 @@ extern StripeClient uses Http;
 ```
 
 - **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
-- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern Foundation.now uses Clock;` for a function a library declares outside any namespace, after `import Illuminate.Foundation;` (section 23). `extern namespace WordPress for WP_Post;` declares no effect: it gives a library whose classes have no namespace the namespace its functions are declared through, as `extern WordPress.get_post uses Database;` (section 23).
+- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern Foundation.now uses Clock;` for a function a library declares outside any namespace, after `import Illuminate.Foundation;` and the `extern namespace` line that gives its folder that namespace (section 23). `extern namespace WordPress for WP_Post;` declares no effect: it gives a library's folder of root names the namespace its functions are declared through, as `extern WordPress.get_post uses Database;` (section 23).
 - **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
 
 <!-- example extern-functions -->
@@ -6197,6 +6276,7 @@ namespace App.Stubs;
 import Illuminate.Foundation;
 import Vendor.Pdf;
 
+extern namespace Illuminate.Foundation for now;
 extern Pdf.render uses Files;        // compiles: Pdf.render(html) has the effect Files
 extern Foundation.now uses Clock;    // compiles: Foundation.now() has the effect Clock
 extern now uses Clock;               // compile error: no function now exists
@@ -6846,7 +6926,7 @@ namespace App.Tenant.Store;
 
 module
 {
-    imports App.Tenant.Community, App.Shared.Schema, Illuminate.Support;
+    imports App.Shop.Loyalty, App.Shop.Records, Illuminate.Support;
 }
 ```
 
@@ -6855,9 +6935,9 @@ module
 // app/Tenant/Store/StoreService.sharp
 namespace App.Tenant.Store;
 
-import App.Tenant.Community.Member;     // compiles
+import App.Shop.Loyalty.Member;         // compiles
 import Illuminate.Support.Facades.DB;   // compiles: Illuminate.Support lists every namespace below it
-import App.Shared.Ledger.Entry;         // compile error: App.Tenant.Store imports only App.Tenant.Community, App.Shared.Schema and Illuminate.Support
+import App.Shared.Ledger.Entry;         // compile error: App.Tenant.Store imports only App.Shop.Loyalty, App.Shop.Records and Illuminate.Support
 
 public class StoreService { … }
 ```
@@ -6878,18 +6958,18 @@ namespace App.Tenant.Store;
 
 module
 {
-    imports App.Tenant.Community, App.Shared.Schema;   // compile error: App.Tenant.Store and App.Shared.Schema import from each other
+    imports App.Shop.Loyalty, App.Shop.Records;        // compile error: App.Tenant.Store and App.Shop.Records import from each other
 }
 ```
 
 <!-- example module-imports-errors -->
 ```csharp
-// app/Shared/Schema/Module.sharp
-namespace App.Shared.Schema;
+// app/Shop/Records/Module.sharp
+namespace App.Shop.Records;
 
 module
 {
-    imports App.Tenant.Store, App.Shared.Ledgr;        // compile error: App.Shared.Ledgr names no namespace, and App.Shared.Schema and App.Tenant.Store import from each other
+    imports App.Tenant.Store, App.Shared.Ledgr;        // compile error: App.Shared.Ledgr names no namespace, and App.Shop.Records and App.Tenant.Store import from each other
 }
 ```
 

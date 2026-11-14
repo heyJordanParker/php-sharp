@@ -10,7 +10,7 @@ public static class Report
         List<string> lines = [];
         for (const method of typeof(Box<Order>).methods()) {
             const parameters = method.parameters().map(parameter => Report.parameter(parameter));
-            const nullable = method.nullable ? "?" : "";
+            const nullable = method.isNullable ? "?" : "";
             const fields = method.attributes<Field>().count();
             lines.add(`${method.name}(${parameters.join(", ")}): ${method.type.name()}${nullable} fields=${fields}`);
         }
@@ -19,8 +19,8 @@ public static class Report
 
     private static string parameter(Parameter parameter)
     {
-        const nullable = parameter.nullable ? "?" : "";
-        const optional = parameter.optional ? " optional" : "";
+        const nullable = parameter.isNullable ? "?" : "";
+        const optional = parameter.isOptional ? " optional" : "";
         const fields = parameter.attributes<Field>().count();
         return `${parameter.name}: ${parameter.type.name()}${nullable}${optional} fields=${fields}`;
     }

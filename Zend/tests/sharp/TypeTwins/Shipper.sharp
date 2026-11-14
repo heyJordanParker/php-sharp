@@ -1,0 +1,6 @@
+namespace Twins;
+
+public class Shipper
+{
+    public virtual string ship(Parcel.Box parcel) => "shipped";
+}

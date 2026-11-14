@@ -43,6 +43,7 @@ use mago_analyzer::settings::ClassInitializer;
 use mago_analyzer::settings::Settings;
 use mago_codex::identifier::function_like::FunctionLikeIdentifier;
 use mago_codex::metadata::CodebaseMetadata;
+use mago_codex::metadata::r#extern::extern_namespace_classes;
 use mago_codex::reference::SymbolReferences;
 use mago_codex::scanner::scan_program;
 use mago_codex::ttype::TType;
@@ -242,9 +243,9 @@ fn analyze_with_references(
             scan_program(&arena, file, program, &names, settings.version)
         })
         .collect();
-    let namespace_classes = NamespaceClasses::new(
-        scanned.iter().flat_map(|scan| scan.class_likes.values().map(|class_like| class_like.original_name)),
-    );
+    let namespace_classes = NamespaceClasses::new(scanned.iter().flat_map(|scan| {
+        scan.class_likes.values().map(|class_like| (class_like.original_name, class_like.flags.is_sharp()))
+    }));
     let changing_members = ChangingMembers::new(scanned.iter().flat_map(|scan| {
         scan.function_likes
             .values()
@@ -254,9 +255,7 @@ fn analyze_with_references(
             })
             .map(|member| member.original_name)
     }));
-    let extern_namespaces = ExternNamespaces::new(
-        scanned.iter().flat_map(|scan| scan.extern_namespaces.iter().map(|declaration| declaration.namespace)),
-    );
+    let extern_namespaces = ExternNamespaces::new(extern_namespace_classes(&scanned.iter().collect::<Vec<_>>()));
     let mut programs = Vec::new();
     for (file, program) in parsed {
         let names =
@@ -446,24 +445,66 @@ fn a_member_inherited_from_a_plain_php_parent_is_not_too_wide() {
     );
 }
 
-/// Spec section 5: a member with an attribute is reached by the code that reads the attribute, through reflection,
-/// which no checker sees, so it never warns, as a `[Listen]` method or a `[Field]` property. The same members
-/// without an attribute still warn.
+/// Spec section 5: a member whose attribute's class is marked `[ReachedByReflection]` is reached by the framework that
+/// reads the attribute, through reflection, which no checker sees, so it never warns. So are a plain PHP `[Listen]`
+/// method and `[Field]` property, and a PHP# `[Route]` method. Any other attribute, as PHP's `[Deprecated]`, says
+/// nothing about who uses a member, so its property, method and constant warn as members without one do.
 #[test]
-fn a_public_member_with_an_attribute_is_not_too_wide() {
-    let listen = "<?php\n\nnamespace Lib;\n\n#[\\Attribute(\\Attribute::TARGET_METHOD)]\nfinal class Listen\n{\n}\n";
-    let field = "<?php\n\nnamespace Lib;\n\n#[\\Attribute(\\Attribute::TARGET_PROPERTY)]\nfinal class Field\n{\n}\n";
-    let hooks = "namespace App.Payments;\n\nimport Lib.Field;\nimport Lib.Listen;\n\npublic class Hooks\n{\n    [Field]\n    public string title { get; } = \"hooks\";\n\n    public string label { get; } = \"hooks\";\n\n    [Listen]\n    public void paid() { }\n\n    public void refunded() { }\n}\n";
+fn a_public_member_whose_attribute_a_framework_reads_by_reflection_is_not_too_wide() {
+    let marker = (
+        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/ReachedByReflection.sharp",
+        include_str!("../../../../composer/library/Sharp/ReachedByReflection.sharp"),
+    );
+    let listen = "<?php\n\nnamespace Lib;\n\n#[\\Attribute(\\Attribute::TARGET_METHOD)]\n#[\\Sharp\\ReachedByReflection]\nfinal class Listen\n{\n}\n";
+    let field = "<?php\n\nnamespace Lib;\n\n#[\\Attribute(\\Attribute::TARGET_PROPERTY | \\Attribute::TARGET_CLASS_CONSTANT)]\n#[\\Sharp\\ReachedByReflection]\nfinal class Field\n{\n}\n";
+    let route = "namespace App.Web;\n\nimport Attribute;\n\n[Attribute(Attribute.TARGET_METHOD)]\n[ReachedByReflection]\npublic class Route\n{\n}\n";
+    let hooks = "namespace App.Payments;\n\nimport App.Web.Route;\nimport Deprecated;\nimport Lib.Field;\nimport Lib.Listen;\n\npublic class Hooks\n{\n    [Field]\n    public const int LIMIT = 3;\n\n    [Deprecated]\n    public const int CAP = 4;\n\n    [Field]\n    public string title { get; } = \"hooks\";\n\n    [Deprecated]\n    public string label { get; } = \"hooks\";\n\n    [Listen]\n    public void paid() { }\n\n    [Route]\n    public void refunded() { }\n\n    [Deprecated]\n    public void voided() { }\n\n    public void settled() { }\n}\n";
 
     assert_eq!(
         too_wide(&[
+            marker,
             ("src/Lib/Listen.php", listen),
             ("src/Lib/Field.php", field),
+            ("src/App/Web/Route.sharp", route),
             ("src/App/Payments/Hooks.sharp", hooks),
         ]),
         [
-            "src/App/Payments/Hooks.sharp 11:19 `Hooks.label` is public, and nothing outside `App.Payments` uses it.",
-            "src/App/Payments/Hooks.sharp 16:17 `Hooks.refunded` is public, and nothing outside `App.Payments` uses it.",
+            "src/App/Payments/Hooks.sharp 14:22 `Hooks.CAP` is public, and nothing outside `App.Payments` uses it.",
+            "src/App/Payments/Hooks.sharp 20:19 `Hooks.label` is public, and nothing outside `App.Payments` uses it.",
+            "src/App/Payments/Hooks.sharp 29:17 `Hooks.voided` is public, and nothing outside `App.Payments` uses it.",
+            "src/App/Payments/Hooks.sharp 31:17 `Hooks.settled` is public, and nothing outside `App.Payments` uses it.",
+        ]
+    );
+}
+
+/// Spec sections 5 and 23: plain PHP calls an `[Export]` method through the global function it declares, which the
+/// checker never sees, so the method never warns. The other marks say nothing about who reaches their member, so an
+/// `[Import]` method and a `[Key]` property warn as members without them do. An `override` and an `internal` member
+/// never warn by their modifiers. The bridge writes `#[\Override]`, `#[\Sharp\Internal\Internal]` and, on a `List`
+/// property, `#[\Sharp\Crossing]` into the lowered file only, which the checker never reads, so `amounts` warns.
+#[test]
+fn an_exported_method_is_not_too_wide_and_the_other_marks_change_nothing() {
+    let export = (
+        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Interop/Export.sharp",
+        include_str!("../../../../composer/library/Sharp/Interop/Export.sharp"),
+    );
+    let import = (
+        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Interop/Import.sharp",
+        include_str!("../../../../composer/library/Sharp/Interop/Import.sharp"),
+    );
+    let key = (
+        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Key.sharp",
+        include_str!("../../../../composer/library/Sharp/Key.sharp"),
+    );
+    let base = "<?php\n\nnamespace Lib;\n\nclass Base\n{\n    public function label(): string\n    {\n        return 'base';\n    }\n}\n";
+    let pricing = "namespace App.Shop;\n\nimport Lib.Base;\nimport Sharp.Interop.Export;\nimport Sharp.Interop.Import;\n\npublic class Pricing : Base\n{\n    [Key(\"order_id\")]\n    public int id { get; } = 0;\n\n    public List<int> amounts { get; set; } = [];\n\n    internal int stock { get; set; } = 0;\n\n    [Export(\"format_price\")]\n    public static string formatPrice(int cents) => `${cents}`;\n\n    [Import(\"levenshtein\")]\n    public static int distance(string from, string to);\n\n    public override string label() => \"pricing\";\n}\n";
+
+    assert_eq!(
+        too_wide(&[export, import, key, ("src/Lib/Base.php", base), ("src/App/Shop/Pricing.sharp", pricing)]),
+        [
+            "src/App/Shop/Pricing.sharp 10:16 `Pricing.id` is public, and nothing outside `App.Shop` uses it.",
+            "src/App/Shop/Pricing.sharp 12:22 `Pricing.amounts` is public, and nothing outside `App.Shop` uses it.",
+            "src/App/Shop/Pricing.sharp 20:23 `Pricing.distance` is public, and nothing outside `App.Shop` uses it.",
         ]
     );
 }
@@ -3822,7 +3863,8 @@ fn a_catch_variable_has_the_caught_classes_as_its_type_as_in_php() {
 
 /// Spec section 23 calls a plain PHP function through its namespace: `Pdf.render(html)` after `import Vendor.Pdf;`
 /// calls a function of that namespace, and `Pdf.helper(extra)` the function `helper` the library declares in PHP's
-/// root namespace beside its classes. Each checks its arguments as its PHP twin's call does.
+/// root namespace, which `extern namespace Pdf for helper;` gives `Vendor\Pdf`. Each checks its arguments as its PHP
+/// twin's call does.
 #[test]
 fn a_plain_php_function_is_called_through_its_namespace() {
     let pdf = "<?php\n\nnamespace Vendor\\Pdf;\n\nfunction render(string $html): string\n{\n    return $html;\n}\n";
@@ -3834,6 +3876,7 @@ fn a_plain_php_function_is_called_through_its_namespace() {
         ("src/Vendor/Pdf/functions.php", pdf),
         ("src/Vendor/Pdf/helpers.php", helpers),
         ("src/Vendor/Pdf/Document.php", document),
+        ("src/Demo/Externs.sharp", "namespace Demo;\n\nimport Vendor.Pdf;\n\nextern namespace Pdf for helper;\n"),
     ];
 
     let sharp_issues = issues(("src/Demo/Report.sharp", sharp), &others);
@@ -3843,8 +3886,10 @@ fn a_plain_php_function_is_called_through_its_namespace() {
 }
 
 /// Laravel's `helpers.php` files and stancl/tenancy's, each a library's functions in PHP's root namespace beside its
-/// classes. Laravel keeps `collect` in `Illuminate/Collections`, beside the classes of `Illuminate\Support`.
-const ROOT_HELPERS: [(&str, &str); 6] = [
+/// classes, and the project's `extern namespace` lines that give each folder a namespace, spec section 23, one written
+/// in full and one through its import. Laravel keeps `collect` in `Illuminate/Collections`, beside the classes of
+/// `Illuminate\Support`. The first six are the libraries alone.
+const ROOT_HELPERS: [(&str, &str); 7] = [
     (
         "vendor/laravel/framework/src/Illuminate/Foundation/helpers.php",
         "<?php\n\nfunction abort(int $code, string $message = ''): never\n{\n    exit($code);\n}\n\nfunction app(): object\n{\n    return new stdClass();\n}\n\nfunction now(): int\n{\n    return time();\n}\n",
@@ -3863,15 +3908,20 @@ const ROOT_HELPERS: [(&str, &str); 6] = [
     ),
     ("vendor/stancl/tenancy/src/helpers.php", "<?php\n\nfunction tenant(): ?string\n{\n    return null;\n}\n"),
     ("vendor/stancl/tenancy/src/Tenancy.php", "<?php\n\nnamespace Stancl\\Tenancy;\n\nclass Tenancy\n{\n}\n"),
+    (
+        "app/Externs/Libraries.sharp",
+        "namespace App.Externs;\n\nimport Stancl.Tenancy;\n\nextern namespace Illuminate.Foundation for abort;\nextern namespace Illuminate.Support for collect;\nextern namespace Tenancy for tenant;\n",
+    ),
 ];
 
-/// Jordan's ruling of 10-22, spec section 23: a function a library declares outside any namespace belongs to the
-/// namespace of the library's classes in the same folder, so `Foundation.abort(…)` calls Laravel's `abort`,
-/// `Support.collect(…)` its `collect`, which sits in `Illuminate/Collections` beside `Illuminate\Support`'s classes, and
-/// `Tenancy.tenant()` stancl/tenancy's `tenant`. A function is a value through its namespace too, as `Foundation.app`.
-/// The folder's name is no namespace, so `Collections.collect` names nothing.
+/// Decision 097, spec section 23: a function a library declares outside any namespace has the namespace an
+/// `extern namespace` line gives its folder, so `Foundation.abort(…)` calls Laravel's `abort`, `Foundation.now()` the
+/// `now` beside it, `Support.collect(…)` its `collect`, and `Tenancy.tenant()` stancl/tenancy's `tenant`. A function is
+/// a value through its namespace too, as `Foundation.app`. A folder's name is no namespace, so `Collections.collect`
+/// names nothing. Without the lines, the classes beside a function give it no namespace, so each call is the error a
+/// missing function gets.
 #[test]
-fn a_function_a_library_declares_outside_any_namespace_belongs_to_the_namespace_of_its_classes() {
+fn a_function_a_library_declares_outside_any_namespace_has_the_namespace_its_extern_namespace_line_gives() {
     let controller = (
         "app/Http/CartsController.sharp",
         "namespace App.Http;\n\nimport Illuminate.Foundation;\nimport Illuminate.Support;\nimport Stancl.Tenancy;\n\npublic class CartsController\n{\n    public Any? missing() => Foundation.abort(404, \"Cart not found.\");\n    public int stamp() => Foundation.now();\n    public Any container() => Foundation.app;\n    public int counted() => Support.collect([1, 2]);\n    public string? current() => Tenancy.tenant();\n    public int wrong() => Support.collect(\"one\");\n}\n",
@@ -3893,10 +3943,23 @@ fn a_function_a_library_declares_outside_any_namespace_belongs_to_the_namespace_
             "5:29 non-existent-class-like `Collections` names no class, and no namespace this file imports. | Check the spelling of `Collections`, or import the class or the namespace whose member this names."
         ]
     );
+    let bare = (
+        "app/Http/Bare.sharp",
+        "namespace App.Http;\n\nimport Illuminate.Foundation;\n\npublic class Bare\n{\n    public Any? missing() => Foundation.abort(404, \"Cart not found.\");\n}\n",
+    );
+    assert_eq!(
+        refusals(bare, &ROOT_HELPERS[..6]),
+        [
+            "3:8 class-namespace-import `Illuminate.Foundation` holds classes only, and an import names a class or a namespace of functions: import the class, as in `import Illuminate.Foundation.Application;`. | ",
+            "7:41 non-existent-function Function `Foundation.abort` does not exist. | Check the spelling of `Foundation.abort`, or declare `function abort()` in a `.php` file of the namespace `Illuminate.Foundation`.",
+        ]
+    );
 }
 
-/// A library whose classes and functions have no namespace, as WordPress, beside one with a namespace.
-const ROOT_LIBRARIES: [(&str, &str); 4] = [
+/// A library whose classes and functions have no namespace, as WordPress, with a class in a second folder, beside one
+/// with a namespace.
+const ROOT_LIBRARIES: [(&str, &str); 5] = [
+    ("vendor/wordpress/wp-admin/class-wp-screen.php", "<?php\n\nclass WP_Screen\n{\n}\n"),
     (
         "vendor/wordpress/wp-includes/class-wp-post.php",
         "<?php\n\nclass WP_Post\n{\n    public string $post_title = '';\n}\n",
@@ -3910,22 +3973,26 @@ const ROOT_LIBRARIES: [(&str, &str); 4] = [
 ];
 
 /// Spec section 23: `extern namespace WordPress for WP_Post;` gives the folder of a plain PHP class of PHP's root
-/// namespace the namespace `WordPress`, so its functions are `WordPress.add_action`, its classes `import
-/// WordPress.WP_Post;`, and `extern WordPress.get_post` declares a function's effect. The class must be a library's, of
-/// PHP's root namespace, and a folder takes one namespace no class has, which no other folder takes.
+/// namespace the namespace `WordPress`, so its classes are `import WordPress.WP_Post;` and its functions
+/// `WordPress.add_action`, and `extern WordPress.get_post` declares a function's effect. A root class of another folder
+/// of the library, as `WP_Screen`, takes no namespace from it. The line names a library's class, function or constant
+/// of PHP's root namespace, a folder takes one namespace, which no other folder takes, and a namespace a class has is
+/// one only a folder that holds such a class takes.
 #[test]
 fn an_extern_namespace_names_a_namespace_less_library() {
     let stubs = (
         "app/Stubs/WordPress.sharp",
         "namespace App.Stubs;\n\nimport WordPress;\n\nextern namespace WordPress for WP_Post;\nextern WordPress.get_post uses Database;\n",
     );
+    let screen =
+        ("app/Blog/Screen.sharp", "namespace App.Blog;\n\nimport WordPress.WP_Screen;\n\npublic class Screen\n{\n}\n");
     let feed = (
         "app/Blog/Feed.sharp",
         "namespace App.Blog;\n\nimport WordPress;\nimport WordPress.WP_Post;\n\npublic class Feed\n{\n    public bool hook() => WordPress.add_action(\"init\", () => { });\n    public string title(WP_Post post) => post.post_title;\n    public WP_Post? first() => WordPress.get_post(1);\n    public bool bare() => add_action(\"init\", () => { });\n}\n",
     );
     let wrong = (
         "app/Stubs/Wrong.sharp",
-        "namespace App.Stubs;\n\nextern namespace Missing for No_Such_Class;\nextern namespace Clients for Acme.Client;\nextern namespace Press for WP_Post;\nextern namespace WordPress for Legacy_Widget;\nextern namespace Acme for Legacy_Widget;\nextern namespace Pages for Page;\n",
+        "namespace App.Stubs;\n\nextern namespace Missing for No_Such_Class;\nextern namespace Clients for Acme.Client;\nextern namespace Press for WP_Post;\nextern namespace WordPress for Legacy_Widget;\nextern namespace Acme for Legacy_Widget;\nextern namespace Pages for Page;\nextern namespace Press for add_action;\nextern namespace Text for strlen;\n",
     );
     let page = (
         "app/Stubs/Page.sharp",
@@ -3942,7 +4009,7 @@ fn an_extern_namespace_names_a_namespace_less_library() {
     );
     let missing = |at: &str, class: &str| {
         format!(
-            "{at} non-existent-class-like Cannot find the plain PHP class `{class}` outside any namespace. | `extern namespace` names a class of a library whose classes have no namespace, as `extern namespace WordPress for WP_Post;`."
+            "{at} non-existent-class-like Cannot find the plain PHP class, function or constant `{class}` outside any namespace. | `extern namespace` names a class, function or constant a library declares outside any namespace, as `extern namespace WordPress for WP_Post;` or `extern namespace Illuminate.Foundation for abort;`."
         )
     };
     assert_eq!(
@@ -3958,8 +4025,16 @@ fn an_extern_namespace_names_a_namespace_less_library() {
             missing("4:30", "Acme.Client"),
             "5:1 duplicate-extern The folder of `WP_Post` already takes the namespace `WordPress`. | Delete this line: a folder takes one namespace.".to_owned(),
             "6:1 duplicate-extern `WordPress` is already the namespace of the folder of `WP_Post`. | Give this library another namespace.".to_owned(),
-            "7:18 duplicate-extern `Acme` is already the namespace of `Client`, so no library's folder takes it. | Give the library a namespace no class has.".to_owned(),
+            "7:18 duplicate-extern `Acme` is already the namespace of `Client`, whose folder doesn't hold `Legacy_Widget`. | Give the library a namespace no class has, or the namespace of the classes beside it.".to_owned(),
             missing("8:28", "Page"),
+            "9:1 duplicate-extern The folder of `add_action` already takes the namespace `WordPress`. | Delete this line: a folder takes one namespace.".to_owned(),
+            missing("10:27", "strlen"),
+        ]
+    );
+    assert_eq!(
+        refusals(screen, &others(stubs)),
+        [
+            "3:8 non-existent-use-import Imported class, interface, trait, or enum `WordPress.WP_Screen` does not exist. | Ensure that the class, interface, trait, or enum `WordPress.WP_Screen` is defined in the codebase."
         ]
     );
 }
@@ -4015,9 +4090,10 @@ fn global_is_an_ordinary_name_in_a_project_s_code() {
 }
 
 /// Spec section 23 reads a plain PHP constant through its namespace, as it calls a function: `Pdf.DEFAULT_DPI` after
-/// `import Vendor.Pdf;` reads the library's, and `Pdf.VERSION` the one the library declares in PHP's root namespace
-/// beside its classes, each with its type. A bare uppercase name is the code's own constant, so a bare `VERSION` and a
-/// bare PHP constant are each the error a misspelled name gets. A `.php` file reads each.
+/// `import Vendor.Pdf;` reads the library's, and `Pdf.VERSION` the one the library declares in PHP's root namespace,
+/// which `extern namespace Pdf for VERSION;` gives `Vendor\Pdf`, each with its type. A bare uppercase name is the code's
+/// own constant, so a bare `VERSION` and a bare PHP constant are each the error a misspelled name gets. A `.php` file
+/// reads each.
 #[test]
 fn a_plain_php_constant_is_read_through_its_namespace() {
     let pdf = "<?php\n\nnamespace Vendor\\Pdf;\n\nconst DEFAULT_DPI = 300;\n";
@@ -4029,6 +4105,7 @@ fn a_plain_php_constant_is_read_through_its_namespace() {
         ("src/Vendor/Pdf/constants.php", pdf),
         ("src/Vendor/Pdf/version.php", version),
         ("src/Vendor/Pdf/Document.php", document),
+        ("src/Demo/Externs.sharp", "namespace Demo;\n\nimport Vendor.Pdf;\n\nextern namespace Pdf for VERSION;\n"),
     ];
 
     let undefined = |at: &str, name: &str| {
@@ -4120,8 +4197,9 @@ fn a_member_written_as_an_expression_after_a_namespace_shows_its_refusal_alone()
 }
 
 /// A message names a plain PHP function as the `.sharp` file calls it, through its namespace: `Pdf.helper` for the
-/// `helper` the library declares in PHP's root namespace beside its classes, and `Pdf.missing` for a function an
-/// imported namespace lacks, which is a missing function, not a missing method.
+/// `helper` the library declares in PHP's root namespace, which `extern namespace Pdf for helper;` gives `Vendor\Pdf`
+/// after `import Vendor.Pdf;`, and `Pdf.missing` for a function an imported namespace lacks, which is a missing
+/// function, not a missing method.
 #[test]
 fn a_message_names_a_plain_php_function_as_the_file_calls_it() {
     let pdf = "<?php\n\nnamespace Vendor\\Pdf;\n\nfunction render(string $html): string\n{\n    return $html;\n}\n";
@@ -4132,6 +4210,7 @@ fn a_message_names_a_plain_php_function_as_the_file_calls_it() {
         ("src/Vendor/Pdf/functions.php", pdf),
         ("src/Vendor/Pdf/helpers.php", helpers),
         ("src/Vendor/Pdf/Document.php", document),
+        ("src/Demo/Externs.sharp", "namespace Demo;\n\nimport Vendor.Pdf;\n\nextern namespace Pdf for helper;\n"),
     ];
 
     assert_eq!(
@@ -4384,8 +4463,9 @@ fn a_template_is_a_string_as_php_interpolation_is() {
     assert_eq!(issues(("src/Demo/Report.php", php), &[]), ["14:16 invalid-return-statement"]);
 }
 
-/// A call of a function an imported namespace lacks is reported as PHP reports it, and a library that declares the
-/// function in PHP's root namespace beside the namespace's classes makes the call compile, spec section 23.
+/// A call of a function an imported namespace lacks is reported as PHP reports it, spec section 23. A library that
+/// declares the function in PHP's root namespace beside the namespace's classes leaves it missing, and the
+/// `extern namespace` line that gives the function the namespace makes the call compile.
 #[test]
 fn calling_a_function_that_does_not_exist_is_reported_as_in_php() {
     let pdf = (
@@ -4408,7 +4488,13 @@ fn calling_a_function_that_does_not_exist_is_reported_as_in_php() {
     let declared =
         ("src/Vendor/Pdf/helpers.php", "<?php\n\nfunction missing(int $value): int\n{\n    return $value;\n}\n");
     let document = ("src/Vendor/Pdf/Document.php", "<?php\n\nnamespace Vendor\\Pdf;\n\nfinal class Document\n{\n}\n");
-    assert_eq!(issues(("src/Demo/Report.sharp", sharp), &[pdf, declared, document]), Vec::<String>::new());
+    assert_eq!(
+        issues(("src/Demo/Report.sharp", sharp), &[pdf, declared, document]),
+        ["9:20 non-existent-function", "9:16 mixed-return-statement"]
+    );
+    let externs =
+        ("src/Demo/Externs.sharp", "namespace Demo;\n\nimport Vendor.Pdf;\n\nextern namespace Pdf for missing;\n");
+    assert_eq!(issues(("src/Demo/Report.sharp", sharp), &[pdf, declared, externs]), Vec::<String>::new());
 }
 
 /// A method that wraps the PHP function of its own name calls it as `global.ceil(x)`, which never reaches the method.
@@ -6698,8 +6784,8 @@ fn a_method_value_passed_to_a_collection_method_types_its_result() {
 
 /// Spec section 14.3: a method named without parentheses is a function value, whatever it is a method of: a `List`,
 /// `Map` or `Set` method that leaves the collection as it is, an extension method of the standard library or of an
-/// import, and a plain PHP function a library declares in its namespace or beside its classes. Each value has its
-/// method's function type without the receiver.
+/// import, and a plain PHP function a library declares in its namespace, or in PHP's root namespace with the namespace
+/// an `extern namespace` line gives it. Each value has its method's function type without the receiver.
 #[test]
 fn a_method_value_of_a_collection_an_extension_or_a_plain_php_function_has_its_function_type() {
     let sharp = "namespace Demo;\n\nimport App.Shared.Text.TextExtensions;\nimport Vendor.Strings;\n\nclass Report\n{\n    public int run(List<int> numbers, List<int> allowed, Map<string, int> prices, Set<int> seen, List<string> names, string title)\n    {\n        List<int> kept = numbers.filter(allowed.contains);\n        List<string> priced = names.filter(prices.has);\n        List<int> met = numbers.filter(seen.contains);\n        Function<int()> size = allowed.count;\n        Function<string()> tidy = title.trim;\n        Function<string(string)> slug = title.slug;\n        List<string> capitalized = names.map(Strings.capitalize);\n        Function<int(string)> length = Strings.measure;\n        Function<int(int)> wrongList = allowed.contains;\n        Function<int()> wrongExtension = title.trim;\n        Function<string(int)> wrongImported = title.slug;\n        Function<string(string)> wrongFunction = Strings.measure;\n        const trimmed = title.trim;\n        const slugged = title.slug;\n        string wrongCall = slugged(1);\n        return kept.count() + priced.count() + met.count() + size() + Strings.measure(tidy()) + Strings.measure(slug(\"-\")) + capitalized.count() + length(\"x\") + Strings.measure(trimmed()) + Strings.measure(slugged(\"-\")) + Strings.measure(wrongCall);\n    }\n\n    public int more(List<int> numbers, List<string> names, List<int>? maybe, Iterable<int> feed, string title)\n    {\n        Function<int(int)> firstOr = numbers.firstOr;\n        Function<string(string)> wrongFirst = numbers.firstOr;\n        Function<int(int)> same = Strings.same_value;\n        Function<string(int)> wrongSame = Strings.same_value;\n        Function<Iterable<int>(int)> take = feed.take;\n        const maybeHas = maybe.contains;\n        const total = names.total;\n        title.slug = \"x\";\n        const nope = numbers.missing;\n        return firstOr(1) + same(1) + take(1).toList().count();\n    }\n}\n";
@@ -6716,6 +6802,10 @@ fn a_method_value_of_a_collection_an_extension_or_a_plain_php_function_has_its_f
         ("src/Vendor/Strings/same.php", same),
         ("src/Vendor/Strings/functions.php", strings),
         ("src/Vendor/Strings/Buffer.php", buffer),
+        (
+            "src/Demo/Externs.sharp",
+            "namespace Demo;\n\nimport Vendor.Strings;\n\nextern namespace Strings for same_value;\n",
+        ),
     ];
 
     assert_eq!(
@@ -7181,7 +7271,11 @@ fn a_function_value_crosses_plain_php_callbacks_that_declare_no_types() {
 
     assert_messages(
         ("src/Demo/Report.sharp", sharp),
-        &[("src/Lib/Callbacks.php", callbacks), ("src/Lib/helpers.php", helpers)],
+        &[
+            ("src/Lib/Callbacks.php", callbacks),
+            ("src/Lib/helpers.php", helpers),
+            ("src/Demo/Externs.sharp", "namespace Demo;\n\nextern namespace Lib for absolute;\n"),
+        ],
         &[
             "19:36 invalid-local-assignment-value: `Callbacks.named()` gives a plain PHP `callable`, which may be a function's name or an array, so it is no `Function<int(int)>`.",
             "20:38 invalid-local-assignment-value: `Callbacks.untyped()` gives a function whose types plain PHP doesn't declare, so it is no `Function<int(int)>`: hold it with `const`, and check what each call gives.",
@@ -7467,14 +7561,19 @@ fn a_plain_php_function_called_through_global_narrows_as_in_php() {
     assert_eq!(wrong, Vec::<String>::new());
 }
 
-/// A plain PHP function a library declares in PHP's root namespace beside its classes, called through the library's
-/// namespace, gets every check PHP's call of it gets, and PHP's call gets them by the name it runs, so `fresh()` in a
-/// namespace runs the root `fresh`. Each row is a body of `run`, its PHP twin, and the issue codes both report.
+/// A plain PHP function a library declares in PHP's root namespace, called through the namespace an `extern namespace`
+/// line gives it, gets every check PHP's call of it gets, and PHP's call gets them by the name it runs, so `fresh()` in
+/// a namespace runs the root `fresh`. Each row is a body of `run`, its PHP twin, and the issue codes both report.
 #[test]
 fn a_plain_php_function_called_through_its_library_s_namespace_is_checked_as_in_php() {
     const LIBRARY: &str = "<?php\n\n/** @pure */\nfunction measure(string $value): int\n{\n    return 1;\n}\n\n#[\\NoDiscard]\nfunction fresh(string $value): int\n{\n    return 1;\n}\n\nfunction record(mixed ...$values): void\n{\n}\n\n/** @experimental */\nfunction preview(string $value): void\n{\n}\n";
     const TOOLBOX: &str = "<?php\n\nnamespace Vendor\\Tools;\n\nfinal class Toolbox\n{\n}\n";
-    let others = [("src/Vendor/Tools/library.php", LIBRARY), ("src/Vendor/Tools/Toolbox.php", TOOLBOX)];
+    const EXTERNS: &str = "namespace Demo;\n\nextern namespace Vendor.Tools for measure;\n";
+    let others = [
+        ("src/Vendor/Tools/library.php", LIBRARY),
+        ("src/Vendor/Tools/Toolbox.php", TOOLBOX),
+        ("src/Demo/Externs.sharp", EXTERNS),
+    ];
     let settings =
         || Settings { find_unused_parameters: true, check_experimental: true, check_name_casing: true, ..settings() };
     let rows: [(&str, &str, &[&str]); 5] = [
@@ -8655,7 +8754,11 @@ fn a_named_argument_fills_a_plain_php_variadic_parameter_under_its_name() {
     let html = "<?php\n\nnamespace Lib;\n\nfinal class Html\n{\n    public static function tag(string $name, string ...$attributes): string\n    {\n        return $name;\n    }\n\n    public function open(string $name, string ...$attributes): string\n    {\n        return $name;\n    }\n}\n\nfinal class Element\n{\n    public function __construct(public string $name, int ...$sizes)\n    {\n    }\n}\n\n#[\\Attribute(\\Attribute::TARGET_ALL)]\nfinal class Generic\n{\n    public function __construct(string ...$types)\n    {\n    }\n}\n";
     let helpers = "<?php\n\nfunction attrs(string $name, string ...$attributes): string\n{\n    return $name;\n}\n";
     let sharp = "namespace Demo;\n\nimport Lib;\nimport Lib.Element;\nimport Lib.Generic;\nimport Lib.Html;\n\n[Generic(Item: typeof(Report))]\nclass Report\n{\n    public static string run(Html html)\n    {\n        const a = Html.tag(\"a\", href: \"/home\", title: \"Home\");\n        const b = html.open(\"a\", \"x\", href: \"/home\", attributes: \"own\");\n        const c = new Element(name: \"box\", width: 3, height: 4);\n        const d = Lib.attrs(\"a\", href: \"/home\");\n        const e = Html.tag(\"a\", href: 3, title: \"Home\", title: \"Again\");\n        return a + b + c.name + d + e;\n    }\n}\n";
-    let others = [("src/Lib/Html.php", html), ("src/Lib/helpers.php", helpers)];
+    let others = [
+        ("src/Lib/Html.php", html),
+        ("src/Lib/helpers.php", helpers),
+        ("src/Demo/Externs.sharp", "namespace Demo;\n\nextern namespace Lib for attrs;\n"),
+    ];
 
     assert_eq!(
         issues(("src/Demo/Report.sharp", sharp), &others),
@@ -11738,17 +11841,21 @@ fn an_import_names_a_class_or_a_namespace_of_functions_and_constants() {
     const PDF: &str = "<?php\n\nnamespace Vendor\\Pdf;\n\nconst DEFAULT_DPI = 300;\n\nfunction render(string $html): string { return $html; }\n";
     const HELPERS: &str = "<?php\n\nconst LARAVEL = 11;\n\nfunction abort(int $code): never { exit($code); }\n";
     const APPLICATION: &str = "<?php\n\nnamespace Vendor\\Foundation;\n\nclass Application {}\n";
-    const ENTITY: &str = "<?php\n\nnamespace App\\Shared\\Schema;\n\nclass Entity {}\n";
-    const COLUMN: &str = "<?php\n\nnamespace App\\Shared\\Schema;\n\nclass Column {}\n";
-    const SCHEMA_MODULE: &str = "namespace App.Shared.Schema;\n\nmodule\n{\n}\n";
+    const ENTITY: &str = "<?php\n\nnamespace App\\Shop\\Records;\n\nclass Entity {}\n";
+    const COLUMN: &str = "<?php\n\nnamespace App\\Shop\\Records;\n\nclass Column {}\n";
+    const RECORDS_MODULE: &str = "namespace App.Shop.Records;\n\nmodule\n{\n}\n";
     let others = [
         ("src/Vendor/Pdf/Pdf.php", PDF),
         ("src/Vendor/Foundation/helpers.php", HELPERS),
         ("src/Vendor/Foundation/Application.php", APPLICATION),
         ("src/App/Shared/Money.php", MONEY),
-        ("src/App/Shared/Schema/Entity.php", ENTITY),
-        ("src/App/Shared/Schema/Column.php", COLUMN),
-        ("src/App/Shared/Schema/Module.sharp", SCHEMA_MODULE),
+        ("src/App/Shop/Records/Entity.php", ENTITY),
+        ("src/App/Shop/Records/Column.php", COLUMN),
+        ("src/App/Shop/Records/Module.sharp", RECORDS_MODULE),
+        (
+            "src/App/Externs.sharp",
+            "namespace App;\n\nimport Vendor.Foundation;\n\nextern namespace Foundation for abort;\nextern namespace Foundation for LARAVEL;\n",
+        ),
     ];
 
     for (import, expected) in [
@@ -11760,9 +11867,9 @@ fn an_import_names_a_class_or_a_namespace_of_functions_and_constants() {
         ),
         ("Log", Some("non-existent-use-import Imported class, interface, trait, or enum `Log` does not exist.")),
         (
-            "App.Shared.Schema",
+            "App.Shop.Records",
             Some(
-                "class-namespace-import `App.Shared.Schema` holds classes only, and an import names a class or a namespace of functions: import the class, as in `import App.Shared.Schema.Column;` or `import App.Shared.Schema.Entity;`.",
+                "class-namespace-import `App.Shop.Records` holds classes only, and an import names a class or a namespace of functions: import the class, as in `import App.Shop.Records.Column;` or `import App.Shop.Records.Entity;`.",
             ),
         ),
         (
@@ -14970,6 +15077,73 @@ fn library_call_types(sharp: &'static str, others: &[(&'static str, &'static str
             artifacts.expression_types[&(start, start + call.len() as u32)].get_id().to_string()
         })
         .collect()
+}
+
+/// A library's polyfill of a function the engine builds in, as `if (!function_exists('str_starts_with'))` declares,
+/// never runs beside the engine's own, so a call of the function has the built-in's signature, and `str_starts_with`
+/// returns a `bool` though the polyfill declares no return type. A polyfill of a function with no built-in of its
+/// name, as `shop_label`, is the function, so a call of it has the polyfill's signature.
+#[test]
+fn a_call_of_a_built_in_function_has_its_signature_and_never_a_polyfill_s() {
+    let polyfills = (
+        "lib/polyfills.php",
+        "<?php\n\nif (!function_exists('str_starts_with')) {\n    function str_starts_with($haystack, $needle) {\n        return 1;\n    }\n}\n\nif (!function_exists('shop_label')) {\n    function shop_label(string $name): string {\n        return $name;\n    }\n}\n",
+    );
+    let sharp = "namespace Sharp;\n\npublic static class Calls\n{\n    public static List<Any?> run() => [global.str_starts_with(\"ab\", \"a\"), global.shop_label(\"a\")];\n}\n";
+
+    assert_eq!(
+        library_call_types(sharp, &[polyfills], &["global.str_starts_with(\"ab\", \"a\")", "global.shop_label(\"a\")"]),
+        ["bool", "string"]
+    );
+}
+
+/// A library's polyfill of a function or a class the engine builds in, which the built-in keeps its name from, is no
+/// duplicate definition: its existence check guards it, so PHP never declares it beside the built-in.
+#[test]
+fn a_polyfill_of_a_built_in_is_no_duplicate_definition() {
+    let polyfills = (
+        "src/polyfills.php",
+        "<?php\n\nif (!function_exists('str_starts_with')) {\n    function str_starts_with(string $haystack, string $needle): bool\n    {\n        return strncmp($haystack, $needle, strlen($needle)) === 0;\n    }\n}\n\nif (!class_exists('ArrayObject')) {\n    class ArrayObject\n    {\n    }\n}\n",
+    );
+
+    assert_eq!(issues(polyfills, &[]), Vec::<String>::new());
+}
+
+/// An `@assert iterable<K, V>` narrows a plain PHP array to the keys and values both types hold, as an
+/// `array<array-key, int|string>` asserted `iterable<string, int>` is an `array<string, int>`.
+#[test]
+fn an_iterable_assertion_narrows_an_array_to_both_key_and_value_types() {
+    let php = "<?php\n\n/**\n * @assert iterable<string, int> $value\n */\nfunction assert_counts(mixed $value): void\n{\n}\n\n/**\n * @param array<string, int> $counts\n */\nfunction total(array $counts): int\n{\n    return array_sum($counts);\n}\n\n/**\n * @param array<array-key, int|string> $values\n */\nfunction counts(array $values): int\n{\n    assert_counts($values);\n\n    return total($values);\n}\n";
+
+    assert_eq!(issues(("src/counts.php", php), &[]), Vec::<String>::new());
+}
+
+/// A `Set` tested `is Iterable<T>` is a `Set` of the elements both types hold, spec section 21, as a `Set<int|string>`
+/// tested `is Iterable<int>` is a `Set<int>`, so only the branch the test leaves it untested in refuses it as one.
+#[test]
+fn a_set_tested_as_an_iterable_is_a_set_of_the_elements_both_hold() {
+    let sharp = "namespace Demo;\n\npublic static class Tags\n{\n    public static Set<int> numbers(Set<int|string> tags)\n    {\n        if (tags is Iterable<int>) {\n            return tags;\n        }\n\n        return tags;\n    }\n}\n";
+
+    assert_eq!(issues(("src/Demo/Tags.sharp", sharp), &[]), ["11:16 invalid-return-statement"]);
+}
+
+/// A call on an intersection of a plain PHP class with a template or an `iterable` finds the class's method, and a
+/// method none of its parts declares is missing, named on the class: the parts that are no class name none.
+#[test]
+fn a_call_on_an_intersection_with_a_template_or_an_iterable_reads_its_class() {
+    let php = "<?php\n\n/**\n * @template T of object\n *\n * @param Countable&T $counted\n */\nfunction counted(Countable $counted): int\n{\n    return $counted->count();\n}\n\n/**\n * @param Countable&iterable<int, string> $lines\n */\nfunction lines(Countable $lines): int\n{\n    $lines->size();\n\n    return $lines->count();\n}\n";
+
+    assert_eq!(issues(("src/counted.php", php), &[]), ["18:13 non-existent-method"]);
+}
+
+/// A plain PHP interface that reaches a generic interface through two type arguments that share no value, as
+/// `Box<int>` and `Box<string>`, inherits a `get()` that returns their intersection, `never`, so no class could
+/// implement it, and the interface is refused.
+#[test]
+fn a_diamond_of_two_disjoint_type_arguments_is_refused() {
+    let php = "<?php\n\n/**\n * @template T\n */\ninterface Box\n{\n    /**\n     * @return T\n     */\n    public function get(): mixed;\n}\n\n/**\n * @extends Box<int>\n */\ninterface IntBox extends Box\n{\n}\n\n/**\n * @extends Box<string>\n */\ninterface StringBox extends Box\n{\n}\n\ninterface IntAndStringBox extends IntBox, StringBox\n{\n}\n";
+
+    assert_eq!(issues(("src/Box.php", php), &[]), ["28:11 invalid-template-parameter"]);
 }
 
 /// Spec section 12 passes plain PHP a `Map` keyed by a backed enum as the array keyed by each case's backing value, a
@@ -19906,6 +20080,323 @@ fn a_type_test_the_value_always_passes_says_the_value_already_has_the_type() {
             "7:66 redundant-type-comparison `numbers` is already a `List<int>`, so `as List<int>` changes nothing. Write `numbers` alone.",
             "9:53 redundant-type-comparison `order` is already an `Order`, so `is Order` is always true. Remove the test.",
             "11:67 redundant-type-comparison `numbers` is already a `List<int>`, so `is List<int>` is always true. Remove the test.",
+        ]
+    );
+}
+
+/// Spec section 21: `as` converts a value to a type, or gives null, so its type is the target type made nullable, for a
+/// class, an interface, an intersection, a collection, and a type parameter with a bound and without one, whatever the
+/// value's type, its bound's type included. Only a value already of the target type never gives null, and that `as` is
+/// reported as redundant. A nullable target is refused.
+#[test]
+fn as_gives_its_target_type_or_null_for_every_target() {
+    let files = [
+        ("src/Demo/Event.sharp", "namespace Demo;\n\npublic interface Event\n{\n}\n"),
+        ("src/Demo/Named.sharp", "namespace Demo;\n\npublic interface Named\n{\n}\n"),
+        ("src/Demo/Paid.sharp", "namespace Demo;\n\npublic class Paid : Event, Named\n{\n}\n"),
+    ];
+    let typed = "namespace Demo;\n\npublic class Sweep<TDue : Event, TAny>\n{\n    public List<Any?> run(Any? x, Paid paid, List<Event> events, Event ev, Event event, Event any) => [x as Paid, x as Event, x as Event & Named, x as List<int>, x as TDue, x as TAny, paid as Paid, events.map(e => e as TDue), ev as TDue, event as Paid, any as TAny];\n}\n";
+    let (_, artifacts) = analyze_with_artifacts(&PLUGIN_REGISTRY, settings(), ("src/Demo/Sweep.sharp", typed), &files);
+    let type_of = |expression: &str| {
+        let start = typed.find(expression).unwrap() as u32;
+        artifacts.expression_types[&(start, start + expression.len() as u32)].get_id().to_string()
+    };
+    let sweep = "namespace Demo;\n\npublic class Sweep<TDue : Event>\n{\n    public List<TDue> due(List<Event> events)\n    {\n        List<TDue> found = [];\n        for (const item of events.map(e => e as TDue)) {\n            if (item != null) {\n                found.add(item);\n            }\n        }\n        return found;\n    }\n\n    public Paid? paid(Any? x) => x as Paid?;\n\n    public T? any<T>(Event value) => value as T;\n\n    public T? bounded<T : Event>(Event value) => value as T;\n}\n";
+
+    assert_eq!(
+        [
+            "x as Paid",
+            "x as Event",
+            "x as Event & Named",
+            "x as List<int>",
+            "x as TDue",
+            "x as TAny",
+            "paid as Paid",
+            "events.map(e => e as TDue)",
+            "ev as TDue",
+            "event as Paid",
+            "any as TAny"
+        ]
+        .map(type_of),
+        [
+            "Demo\\Paid|null",
+            "Demo\\Event|null",
+            "(Demo\\Event&Demo\\Named)|null",
+            "list<int>|null",
+            "('TDue.Demo\\Sweep extends Demo\\Event)|null",
+            "('TAny.Demo\\Sweep extends mixed)|null",
+            "Demo\\Paid",
+            "list<('TDue.Demo\\Sweep extends Demo\\Event)|null>",
+            "('TDue.Demo\\Sweep extends Demo\\Event)|null",
+            "Demo\\Paid|null",
+            "('TAny.Demo\\Sweep extends Demo\\Event)|null"
+        ]
+    );
+    assert_eq!(
+        explained(("src/Demo/Sweep.sharp", sweep), &files),
+        ["16:39 semantics `as` converts to a type that is not nullable or `void`. Write `as Paid`."]
+    );
+}
+
+/// Spec section 11: a type parameter holds only itself, so a value of its bound, or of any type for an unbounded one,
+/// may or may not be of it. `is` narrows the value to the type parameter, `is not` leaves it its own type, and neither
+/// test is always true or always false.
+#[test]
+fn is_and_is_not_narrow_a_value_of_the_bound_to_a_type_parameter() {
+    let event = ("src/Demo/Event.sharp", "namespace Demo;\n\npublic interface Event\n{\n}\n");
+    let sweep = "namespace Demo;\n\npublic class Sweep<TDue : Event, TAny>\n{\n    public TDue? due(Event ev)\n    {\n        if (ev is TDue) {\n            return ev;\n        }\n        return null;\n    }\n\n    public TDue? after(Event ev)\n    {\n        if (ev is not TDue) {\n            return null;\n        }\n        return ev;\n    }\n\n    public Event? other(Event ev)\n    {\n        if (ev is not TDue) {\n            return ev;\n        }\n        return null;\n    }\n\n    public TAny? any(Event ev)\n    {\n        if (ev is TAny) {\n            return ev;\n        }\n        return null;\n    }\n}\n";
+
+    assert_eq!(explained(("src/Demo/Sweep.sharp", sweep), &[event]), Vec::<String>::new());
+}
+
+/// Spec section 11: a value narrowed to a type parameter is of the type parameter, bounded by the value's own type, so
+/// an `int` tested `is T` or converted `as T`, and the `int` element of a tuple tested `is [T, string]`, read as `T`.
+/// The tuple's element is narrowed by intersecting the two element types.
+#[test]
+fn a_value_of_another_type_narrowed_to_a_type_parameter_is_of_the_type_parameter() {
+    let sweep = "namespace Demo;\n\npublic class Sweep<T>\n{\n    public T? first([int, string] pair)\n    {\n        if (pair is [T, string]) {\n            return pair[0];\n        }\n        return null;\n    }\n\n    public T? tested(int n)\n    {\n        if (n is T) {\n            return n;\n        }\n        return null;\n    }\n\n    public T? converted(int n) => n as T;\n}\n";
+    let (_, artifacts) = analyze_with_artifacts(&PLUGIN_REGISTRY, settings(), ("src/Demo/Sweep.sharp", sweep), &[]);
+    let start = sweep.find("pair[0]").unwrap() as u32;
+
+    assert_eq!(
+        artifacts.expression_types[&(start, start + 7)].get_id().to_string(),
+        "(('T.Demo\\Sweep extends int)&'T.Demo\\Sweep extends mixed)"
+    );
+    assert_eq!(explained(("src/Demo/Sweep.sharp", sweep), &[]), Vec::<String>::new());
+}
+
+/// The PHP# side of the interop matrix: a class, an abstract class, an interface with default bodies and an enum, each
+/// with `count`, `recordEntry` and the twins `total` and `Total`, as Zend/tests/sharp/InteropMatrix declares them.
+const INTEROP: [(&str, &str); 4] = [
+    (
+        "src/Interop/Ledger.sharp",
+        "namespace Interop;\n\npublic class Ledger\n{\n    public virtual int count() => 1;\n\n    public virtual int recordEntry() => 2;\n\n    public virtual int total() => 3;\n\n    public virtual int Total() => 4;\n\n    public static int kind() => 5;\n}\n",
+    ),
+    (
+        "src/Interop/Account.sharp",
+        "namespace Interop;\n\npublic abstract class Account\n{\n    public virtual int count() => 1;\n\n    public virtual int recordEntry() => 2;\n\n    public virtual int total() => 3;\n\n    public virtual int Total() => 4;\n}\n",
+    ),
+    (
+        "src/Interop/Recording.sharp",
+        "namespace Interop;\n\npublic interface Recording\n{\n    int count() => 1;\n\n    int recordEntry() => 2;\n\n    int total() => 3;\n\n    int Total() => 4;\n}\n",
+    ),
+    (
+        "src/Interop/Kind.sharp",
+        "namespace Interop;\n\npublic enum Kind\n{\n    case Open;\n\n    public int count() => 1;\n\n    public int recordEntry() => 2;\n\n    public int total() => 3;\n\n    public int Total() => 4;\n}\n",
+    ),
+];
+
+/// Spec section 24, the interop matrix in the checker: plain PHP extends, overrides, implements and uses each PHP#
+/// type, by `as` and `insteadof` too, and reaches it through a union and an intersection in either order. A call, an
+/// instance or a static first-class callable with a method's exact name gives no issue, and one in another case is
+/// the undefined-method error naming the method the class answers to, an alias included. A value of `Ledger&Countable`
+/// is of a class with `Ledger`'s exact names, so plain `Countable`'s `count` is no `Count`. Each row is a plain PHP file
+/// of its own, whose correct calls are on line 9 and wrong ones on line 14.
+#[test]
+fn interop_matrix_plain_php_reaches_each_php_sharp_method_only_by_its_exact_name() {
+    const ALL: &str =
+        "$o->count(); $o->recordEntry(); $o->total(); $o->Total(); ($o->total(...))(); ($o->Total(...))();";
+    const WRONG: &str = "$o->Count(); $o->recordentry(); $o->TOTAL(); ($o->TOTAL(...))();";
+    const MEANT: &[(&str, &str)] =
+        &[("Count", "count"), ("recordentry", "recordEntry"), ("TOTAL", "Total"), ("TOTAL", "Total")];
+    const LEDGER: &[&str] = &["Interop\\Ledger"];
+    // Each row: its name, the plain PHP it declares, the receiver's type, its correct and its wrong calls, the classes a
+    // wrong call's error names, and each wrong name with the name it meant.
+    type Row = (
+        &'static str,
+        &'static str,
+        &'static str,
+        &'static str,
+        &'static str,
+        &'static [&'static str],
+        &'static [(&'static str, &'static str)],
+    );
+    let rows: [Row; 15] = [
+        (
+            "plain extends a class",
+            "class Inherits extends \\Interop\\Ledger {}",
+            "Inherits",
+            ALL,
+            WRONG,
+            &["Demo\\Inherits"],
+            MEANT,
+        ),
+        (
+            "plain overrides one twin",
+            "class Overrides extends \\Interop\\Ledger { public function Total(): int { return 14; } }",
+            "Overrides",
+            ALL,
+            WRONG,
+            &["Demo\\Overrides"],
+            MEANT,
+        ),
+        (
+            "plain extends an abstract class",
+            "class InheritsAbstract extends \\Interop\\Account {}",
+            "InheritsAbstract",
+            ALL,
+            WRONG,
+            &["Demo\\InheritsAbstract"],
+            MEANT,
+        ),
+        (
+            "plain takes default bodies",
+            "class TakesDefaults implements \\Interop\\Recording { use \\Interop\\Recording\\Defaults; }",
+            "TakesDefaults",
+            ALL,
+            WRONG,
+            &["Demo\\TakesDefaults"],
+            MEANT,
+        ),
+        (
+            "plain overrides the camelCase default body",
+            "class OverridesEntry implements \\Interop\\Recording { use \\Interop\\Recording\\Defaults; public function recordEntry(): int { return 12; } }",
+            "OverridesEntry",
+            ALL,
+            WRONG,
+            &["Demo\\OverridesEntry"],
+            MEANT,
+        ),
+        (
+            "plain overrides one twin's default body",
+            "class OverridesTwin implements \\Interop\\Recording { use \\Interop\\Recording\\Defaults; public function Total(): int { return 14; } }",
+            "OverridesTwin",
+            ALL,
+            WRONG,
+            &["Demo\\OverridesTwin"],
+            MEANT,
+        ),
+        (
+            "plain takes a plain parent's static camelCase method as a first-class callable",
+            "abstract class FinderBase { public static function findOrFail(int $id): int { return $id; } } class Finder extends FinderBase implements \\Interop\\Recording { use \\Interop\\Recording\\Defaults; }",
+            "Finder",
+            "array_map(Finder::findOrFail(...), [1, 2]);",
+            "array_map(Finder::findorfail(...), [1, 2]);",
+            &["Demo\\Finder"],
+            &[("findorfail", "findOrFail")],
+        ),
+        (
+            "plain aliases default bodies with as",
+            "class Aliases implements \\Interop\\Recording { use \\Interop\\Recording\\Defaults { recordEntry as entry; Total as grandTotal; } }",
+            "Aliases",
+            "$o->entry(); $o->grandTotal(); $o->Total();",
+            "$o->ENTRY(); $o->grandtotal();",
+            &["Demo\\Aliases"],
+            &[("ENTRY", "entry"), ("grandtotal", "grandTotal")],
+        ),
+        (
+            "plain picks a plain trait insteadof Defaults",
+            "trait PlainEntries { public function recordEntry(): int { return 22; } } class Chooses implements \\Interop\\Recording { use PlainEntries, \\Interop\\Recording\\Defaults { PlainEntries::recordEntry insteadof \\Interop\\Recording\\Defaults; \\Interop\\Recording\\Defaults::recordEntry as sharpEntry; } }",
+            "Chooses",
+            "$o->recordEntry(); $o->sharpEntry();",
+            "$o->SharpEntry();",
+            &["Demo\\Chooses"],
+            &[("SharpEntry", "sharpEntry")],
+        ),
+        (
+            "a union, the class first",
+            "",
+            "\\Interop\\Ledger|\\Interop\\Account",
+            ALL,
+            WRONG,
+            &["Interop\\Ledger", "Interop\\Account"],
+            MEANT,
+        ),
+        (
+            "a union, the abstract class first",
+            "",
+            "\\Interop\\Account|\\Interop\\Ledger",
+            ALL,
+            WRONG,
+            &["Interop\\Ledger", "Interop\\Account"],
+            MEANT,
+        ),
+        ("an intersection, the class first", "", "\\Interop\\Ledger&\\Countable", ALL, WRONG, LEDGER, MEANT),
+        ("an intersection, the interface first", "", "\\Countable&\\Interop\\Ledger", ALL, WRONG, LEDGER, MEANT),
+        ("an enum case", "", "\\Interop\\Kind", ALL, WRONG, &["Interop\\Kind"], MEANT),
+        (
+            "a static first-class callable",
+            "",
+            "\\Interop\\Ledger",
+            "(\\Interop\\Ledger::kind(...))();",
+            "(\\Interop\\Ledger::Kind(...))();",
+            LEDGER,
+            &[("Kind", "kind")],
+        ),
+    ];
+
+    // Each row whose issues differ, with them, so a failure lists every failing cell.
+    let failing: Vec<String> = rows
+        .into_iter()
+        .filter_map(|(row, declarations, receiver, calls, wrong, classes, meant)| {
+            let php: &'static str = format!(
+                "<?php\n\nnamespace Demo;\n\n{declarations}\n\nfunction reach({receiver} $o): void\n{{\n    {calls}\n}}\n\nfunction wrong({receiver} $o): void\n{{\n    {wrong}\n}}\n"
+            )
+            .leak();
+            let found = explained(("src/Demo/Matrix.php", php), &INTEROP);
+            let expected: Vec<String> = meant
+                .iter()
+                .flat_map(|(written, declared)| {
+                    classes.iter().map(move |class| {
+                        format!("14 `{class}` has no member `{written}`; did you mean `{declared}`? Write `{declared}`.")
+                    })
+                })
+                .collect();
+            // A wrong first-class callable is also a value of type `never`, called or passed on, which follows from its
+            // error.
+            let reported: Vec<String> = found
+                .iter()
+                .filter(|issue| !(issue.starts_with("14:") && issue.contains("type `never`")))
+                .map(|issue| {
+                    let (line, rest) = issue.split_once(':').unwrap();
+                    format!("{line} {}", rest.split_once(" non-existent-method ").map_or(rest, |(_, message)| message))
+                })
+                .collect();
+
+            (reported != expected).then(|| format!("{row}: {reported:#?}"))
+        })
+        .collect();
+
+    assert!(failing.is_empty(), "{failing:#?}");
+}
+
+/// Spec section 24, the interop matrix's reverse direction in the checker: a PHP# class extends a plain class, overrides
+/// a plain abstract class, implements a plain interface and uses a plain trait, and keys each method it takes by its
+/// declared name, so PHP# code reaches it by that name, and another case is the error naming it.
+#[test]
+fn interop_matrix_php_sharp_reaches_each_plain_php_method_only_by_its_declared_name() {
+    let plain = (
+        "src/Lib/Interop/Plain.php",
+        "<?php\n\nnamespace Lib\\Interop;\n\nclass PlainLedger\n{\n    public function count(): int { return 31; }\n\n    public function recordEntry(): int { return 32; }\n}\n\nabstract class PlainAccount\n{\n    public function count(): int { return 31; }\n\n    public function recordEntry(): int { return 32; }\n}\n\ninterface PlainRecording\n{\n    public function count(): int;\n\n    public function recordEntry(): int;\n}\n\ntrait PlainCounting\n{\n    public function count(): int { return 31; }\n\n    public function recordEntry(): int { return 32; }\n}\n",
+    );
+    let types = [
+        (
+            "src/Interop/SharpLedger.sharp",
+            "namespace Interop;\n\nimport Lib.Interop.PlainLedger;\n\npublic class SharpLedger : PlainLedger\n{\n}\n",
+        ),
+        (
+            "src/Interop/SharpOverride.sharp",
+            "namespace Interop;\n\nimport Lib.Interop.PlainAccount;\n\npublic class SharpOverride : PlainAccount\n{\n    public override int count() => 41;\n\n    public override int recordEntry() => 42;\n}\n",
+        ),
+        (
+            "src/Interop/SharpRecording.sharp",
+            "namespace Interop;\n\nimport Lib.Interop.PlainRecording;\n\npublic class SharpRecording : PlainRecording\n{\n    public int count() => 41;\n\n    public int recordEntry() => 42;\n}\n",
+        ),
+        (
+            "src/Interop/SharpCounting.sharp",
+            "namespace Interop;\n\nimport Lib.Interop.PlainCounting;\n\npublic class SharpCounting : PlainCounting\n{\n}\n",
+        ),
+        plain,
+    ];
+    let probe = "namespace Interop;\n\npublic class Probe\n{\n    public static int reach(SharpLedger a, SharpOverride b, SharpRecording c, SharpCounting d) =>\n        a.count() + a.recordEntry() + b.count() + b.recordEntry() + c.count() + c.recordEntry() + d.count() + d.recordEntry();\n\n    public static int wrong(SharpLedger a, SharpOverride b, SharpRecording c, SharpCounting d) =>\n        a.Count() + b.recordentry() + c.COUNT() + d.RecordEntry();\n}\n";
+
+    assert_eq!(
+        explained(("src/Interop/Probe.sharp", probe), &types),
+        [
+            "9:11 non-existent-method `SharpLedger` has no member `Count`; did you mean `count`? Write `count`.",
+            "9:23 non-existent-method `SharpOverride` has no member `recordentry`; did you mean `recordEntry`? Write `recordEntry`.",
+            "9:41 non-existent-method `SharpRecording` has no member `COUNT`; did you mean `count`? Write `count`.",
+            "9:53 non-existent-method `SharpCounting` has no member `RecordEntry`; did you mean `recordEntry`? Write `recordEntry`.",
         ]
     );
 }
@@ -25625,6 +26116,33 @@ const LETTERS: (&str, &str) = (
     "<?php\n\nnamespace Acme\\Letters;\n\nfunction shout(string $text): string\n{\n    return strtoupper($text);\n}\n\nfunction whisper(string $text): string\n{\n    return strtolower($text);\n}\n",
 );
 
+/// Spec section 23: an `extern namespace` line gives its namespace to the root classes, functions and constants of the
+/// folder of what it names, so a line that names a class answers for a function and a constant beside it, and a root
+/// name of another folder of the same library, or one of PHP's built-ins, has none.
+#[test]
+fn an_extern_namespace_line_gives_its_namespace_to_the_root_names_of_its_folder() {
+    let (codebase, _) = summarized(&[
+        (
+            "vendor/acme/blog/src/helpers.php",
+            "<?php\n\nconst BLOG_VERSION = 2;\n\nfunction blog_title(): string\n{\n    return '';\n}\n",
+        ),
+        ("vendor/acme/blog/src/class-blog-post.php", "<?php\n\nclass Blog_Post\n{\n}\n"),
+        (
+            "vendor/acme/blog/admin/class-blog-screen.php",
+            "<?php\n\nclass Blog_Screen\n{\n}\n\nfunction blog_admin(): void\n{\n}\n",
+        ),
+        ("app/Stubs/Blog.sharp", "namespace App.Stubs;\n\nextern namespace Blog for Blog_Post;\n"),
+    ]);
+    let of = |name: &str| {
+        codebase.extern_namespace_of(name.as_bytes()).map(|namespace| namespace.as_str_lossy().into_owned())
+    };
+
+    assert_eq!(
+        ["blog_title", "BLOG_VERSION", "Blog_Post", "Blog_Screen", "blog_admin", "strlen"].map(of),
+        [Some("Blog".to_owned()), Some("Blog".to_owned()), Some("Blog".to_owned()), None, None, None]
+    );
+}
+
 /// Analyzes every file of `files` against the codebase they declare together with the effect classes, and returns the
 /// codebase and the effect summaries of every body `files` declare.
 fn summarized(files: &[(&'static str, &'static str)]) -> (CodebaseMetadata, Vec<EffectSummary>) {
@@ -26716,8 +27234,9 @@ fn a_law_reading_a_getter_that_calls_a_function_with_no_extern_is_refused_and_na
 }
 
 /// Spec sections 23 and 29: an `extern` names a plain PHP function a library declares in PHP's root namespace through
-/// the namespace of the library's classes beside it, as `extern Foundation.now uses Clock;`, and the effects it lists
-/// reach each call of `Foundation.now()`. A bare `extern now;` names no function, as a misspelled name does.
+/// the namespace an `extern namespace` line gives it, as `extern Foundation.now uses Clock;` after
+/// `extern namespace Foundation for now;`, and the effects it lists reach each call of `Foundation.now()`. A bare
+/// `extern now;` names no function, as a misspelled name does.
 #[test]
 fn an_extern_declares_a_library_s_root_function_through_its_library_s_namespace() {
     let helpers = ("vendor/laravel/Foundation/helpers.php", "<?php\n\nfunction now(): int\n{\n    return time();\n}\n");
@@ -26731,7 +27250,7 @@ fn an_extern_declares_a_library_s_root_function_through_its_library_s_namespace(
     );
     let stub = (
         "app/Stubs/Foundation.sharp",
-        "namespace App.Stubs;\n\nimport Vendor.Foundation;\n\nextern Foundation.now uses Clock;\n",
+        "namespace App.Stubs;\n\nimport Vendor.Foundation;\n\nextern namespace Foundation for now;\nextern Foundation.now uses Clock;\n",
     );
     let bare = ("app/Stubs/Clock.sharp", "namespace App.Stubs;\n\nextern now uses Clock;\n");
 
@@ -27520,7 +28039,7 @@ fn a_static_method_value_has_its_method_s_effects_where_it_runs() {
         );
         let job = ("app/Shop/Job.sharp", Box::leak(code.into_boxed_str()) as &'static str);
 
-        assert_eq!(issues(job, &[pinged, runner, RELAY_STUB, RELAY, SCOPE]), Vec::<String>::new(), "{go}");
+        assert_eq!(issues(job, &[pinged, runner, RELAY_STUB, RELAY, SCOPE, DISPATCHER]), Vec::<String>::new(), "{go}");
         assert_eq!(
             effect_issues(&[job, pinged, runner, RELAY_STUB, RELAY, SCOPE]),
             [
@@ -28548,6 +29067,287 @@ fn a_static_field_holding_a_foreign_object_is_refused() {
             &[store, money]
         ),
         Vec::<String>::new()
+    );
+}
+
+/// The standard library's reflection of a class's members, spec section 25, as a project installs it.
+const REFLECTION: [(&str, &str); 6] = [
+    (
+        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/ClassMembers.sharp",
+        include_str!("../../../../composer/library/Sharp/ClassMembers.sharp"),
+    ),
+    (
+        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Method.sharp",
+        include_str!("../../../../composer/library/Sharp/Method.sharp"),
+    ),
+    (
+        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Parameter.sharp",
+        include_str!("../../../../composer/library/Sharp/Parameter.sharp"),
+    ),
+    (
+        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Property.sharp",
+        include_str!("../../../../composer/library/Sharp/Property.sharp"),
+    ),
+    (
+        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Visibility.sharp",
+        include_str!("../../../../composer/library/Sharp/Visibility.sharp"),
+    ),
+    BUILTINS,
+];
+
+/// Spec sections 12 and 22: a plain PHP shape whose keys are 0 to n-1, `array{string|null, string}`, is a list, so it
+/// reads as one `List<string?>` at a `super.` call and in the override's signature check, and a PHP# override that
+/// returns `List<string?>` and calls `super.` the method compiles with no issues. So does one whose parameter takes
+/// `List<string|int>` where the plain PHP method's `array` takes `array{string, int}`: PHP links that `array` against
+/// the PHP# `List`'s `array`, and no `Sharp\Map`. A `Map` parameter over a plain PHP `array` compiles as well, since
+/// the bridge declares it `Sharp\Map|array`.
+#[test]
+fn a_plain_php_list_shape_reads_as_one_list_at_a_super_call_and_in_the_override_check() {
+    let splitter = (
+        "src/Lib/Splitter.php",
+        "<?php\n\nnamespace Lib;\n\nclass Splitter\n{\n    /**\n     * @return array{string|null, string}\n     */\n    public function split(string $text): array\n    {\n        return [null, $text];\n    }\n\n    /**\n     * @param array{string, int} $pair\n     */\n    public function join(array $pair): string\n    {\n        return $pair[0];\n    }\n\n    /**\n     * @param array<int|string, mixed> $extra\n     */\n    public function merged(array $extra): int\n    {\n        return count($extra);\n    }\n}\n",
+    );
+    let halves = (
+        "src/App/Halves.sharp",
+        "namespace App;\n\nimport Lib.Splitter;\n\npublic class Halves : Splitter\n{\n    public override List<string?> split(string text) => super.split(text);\n\n    public override string join(List<string|int> pair) => \"\";\n\n    public override int merged(Map<int|string, Any?> extra) => extra.count();\n}\n",
+    );
+
+    assert_eq!(worded(halves, &[splitter]), Vec::<String>::new());
+}
+
+/// Spec section 25: a reflection boolean is named `isNullable` and `isOptional`, as the standard library names every
+/// boolean, so 0.6.10's `nullable` and `optional` name no member.
+#[test]
+fn the_reflection_booleans_of_0_6_10_name_no_member() {
+    let report = (
+        "src/Report.sharp",
+        "namespace App;\n\npublic class Report\n{\n    public bool read(int depth)\n    {\n        const parameter = typeof(Report).methods()[0].parameters()[0];\n        bool nullable = parameter.nullable;\n        bool optional = parameter.optional;\n        return nullable || optional || depth > 0;\n    }\n}\n",
+    );
+
+    assert_eq!(
+        messages(report, &REFLECTION),
+        ["Property `Parameter.nullable` does not exist.", "Property `Parameter.optional` does not exist."]
+    );
+}
+
+/// Spec section 25: a `Method` gives the class that declares it, `isStatic`, `isNullable` and its `Visibility`, a
+/// `Property` its declaring class, `isNullable` and `Visibility`, and a `Parameter` `isNullable`, `isOptional`,
+/// `isVariadic` and its `defaultValue()`, so each read into an `int` is refused with its own type. So are a method's
+/// `invoke` and a property's `get`, whose results are `Any?`.
+#[test]
+fn reflection_gives_each_member_fact_its_type() {
+    let report = (
+        "src/Report.sharp",
+        "namespace App;\n\npublic class Report\n{\n    int code = 0;\n\n    public int read(int depth)\n    {\n        const method = typeof(Report).methods()[0];\n        const property = typeof(Report).properties()[0];\n        const parameter = method.parameters()[0];\n        int declaring = method.declaringClass;\n        int shared = method.isStatic;\n        int visibility = method.visibility;\n        int result = method.isNullable;\n        int owner = property.declaringClass;\n        int reach = property.visibility;\n        int held = property.isNullable;\n        int given = parameter.isNullable;\n        int optional = parameter.isOptional;\n        int variadic = parameter.isVariadic;\n        int fallback = parameter.defaultValue();\n        int called = method.invoke(this, [depth]);\n        int value = property.get(this);\n        return declaring + shared + visibility + result + owner + reach + held + given + optional + variadic + fallback\n            + called + value + depth + this.code;\n    }\n}\n",
+    );
+
+    // Each refusal names the local and the type of the member read into it.
+    let between = |text: &str, start: &str, end: &str| {
+        let from = text.find(start).map(|offset| offset + start.len()).expect("the issue names it");
+        text[from..].split(end).next().unwrap_or_default().to_owned()
+    };
+    let read: Vec<String> = worded(report, &REFLECTION)
+        .iter()
+        .map(|issue| format!("{}: {}", between(issue, "assignment to `", "`"), between(issue, "has type `", "`.")))
+        .collect();
+
+    assert_eq!(
+        read,
+        [
+            "declaring: Class<Object>",
+            "shared: bool",
+            "visibility: Visibility",
+            "result: bool",
+            "owner: Class<Object>",
+            "reach: Visibility",
+            "held: bool",
+            "given: bool",
+            "optional: bool",
+            "variadic: bool",
+            "fallback: Any?",
+            "called: Any?",
+            "value: Any?",
+        ]
+    );
+}
+
+/// Spec section 25: `Class.of(value)` of a value of type `T` is a `Class<T>`, so of an `Object` it is a `Class<Object>`,
+/// and every member of a class value, `name()` and `methods()` included, is a member of it, as of a `Class<Event>` and
+/// the `Class<TObject>` of a type parameter bounded by `Object`. The checker needs no extension host for it. A value that
+/// may hold no object, an `Any`, an `Object?` or a type parameter with no bound, is refused by `Class.of`'s bound alone.
+#[test]
+fn class_of_any_object_has_every_member_of_a_class_value() {
+    let event = ("src/Demo/Event.sharp", "namespace Demo;\n\npublic interface Event\n{\n}\n");
+    let sharp = "namespace Demo;\n\npublic class Names<TValue, TObject : Object>\n{\n    public string nameOf(Object other) => Class.of(other).name();\n\n    public List<Method> methods(Object other) => Class.of(other).methods();\n\n    public string eventName(Event happened) => Class.of(happened).name();\n\n    public string bounded(TObject value) => Class.of(value).name();\n\n    public string anyName(Any value) => Class.of(value).name();\n\n    public string maybe(Object? other) => Class.of(other).name();\n\n    public string typed(TValue value) => Class.of(value).name();\n}\n";
+    let mut files = REFLECTION.to_vec();
+    files.push(event);
+
+    assert_eq!(
+        explained(("src/Demo/Names.sharp", sharp), &files),
+        [
+            "13:50 template-constraint-violation `Any` does not satisfy the bound `Object` of type parameter `T`. Ensure the argument's type satisfies the bound.",
+            "15:52 template-constraint-violation `Object?` does not satisfy the bound `Object` of type parameter `T`. Ensure the argument's type satisfies the bound.",
+            "17:51 invalid-argument Invalid argument type for argument #1 of `Class.of`: expected `T`, but found `TValue`. Change the argument value to match `T`, or update the parameter's type declaration.",
+        ]
+    );
+}
+
+/// Spec sections 25 and 29: `Method.invoke`, `Property.get` and `Property.set` run code the caller can't see, a method's
+/// body, a `get` or a `set`, so each may have every effect. A method that implements a pure interface method can't call
+/// one, and a method with no `uses` to keep may.
+#[test]
+fn a_reflection_call_read_or_write_may_have_every_effect() {
+    let audit =
+        ("app/Shop/Audit.sharp", "namespace App.Shop;\n\npublic interface Audit\n{\n    void run(Till till);\n}\n");
+    let till = (
+        "app/Shop/Till.sharp",
+        "namespace App.Shop;\n\npublic class Till\n{\n    public int total { get; set; } = 0;\n\n    public int add(int amount) => amount;\n}\n",
+    );
+    let calling = (
+        "app/Shop/Calling.sharp",
+        "namespace App.Shop;\n\npublic class Calling : Audit\n{\n    public void run(Till till) { typeof(Till).methods()[0].invoke(till, [1]); }\n}\n",
+    );
+    let reading = (
+        "app/Shop/Reading.sharp",
+        "namespace App.Shop;\n\npublic class Reading : Audit\n{\n    public void run(Till till) { typeof(Till).properties()[0].get(till); }\n}\n",
+    );
+    let writing = (
+        "app/Shop/Writing.sharp",
+        "namespace App.Shop;\n\npublic class Writing : Audit\n{\n    public void run(Till till) { typeof(Till).properties()[0].set(till, 2); }\n}\n",
+    );
+    let free = (
+        "app/Shop/Free.sharp",
+        "namespace App.Shop;\n\npublic class Free\n{\n    public void run(Till till) { typeof(Till).properties()[0].set(till, typeof(Till).methods()[0].invoke(till, [1])); }\n}\n",
+    );
+    let [a, b, c, d, e, f] = REFLECTION;
+
+    assert_eq!(
+        effect_issues(&[calling, reading, writing, free, audit, till, a, b, c, d, e, f]),
+        [
+            "app/Shop/Calling.sharp:5:34 incompatible-effects: `Calling.run` reaches `Method.invoke`, which may have every effect, so the pure `Audit.run` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
+            "app/Shop/Reading.sharp:5:34 incompatible-effects: `Reading.run` reaches `Property.get`, which may have every effect, so the pure `Audit.run` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
+            "app/Shop/Writing.sharp:5:34 incompatible-effects: `Writing.run` reaches `Property.set`, which may have every effect, so the pure `Audit.run` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
+        ]
+    );
+}
+
+/// Spec sections 23 and 24: a class-like of a file's namespace wins over the default class-like of its exact short name,
+/// so the PHP# `App\RANDOM` leaves a bare `Random` in `App` naming `Sharp\Random`.
+#[test]
+fn a_twin_of_a_default_class_in_the_namespace_leaves_the_default_class() {
+    let twin = ("src/RANDOM.sharp", "namespace App;\n\npublic class RANDOM\n{\n}\n");
+    let shape = (
+        "src/Shape.sharp",
+        "namespace App;\n\npublic class Shape\n{\n    public Random? pick(Random? random) => random;\n}\n",
+    );
+
+    assert_eq!(messages(shape, &[twin]), Vec::<String>::new());
+}
+
+/// Spec sections 10 and 24: a struct names its members as declared, so a `Parse` of its own leaves it the generated
+/// `parse` and `tryParse`, and a call of `Parse` is no call of the generated pair.
+#[test]
+fn a_struct_s_own_parse_twin_keeps_the_generated_parse() {
+    let spot = (
+        "src/Spot.sharp",
+        "namespace Demo;\n\npublic struct Spot\n{\n    public Spot(public int x { get; }) { }\n\n    public static Spot Parse(string text) => new Spot(1);\n}\n",
+    );
+    let reads = (
+        "src/Reads.sharp",
+        "namespace Demo;\n\nclass Reads\n{\n    public Spot read(Map<string, Any?> input) => Spot.parse(input);\n\n    public Spot? tried(Map<string, Any?> input) => Spot.tryParse(input);\n\n    public Spot text() => Spot.Parse(\"1\");\n}\n",
+    );
+
+    assert_eq!(messages(reads, &[spot]), Vec::<String>::new());
+}
+
+/// Spec section 24: a PHP# enum keys its methods by their declared names, so a `Cases` its interface declares is no
+/// built-in `cases`, and the enum must implement it.
+#[test]
+fn a_sharp_enum_implements_a_cases_twin_of_its_interface() {
+    let listed = ("src/Listed.sharp", "namespace Demo;\n\npublic interface Listed\n{\n    int Cases();\n}\n");
+    let size = ("src/Size.sharp", "namespace Demo;\n\npublic enum Size : Listed\n{\n    case Small;\n}\n");
+
+    assert_eq!(messages(size, &[listed]), ["Class `Size` does not implement the abstract method `Cases`."]);
+}
+
+/// Spec section 24: a PHP# enum's own static `Cases` is no built-in `cases`, so the provider of `cases` never types its
+/// call.
+#[test]
+fn a_call_of_a_sharp_enum_s_cases_twin_has_its_own_type() {
+    let size = (
+        "src/Size.sharp",
+        "namespace Demo;\n\npublic enum Size\n{\n    case Small;\n\n    public static int Cases() => 1;\n}\n",
+    );
+    let count = ("src/Count.sharp", "namespace Demo;\n\nclass Count\n{\n    public int all() => Size.Cases();\n}\n");
+
+    assert_eq!(messages(count, &[size]), Vec::<String>::new());
+}
+
+/// Spec sections 18 and 24: PHP# calls a plain PHP class's `__toString()` as its `toString()`, by the class's rule, so a
+/// plain class with exact names, as one that implements a PHP# interface, has no `ToString`.
+#[test]
+fn a_plain_class_with_exact_names_has_no_to_string_twin() {
+    let shown = ("src/Web/Shown.sharp", "namespace App.Web;\n\npublic interface Shown\n{\n    int id();\n}\n");
+    let room = (
+        "src/Web/Room.php",
+        "<?php\n\nnamespace App\\Web;\n\nfinal class Room implements Shown\n{\n    public function id(): int\n    {\n        return 1;\n    }\n\n    public function __toString(): string\n    {\n        return 'room';\n    }\n}\n",
+    );
+    let page = (
+        "src/Web/Page.sharp",
+        "namespace App.Web;\n\npublic class Page\n{\n    public string title(Room room) => room.toString();\n\n    public string twin(Room room) => room.ToString();\n}\n",
+    );
+
+    assert_eq!(messages(page, &[shown, room]), ["Method `Room.ToString` does not exist."]);
+}
+
+/// Spec section 24: a setting names a class-like as written, so the PHP# exception `NotFound` it leaves unchecked
+/// leaves its twin `NOTFOUND` checked.
+#[test]
+fn an_unchecked_exception_setting_names_only_its_own_class() {
+    let not_found = ("src/Errors/NotFound.sharp", "namespace App.Errors;\n\npublic class NotFound : Exception\n{\n}\n");
+    let twin = ("src/Errors/NOTFOUND.sharp", "namespace App.Errors;\n\npublic class NOTFOUND : Exception\n{\n}\n");
+    let thrower = (
+        "src/Thrower.php",
+        "<?php\n\nnamespace App;\n\nfinal class Thrower\n{\n    public function first(): void\n    {\n        throw new Errors\\NotFound();\n    }\n\n    public function twin(): void\n    {\n        throw new Errors\\NOTFOUND();\n    }\n}\n",
+    );
+    let named = || std::iter::once(word(b"App\\Errors\\NotFound")).collect();
+
+    // `unchecked-exception-classes` names the class alone, and `unchecked-exceptions` the class and its subclasses.
+    for settings in [
+        Settings { unchecked_exception_classes: named(), ..settings() },
+        Settings { unchecked_exceptions: named(), ..settings() },
+    ] {
+        assert_eq!(
+            messages_with(settings, thrower, &[not_found, twin]),
+            ["Potentially unhandled exception `App\\Errors\\NOTFOUND` in `App\\Thrower::twin`."]
+        );
+    }
+}
+
+/// Spec sections 24 and 29: an effect is a class-like named by its key, so the `foreign` PHP# classes `Disk` and `DISK`
+/// are two effects, and `uses DISK` allows no call of a `Disk`.
+#[test]
+fn an_effect_allows_only_its_own_class_and_not_its_twin() {
+    let disk = (
+        "app/Cache/Disk.sharp",
+        "namespace App.Cache;\n\npublic foreign class Disk\n{\n    public int size() => 3;\n}\n",
+    );
+    let twin = (
+        "app/Cache/DISK.sharp",
+        "namespace App.Cache;\n\npublic foreign class DISK\n{\n    public int size() => 4;\n}\n",
+    );
+    let store =
+        ("app/Cache/Store.sharp", "namespace App.Cache;\n\npublic interface Store\n{\n    int size() uses DISK;\n}\n");
+    let disk_store = (
+        "app/Cache/DiskStore.sharp",
+        "namespace App.Cache;\n\npublic class DiskStore : Store\n{\n    public DiskStore(private Disk disk) { }\n\n    public int size() => this.disk.size();\n}\n",
+    );
+
+    assert_eq!(
+        effect_issues(&[disk, twin, store, disk_store]),
+        [
+            "app/Cache/DiskStore.sharp:7:26 incompatible-effects: `DiskStore.size` calls `App.Cache.Disk.size`, which has the effect `App.Cache.Disk`, so `uses App.Cache.DISK` on `Store.size` cannot accept it."
+        ]
     );
 }
 
@@ -29714,20 +30514,34 @@ fn interop_attributes_mark_static_methods_of_one_name_each() {
     );
 }
 
-/// `Sql.identifier(name, allowed)` gives a `literal-string`, spec section 24, so a column chosen while the code runs
-/// passes to a plain PHP `literal-string` parameter through it, and the same column passed bare is still refused.
+/// Spec section 24, decision 98: a string-backed enum case's `value` is a `literal-string` wherever the case comes from,
+/// a parameter, a variable, a case, a collection's element, a method's result or a type parameter's bound, so a column
+/// chosen while the code runs passes to a plain PHP `literal-string` parameter as one of the enum's names, and a string
+/// passed bare is still refused. `Sharp.Data.Sql` and its `identifier` no longer exist.
 #[test]
-fn an_identifier_from_an_allow_list_passes_to_a_plain_php_literal_string() {
+fn an_allow_list_enum_s_value_passes_to_a_plain_php_literal_string() {
     let query = (
         "src/Lib/Query.php",
         "<?php\n\nnamespace Lib;\n\nfinal class Query\n{\n    /**\n     * @param literal-string $sql\n     */\n    public function orderByRaw(string $sql): self\n    {\n        return $this;\n    }\n}\n",
     );
-    let sharp = "namespace Demo;\n\nimport Lib.Query;\nimport Sharp.Data.Sql;\n\npublic class Report\n{\n    public Query run(Query query, string column)\n    {\n        query.orderByRaw(Sql.identifier(column, [\"name\", \"created_at\"]));\n        return query.orderByRaw(column);\n    }\n}\n";
+    let column = (
+        "src/Demo/SortColumn.sharp",
+        "namespace Demo;\n\npublic enum SortColumn : string\n{\n    case Name = \"name\";\n    case CreatedAt = \"created_at\";\n}\n",
+    );
+    let sharp = "namespace Demo;\n\nimport Lib.Query;\n\npublic class Report\n{\n    public Query run(Query query, SortColumn column, string chosen)\n    {\n        query.orderByRaw(column.value);\n        SortColumn held = column;\n        query.orderByRaw(held.value);\n        query.orderByRaw(SortColumn.Name.value);\n        List<SortColumn> all = [column];\n        query.orderByRaw(all[0].value);\n        query.orderByRaw(this.pick().value);\n        return query.orderByRaw(chosen);\n    }\n\n    public SortColumn pick() => SortColumn.Name;\n\n    public Query bounded<T : SortColumn>(Query query, T column) => query.orderByRaw(column.value);\n}\n";
+    let sql =
+        ("src/Demo/Identifiers.sharp", "namespace Demo;\n\nimport Sharp.Data.Sql;\n\npublic class Identifiers\n{\n}\n");
 
     assert_eq!(
-        explained(("src/Demo/Report.sharp", sharp), &[query]),
+        explained(("src/Demo/Report.sharp", sharp), &[query, column]),
         [
-            "11:33 possibly-invalid-argument Argument #1 of method `Query.orderByRaw` takes a `literal-string`, a string literal or a constant, and this string is composed while the code runs. Write the string as a literal or a constant, and pass each value it holds separately, as a query's bindings for its `?` placeholders take them."
+            "16:33 possibly-invalid-argument Argument #1 of method `Query.orderByRaw` takes a `literal-string`, a string literal or a constant, and this string is composed while the code runs. Write the string as a literal or a constant, and pass each value it holds separately, as a query's bindings for its `?` placeholders take them."
+        ]
+    );
+    assert_eq!(
+        refusals(sql, &[]),
+        [
+            "3:8 non-existent-use-import Imported class, interface, trait, or enum `Sharp.Data.Sql` does not exist. | Ensure that the class, interface, trait, or enum `Sharp.Data.Sql` is defined in the codebase."
         ]
     );
 }
@@ -30261,11 +31075,11 @@ fn emit_takes_an_event() {
         ]
     );
     assert_eq!(
-        worded(noticed, &[failed, notice]),
+        worded(noticed, &[failed, notice, DISPATCHER]),
         [format!("9:14 invalid-event `emit` takes an event, and `Notice` is not one. | Emitted here. | {note}")]
     );
     assert_eq!(
-        worded(raiser, &[order_event, order_paid, refunded, failed, money, spot]),
+        worded(raiser, &[order_event, order_paid, refunded, failed, money, spot, DISPATCHER]),
         [
             "11:116 non-existent-class-like Cannot find type `App.Shop.Missing`. | No type of this name is declared. | Check the name's spelling, and import the type with `import` when another namespace declares it.".to_owned(),
             format!("16:14 invalid-event `emit` takes an event, and `OrderEvent` is not one. | Emitted here. | {note}"),
@@ -30292,7 +31106,7 @@ fn emit_has_the_effect_events() {
         "namespace App.Shop;\n\npublic class Checkout\n{\n    private Function<void() uses Events> announce = () => { emit new OrderPaid(1); };\n\n    private Function<void()> silent = () => { emit new OrderPaid(2); };\n\n    public int paid\n    {\n        get\n        {\n            emit new OrderPaid(3);\n            return 3;\n        }\n    }\n\n    public int total => this.complete();\n\n    law completes(Checkout checkout) => checkout.complete() > 0;\n\n    law announces(Checkout checkout) => checkout.paid > 0;\n\n    public int complete()\n    {\n        emit new OrderPaid(4);\n        return 4;\n    }\n\n    public void run()\n    {\n        this.announce();\n        this.silent();\n    }\n\n    public void broadcast()\n    {\n        emit new OrderPaid(5);\n        this.announce();\n    }\n}\n",
     );
 
-    assert_eq!(issues(checkout, &ORDER_EVENTS), Vec::<String>::new());
+    assert_eq!(issues(checkout, &[order_event, order_paid, DISPATCHER]), Vec::<String>::new());
     // Its own `emit` and a call of a function whose type lists `Events` give a function type `Events` once.
     let (codebase, summaries) = summarized(&[checkout, order_event, order_paid]);
     let broadcast = FunctionLikeIdentifier::Method(word(b"App\\Shop\\Checkout"), word(b"broadcast"));
@@ -30378,6 +31192,67 @@ fn only_the_apps_top_module_binds_the_dispatcher() {
         let others: Vec<_> = [DISPATCHER, recorder].into_iter().chain(others).collect();
         assert_eq!(refusals(analyzed, &others), expected, "{}", analyzed.0);
     }
+}
+
+/// Spec section 15: the dispatcher is the interface the standard library marks `DispatchesEmits`, whatever its name.
+/// So two top modules that bind a marked `Relay` are each refused, and two that bind an unmarked interface named
+/// `Dispatcher` bind a service like any other.
+#[test]
+fn the_dispatcher_is_the_interface_the_standard_library_marks() {
+    let relay = (
+        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Relay.sharp",
+        "namespace Sharp;\n\nimport Sharp.Internal.DispatchesEmits;\n\n[DispatchesEmits]\npublic interface Relay\n{\n    void dispatch(Any emitted, List<Function<void(Any)>> listeners);\n}\n",
+    );
+    let dispatcher = ("app/Dispatcher.sharp", "namespace App;\n\npublic interface Dispatcher\n{\n}\n");
+    let recorder = (
+        "app/Recorder.sharp",
+        "namespace App;\n\nimport Sharp.Relay;\n\npublic class Recorder : Relay, Dispatcher\n{\n    public void dispatch(Any emitted, List<Function<void(Any)>> listeners) { }\n}\n",
+    );
+    let module = |path: &'static str, namespace: &str, service: &str| {
+        let import = if service == "Relay" { "Sharp.Relay" } else { "App.Dispatcher" };
+
+        (
+            path,
+            leak(format!(
+                "namespace {namespace};\n\nimport App.Recorder;\nimport {import};\n\nmodule\n{{\n    singleton {service} = Recorder;\n}}\n"
+            )),
+        )
+    };
+    let others = |admin: (&'static str, &'static str)| vec![relay, dispatcher, recorder, admin];
+
+    assert_eq!(
+        refusals(module("app/Module.sharp", "App", "Relay"), &others(module("admin/Module.sharp", "Admin", "Relay"))),
+        [
+            "8:5 invalid-binding This module and `admin/Module.sharp` each bind `Relay`, and an app binds it once, in its top module. | Bind `Relay` in one module, in the namespace above both."
+        ]
+    );
+    assert_eq!(
+        refusals(
+            module("app/Module.sharp", "App", "Dispatcher"),
+            &others(module("admin/Module.sharp", "Admin", "Dispatcher"))
+        ),
+        Vec::<String>::new()
+    );
+}
+
+/// Spec section 15: `emit` hands its event to the dispatcher, so in a project where no interface carries the standard
+/// library's `DispatchesEmits`, which holds no standard library, an `emit` is refused. With the library's `Dispatcher`,
+/// it compiles.
+#[test]
+fn an_emit_without_a_dispatcher_is_refused() {
+    let payer = (
+        "app/Payer.sharp",
+        "namespace App;\n\npublic class Payer\n{\n    public void pay() { emit new Paid(1); }\n}\n",
+    );
+    let paid = ("app/Paid.sharp", "namespace App;\n\npublic event Paid(int orderId);\n");
+
+    assert_eq!(
+        refusals(payer, &[paid]),
+        [
+            "5:25 invalid-event `emit` hands its event to a dispatcher, and this project has none. | Require heyjordanparker/php-sharp-composer, the standard library."
+        ]
+    );
+    assert_eq!(refusals(payer, &[paid, DISPATCHER]), Vec::<String>::new());
 }
 
 /// The standard library's `Dispatcher`, as `sharp/composer/` ships it.
@@ -31138,17 +32013,17 @@ fn an_environment_or_test_module_is_checked_with_the_base_bindings_it_changes() 
     }
 }
 
-/// The module of spec section 32's `imports` example: `App.Tenant.Store` imports only from `App.Tenant.Community`,
-/// `App.Shared.Schema` and `Illuminate.Support`.
+/// The module of spec section 32's `imports` example: `App.Tenant.Store` imports only from `App.Shop.Loyalty`,
+/// `App.Shop.Records` and `Illuminate.Support`.
 const STORE_MODULE: (&str, &str) = (
     "app/Tenant/Store/Module.sharp",
-    "namespace App.Tenant.Store;\n\nmodule\n{\n    imports App.Tenant.Community, App.Shared.Schema, Illuminate.Support;\n}\n",
+    "namespace App.Tenant.Store;\n\nmodule\n{\n    imports App.Shop.Loyalty, App.Shop.Records, Illuminate.Support;\n}\n",
 );
 
 /// The classes the `imports` tests import, one in each namespace they reach.
 const LISTED_CLASSES: [(&str, &str); 7] = [
-    ("app/Tenant/Community/Member.sharp", "namespace App.Tenant.Community;\n\npublic class Member\n{\n}\n"),
-    ("app/Shared/Schema/Table.sharp", "namespace App.Shared.Schema;\n\npublic class Table\n{\n}\n"),
+    ("app/Shop/Loyalty/Member.sharp", "namespace App.Shop.Loyalty;\n\npublic class Member\n{\n}\n"),
+    ("app/Shop/Records/Table.sharp", "namespace App.Shop.Records;\n\npublic class Table\n{\n}\n"),
     (
         "app/Shared/Ledger/Entry.sharp",
         "namespace App.Shared.Ledger;\n\npublic class Entry\n{\n    public static int record() => 1;\n}\n",
@@ -31191,19 +32066,20 @@ fn an_import_outside_the_list_of_its_namespace_is_refused_at_the_import() {
     let service = importing(
         "app/Tenant/Store/StoreService.sharp",
         "App.Tenant.Store",
-        &["App.Tenant.Community.Member", "Illuminate.Support.Facades.DB", "App.Shared.Ledger.Entry"],
+        &["App.Shop.Loyalty.Member", "Illuminate.Support.Facades.DB", "App.Shared.Ledger.Entry"],
     );
     let others: Vec<_> = LISTED_CLASSES.iter().copied().chain([STORE_MODULE]).collect();
 
     assert_eq!(
         worded(service, &others),
         [
-            "5:8 unlisted-import `App.Tenant.Store` imports only `App.Tenant.Community`, `App.Shared.Schema` and `Illuminate.Support`. | Imports `App.Shared.Ledger.Entry`. | The list is the `imports` line of app/Tenant/Store/Module.sharp."
+            "5:8 unlisted-import `App.Tenant.Store` imports only `App.Shop.Loyalty`, `App.Shop.Records` and `Illuminate.Support`. | Imports `App.Shared.Ledger.Entry`. | The list is the `imports` line of app/Tenant/Store/Module.sharp."
         ]
     );
 }
 
-/// Spec sections 23 and 32: the namespace a library's root functions belong to is held to the list as any import is,
+/// Spec sections 23 and 32: the namespace `extern namespace` lines give a library's root functions is held to the list
+/// as any import is,
 /// so `import Illuminate.Foundation;` is refused under a list that leaves it out, and `import Illuminate.Support;`, which
 /// the list names, reaches `Support.collect`.
 #[test]
@@ -31217,7 +32093,7 @@ fn an_import_of_the_namespace_of_a_library_s_root_functions_is_held_to_the_list(
     assert_eq!(
         worded(till, &others),
         [
-            "3:8 unlisted-import `App.Tenant.Store` imports only `App.Tenant.Community`, `App.Shared.Schema` and `Illuminate.Support`. | Imports `Illuminate.Foundation`. | The list is the `imports` line of app/Tenant/Store/Module.sharp."
+            "3:8 unlisted-import `App.Tenant.Store` imports only `App.Shop.Loyalty`, `App.Shop.Records` and `Illuminate.Support`. | Imports `Illuminate.Foundation`. | The list is the `imports` line of app/Tenant/Store/Module.sharp."
         ]
     );
 }
@@ -31229,7 +32105,7 @@ fn an_import_of_the_namespace_of_a_library_s_root_functions_is_held_to_the_list(
 fn a_namespace_with_no_list_imports_from_any_namespace() {
     let tenant_module = (
         "app/Tenant/Module.sharp",
-        "namespace App.Tenant;\n\nimport App.Tenant.Community.Member;\n\nmodule\n{\n    transient Member = Member;\n}\n",
+        "namespace App.Tenant;\n\nimport App.Shop.Loyalty.Member;\n\nmodule\n{\n    transient Member = Member;\n}\n",
     );
     let others: Vec<_> = LISTED_CLASSES.iter().copied().chain([STORE_MODULE, tenant_module]).collect();
 
@@ -31257,25 +32133,19 @@ fn a_namespace_with_no_list_imports_from_any_namespace() {
 fn an_import_passes_the_list_of_its_namespace_and_of_each_namespace_above_it() {
     let checkout_module = (
         "app/Tenant/Store/Checkout/Module.sharp",
-        "namespace App.Tenant.Store.Checkout;\n\nmodule\n{\n    imports App.Tenant.Store, App.Shared.Schema, App.Shared.Ledger;\n}\n",
+        "namespace App.Tenant.Store.Checkout;\n\nmodule\n{\n    imports App.Tenant.Store, App.Shop.Records, App.Shared.Ledger;\n}\n",
     );
     let others: Vec<_> = LISTED_CLASSES.iter().copied().chain([STORE_MODULE, checkout_module, DISPATCHER]).collect();
-    let store =
-        "`App.Tenant.Store` imports only `App.Tenant.Community`, `App.Shared.Schema` and `Illuminate.Support`. | ";
+    let store = "`App.Tenant.Store` imports only `App.Shop.Loyalty`, `App.Shop.Records` and `Illuminate.Support`. | ";
     let checkout =
-        "`App.Tenant.Store.Checkout` imports only `App.Tenant.Store`, `App.Shared.Schema` and `App.Shared.Ledger`. | ";
+        "`App.Tenant.Store.Checkout` imports only `App.Tenant.Store`, `App.Shop.Records` and `App.Shared.Ledger`. | ";
 
     for (importer, expected) in [
         (
             importing(
                 "app/Tenant/Store/Receipts/Printer.sharp",
                 "App.Tenant.Store.Receipts",
-                &[
-                    "App.Tenant.Store.Checkout.Cart",
-                    "App.Tenant.Community.Member",
-                    "Sharp.Dispatcher",
-                    "App.Shared.Money",
-                ],
+                &["App.Tenant.Store.Checkout.Cart", "App.Shop.Loyalty.Member", "Sharp.Dispatcher", "App.Shared.Money"],
             ),
             vec![format!("6:8 unlisted-import {store}")],
         ),
@@ -31285,9 +32155,9 @@ fn an_import_passes_the_list_of_its_namespace_and_of_each_namespace_above_it() {
                 "App.Tenant.Store.Checkout",
                 &[
                     "App.Tenant.Store.Receipts.Receipt",
-                    "App.Shared.Schema.Table",
+                    "App.Shop.Records.Table",
                     "App.Shared.Ledger.Entry",
-                    "App.Tenant.Community.Member",
+                    "App.Shop.Loyalty.Member",
                     "Illuminate.Support.Facades.DB",
                 ],
             ),
@@ -31308,22 +32178,21 @@ fn an_import_passes_the_list_of_its_namespace_and_of_each_namespace_above_it() {
 fn a_full_name_in_code_counts_as_an_import() {
     let service = (
         "app/Tenant/Store/StoreService.sharp",
-        "namespace App.Tenant.Store;\n\npublic class StoreService\n{\n    public int recorded() => App.Shared.Ledger.Entry.record();\n    public void hold(App.Shared.Ledger.Entry entry, App.Tenant.Community.Member member) { }\n    public int totalled() => App.Shared.Ledger.total();\n}\n",
+        "namespace App.Tenant.Store;\n\npublic class StoreService\n{\n    public int recorded() => App.Shared.Ledger.Entry.record();\n    public void hold(App.Shared.Ledger.Entry entry, App.Shop.Loyalty.Member member) { }\n    public int totalled() => App.Shared.Ledger.total();\n}\n",
     );
     let total = (
         "app/Shared/Ledger/functions.php",
         "<?php\n\nnamespace App\\Shared\\Ledger;\n\nfunction total(): int\n{\n    return 1;\n}\n",
     );
     let others: Vec<_> = LISTED_CLASSES.iter().copied().chain([STORE_MODULE, total]).collect();
-    let refused =
-        "`App.Tenant.Store` imports only `App.Tenant.Community`, `App.Shared.Schema` and `Illuminate.Support`. | ";
+    let refused = "`App.Tenant.Store` imports only `App.Shop.Loyalty`, `App.Shop.Records` and `Illuminate.Support`. | ";
 
     assert_eq!(
         refusals(service, &others),
         [
             format!("5:30 unlisted-import {refused}"),
             format!("6:22 unlisted-import {refused}"),
-            "6:53 non-existent-class-like Full names appear only in `import` lines: add `import App.Tenant.Community.Member;` and write `Member`. | In code, `.` is always member access, so a class is written by the short name its import brings in.".to_owned(),
+            "6:53 non-existent-class-like Full names appear only in `import` lines: add `import App.Shop.Loyalty.Member;` and write `Member`. | In code, `.` is always member access, so a class is written by the short name its import brings in.".to_owned(),
             format!("7:30 unlisted-import {refused}"),
         ]
     );
@@ -31343,7 +32212,7 @@ fn a_missing_import_is_suggested_only_when_the_list_allows_it() {
         refusals(service, &others),
         [
             "5:22 non-existent-class-like `Entry` is not imported. | `App.Shared.Ledger.Entry` is outside `App.Tenant.Store`'s list, the `imports` line of app/Tenant/Store/Module.sharp.",
-            "5:35 non-existent-class-like `Member` is not imported. | Add `import App.Tenant.Community.Member;` to the file.",
+            "5:35 non-existent-class-like `Member` is not imported. | Add `import App.Shop.Loyalty.Member;` to the file.",
         ]
     );
 }
@@ -31353,13 +32222,13 @@ fn a_missing_import_is_suggested_only_when_the_list_allows_it() {
 #[test]
 fn a_help_names_each_class_outside_the_list_once() {
     let membership = (
-        "app/Tenant/Community/Membership.sharp",
-        "namespace App.Tenant.Community;\n\nimport App.Shared.Ledger.Account;\nimport App.Shared.Ledger.Entry;\n\npublic class Membership\n{\n    public Membership(Entry first, Entry second, Account account) { }\n}\n",
+        "app/Shop/Loyalty/Membership.sharp",
+        "namespace App.Shop.Loyalty;\n\nimport App.Shared.Ledger.Account;\nimport App.Shared.Ledger.Entry;\n\npublic class Membership\n{\n    public Membership(Entry first, Entry second, Account account) { }\n}\n",
     );
     let account = ("app/Shared/Ledger/Account.sharp", "namespace App.Shared.Ledger;\n\npublic class Account\n{\n}\n");
     let shopper = (
         "app/Tenant/Store/Shopper.sharp",
-        "namespace App.Tenant.Store;\n\nimport App.Tenant.Community.Membership;\n\npublic class Shopper : Membership\n{\n    protected string label = Shopper.shout(\"x\");\n\n    public static string shout(string text) => text + \"!\";\n}\n",
+        "namespace App.Tenant.Store;\n\nimport App.Shop.Loyalty.Membership;\n\npublic class Shopper : Membership\n{\n    protected string label = Shopper.shout(\"x\");\n\n    public static string shout(string text) => text + \"!\";\n}\n",
     );
     let others: Vec<_> = LISTED_CLASSES.iter().copied().chain([STORE_MODULE, membership, account]).collect();
 
@@ -31375,19 +32244,19 @@ fn a_help_names_each_class_outside_the_list_once() {
 /// entry the list above it leaves out allows nothing.
 #[test]
 fn a_nested_list_entry_outside_its_parent_s_list_is_refused() {
-    let tenant = ("app/Tenant/Module.sharp", "namespace App.Tenant;\n\nmodule\n{\n    imports App.Shared;\n}\n");
+    let tenant = ("app/Tenant/Module.sharp", "namespace App.Tenant;\n\nmodule\n{\n    imports App.Shop;\n}\n");
     let store = (
         "app/Tenant/Store/Module.sharp",
-        "namespace App.Tenant.Store;\n\nmodule\n{\n    imports App.Shared.Schema, App.Billing;\n}\n",
+        "namespace App.Tenant.Store;\n\nmodule\n{\n    imports App.Shop.Records, App.Billing;\n}\n",
     );
     let invoices = ("app/Billing/Invoice.sharp", "namespace App.Billing;\n\npublic class Invoice\n{\n}\n");
-    let schema = ("app/Shared/Schema/Table.sharp", "namespace App.Shared.Schema;\n\npublic class Table\n{\n}\n");
-    let files: Vec<_> = LISTED_CLASSES.iter().copied().chain([invoices, schema, tenant]).collect();
+    let records = ("app/Shop/Records/Table.sharp", "namespace App.Shop.Records;\n\npublic class Table\n{\n}\n");
+    let files: Vec<_> = LISTED_CLASSES.iter().copied().chain([invoices, records, tenant]).collect();
 
     assert_eq!(
         refusals(store, &files),
         [
-            "5:32 unlisted-import `App.Billing` is outside `App.Tenant`'s list, so this entry allows nothing. | Add `App.Billing` to `App.Tenant`'s list, or remove this entry."
+            "5:31 unlisted-import `App.Billing` is outside `App.Tenant`'s list, so this entry allows nothing. | Add `App.Billing` to `App.Tenant`'s list, or remove this entry."
         ]
     );
 }
@@ -31402,9 +32271,9 @@ fn lists_that_name_each_other_are_refused_at_each_imports_line() {
 
         (path, leak(format!("namespace {namespace};\n\nmodule\n{{\n    imports {listed};\n}}\n")))
     };
-    let store = module("App.Tenant.Store", "App.Tenant.Community, App.Shared");
-    let schema = module("App.Shared.Schema", "App.Tenant.Store");
-    let community = module("App.Tenant.Community", "App.Billing");
+    let store = module("App.Tenant.Store", "App.Shop.Loyalty, App.Shop");
+    let records = module("App.Shop.Records", "App.Tenant.Store");
+    let loyalty = module("App.Shop.Loyalty", "App.Billing");
     let billing = module("App.Billing", "App.Tenant.Store");
     let invoices = ("app/Billing/Invoice.sharp", "namespace App.Billing;\n\npublic class Invoice\n{\n}\n");
     let others: Vec<_> = LISTED_CLASSES.iter().copied().chain([invoices]).collect();
@@ -31414,46 +32283,44 @@ fn lists_that_name_each_other_are_refused_at_each_imports_line() {
     let help = " | Remove one of these names, so the namespaces import one way.";
 
     assert_eq!(
-        refusals(store, &with(&[schema])),
+        refusals(store, &with(&[records])),
         [format!(
-            "5:35 import-cycle `App.Tenant.Store` and `App.Shared.Schema` import from each other: `App.Tenant.Store` lists `App.Shared`, and `App.Shared.Schema` lists `App.Tenant.Store`.{help}"
+            "5:31 import-cycle `App.Tenant.Store` and `App.Shop.Records` import from each other: `App.Tenant.Store` lists `App.Shop`, and `App.Shop.Records` lists `App.Tenant.Store`.{help}"
         )]
     );
     assert_eq!(
-        refusals(schema, &with(&[store])),
+        refusals(records, &with(&[store])),
         [format!(
-            "5:13 import-cycle `App.Shared.Schema` and `App.Tenant.Store` import from each other: `App.Shared.Schema` lists `App.Tenant.Store`, and `App.Tenant.Store` lists `App.Shared`.{help}"
+            "5:13 import-cycle `App.Shop.Records` and `App.Tenant.Store` import from each other: `App.Shop.Records` lists `App.Tenant.Store`, and `App.Tenant.Store` lists `App.Shop`.{help}"
         )]
     );
     assert_eq!(
-        refusals(community, &with(&[store, billing])),
+        refusals(loyalty, &with(&[store, billing])),
         [format!(
-            "5:13 import-cycle `App.Tenant.Community`, `App.Billing` and `App.Tenant.Store` import from each other: `App.Tenant.Community` lists `App.Billing`, `App.Billing` lists `App.Tenant.Store`, and `App.Tenant.Store` lists `App.Tenant.Community`.{help}"
+            "5:13 import-cycle `App.Shop.Loyalty`, `App.Billing` and `App.Tenant.Store` import from each other: `App.Shop.Loyalty` lists `App.Billing`, `App.Billing` lists `App.Tenant.Store`, and `App.Tenant.Store` lists `App.Shop.Loyalty`.{help}"
         )]
     );
-    // Neither `App.Tenant.Community` nor `App.Shared` has a list, so the chain from `App.Billing` ends at them.
+    // Neither `App.Shop.Loyalty` nor `App.Shop` has a list, so the chain from `App.Billing` ends at them.
     assert_eq!(refusals(billing, &with(&[store])), Vec::<String>::new());
 
     // A listed name below the other list's namespace leads to it too.
-    let columns = (
-        "app/Shared/Schema/Columns/Column.sharp",
-        "namespace App.Shared.Schema.Columns;\n\npublic class Column\n{\n}\n",
-    );
-    let store_to_columns = module("App.Tenant.Store", "App.Tenant.Community, App.Shared.Schema.Columns");
+    let columns =
+        ("app/Shop/Records/Columns/Column.sharp", "namespace App.Shop.Records.Columns;\n\npublic class Column\n{\n}\n");
+    let store_to_columns = module("App.Tenant.Store", "App.Shop.Loyalty, App.Shop.Records.Columns");
     assert_eq!(
-        refusals(store_to_columns, &with(&[schema, columns])),
+        refusals(store_to_columns, &with(&[records, columns])),
         [format!(
-            "5:35 import-cycle `App.Tenant.Store` and `App.Shared.Schema` import from each other: `App.Tenant.Store` lists `App.Shared.Schema.Columns`, and `App.Shared.Schema` lists `App.Tenant.Store`.{help}"
+            "5:31 import-cycle `App.Tenant.Store` and `App.Shop.Records` import from each other: `App.Tenant.Store` lists `App.Shop.Records.Columns`, and `App.Shop.Records` lists `App.Tenant.Store`.{help}"
         )]
     );
 
-    // Two chains from `App.Tenant.Store` meet at `App.Tenant.Community` before it leads back, and one cycle is refused.
-    let branching = module("App.Tenant.Store", "App.Billing, App.Shared.Schema");
-    let schema_to_community = module("App.Shared.Schema", "App.Tenant.Community");
-    let billing_to_community = module("App.Billing", "App.Tenant.Community");
-    let community_to_store = module("App.Tenant.Community", "App.Tenant.Store");
+    // Two chains from `App.Tenant.Store` meet at `App.Shop.Loyalty` before it leads back, and one cycle is refused.
+    let branching = module("App.Tenant.Store", "App.Billing, App.Shop.Records");
+    let records_to_loyalty = module("App.Shop.Records", "App.Shop.Loyalty");
+    let billing_to_loyalty = module("App.Billing", "App.Shop.Loyalty");
+    let loyalty_to_store = module("App.Shop.Loyalty", "App.Tenant.Store");
     assert_eq!(
-        codes(&issues(branching, &with(&[schema_to_community, billing_to_community, community_to_store]))),
+        codes(&issues(branching, &with(&[records_to_loyalty, billing_to_loyalty, loyalty_to_store]))),
         ["import-cycle"]
     );
 }
@@ -31464,13 +32331,13 @@ fn lists_that_name_each_other_are_refused_at_each_imports_line() {
 fn a_listed_name_that_names_no_namespace_is_an_unknown_name() {
     let module = (
         "app/Tenant/Store/Module.sharp",
-        "namespace App.Tenant.Store;\n\nmodule\n{\n    imports App.Tenant.Community, App.Shared.Ledgr;\n}\n",
+        "namespace App.Tenant.Store;\n\nmodule\n{\n    imports App.Shop.Loyalty, App.Shared.Ledgr;\n}\n",
     );
 
     assert_eq!(
         refusals(module, &LISTED_CLASSES),
         [
-            "5:35 non-existent-use-import Imported namespace `App.Shared.Ledgr` does not exist. | Ensure that the namespace `App.Shared.Ledgr` is defined in the codebase."
+            "5:31 non-existent-use-import Imported namespace `App.Shared.Ledgr` does not exist. | Ensure that the namespace `App.Shared.Ledgr` is defined in the codebase."
         ]
     );
 }

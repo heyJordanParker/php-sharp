@@ -78,6 +78,7 @@ use crate::commands::outcome::CommandOutcome;
 use crate::config::Configuration;
 use crate::config::extension::ExtensionHostConfiguration;
 use crate::consts::PRELUDE_BYTES;
+use crate::consts::VERSION;
 use crate::error::Error;
 use crate::extensions::start_external_analyzer;
 use crate::utils::create_orchestrator;
@@ -196,7 +197,7 @@ fn compile_into(configuration: &Configuration, root: &Path, folder: &Path) -> Re
     orchestrator.add_exclude_patterns(configuration.analyzer.excludes.iter());
     let (database, _) = project_database(&orchestrator, &configuration.source.workspace)?;
 
-    let library = standard_library(root, &database).unwrap_or_default();
+    let library = standard_library(root, &database).map_err(OrchestratorError::General)?;
     let mut server = Server::new(database.into_static(), decode_prelude, server_settings(&orchestrator));
     server.analyze()?;
     // A file whose errors the lowering does not survive is refused, whatever panic message its lowering printed.
@@ -1128,7 +1129,9 @@ const STANDARD_LIBRARY_PACKAGE: &str = "heyjordanparker/php-sharp-composer";
 /// or whose library declares no native bodies in a `native.php`, compiles against none, an all-zero fingerprint.
 ///
 /// Fails when the package's `native.php` gives no fingerprint, so no compiled file names a library it was not checked
-/// against.
+/// against, and when the package is a release other than mago's own, since mago reads the library it ships with, as
+/// the `Dispatcher` it marks. A Composer dev version, as `dev-master` or `0.6.x-dev`, and a library outside `vendor/`
+/// name no release, so they compile.
 pub(crate) fn standard_library(root: &Path, database: &impl DatabaseReader) -> Result<unit::Library, String> {
     let Some(file) = database.files().find(|file| file.is_standard_library) else {
         return Ok(unit::Library::default());
@@ -1140,6 +1143,28 @@ pub(crate) fn standard_library(root: &Path, database: &impl DatabaseReader) -> R
             source.display()
         ));
     };
+
+    let installed = package.parent().and_then(Path::parent).map(|vendor| vendor.join("composer/installed.json"));
+    let version = installed
+        .and_then(|installed| std::fs::read(installed).ok())
+        .and_then(|installed| serde_json::from_slice::<serde_json::Value>(&installed).ok())
+        .and_then(|installed| {
+            let packages = installed.get("packages").unwrap_or(&installed).as_array()?.clone();
+            packages
+                .into_iter()
+                .find(|entry| entry.get("name").and_then(serde_json::Value::as_str) == Some(STANDARD_LIBRARY_PACKAGE))
+        })
+        .and_then(|entry| entry.get("version").and_then(serde_json::Value::as_str).map(str::to_owned))
+        .unwrap_or_default();
+    // A tag names its release with a `v`, as the engine reads it.
+    let release =
+        version.strip_prefix('v').filter(|rest| rest.starts_with(|c: char| c.is_ascii_digit())).unwrap_or(&version);
+    if !release.is_empty() && !release.starts_with("dev-") && !release.ends_with("-dev") && release != VERSION {
+        return Err(format!(
+            "This project's PHP# standard library is {release}, and mago is {VERSION}. Move mago and the standard library \
+             to the same release: require {STANDARD_LIBRARY_PACKAGE} {VERSION}, or heyjordanparker/mago-sharp {release}."
+        ));
+    }
 
     let native = package.join("native.php");
     if !native.exists() {
@@ -1157,19 +1182,6 @@ pub(crate) fn standard_library(root: &Path, database: &impl DatabaseReader) -> R
     let Some(native_fingerprint) = fingerprint else {
         return Err(format!("{} gives no native fingerprint. Reinstall {STANDARD_LIBRARY_PACKAGE}.", native.display()));
     };
-
-    let installed = package.parent().and_then(Path::parent).map(|vendor| vendor.join("composer/installed.json"));
-    let version = installed
-        .and_then(|installed| std::fs::read(installed).ok())
-        .and_then(|installed| serde_json::from_slice::<serde_json::Value>(&installed).ok())
-        .and_then(|installed| {
-            let packages = installed.get("packages").unwrap_or(&installed).as_array()?.clone();
-            packages
-                .into_iter()
-                .find(|entry| entry.get("name").and_then(serde_json::Value::as_str) == Some(STANDARD_LIBRARY_PACKAGE))
-        })
-        .and_then(|entry| entry.get("version").and_then(serde_json::Value::as_str).map(str::to_owned))
-        .unwrap_or_default();
 
     Ok(unit::Library { native_fingerprint, version: version.into_bytes() })
 }
@@ -1705,6 +1717,39 @@ mod tests {
 
         assert!(compile_into(&configuration, &root, folder.path()).unwrap(), "the vendor edit compiles again");
         assert_ne!(std::fs::read(folder.path().join("app/Paced.sharpc")).unwrap(), paced);
+    }
+
+    /// The hosts' compile refuses a standard library of another release as `mago compile` does, with the same message,
+    /// where it once compiled against no library.
+    #[test]
+    fn the_hosts_compile_refuses_a_standard_library_of_another_release() {
+        let (_directory, root, configuration) = project();
+        let library = "vendor/heyjordanparker/php-sharp-composer";
+        write(&root, &format!("{library}/composer.json"), "{\"name\": \"heyjordanparker/php-sharp-composer\"}\n");
+        write(
+            &root,
+            &format!("{library}/library/Sharp/Math.sharp"),
+            "namespace Sharp;\n\npublic static class Math\n{\n    public static int twice(int value) => value * 2;\n}\n",
+        );
+        write(
+            &root,
+            "vendor/composer/installed.json",
+            "{\"packages\": [{\"name\": \"heyjordanparker/php-sharp-composer\", \"version\": \"v0.5.9\"}]}\n",
+        );
+        let folder = tempfile::tempdir().unwrap();
+
+        let Err(error) = compile_into(&configuration, &root, folder.path()) else {
+            panic!("the hosts' compile accepted library 0.5.9");
+        };
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "Orchestrator error: This project's PHP# standard library is 0.5.9, and mago is {VERSION}. Move mago and \
+                 the standard library to the same release: require heyjordanparker/php-sharp-composer {VERSION}, or \
+                 heyjordanparker/mago-sharp 0.5.9."
+            )
+        );
+        assert!(!folder.path().join("app/Order.sharpc").exists());
     }
 
     /// Writes `bytes` to the file at `path` and sets its modification time back to `modified`, as `touch -d` does.

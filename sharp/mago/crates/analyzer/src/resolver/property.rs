@@ -897,6 +897,7 @@ impl DeclaredProperty<'_> {
         if let DeclaredPropertyKind::Real { annotation: Some(annotation) } = self.kind
             && let Some(annotation_type) = annotation_type_metadata(annotation, for_write).map(|tm| &tm.type_union)
         {
+            // Only a plain PHP class writes a `@property` annotation, so both types are plain PHP declarations.
             let narrows = match self.property.type_metadata.as_ref().map(|tm| &tm.type_union) {
                 None => true,
                 Some(real_type) => {
@@ -908,7 +909,7 @@ impl DeclaredProperty<'_> {
                             false,
                             false,
                             false,
-                            &mut ComparisonResult::default(),
+                            &mut ComparisonResult::for_dialect(Dialect::Php),
                         )
                 }
             };
@@ -1875,12 +1876,12 @@ where
     let mut member_type = inferred_type_replacer::replace(&member_type, &type_arguments, context.codebase);
     expander::expand_union(context.codebase, &mut member_type, &TypeExpansionOptions::default());
 
-    rename_trait_objects(declaring_class, calling_class, &mut member_type);
+    rename_trait_objects(context.codebase, declaring_class, calling_class, &mut member_type);
     for atomic in member_type.types.to_mut() {
         if let TAtomic::Callable(TCallable::Signature(signature)) = atomic
             && let Some(return_type) = signature.get_return_type_mut()
         {
-            rename_trait_objects(declaring_class, calling_class, return_type);
+            rename_trait_objects(context.codebase, declaring_class, calling_class, return_type);
         }
     }
 

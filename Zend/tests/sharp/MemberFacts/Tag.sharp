@@ -1,0 +1,7 @@
+namespace App.Facts;
+
+// A class whose constructor promotes an `internal` property.
+public class Tag
+{
+    public Tag(internal string label { get; }) { }
+}

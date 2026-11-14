@@ -36,7 +36,7 @@ echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n'
         . ' file_put_contents(' . var_export("$root/app/Fresh/Audit.sharp", true) . ', ' . var_export($audit, true) . ');'
         . ' file_put_contents(' . var_export("$root/app/Fresh/Warmup.sharp", true) . ', ' . var_export($warmup, true) . ');'
         . ' echo "Warmup loaded: ", var_export(class_exists("App\\\\Fresh\\\\Warmup"), true), "\n";'
-        . ' Sharp\Internal\emit(new App\Fresh\Paid(1));'
+        . ' Sharp\Internal\emit(new App\Fresh\Paid(1), "Sharp\\\\Dispatcher");'
         . ' echo implode(", ", App\Fresh\Notices::$log), "; compiles: ", substr_count(file_get_contents(' . var_export("$root/runs.log", true) . '), "run"), "\n";'
     ));
 remove_project($root);

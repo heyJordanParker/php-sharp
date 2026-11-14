@@ -333,16 +333,26 @@ const BEHAVIOR_LIBRARY: (&str, &str) = (
     include_str!("../../../../composer/library/Sharp/Behavior.sharp"),
 );
 
+/// The standard library's `Dispatcher`, which it marks `DispatchesEmits`, the service every `emit` hands its event to.
+const DISPATCHER_LIBRARY: (&str, &str) = (
+    "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Dispatcher.sharp",
+    include_str!("../../../../composer/library/Sharp/Dispatcher.sharp"),
+);
+
 /// `Lib\Loud`, a project file with a method the inlining rule would take in the standard library: a call of a plain
-/// PHP function through its namespace, `capitalize`, which `LOUD_HELPERS` declares beside it.
+/// PHP function through its namespace, `capitalize`, which `LOUD_HELPERS` declares and `LOUD_EXTERNS` gives `Lib`.
 const LOUD: (&str, &str) = (
     "src/Lib/Loud.sharp",
     "namespace Lib;\n\nimport Lib;\n\npublic class Loud\n{\n    public static string capitalized(string text) => Lib.capitalize(text);\n}\n",
 );
 
-/// The plain PHP function `LOUD` calls, in PHP's root namespace beside `Lib\Loud`.
+/// The plain PHP function `LOUD` calls, in PHP's root namespace.
 const LOUD_HELPERS: (&str, &str) =
     ("src/Lib/helpers.php", "<?php function capitalize(string $text): string { return ucfirst($text); }");
+
+/// The `extern namespace` line that gives `capitalize` the namespace `Lib`, spec section 23.
+const LOUD_EXTERNS: (&str, &str) =
+    ("src/Lib/Externs.sharp", "namespace Lib;\n\nextern namespace Lib for capitalize;\n");
 
 /// The statements of `run`, declared with `signature` and holding `statements` in a class that imports `Sharp.Text`
 /// and `Lib.Loud`, lowered with the inline forms of `TEXT`.
@@ -351,7 +361,7 @@ fn inlined_body(signature: &str, statements: &str) -> String {
         "namespace App.Tenant;\n\nimport Lib.Loud;\nimport Sharp.Text;\n\nclass Report\n{{\n    public {signature}\n    {{\n{statements}    }}\n}}\n"
     );
 
-    Lowered::inlining(&code, &[LOUD, LOUD_HELPERS], &[TEXT]).body()
+    Lowered::inlining(&code, &[LOUD, LOUD_HELPERS, LOUD_EXTERNS], &[TEXT]).body()
 }
 
 /// A file declaring the method `run` with `body`. Its body starts on line 9.
@@ -669,7 +679,7 @@ fn the_php_sharp_form_a_refused_php_construct_names_compiles() {
 /// The lowering takes only a checked program, so an enum the slice refuses lowers no node of the enum.
 #[test]
 fn an_enum_the_slice_refuses_returns_its_error_and_no_nodes() {
-    let lowered = Lowered::new("enum Status\n{\n    case Active;\n\n    public status() {}\n}\n");
+    let lowered = Lowered::new("enum Status\n{\n    case Active;\n\n    public Status() {}\n}\n");
 
     assert_eq!(
         lowered.diagnostics(),
@@ -5290,6 +5300,7 @@ fn parameters_carry_their_type_name_and_default() {
         &[
             ("src/Lib/Calc.php", "<?php namespace Lib; final class Calc {}"),
             ("src/Lib/constants.php", "<?php const LOUD = 1;"),
+            ("src/Stubs/Externs.sharp", "namespace Stubs;\n\nextern namespace Lib for LOUD;\n"),
         ],
     );
     let method = lowered.nodes().iter().position(|node| node.kind == sharp_kind::SHARP_AST_METHOD).expect("a method");
@@ -14050,6 +14061,7 @@ fn a_value_from_plain_php_is_checked_where_it_enters_php_sharp() {
                 "src/Lib/orders.php",
                 "<?php\n\n/** @return \\App\\Box<\\App\\Order> */\nfunction orders(): \\App\\Box\n{\n    return new \\App\\Box();\n}\n",
             ),
+            ("src/Stubs/Externs.sharp", "namespace Stubs;\n\nextern namespace Lib for orders;\n"),
         ],
     );
 
@@ -16365,17 +16377,18 @@ fn an_event_is_a_final_class_and_an_interface_property_has_an_abstract_get_hook(
 }
 
 /// ```php
-/// \Sharp\Internal\emit(new \App\OrderPaid(1));
-/// \Sharp\Internal\emit($paid);
+/// \Sharp\Internal\emit(new \App\OrderPaid(1), 'Sharp\Dispatcher');
+/// \Sharp\Internal\emit($paid, 'Sharp\Dispatcher');
 /// ```
 ///
-/// Spec section 15: `emit` raises the event its expression gives, through the one function the engine adds, which runs
-/// every listener of the event before it returns.
+/// Spec section 15: `emit` raises the event its expression gives, through the one function the engine adds, which hands
+/// it to the app's binding of the dispatcher, the interface the standard library marks `DispatchesEmits`, with every
+/// listener of the event before it returns.
 #[test]
 fn emit_is_a_call_of_the_engine_emit() {
     let lowered = Lowered::with(
         "namespace App;\n\npublic class Order\n{\n    public void run(OrderPaid paid)\n    {\n        emit new OrderPaid(1);\n        emit paid;\n    }\n}\n",
-        &[("src/OrderPaid.sharp", "namespace App;\n\npublic event OrderPaid(int orderId);\n")],
+        &[("src/OrderPaid.sharp", "namespace App;\n\npublic event OrderPaid(int orderId);\n"), DISPATCHER_LIBRARY],
     );
 
     assert_eq!(
@@ -16389,11 +16402,13 @@ fn emit_is_a_call_of_the_engine_emit() {
                     ZVAL "App\\OrderPaid"
                     ARG_LIST
                       ZVAL 1
+                  ZVAL "Sharp\\Dispatcher"
               CALL
                 ZVAL "Sharp\\Internal\\emit"
                 ARG_LIST
                   VAR
                     ZVAL "paid"
+                  ZVAL "Sharp\\Dispatcher"
         "#}
     );
 }
@@ -16927,7 +16942,9 @@ fn an_override_with_accessor_bodies_and_an_abstract_property_are_their_php_hooks
 ///
 /// PHP has no namespace reach, so spec section 5's `internal` runs as public, and the analyzer checks who reaches it.
 /// An `internal` class takes no flag, `internal set` takes no set visibility, and `internal init` takes the
-/// `protected(set)` of every `init`, which only constructors run.
+/// `protected(set)` of every `init`, which only constructors run. An `internal` property and method carry
+/// `#[\Sharp\Internal\Internal]`, so `Class<T>.properties()` and `methods()` give them `Visibility.Internal`, spec
+/// section 25. A constant and an accessor written `internal` carry none, since reflection reads neither.
 #[test]
 fn internal_runs_as_public() {
     let lowered = Lowered::with(
@@ -16968,7 +16985,11 @@ fn internal_runs_as_public() {
                       ZVAL 0
                       null
                       null
-                  null
+                  ATTRIBUTE_LIST
+                    ATTRIBUTE_GROUP
+                      ATTRIBUTE
+                        ZVAL "Sharp\\Internal\\Internal"
+                        ARG_LIST
                 PROP_GROUP [2049]
                   ZVAL [1] "int"
                   PROP_DECL
@@ -16987,7 +17008,11 @@ fn internal_runs_as_public() {
                   SHARP_TYPE_ARGS
                     ZVAL [1] "int"
                     ZVAL "Function<int()>"
-                  null
+                  ATTRIBUTE_LIST
+                    ATTRIBUTE_GROUP
+                      ATTRIBUTE
+                        ZVAL "Sharp\\Internal\\Internal"
+                        ARG_LIST
               null
               null
         "#}
@@ -20167,6 +20192,10 @@ fn an_extension_method_or_plain_php_function_value_calls_what_it_names() {
                 "<?php\n\nfunction capitalize(string $text): string\n{\n    return ucfirst($text);\n}\n",
             ),
             ("src/Vendor/Pdf/Document.php", "<?php namespace Vendor\\Pdf; final class Document {}"),
+            (
+                "src/Stubs/Externs.sharp",
+                "namespace Stubs;\n\nimport Vendor.Pdf;\n\nextern namespace Pdf for capitalize;\n",
+            ),
         ],
     );
 
@@ -24724,6 +24753,10 @@ fn a_call_through_a_namespace_is_a_call_of_its_plain_php_function() {
                 "<?php function measure(string $text): int { return strlen($text); } function pad(string $text, int $length): string { return str_pad($text, $length); }",
             ),
             ("src/Vendor/Pdf/Document.php", "<?php namespace Vendor\\Pdf; final class Document {}"),
+            (
+                "src/Stubs/Externs.sharp",
+                "namespace Stubs;\n\nimport Vendor.Pdf;\n\nextern namespace Pdf for measure;\n",
+            ),
         ],
     );
 
@@ -24844,6 +24877,10 @@ fn a_read_through_a_namespace_is_a_read_of_its_plain_php_constant() {
             ("src/Vendor/Pdf/constants.php", "<?php namespace Vendor\\Pdf; const DEFAULT_DPI = 300;"),
             ("src/Vendor/Pdf/version.php", "<?php const PDF_VERSION = 2;"),
             ("src/Vendor/Pdf/Document.php", "<?php namespace Vendor\\Pdf; final class Document {}"),
+            (
+                "src/Stubs/Externs.sharp",
+                "namespace Stubs;\n\nimport Vendor.Pdf;\n\nextern namespace Pdf for PDF_VERSION;\n",
+            ),
         ],
     );
 
@@ -24875,6 +24912,7 @@ fn a_namespace_call_named_like_a_method_of_its_class_is_a_call_of_the_plain_php_
             &[
                 ("src/Vendor/Jobs/run.php", "<?php function run(int $extra): int { return $extra; }"),
                 ("src/Vendor/Jobs/Queue.php", "<?php namespace Vendor\\Jobs; final class Queue {}"),
+                ("src/Stubs/Externs.sharp", "namespace Stubs;\n\nimport Vendor.Jobs;\n\nextern namespace Jobs for run;\n"),
             ]
         )
         .body(),
@@ -29785,6 +29823,7 @@ fn every_construct_of_the_slice_lowers_into_nodes_of_their_kinds_child_count() {
                 "src/Lib/helpers.php",
                 "<?php const TOP = PHP_INT_MAX; function capitalize(string $text): string { return ucfirst($text); } function clean(string $text): string { return trim($text); } function measure(string $text): int { return strlen($text); } function format(string $format, mixed ...$values): string { return sprintf($format, ...$values); } function largest(int ...$values): int { return max(0, ...$values); } /** @param list<int> $values */ function total(array $values): int { return array_sum($values); } /**\n * @param list<int> $values\n * @param callable(int, int): int $step\n */\nfunction fold(array $values, callable $step, int $start): int { return array_reduce($values, $step, $start); }",
             ),
+            ("src/Lib/Externs.sharp", "namespace Lib;\n\nextern namespace Lib for capitalize;\n"),
             (
                 "src/App/Tenant/Access.php",
                 "<?php namespace App\\Tenant; #[\\Attribute] final class Access { public function __construct(string $class) {} }",
@@ -29796,6 +29835,7 @@ fn every_construct_of_the_slice_lowers_into_nodes_of_their_kinds_child_count() {
             common::FAILURES,
             common::INT,
             common::FLOAT,
+            DISPATCHER_LIBRARY,
         ],
     );
     lowered.push(Lowered::named(
@@ -30464,7 +30504,7 @@ fn a_checker_mark_stays_out_of_the_lowered_attributes() {
 #[test]
 fn a_call_names_the_lean_function_its_method_is_marked_with() {
     let code = "namespace App;\n\nimport Lib;\n\nclass Bounds\n{\n    public int largest(int a, int b) => Math.max(a, b);\n\n    public float root(float x) => Math.sqrt(x);\n\n    public string loud(string text) => Lib.capitalize(text);\n}\n";
-    let functions = common::checked("src/App/Bounds.sharp", code, &[LOUD, LOUD_HELPERS], |checked| {
+    let functions = common::checked("src/App/Bounds.sharp", code, &[LOUD, LOUD_HELPERS, LOUD_EXTERNS], |checked| {
         Node::Program(checked.program()).filter_map(|node| match node {
             Node::Expression(expression @ Expression::Call(Call::Method(_))) => {
                 Some(checked.types().lean_function(expression).map(|function| function.to_string()))

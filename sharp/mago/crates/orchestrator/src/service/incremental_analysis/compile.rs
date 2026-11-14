@@ -16,13 +16,13 @@ use mago_analyzer::external::ExternalAnalysisSession;
 use mago_analyzer::external::FileReads;
 use mago_analyzer::external::Listing;
 use mago_analyzer::is_collection_member;
-use mago_codex::metadata::module::BindingMetadata;
 use mago_codex::metadata::module::ModuleKind;
 use mago_codex::metadata::module::ModuleMetadata;
 use mago_codex::metadata::module::top_dispatcher_namespaces;
 use mago_codex::reference::CascadeEdge;
 use mago_codex::reference::ReferenceOrigin;
 use mago_codex::reference::SymbolReferences;
+use mago_codex::signature::DefSignatureNode;
 use mago_codex::symbol::SymbolIdentifier;
 use mago_codex::ttype::TType;
 use mago_database::DatabaseReader;
@@ -111,8 +111,8 @@ pub struct Listener {
     pub takes_event: bool,
 }
 
-/// The app's module whose binding of `Sharp.Dispatcher` serves the whole app, spec section 15, which `emit` reads
-/// wherever the event is emitted.
+/// The app's module whose binding of the dispatcher serves the whole app, spec section 15, which `emit` reads wherever
+/// the event is emitted.
 #[derive(Debug, PartialEq, Eq)]
 pub struct DispatcherModule {
     /// The workspace-relative name of its file.
@@ -170,22 +170,23 @@ impl IncrementalAnalysisService {
         listeners.into_iter().map(|(_, _, listener)| listener).collect()
     }
 
-    /// The app's module whose binding of `Sharp.Dispatcher` serves the whole app, spec section 15: a module of the one
+    /// The app's module whose binding of the dispatcher serves the whole app, spec section 15: a module of the one
     /// namespace `top_dispatcher_namespaces` gives. `None` when no app module binds it, and the standard library's
     /// binding serves, and when two namespaces tie, which the analyzer refuses.
     #[must_use]
     pub fn dispatcher_module(&self) -> Option<DispatcherModule> {
-        let [namespace] = top_dispatcher_namespaces(&self.codebase.modules)[..] else {
+        let codebase = &self.codebase;
+        let [namespace] = top_dispatcher_namespaces(&codebase.modules, codebase)[..] else {
             return None;
         };
 
-        self.codebase
+        codebase
             .modules
             .iter()
             .find(|module| {
                 module.kind != ModuleKind::Test
                     && module.namespace == namespace
-                    && module.bindings.iter().any(BindingMetadata::binds_dispatcher)
+                    && module.bindings.iter().any(|binding| binding.binds_dispatcher(codebase))
             })
             .map(|module| DispatcherModule { file: module.file, namespace })
     }
@@ -515,7 +516,7 @@ impl IncrementalAnalysisService {
                 };
                 declare((node.name, empty_word()), node.signature_hash);
                 for child in &node.children {
-                    declare((node.name, child.name), child.signature_hash);
+                    declare((node.name, super::member_key(&self.codebase, node.name, child)), child.signature_hash);
                 }
             }
         }
@@ -972,15 +973,27 @@ impl<'service> Dependencies<'service> {
             }
         }
 
+        // A library's polyfill of a name the engine builds in never declares it, since the built-in keeps the name, so
+        // its file is no input of the code that reads the name.
+        let codebase = &service.codebase;
+        let built_in = |node: &DefSignatureNode| {
+            let name = node.name.as_bytes();
+            if node.is_function {
+                codebase.get_function(name).is_some_and(|function| function.flags.is_built_in())
+            } else {
+                codebase.get_class_like(name).is_some_and(|class_like| class_like.flags.is_built_in())
+                    || codebase.get_constant(name).is_some_and(|constant| constant.flags.is_built_in())
+            }
+        };
         for (file_id, signature) in &service.codebase.file_signatures {
             if !service.database.get(file_id).is_ok_and(|file| is_source(&file)) {
                 continue;
             }
 
-            for node in signature.ast_nodes.iter().filter(|node| !node.name.is_empty()) {
+            for node in signature.ast_nodes.iter().filter(|node| !node.name.is_empty() && !built_in(node)) {
                 dependencies.declared_in.entry((node.name, empty_word())).or_default().push(*file_id);
                 for child in node.children.iter().filter(|child| !child.name.is_empty()) {
-                    let member = (node.name, child.name);
+                    let member = (node.name, super::member_key(&service.codebase, node.name, child));
                     dependencies.declared_in.entry(member).or_default().push(*file_id);
                     dependencies.signature_members.entry(node.name).or_default().push(member);
                 }
@@ -1618,6 +1631,48 @@ mod tests {
         );
     }
 
+    /// A library's polyfill of a function the engine builds in, as `if (!function_exists('str_starts_with'))` declares,
+    /// never runs beside the engine's own, so its file is no input of a file whose code calls the function, here through
+    /// the standard library's `startsWith`. A library's polyfill of a function with no built-in of its name, as
+    /// `shop_label`, declares the function, so its file is an input.
+    #[test]
+    fn a_polyfill_of_a_built_in_function_is_no_input_and_one_of_a_library_function_is() {
+        let database = project(&[
+            (
+                "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Text/StringMembers.sharp",
+                "namespace Sharp.Text;\n\npublic static class StringMembers\n{\n    extension(string text)\n    {\n        public bool startsWith(string prefix) => global.str_starts_with(text, prefix);\n    }\n}\n",
+            ),
+            (
+                "app/Prefix.sharp",
+                "namespace App;\n\nimport Lib;\n\npublic class Prefix\n{\n    public bool starts() => \"ab\".startsWith(\"a\");\n\n    public string label() => Lib.shop_label(\"a\");\n}\n",
+            ),
+            ("app/Externs.sharp", "namespace App;\n\nextern namespace Lib for shop_label;\n"),
+            (
+                "lib/polyfills.php",
+                "<?php\n\nif (!function_exists('str_starts_with')) {\n    function str_starts_with($haystack, $needle) {\n        return true;\n    }\n}\n",
+            ),
+            (
+                "lib/helpers.php",
+                "<?php\n\nif (!function_exists('shop_label')) {\n    function shop_label(string $name): string {\n        return $name;\n    }\n}\n",
+            ),
+        ]);
+
+        let compiled = compile(&mut analyzed(&database), empty_stamp);
+
+        assert_eq!(
+            input_paths(accepted(&compiled, "app/Prefix.sharp")),
+            [
+                "Module.sharp",
+                "app/*.sharp",
+                "app/Externs.sharp",
+                "app/Module.sharp",
+                "app/Prefix.sharp",
+                "composer.lock",
+                "lib/helpers.php"
+            ]
+        );
+    }
+
     /// Spec section 22: a class's `use` names its header's traits and the `Defaults` trait of each interface with a
     /// default body, so the file of each is an input. A header trait that turns into an interface, or an interface
     /// that gains or loses its last default body, leaves the compiled class stale.
@@ -2042,13 +2097,14 @@ mod tests {
         }
     }
 
-    fn declarations(signature: &FileSignature) -> Vec<SymbolIdentifier> {
+    fn declarations(codebase: &CodebaseMetadata, signature: &FileSignature) -> Vec<SymbolIdentifier> {
         signature
             .ast_nodes
             .iter()
             .flat_map(|node| {
-                std::iter::once((node.name, empty_word()))
-                    .chain(node.children.iter().map(|child| (node.name, child.name)))
+                std::iter::once((node.name, empty_word())).chain(
+                    node.children.iter().map(|child| (node.name, super::super::member_key(codebase, node.name, child))),
+                )
             })
             .collect()
     }
@@ -2061,8 +2117,12 @@ mod tests {
         let name = |file_id: &FileId| {
             String::from_utf8_lossy(&database.get(file_id).expect("a file exists").name).into_owned()
         };
-        let every_declaration: Vec<SymbolIdentifier> =
-            service.codebase.file_signatures.values().flat_map(declarations).collect();
+        let every_declaration: Vec<SymbolIdentifier> = service
+            .codebase
+            .file_signatures
+            .values()
+            .flat_map(|signature| declarations(&service.codebase, signature))
+            .collect();
         let files: Vec<FileId> =
             database.files().filter(|file| file.file_type != FileType::Builtin).map(|file| file.id).collect();
 
@@ -2072,8 +2132,9 @@ mod tests {
             let Some(signature) = service.codebase.get_file_signature(&edited.id) else {
                 continue;
             };
-            let diff =
-                CodebaseDiff::new().with_keep(every_declaration.iter().copied()).with_changed(declarations(signature));
+            let diff = CodebaseDiff::new()
+                .with_keep(every_declaration.iter().copied())
+                .with_changed(declarations(&service.codebase, signature));
             service.codebase.safe_symbols.clear();
             service.codebase.safe_symbol_members.clear();
             let unchanged: Vec<FileId> = files.iter().copied().filter(|file_id| *file_id != edited.id).collect();
@@ -2638,6 +2699,10 @@ mod tests {
                 "<?php\n\nnamespace Vendor\\Pdf;\n\nconst DEFAULT_DPI = 300;\n\nfinal class Document\n{\n}\n".to_string(),
             ),
             ("lib/version.php", "<?php\n\nconst APP_VERSION = 3;\n".to_string()),
+            (
+                "app/Shop/Externs.sharp",
+                "namespace App.Shop;\n\nimport Vendor.Pdf;\n\nextern namespace Pdf for APP_VERSION;\n".to_string(),
+            ),
             ("app/Shop/Report.sharp", "namespace App.Shop;\n\nimport Vendor.Pdf;\n\npublic class Report\n{\n    public int dpi() => Pdf.DEFAULT_DPI;\n\n    public int version() => Pdf.APP_VERSION;\n}\n".to_string()),
         ]
     }

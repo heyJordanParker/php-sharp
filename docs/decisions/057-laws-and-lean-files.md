@@ -10,7 +10,7 @@ Lean stays underneath. The checker translates the pure code a law reaches and th
 
 **A law's claim and its `when` condition compute ints exactly** (Cass, 10-22). A law never runs, so `Money.total(a) + Money.total(b)` in a claim never overflows, and the code the claim calls throws `ArithmeticError` where it does at runtime. Wherever PHP runs the claim without throwing, each value is the exact one, so a law proven of exact values holds of PHP's, and an exact `when` only adds cases the law must hold in. A checked `+` in the claim made the law for a list's rest hold only where `total(rest) + total(b)` fits an int, which the case `[Money first, ...rest]` cannot show, so no sum law proved by calling itself. The trade: a claim true only because its own arithmetic overflows, such as `x + 1 <= 9223372036854775807`, is not proven. Rejected: keep the checked claim as the law's statement and prove each law that calls itself through a second, exact statement. Each such law then carries two statements, and the checker must find a proof that the exact one gives the checked one for every claim.
 
-**Structure is a module's `imports` list, as Java's `module-info` lists what a module `requires`.** A namespace's `Module.sharp` lists the namespaces its code imports from, `module { imports App.Tenant.Community, App.Shared.Schema; }`, and an import of any other namespace is a compile error at the import. The checker checks the list as it checks types, with no Lean.
+**Structure is a module's `imports` list, as Java's `module-info` lists what a module `requires`.** A namespace's `Module.sharp` lists the namespaces its code imports from, `module { imports App.Shop.Loyalty, App.Shop.Records; }`, and an import of any other namespace is a compile error at the import. The checker checks the list as it checks types, with no Lean.
 
 ## Options for laws
 
@@ -143,7 +143,7 @@ namespace App.Tenant.Store;
 
 module
 {
-    imports App.Tenant.Community, App.Shared.Schema, Illuminate.Support;
+    imports App.Shop.Loyalty, App.Shop.Records, Illuminate.Support;
 }
 ```
 
@@ -168,7 +168,7 @@ The namespace that is used names who may use it. Rust's `pub(in path)` and Go's 
 import Code.App.Tenant.Store.Module
 open Sharp
 
-@[rule] def importsOnly : Rule := .importsOnly [App.Tenant.Community, App.Shared.Schema]
+@[rule] def importsOnly : Rule := .importsOnly [App.Shop.Loyalty, App.Shop.Records]
 ```
 
 This was the previous design: Lean ran each rule over the code's namespaces, imports and references. A PHP# developer had to write Lean to state where code may depend, and every compile that judged a rule started Lean.

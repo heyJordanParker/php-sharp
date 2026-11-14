@@ -1,5 +1,5 @@
 --TEST--
-A string reads as its bytes, trims the characters it is given, Json.encode takes its switches, Json.parse compares by structure, and Sql.identifier gives only an allowed name
+A string reads as its bytes, trims the characters it is given, Json.encode takes its switches, Json.parse compares by structure, and a string-backed enum case gives its value, and no other name becomes one
 --FILE--
 <?php
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Text/StringMembers.sharp';
@@ -10,6 +10,7 @@ require __DIR__ . '/harness/fixture.inc';
 fixture('Payloads');
 
 use Payloads\Report;
+use Payloads\SortColumn;
 
 echo json_encode(Report::bytes(), JSON_UNESCAPED_UNICODE), "\n";
 foreach ([[0, 9], [3, 2], [-1, 2]] as [$start, $end]) {
@@ -25,9 +26,9 @@ foreach (Report::encodings() as $encoded) {
 }
 var_dump(Report::comparisons());
 var_dump(Report::value('{"a":[1,2]}'));
-echo Report::column('created_at'), "\n";
+echo Report::column(SortColumn::CreatedAt), "\n";
 try {
-    Report::column('name; drop table orders');
+    Report::column(SortColumn::from('name; drop table orders'));
 } catch (ValueError $e) {
     echo get_class($e), ": ", $e->getMessage(), "\n";
 }
@@ -71,4 +72,4 @@ array(1) {
   }
 }
 created_at
-ValueError: `Sql.identifier` takes a name the query allows, and "name; drop table orders" is none of them.
+ValueError: "name; drop table orders" is not a valid backing value for enum Payloads\SortColumn

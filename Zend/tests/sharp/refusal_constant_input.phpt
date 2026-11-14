@@ -22,6 +22,8 @@ $root = compile_project('constant-input', [
     'mago.toml' => "[source]\npaths = [\".\"]\nextensions = [\"sharp\", \"php\"]\n",
     'Pdf.php' => PDF,
     'version.php' => VERSION,
+    // The folder's root constant `APP_VERSION` takes the namespace `Vendor.Pdf`, spec section 23.
+    'Externs.sharp' => "extern namespace Vendor.Pdf for APP_VERSION;\n",
     'Report.sharp' => <<<'SHARP'
 namespace Demo;
 

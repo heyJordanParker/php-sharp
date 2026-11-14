@@ -44,19 +44,6 @@ final class Listening
     private function __construct() {}
 }
 
-namespace Sharp\Data;
-
-/**
- * @strict-properties
- * @not-serializable
- */
-final class Sql
-{
-    private function __construct() {}
-
-    public static function identifier(string $name, array $allowed): string {}
-}
-
 namespace Sharp\Internal;
 
 /**
@@ -113,6 +100,12 @@ function methods(string $type): array {}
 
 function typeArguments(string $type): array {}
 
+function invoke(object $receiver, string $class, string $method, array $arguments): mixed {}
+
+function read(object $receiver, string $class, string $property): mixed {}
+
+function write(object $receiver, string $class, string $property, mixed $value): void {}
+
 function readModule(string $path): void {}
 
 function testModule(string $class, array $bindings): void {}
@@ -127,7 +120,7 @@ function building(object $object): bool {}
 
 function build(object $object, \Closure $body, mixed ...$arguments): mixed {}
 
-function emit(object $event): void {}
+function emit(object $event, string $dispatcher): void {}
 
 function listenersFor(object $event): array {}
 

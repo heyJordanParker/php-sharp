@@ -35,7 +35,7 @@ function request(string $root, ?string $compile): void
     $setting = $compile === null ? '' : ' -d ' . escapeshellarg("sharp.compile_command=\"$compile\"");
     echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . " -n$setting -r " . escapeshellarg(
         'require ' . var_export(__DIR__ . '/Container.inc', true) . '; container_load(' . var_export($root, true) . ');'
-        . ' Sharp\Internal\emit(new App\Fresh\Paid(1));'
+        . ' Sharp\Internal\emit(new App\Fresh\Paid(1), "Sharp\\\\Dispatcher");'
         . ' echo implode(", ", App\Fresh\Notices::$log), "; compiles: ", substr_count(@file_get_contents(' . var_export("$root/runs.log", true) . ') ?: "", "run"), "\n";'
     ));
 }

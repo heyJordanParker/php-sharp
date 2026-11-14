@@ -75,8 +75,8 @@ container_project('events-container', [
         SHARP,
 ]);
 
-Sharp\Internal\emit(new App\Shop\Paid(1));
-Sharp\Internal\emit(new App\Shop\Paid(2));
+Sharp\Internal\emit(new App\Shop\Paid(1), 'Sharp\Dispatcher');
+Sharp\Internal\emit(new App\Shop\Paid(2), 'Sharp\Dispatcher');
 [$first, $second] = App\Shop\Notices::$made;
 echo 'a new object for every event: ', var_export($first !== $second, true), "\n";
 echo 'its singleton service: ', $first->usedMailer()->name(), ', the same object: ', var_export($first->usedMailer() === $second->usedMailer(), true), "\n";
@@ -86,13 +86,13 @@ echo 'a class a module binds as a singleton, still new for every event: ', var_e
 
 Sharp\Internal\testModule('Tests\NoticesTest', [['app\shop', 'App\Mail\Mailer', null, 'singleton', 'App\Mail\QueueMailer']]);
 Sharp\Internal\startTest('Tests\NoticesTest');
-Sharp\Internal\emit(new App\Shop\Paid(3));
+Sharp\Internal\emit(new App\Shop\Paid(3), 'Sharp\Dispatcher');
 Sharp\Internal\endTest();
 echo 'while a test runs, its module\'s service: ', end(App\Shop\Notices::$made)->usedMailer()->name(), "\n";
 
 App\Shop\Fragile::$broken = true;
 try {
-    Sharp\Internal\emit(new App\Shop\Paid(4));
+    Sharp\Internal\emit(new App\Shop\Paid(4), 'Sharp\Dispatcher');
 } catch (RuntimeException $exception) {
     echo get_class($exception), ' leaves emit: ', $exception->getMessage(), "\n";
 }

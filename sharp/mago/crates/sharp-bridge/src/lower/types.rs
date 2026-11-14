@@ -19,6 +19,7 @@ use mago_codex::metadata::class_like::ClassLikeMetadata;
 use mago_codex::metadata::class_like::ParsedField;
 use mago_codex::metadata::function_like::FunctionLikeMetadata;
 use mago_codex::metadata::module::ModuleMetadata;
+use mago_codex::metadata::module::dispatcher;
 use mago_codex::metadata::parameter::FunctionLikeParameterMetadata;
 use mago_codex::metadata::property::PropertyMetadata;
 use mago_codex::misc::GenericParent;
@@ -216,6 +217,15 @@ impl<'analysis> Types<'analysis> {
 
     pub(crate) fn codebase(&self) -> &'analysis CodebaseMetadata {
         self.codebase
+    }
+
+    /// The full name of the interface every `emit` hands its event to, as [`dispatcher`] finds it.
+    pub(crate) fn dispatcher(&self) -> Word {
+        let Some(dispatcher) = dispatcher(self.codebase) else {
+            unreachable!("the checker refuses an `emit` in a project without a dispatcher");
+        };
+
+        dispatcher
     }
 
     /// What the PHP of a pattern depends on, as the analysis answered it.
@@ -1075,8 +1085,10 @@ impl<'analysis> Types<'analysis> {
             (owner.flags.is_sharp()
                 && !owner.flags.is_final()
                 && member.method_metadata.as_ref().is_some_and(|method| !method.visibility.is_private())
+                // A class-like is named by its key, spec section 24, so the PHP# `Box` is not `BOX`.
                 && among.is_none_or(|among| {
-                    among.iter().any(|named| named.as_bytes().eq_ignore_ascii_case(class.as_bytes()))
+                    let class = self.codebase.class_key(class.as_bytes());
+                    among.iter().any(|named| self.codebase.class_key(named.as_bytes()) == class)
                 }))
             .then_some((class, member))
         })
@@ -1145,10 +1157,8 @@ impl<'analysis> Types<'analysis> {
     #[must_use]
     pub(crate) fn import(&self, class: &[u8], method: &[u8]) -> Option<(Word, Option<(String, String)>)> {
         let metadata = self.codebase.get_method(class, method)?;
-        let mark = metadata
-            .attributes
-            .iter()
-            .find(|attribute| attribute.name.as_bytes().eq_ignore_ascii_case(IMPORT.as_bytes()))?;
+        // `[Import]` is a PHP# class-like of the standard library, keyed by its exact name, spec section 24.
+        let mark = metadata.attributes.iter().find(|attribute| attribute.name.as_bytes() == IMPORT.as_bytes())?;
         let Some(ConstantExpression::String(function)) =
             mark.arguments.first().and_then(|argument| argument.value.as_ref())
         else {
@@ -1646,9 +1656,7 @@ impl<'analysis> Types<'analysis> {
             .iter()
             .skip(written.argument_list.arguments.len())
             .filter_map(|parameter| {
-                let marked = |mark: &[u8]| {
-                    parameter.attributes.iter().any(|attribute| attribute.name.as_bytes().eq_ignore_ascii_case(mark))
-                };
+                let marked = |mark: &[u8]| parameter.has_attribute(self.codebase, mark);
 
                 if marked(TAKES_RESULT_TYPE) {
                     Some(RESULT_TYPE_SLOT)
@@ -2204,7 +2212,7 @@ impl<'analysis> Types<'analysis> {
                 false,
                 false,
                 false,
-                &mut ComparisonResult::default(),
+                &mut ComparisonResult::new(),
             ))
         .then_some(root_type)
     }

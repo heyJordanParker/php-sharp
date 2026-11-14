@@ -16,7 +16,8 @@ $root = compile_project('library-autoload-classmap-authoritative', $files + [
     "$library/autoload.php" => file_get_contents("$package/autoload.php"),
     "$library/native.php" => file_get_contents("$package/native.php"),
     "$library/src/Plugin.php" => file_get_contents("$package/src/Plugin.php"),
-    'vendor/composer/installed.json' => '{"packages": [{"name": "heyjordanparker/php-sharp-composer", "version": "9.9.9"}]}',
+    // A dev version names no release, so mago compiles against it.
+    'vendor/composer/installed.json' => '{"packages": [{"name": "heyjordanparker/php-sharp-composer", "version": "9.9.x-dev"}]}',
     'app/Order.sharp' => "namespace App;\n\npublic class Order\n{\n    public string number() => \"A-12\";\n}\n",
     'app/Priced.sharp' => "namespace App;\n\npublic interface Priced\n{\n    int price() => 5;\n}\n",
     'app/Payment.sharp' => "namespace App;\n\npublic enum Payment\n{\n    case Pending;\n    case Paid(int amount);\n}\n",
@@ -70,7 +71,7 @@ namespace Composer {
 
         public static function getPrettyVersion(string $packageName): string
         {
-            return '9.9.9';
+            return '9.9.x-dev';
         }
     }
 }

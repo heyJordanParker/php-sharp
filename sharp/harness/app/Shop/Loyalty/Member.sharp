@@ -1,0 +1,5 @@
+namespace App.Shop.Loyalty;
+
+public class Member
+{
+}

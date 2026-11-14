@@ -4,6 +4,120 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.10
+
+#### Read a reflection boolean by its `is` name
+
+The booleans `Class<T>.methods()` and `properties()` give are named as the standard library names every boolean, as `List.isEmpty()` and Kotlin's `KParameter.isOptional` are, spec section 25. `Method.nullable`, `Property.nullable` and `Parameter.nullable` are `isNullable`, and `Parameter.optional` is `isOptional`. `mago` refuses the old names with "Property `Parameter.optional` does not exist.". Write `isNullable` and `isOptional`.
+
+#### Mark the attribute classes a framework reads by reflection
+
+A public member with an attribute no longer escapes spec section 5's warning that it is too wide just for having one. Only an attribute whose class is marked `[ReachedByReflection]` turns the warning off, as .NET's `[DynamicallyAccessedMembers]` says reflection reaches a member. A member marked `[Deprecated]`, `[Import]` or `[Key]` that nothing outside its namespace uses now warns "`Hooks.voided` is public, and nothing outside `App.Payments` uses it.", where 0.6.10 said nothing. An `[Export]` method still never warns, since plain PHP calls it through its global function. Mark each attribute class whose framework reaches the member: `[ReachedByReflection]` on a PHP# class, and `#[\Sharp\ReachedByReflection]` on a plain PHP one.
+
+#### Give each library folder of root functions a namespace with `extern namespace`
+
+A function or constant a plain PHP library declares in PHP's root namespace no longer takes the namespace of the classes in its folder, decision 97. `extern namespace` is now the one way to give a library's root names a namespace: it names a class, function or constant of the folder, and gives that folder's root classes, functions and constants the namespace. Without a line, `Foundation.abort(404)` is refused with "Function `Foundation.abort` does not exist.", where 0.6.10 called Laravel's `abort()`. Add one line for each folder the code reaches, in a `.sharp` file of `extern` declarations, with the namespace written in full or through its import:
+
+```csharp
+// 0.6.10: no declaration
+import Illuminate.Foundation;
+
+Foundation.abort(404);
+```
+
+```csharp
+// 0.6.11: app/Stubs/Laravel.sharp
+namespace App.Stubs;
+
+extern namespace Illuminate.Foundation for abort;   // abort(), now() and every root name of helpers.php's folder
+```
+
+A line may give a namespace a class has only to a folder that holds such a class, as `helpers.php` sits beside `Illuminate\Foundation`'s classes. A line also gives its namespace only to the root classes of its own folder, so `WordPress.WP_Screen` of another WordPress folder names no class.
+
+#### Name a query's allowed columns with a string-backed enum
+
+`Sql.identifier` and the `Sharp.Data.Sql` class are deleted, decision 98, since a string-backed enum's `value` is a `literal-string` wherever the case comes from, and the enum holds the allow-list as a type. `import Sharp.Data.Sql;` is refused with "Imported class, interface, trait, or enum `Sharp.Data.Sql` does not exist.". Declare the allowed names as an enum, and pass its case's `value`:
+
+```csharp
+// 0.6.10
+import Sharp.Data.Sql;
+
+query.orderByRaw(Sql.identifier(column, ["name", "created_at"]));
+```
+
+```csharp
+// 0.6.11
+public enum SortColumn : string
+{
+    case Name = "name";
+    case CreatedAt = "created_at";
+}
+
+query.orderByRaw(column.value);   // column is a SortColumn
+```
+
+#### Move the engine, mago and the standard library to 0.6.11 together, then compile again
+
+The 0.6.11 engine refuses every `.sharpc` file an older mago wrote, because `SHARP_UNIT_ABI` changed: each `emit` now passes the engine the dispatcher it hands the event to, the interface the standard library marks, where 0.6.10 passed the event alone.
+
+```text
+Shop.sharp was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine.
+```
+
+With `sharp.compile_command` set, the engine runs it and reads the files it writes. Otherwise, compile again after upgrading.
+
+mago now refuses to compile against a standard library of another release, since it reads the library it ships with, as the `Dispatcher` the library marks. So does the compile for the extension hosts that `mago analyze`, `lint` and `convert` run, which 0.6.10 ran against no library when it couldn't read the installed one. mago 0.6.11 says so where 0.6.10 compiled:
+
+```text
+This project's PHP# standard library is 0.6.10, and mago is 0.6.11. Move mago and the standard library to the same release: require heyjordanparker/php-sharp-composer 0.6.11, or heyjordanparker/mago-sharp 0.6.10.
+```
+
+A Composer dev version of the library, as `dev-master`, names no release, so it compiles. An `emit` in a project without the standard library, which has no dispatcher, is refused with "`emit` hands its event to a dispatcher, and this project has none.", where 0.6.10 compiled it and it threw at run time.
+
+```sh
+composer require "heyjordanparker/php-sharp-composer:^0.6.11"
+composer require --dev "heyjordanparker/mago-sharp:^0.6.11"
+vendor/bin/mago compile
+```
+
+### Added
+
+- `Class<T>.methods()` and `properties()` read what .NET's `MethodInfo` and Kotlin's `KFunction` read, spec section 25. A `Method` gives its `declaringClass`, `isStatic` and `visibility`, a `Property` its `declaringClass` and `visibility`, and a `Parameter` `isVariadic` and `defaultValue()`. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member, so an `internal` member reads `Internal` though plain PHP reaches it as a public one. `defaultValue()` evaluates the default on each read, a `new` in it included, and throws `OutOfRangeException` for a parameter without one.
+- `Method.invoke(receiver, arguments)`, `Property.get(receiver)` and `Property.set(receiver, value)` call, read and write the member, as .NET's `MethodInfo.Invoke` and `PropertyInfo.GetValue`/`SetValue` and Kotlin's `KCallable.call` and `KProperty1.get`/`KMutableProperty1.set` do, spec section 25 and decision 94. Each reaches the member as a direct use from the calling code would, a private member only from its class and an `internal` one only from its namespace, and throws `Error` otherwise. Each argument and value is checked against its type, so `add.invoke(counter, ["2"])` for `add(int amount)` throws `TypeError`. A method that isn't private runs the receiver's override, and `get` runs a computed property's `get`. All three may have every effect, so an implementation of a pure interface method can't call them.
+
+### Changed
+
+- `mago convert` writes the `extern namespace` lines a converted file needs into `Externs.sharp` in the project's first PSR-4 folder, decision 97: one line for each library folder whose root functions, constants or classes the file reaches and no line of the project names, as `extern namespace Illuminate.Foundation for abort;`. The namespace is the first of the folder's classes' namespaces, or the one the library's Composer package name gives when it has no namespaced class, as `Acme.StringHelpers` for `acme/string-helpers`. The command creates the file or adds the missing lines in sorted order, never one twice. A plain PHP library's class of PHP's root namespace converts too, as `import Acme.Legacy.Legacy_Order;`, where 0.6.10 refused the file.
+- Spec section 5's too-wide warning skips only a member whose attribute's class is marked `[ReachedByReflection]`, and an `[Export]` method, decision 95, where 0.6.10 skipped a member with any attribute.
+- `List.first(predicate)` that finds nothing throws `OutOfRangeException` with "`first` finds an element the predicate matches, and none does.", where 0.6.10 said "No element matches the predicate".
+- A refusal of an effect that code outside the standard library reaches through a standard library member names that member, as "`Calling.run` reaches `Method.invoke`, which may have every effect", and tells the code to call it where no `uses` limits the effects. 0.6.10 named the library's own plain PHP call, as `ReflectionMethod.getAttributes` for `Method.attributes<T>()`, and told the code to declare it with `extern`.
+
+### Fixed
+
+- A PHP# override of a plain PHP method reads the method's types as a call of it reads them, spec section 22. A method declared `@return array{string|null, string}` gives `List<string?>`, so an override returning `List<string?>` and calling `super.split(text)` compiles, where 0.6.10 refused it as incompatible with "`Map<0|1, string?>`". An override whose parameter takes `List<string|int>` where the plain method's `array` takes `array{string, int}` compiles too, where 0.6.10 asked it to take "PHP's `Sharp\Map`".
+- An extension's `CallExpression::fromNode` reads a PHP# call that passes type arguments, as `typeof(Order).methods()[0].attributes<Action>()`, `maybe?.wrap<int>(2)` or `Calc.pair<int>(3)`, and gives them as its new `typeArguments` node, apart from its `arguments`. 0.6.10 refused such a call with "A call node has no argument list.", which stopped the file's analysis. It also reads a null-safe call of a function value, `doubler?.(4)`, as a call of an unnamed function, where 0.6.10 refused it as no call.
+- `as` to a type parameter gives the type parameter or null, spec section 21, as `as` to any other type does. Inside `class Sweep<TDue : Event>`, `events.map(e => e as TDue)` of a `List<Event>` is a `List<TDue?>`, so a later `item != null` compiles, where 0.6.10 read a `List<TDue>`, reported the test as redundant and `e` as "already a `TDue`". `value as T` of an `Event` with an unbounded `T` is a `T?`, where 0.6.10 refused `T? any<T>(Event value) => value as T;` as returning `Event`. `is` and `is not` of a type parameter narrow the same way: `ev is TDue` of an `Event` is no longer "always true", and `ev is not TDue` no longer "never matches". In a `.sharp` file, every comparison the checker makes follows PHP#'s rules (spec section 11), where some followed PHP's.
+- A library's polyfill of a function the engine builds in, as `if (!function_exists('str_starts_with')) { function str_starts_with(…) }`, no longer stands for the function. A call of `str_starts_with`, as `"ab".startsWith("a")` makes, has the built-in's signature, and the polyfill's file is no input of the compiled file, so an edit of it leaves the file current. 0.6.10 typed the call by the polyfill, `Any?` for one with no return type, and refused the compiled file as out of date after each edit of the polyfill. A polyfill of a function with no built-in of its name is still that function, and its file still an input. The same holds for a polyfill of a built-in class or constant.
+- A `.sharp` file that reads plain PHP from an includes folder that is a symlink to a folder outside the project runs right after `mago compile`. The compile records such a file by its absolute path, and the engine read every input's path as one under the project, so 0.6.10 refused the file as "out of date (/…/lib/Helper.php changed)" though nothing had changed. An edit of the file behind the symlink still makes it out of date.
+- `Class.of(other).name()` on an `Object` compiles, spec section 25: the `Class<Object>` of any object has every member of a class value, as `name()` and `typeArguments()` of the standard library's `Class<Any?>`. 0.6.10 refused it with "Attempting to access a method on a non-object type (`Class<Object>`).", with or without an extension host.
+- `Class<T>.methods()` reads a method whose last parameter is variadic, as `join(string ...parts)`, and gives that parameter as `parts`, where 0.6.10's engine crashed.
+- `mago analyze --watch` and the language server drop the uses an edited method of a plain PHP class with exact names made, as the plain `Room` that implements a PHP# interface keys `syncedId`, spec section 24. An edit of the body or the signature of `Room::syncedId` that stops calling `Cart.total` brings back spec section 5's warning "`Cart.total` is public, and nothing outside `App.Shop` uses it.", as a full run reports it. 0.6.10 named the edited method `syncedid`, which no use of `syncedId` meets, and kept the uses its old body made.
+- Two PHP# names that differ only in case name two things everywhere, spec section 24, where 0.6.10 still compared some names ignoring case and took one twin for the other. Each compare now keys a name by the engine's rule, a PHP# class-like and the methods of a class with exact names as written, and any other in any case:
+  - A host's return-type, assertion, signature and call-forwarding provider, its method-call hook and its entry point of `Demo\Box::total` reach `total` and never its twin `Total`, and a class-like pattern names a PHP# class-like as written. The SDK's `FunctionLikeIdentifier` carries its class's rule as Mago answers it, so `equals` tells `Box::total` from `Box::Total`, and a worker accepts one hook of both `Box::open` and `Box::Open`, where 0.6.10 refused it as a target named twice. The analyzer protocol moves to 1.14, so a mixed pair is refused at its first message.
+  - An effect is a class-like named by its key, so `uses DISK` allows no call of the `foreign` class `Disk`.
+  - A struct's own `Parse` leaves it the generated `parse` and `tryParse`, a PHP# enum must implement a `Cases` its interface declares, its own static `Cases` keeps its own type, and a plain PHP class with exact names has no `ToString` that runs its `__toString()`.
+  - A PHP# class-like `App\RANDOM`, declared in the file or anywhere in its namespace, leaves a bare `Random` in `App` naming the standard library's `Sharp\Random`, where 0.6.10 reported "Cannot find type `Random`; did you mean `App.RANDOM`?".
+  - A type that names two twins, as `Parcel.Box | Parcel.BOX` of an enum with the cases `Box` and `BOX`, holds both and takes a `BOX` value, where 0.6.10's checker refused it with "Duplicate type `Parcel.BOX` is redundant." The engine compares the class names of a declared type exactly in a `.sharp` file, so plain PHP's `Foo|FOO` is still a duplicate type.
+  - An override whose signature names a PHP# class's twin, as `ship(Parcel\BOX $parcel)` where the parent takes `Parcel\Box`, is refused with PHP's "Declaration of … must be compatible with …", where 0.6.10 took the two for one class. Two names in a signature are one type when they reach one class, so plain PHP's `foo` is still its parent's `Foo`, loaded, autoloaded while the child links, or preloaded.
+  - An `unchecked-exception-classes` or `unchecked-exceptions` entry names a PHP# exception as written, so `App\Errors\NotFound` leaves its twin `NOTFOUND` checked.
+  - In a `.sharp` file, a method `priceof` is no clash with a property `priceOf`, the laws `same` and `Same` are two laws, a method `later` is no clash with the case `Later`, a method `Seconds` none with a case's field `seconds`, `status()` is no constructor of the enum `Status`, `Order.order()` is a named constructor of `Order`, `GetIterator` is no `getIterator`, a bare `Total` names no method `total`, and a constant of `Report` reads no static member through its twin `REPORT`.
+- A plain PHP class that implements a PHP# interface whose default bodies include twins, as `total()` and `Total()`, and uses its `Defaults` trait, takes both as two methods, spec section 24, and its own `Total()` overrides only the default `Total()`. 0.6.10's engine refused the class with "Trait method …\Defaults::Total has not been applied as …::Total, because of collision with …\Defaults::total", or, beside an override, as leaving `total` abstract. The class gained exact names from its interface only after its traits were bound, and it now gains them before.
+- `mago` reads a plain PHP class that takes a PHP# interface's default bodies as the engine runs it, spec section 24:
+  - `use …\Defaults { recordEntry as entry; Total as grandTotal; }` gives the class `entry` and `grandTotal`, and `grandTotal` is the twin `Total`, never `total`. 0.6.10 keyed the names of an `as` in lowercase before the class had exact names, so it reported `entry` and `grandTotal` as methods that don't exist, and `Codebase::findMethods()` named an alias by the trait's method.
+  - A call in another case of a method the class takes from the trait names the method it meant, as "`Demo\TakesDefaults` has no member `Count`; did you mean `count`?", where 0.6.10 said only "Method `Count` does not exist".
+  - A value of an intersection with a PHP# part, as `Ledger&Countable`, is of a class with the part's exact names, so `$o->Count()` is the error the engine throws, where 0.6.10 took the plain `Countable`'s `count` for it. The error names the PHP# part, in either order of the intersection.
+- `mago` reads a class's trait adaptations as PHP applies them. `B::m insteadof A` gives the class `B`'s `m`, where 0.6.10 kept the first trait's. A qualified `A::m as am` aliases only `A`'s `m`, where 0.6.10 aliased every used trait's `m`, and a method keeps each of its aliases, as `am` and `amAgain`, where 0.6.10 kept only the last alias of each method name. A visibility change applies only to the trait method the class takes, so `A::n as protected` after `B::n insteadof A`, or `k as protected` beside the class's own `k`, leaves `n` and `k` public, where 0.6.10 refused their calls as calls of a protected method.
+
 ## [0.6.10] - 2026-11-13
 
 ### Upgrading from 0.6.9
@@ -297,7 +411,7 @@ In worker mode only:
   Only the whole codebase tells these apart, so a file whose attributes hold such a read is sent to the codebase scan hooks once every file is scanned, and sent again when a change to another file changes what it reads.
 - `ConstantExpression::evaluate()` refuses an attribute argument Mago doesn't evaluate with "The expression is not a constant expression Mago evaluates.", where it named a byte offset, as "The expression at 141 in app/Shop/NotFoundException.sharp …", that no one could find. The host's issue carries the argument's location, which Mago prints as `file:line`.
 - `mago convert` holds one proof's analysis and extension hosts at a time. A proof that split its files kept its whole analysis and its hosts' workers running while it proved each part, so a split k levels deep held k analyses and k workers per worker a host has. On a real Laravel app, runs were killed for memory at 7 to 8 GiB, with workers from the first proof still alive hours in. On a project of five clean interfaces and three that split, peak memory falls from 241 MiB to 137 MiB.
-- A `mago convert` proof that can't finish, as when an extension host's hook makes no progress within its `request-timeout-ms`, logs its error once, "Proof 4 could not finish, so the files it proves stay plain PHP: … extension host `dent` made no progress for 120000 ms on the after-analysis hooks of plugin `routes` …", and keeps each of those files plain PHP with "src/Shop/Order.php: proof 4 could not finish" as its reason. The run goes on and reports every other file. Before, the run stopped with exit code 2 and reported nothing it had found.
+- A `mago convert` proof that can't finish, as when an extension host's hook makes no progress within its `request-timeout-ms`, logs its error once, "Proof 4 could not finish, so the files it proves stay plain PHP: … extension host `app` made no progress for 120000 ms on the after-analysis hooks of plugin `routes` …", and keeps each of those files plain PHP with "src/Shop/Order.php: proof 4 could not finish" as its reason. The run goes on and reports every other file. Before, the run stopped with exit code 2 and reported nothing it had found.
 - Once `mago convert` has written its files, a write that fails, a compile of the project for the extension hosts that fails, or a proof by fresh hosts that can't finish now logs its error, says git holds the plain PHP, and ends the run with exit code 1, where each stopped it with exit code 2 and no report. The run names each file it wrote, as `src/Shop/Order.php -> src/Shop/Order.sharp`, where only a dry run named them.
 - `mago compile` keeps the `.php` files it writes beside `.sharp` files out of git with a `.gitignore` of its own in each folder that holds them, which lists itself and each file. It listed them in `.git/info/exclude`, which every worktree of a repository shares, so a compile in one worktree hid the same paths in every other: an untracked `app/Tenant/Publishable.php` someone wrote in another worktree left `git status`, and a branch switch could overwrite it without a warning. A folder whose `.gitignore` the compile didn't write keeps it as it is, and the compile warns: "app/Tenant/.gitignore doesn't list /Order.php, so git may show app/Tenant/Order.php as untracked: add /Order.php to it." A compile also removes the blocks an earlier `mago compile` wrote in `.git/info/exclude`, and keeps every other byte. Run this `mago` in every checkout of a repository: a compile by an older `mago` in any worktree writes its block again, which hides its paths in all of them.
 - `mago convert` says why it can't read git, where it kept every file plain PHP with "commit it first" (#268). In a Docker container on a git worktree, whose git folder sits outside the mount, git can't read the repository, and the run now stops with exit code 2 and git's own reason, which Mago's FAQ explains:

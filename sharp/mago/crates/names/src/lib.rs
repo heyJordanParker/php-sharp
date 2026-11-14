@@ -49,6 +49,12 @@ pub const IMPORT: &str = "Sharp\\Interop\\Import";
 /// spec section 23, as `[Export("auth_redirect")]`.
 pub const EXPORT: &str = "Sharp\\Interop\\Export";
 
+/// The mark of an attribute class whose framework reaches the member its attribute marks by reflection.
+///
+/// Spec section 5: as .NET's `[DynamicallyAccessedMembers]` says a member is reached, so the member never warns that it
+/// is too wide.
+pub const REACHED_BY_REFLECTION: &str = "Sharp\\ReachedByReflection";
+
 /// The mark of a parameter whose argument a method writes as JSON text.
 ///
 /// The standard library marks `Json.encode`'s, so the checker refuses a `Map` key JSON can't write. The checker reads
@@ -64,6 +70,12 @@ pub const ACCEPTS_ANY_EFFECT: &str = "Sharp\\Internal\\AcceptsAnyEffect";
 /// The attribute the standard library marks the method with whose call starts a listener of its first type argument,
 /// as `Events.on`.
 pub const STARTS_LISTENER: &str = "Sharp\\Internal\\StartsListener";
+
+/// The mark of the interface every `emit` hands its event to, as `Dispatcher`.
+///
+/// The app's binding of the interface is its dispatcher, spec section 15. The checker, the compile command and the
+/// lowering of `emit` read the mark, so none copies the library's name.
+pub const DISPATCHES_EMITS: &str = "Sharp\\Internal\\DispatchesEmits";
 
 /// The mark of a generic method that parses a value into its type argument.
 ///
@@ -123,8 +135,8 @@ pub(crate) fn standard_effect(name: &[u8]) -> Option<&'static [u8]> {
         .map(str::as_bytes)
 }
 
-/// Whether a class-like whose short name is `name` wins over a default class-like in its namespace, compared ignoring
-/// case as PHP compares class names.
+/// Whether a plain PHP class-like whose short name is `name` wins over a default class-like in its namespace, compared
+/// ignoring case as PHP compares class names.
 pub(crate) fn shadows_a_default_class(name: &[u8]) -> bool {
     default_classes().any(|class| default_short_name(class).eq_ignore_ascii_case(name))
 }

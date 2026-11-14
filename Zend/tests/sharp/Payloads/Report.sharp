@@ -1,6 +1,5 @@
 namespace Payloads;
 
-import Sharp.Data.Sql;
 import Sharp.Encoding.Json;
 import Sharp.Net.Ip;
 
@@ -57,5 +56,5 @@ public static class Report
 
     public static Any? value(string json) => Json.parse(json).value;
 
-    public static string column(string name) => Sql.identifier(name, ["name", "created_at"]);
+    public static string column(SortColumn column) => column.value;
 }

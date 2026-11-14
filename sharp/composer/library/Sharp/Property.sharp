@@ -3,17 +3,29 @@ namespace Sharp;
 import ReflectionAttribute;
 import ReflectionProperty;
 
-// A property or field a class declares, as `Class<T>.properties()` gives it, spec section 25: its name, the class value
-// of its type without `?`, and whether the type is nullable, as .NET's PropertyInfo and Kotlin's KProperty give them.
-// The engine creates it.
+// A property or field a class declares, as `Class<T>.properties()` gives it, spec section 25: the class that declares
+// it, its name, its visibility, the class value of its type without `?`, and whether the type is nullable, as .NET's
+// PropertyInfo and Kotlin's KProperty give them. The engine creates it.
 public class Property
 {
     internal Property(
-        private Class<Object> declaringClass,
+        public Class<Object> declaringClass { get; },
         public string name { get; },
+        public Visibility visibility { get; },
         public Class<Any?> type { get; },
-        public bool nullable { get; }
+        public bool isNullable { get; }
     ) { }
+
+    // The property's value on `receiver`, as .NET's PropertyInfo.GetValue and Kotlin's KProperty1.get give it. The
+    // calling code reaches the property as a direct read would. A computed property runs its `get`, whose body may have
+    // any effect (spec section 6.1), so the read may have every effect, spec section 29.
+    public Any? get(Object receiver) => Internal.read(receiver, this.declaringClass, this.name);
+
+    // Writes `value` into the property on `receiver`, as .NET's PropertyInfo.SetValue and Kotlin's
+    // KMutableProperty1.set do. The calling code reaches the property as a direct write would, a get-only one included,
+    // and `value` is checked against the property's type there. A `set` may run any code, so the write may have every
+    // effect, spec section 29.
+    public void set(Object receiver, Any? value) => Internal.write(receiver, this.declaringClass, this.name, value);
 
     // The attributes of the property of the class `TAttribute` or of a class that extends or implements it, as
     // `Class<T>.attributes()` gives a class's.

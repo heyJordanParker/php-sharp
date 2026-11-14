@@ -40,6 +40,7 @@ use crate::external::protocol::decode_function_like_identifier;
 use crate::external::protocol::encode_function_like_identifier;
 use crate::external::protocol::encode_generic_parent;
 use crate::external::protocol::encode_union_snapshot;
+use crate::utils::names::declared_method_name;
 use crate::utils::names::is_member_namespace;
 use crate::utils::names::namespace_member;
 
@@ -440,10 +441,12 @@ fn write_method_projection(
     session: &ExternalAnalysisSession,
 ) -> Result<(), ExternalAnalyzerError> {
     writer.write_bytes(class_like.original_name.as_bytes())?;
-    writer.write_bytes(metadata.original_name.as_bytes())?;
+    // The name the class answers to, so a trait's method under an alias is the alias.
+    writer.write_bytes(declared_method_name(codebase, class_like, method_name, metadata).as_bytes())?;
     encode_function_like_identifier(
         writer,
         method_identifier(codebase, class_like.name.as_bytes(), method_name.as_bytes(), metadata),
+        codebase,
     )?;
 
     if fields & METHOD_FIELDS_NAMES != 0 {
@@ -858,7 +861,7 @@ fn write_function_like(
     codebase: &CodebaseMetadata,
     session: &ExternalAnalysisSession,
 ) -> Result<(), ExternalAnalyzerError> {
-    encode_function_like_identifier(writer, identifier)?;
+    encode_function_like_identifier(writer, identifier, codebase)?;
     writer.write_u8(match metadata.kind {
         FunctionLikeKind::Function => 1,
         FunctionLikeKind::Method => 2,

@@ -1088,10 +1088,7 @@ where
                 continue;
             };
 
-            // The header's names are as written until the populator keys them, and a docblock's compare in any case.
-            let written_parent = |parents: &WordSet| {
-                parents.iter().find(|parent| parent.as_bytes().eq_ignore_ascii_case(parent_name.as_bytes())).copied()
-            };
+            let written_parent = |parents: &WordSet| header_name(parents, parent_name.as_bytes());
             let written = if class_like_metadata.kind.is_interface() {
                 written_parent(&class_like_metadata.all_parent_interfaces)
             } else {
@@ -1179,11 +1176,7 @@ where
                 }
             };
 
-            let Some(header_name) = class_like_metadata
-                .all_parent_interfaces
-                .iter()
-                .find(|parent| parent.as_bytes().eq_ignore_ascii_case(parent_name.as_bytes()))
-                .copied()
+            let Some(header_name) = header_name(&class_like_metadata.all_parent_interfaces, parent_name.as_bytes())
             else {
                 class_like_metadata.issues.push(
                     Issue::error("The `@implements` tag must refer to a direct parent interface.")
@@ -1776,19 +1769,32 @@ where
 
                 if let TraitUseSpecification::Concrete(specification) = &trait_use.specification {
                     for adaptation in &specification.adaptations {
+                        // The names as written: a plain PHP class gains exact names only once its hierarchy is
+                        // populated, spec section 24, so each reader keys them, a trait by the codebase's rule, its
+                        // method by the trait's and an alias by the class's.
                         match adaptation {
-                            TraitUseAdaptation::Precedence(_) => {}
+                            TraitUseAdaptation::Precedence(adaptation) => {
+                                let method_name = word(adaptation.method_reference.method_name.value);
+                                for excluded in &adaptation.trait_names {
+                                    class_like_metadata
+                                        .add_trait_exclusion(word(context.resolved_names.get(excluded)), method_name);
+                                }
+                            }
                             TraitUseAdaptation::Alias(adaptation) => {
-                                let method_name = class_like_metadata.method_key(match &adaptation.method_reference {
-                                    TraitUseMethodReference::Identifier(local_identifier) => local_identifier.value,
-                                    TraitUseMethodReference::Absolute(reference) => reference.method_name.value,
-                                });
+                                let (trait_name, method_name) = match &adaptation.method_reference {
+                                    TraitUseMethodReference::Identifier(local_identifier) => {
+                                        (None, word(local_identifier.value))
+                                    }
+                                    TraitUseMethodReference::Absolute(reference) => (
+                                        Some(word(context.resolved_names.get(&reference.trait_name))),
+                                        word(reference.method_name.value),
+                                    ),
+                                };
 
-                                let method_alias =
-                                    adaptation.alias.as_ref().map(|alias| class_like_metadata.method_key(alias.value));
+                                let method_alias = adaptation.alias.as_ref().map(|alias| word(alias.value));
 
                                 if let Some(alias) = method_alias {
-                                    class_like_metadata.add_trait_alias(method_name, alias);
+                                    class_like_metadata.add_trait_alias(alias, trait_name, method_name);
                                 }
 
                                 if let Some(modifier) = &adaptation.modifier {
@@ -1810,11 +1816,11 @@ where
                                         }
                                     };
 
-                                    if let Some(method_alias) = method_alias {
-                                        class_like_metadata.add_trait_visibility(method_alias, visibility);
-                                    } else {
-                                        class_like_metadata.add_trait_visibility(method_name, visibility);
-                                    }
+                                    class_like_metadata.add_trait_visibility(
+                                        method_alias.unwrap_or(method_name),
+                                        trait_name,
+                                        visibility,
+                                    );
                                 }
                             }
                         }
@@ -1897,12 +1903,7 @@ where
                         continue;
                     };
 
-                    let Some(header_name) = class_like_metadata
-                        .used_traits
-                        .iter()
-                        .find(|used| used.as_bytes().eq_ignore_ascii_case(trait_name.as_bytes()))
-                        .copied()
-                    else {
+                    let Some(header_name) = header_name(&class_like_metadata.used_traits, trait_name.as_bytes()) else {
                         class_like_metadata.issues.push(
                             Issue::error("The `@use` tag must refer to a trait that is used.")
                                 .with_code(ScanningIssueKind::InvalidUseTag)
@@ -2069,8 +2070,20 @@ fn declares_equality(members: &Sequence<ClassLikeMember<'_>>) -> bool {
     })
 }
 
+/// The name of `header`, a header's parents or traits, that a docblock tag writes as `written`. The header's names stay
+/// as written until the populator keys them, spec section 24, so the name written as the tag writes it wins, as the
+/// PHP# `Named` over its twin `NAMED`, and a plain PHP one is found in any case after it, as PHP finds it.
+fn header_name(header: &WordSet, written: &[u8]) -> Option<Word> {
+    header
+        .iter()
+        .find(|name| name.as_bytes() == written)
+        .or_else(|| header.iter().find(|name| name.as_bytes().eq_ignore_ascii_case(written)))
+        .copied()
+}
+
 /// Whether `members` declare no member named `parse` or `tryParse`, whose name the generated pair would take: a type
-/// that declares either keeps its own and gets neither.
+/// that declares either keeps its own and gets neither. A struct and a PHP# class have exact names, spec section 24, so
+/// a `Parse` of their own is another method and leaves `parse` free.
 fn leaves_parse_free(members: &Sequence<ClassLikeMember<'_>>) -> bool {
     !members.iter().any(|member| {
         let name = match member {
@@ -2079,7 +2092,7 @@ fn leaves_parse_free(members: &Sequence<ClassLikeMember<'_>>) -> bool {
             _ => return false,
         };
 
-        name.eq_ignore_ascii_case(b"parse") || name.eq_ignore_ascii_case(b"tryParse")
+        name == b"parse" || name == b"tryParse"
     })
 }
 

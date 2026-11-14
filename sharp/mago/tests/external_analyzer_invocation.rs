@@ -726,6 +726,7 @@ fn node_hooks_see_a_sharp_call_of_a_global_function_as_a_function_call_as_in_php
         "<?php\n\nfunction largest(int $a, int $b): int\n{\n    return $a > $b ? $a : $b;\n}\n",
     );
     const TALLY: (&str, &str) = ("src/Tools/Tally.php", "<?php\n\nnamespace Tools;\n\nfinal class Tally\n{\n}\n");
+    const EXTERNS: (&str, &str) = ("src/Externs.sharp", "namespace Demo;\n\nextern namespace Tools for largest;\n");
     const SHARP: (&str, &str) = (
         "src/Report.sharp",
         "namespace Demo;\n\nimport Tools;\n\nclass Report\n{\n    public static int total(Calc calc)\n    {\n        return Tools.largest(calc.add(1), 2);\n    }\n}\n",
@@ -735,7 +736,7 @@ fn node_hooks_see_a_sharp_call_of_a_global_function_as_a_function_call_as_in_php
         "<?php\n\nnamespace Demo;\n\nclass Calc\n{\n    public function add(int $value): int\n    {\n        return $value;\n    }\n}\n\nclass Report\n{\n    public static function total(Calc $calc): int\n    {\n        return largest($calc->add(1), 2);\n    }\n}\n",
     );
 
-    for files in [&[LARGEST, TALLY, CALC, SHARP][..], &[LARGEST, PHP]] {
+    for files in [&[LARGEST, TALLY, EXTERNS, CALC, SHARP][..], &[LARGEST, PHP]] {
         let functions = analyze_files_with_fixture(files, &["MAGO_INVOCATION_FUNCTION_CALL_KINDS"])?;
         let methods = analyze_files_with_fixture(files, &["MAGO_INVOCATION_CALL_KINDS"])?;
 
@@ -778,6 +779,52 @@ fn node_hooks_see_a_sharp_call_of_self_a_case_and_a_local_as_the_php_that_means_
         assert_eq!(methods.invocations, ["call-kind-cap-static"], "{files:?}");
         assert_eq!(functions.invocations, ["call-kind-unnamed-function"], "{files:?}");
     }
+
+    Ok(())
+}
+
+/// A host's node hooks read each PHP# call form, its type arguments apart from its arguments: an instance call
+/// `calc.wrap<int>(1)`, a null-safe one `maybe?.wrap<int>(2)`, a static one `Calc.pair<int>(3)`, a call on a call
+/// `Calc.pair<int>(3).first<int>()`, a null-safe call of a function value `doubler?.(4)`, and `new Box<int>(5)`, which no
+/// SDK view reads. Each passes its type arguments to the call as written, where 0.6.10's view of a call that passes any
+/// refused it with "A call node has no argument list." and stopped the analysis of the file.
+#[test]
+fn node_hooks_read_each_sharp_call_form_and_its_type_arguments() -> Result<(), Box<dyn std::error::Error>> {
+    if !php_sdk_is_available() {
+        return Ok(());
+    }
+
+    const BOX: (&str, &str) =
+        ("src/Box.sharp", "namespace Demo;\n\npublic class Box<T>\n{\n    public Box(public T item { get; }) { }\n}\n");
+    const CALC: (&str, &str) = (
+        "src/Calc.sharp",
+        "namespace Demo;\n\npublic class Calc\n{\n    public int wrap<TItem>(TItem item) => 1;\n\n    public static Calc pair<TItem>(TItem item) => new Calc();\n\n    public TItem? first<TItem>() => null;\n}\n",
+    );
+    const REPORT: (&str, &str) = (
+        "src/Report.sharp",
+        "namespace Demo;\n\npublic class Report\n{\n    public static int total(Calc calc, Calc? maybe, Function<int(int)>? doubler)\n    {\n        const wrapped = calc.wrap<int>(1);\n        const maybeWrapped = maybe?.wrap<int>(2);\n        const first = Calc.pair<int>(3).first<int>();\n        const doubled = doubler?.(4);\n        const box = new Box<int>(5);\n        return wrapped + (maybeWrapped ?? 0) + (first ?? 0) + (doubled ?? 0) + box.item;\n    }\n}\n",
+    );
+
+    let observation = analyze_files_with_fixture(&[BOX, CALC, REPORT], &["MAGO_INVOCATION_EVERY_CALL_KIND"])?;
+
+    assert_eq!(observation.issues, []);
+    assert_eq!(
+        observation.invocations,
+        [
+            "call-kind-wrap-instance",
+            "type-arguments-wrap<int>(1)",
+            "call-kind-wrap-instance",
+            "type-arguments-wrap<int>(1)",
+            "call-kind-first-instance",
+            "receiver-call-kind-pair-static",
+            "type-arguments-first<int>(0)",
+            "call-kind-pair-static",
+            "type-arguments-pair<int>(1)",
+            "call-kind-unnamed-function",
+            "Instantiation-hook-new Box<int>(5)",
+            "Instantiation-hook-new Calc()",
+        ]
+    );
 
     Ok(())
 }
@@ -849,7 +896,53 @@ fn a_method_search_finds_a_method_by_a_sharp_attribute_as_by_a_plain_one() -> Re
     );
     assert_eq!(
         observation.invocations,
-        ["attributed-Probe\\Marked-markedMethod", "attributed-Probe\\Tagged-taggedMethod"]
+        [
+            "attributed-Probe\\Marked-Probe\\Holder::markedMethod",
+            "attributed-Probe\\Tagged-Probe\\Holder::taggedMethod"
+        ]
+    );
+
+    Ok(())
+}
+
+/// The interop matrix's attribute search, spec section 24: the PHP# attribute `Marked` marks the twin `Total` of a PHP#
+/// class and the camelCase default body `recordEntry` of a PHP# interface. A search for it finds each where it appears,
+/// in the PHP# types, the `Defaults` trait and the plain classes that inherit, take or alias it, and never the twin
+/// `total` or a plain override that carries no attribute.
+#[test]
+fn a_method_search_finds_each_matrix_method_a_sharp_attribute_marks() -> Result<(), Box<dyn std::error::Error>> {
+    if !php_sdk_is_available() {
+        return Ok(());
+    }
+
+    const MARKED: (&str, &str) = ("src/Probe/Marked.sharp", "namespace Probe;\n\npublic class Marked\n{\n}\n");
+    const LEDGER: (&str, &str) = (
+        "src/Interop/Ledger.sharp",
+        "namespace Interop;\n\nimport Probe.Marked;\n\npublic class Ledger\n{\n    public virtual int total() => 3;\n\n    [Marked]\n    public virtual int Total() => 4;\n}\n",
+    );
+    const RECORDING: (&str, &str) = (
+        "src/Interop/Recording.sharp",
+        "namespace Interop;\n\nimport Probe.Marked;\n\npublic interface Recording\n{\n    [Marked]\n    int recordEntry() => 2;\n}\n",
+    );
+    const MATRIX: (&str, &str) = (
+        "src/Demo/Matrix.php",
+        "<?php\n\nnamespace Demo;\n\nclass Inherits extends \\Interop\\Ledger {}\n\nclass Overrides extends \\Interop\\Ledger { public function Total(): int { return 14; } }\n\nclass TakesDefaults implements \\Interop\\Recording { use \\Interop\\Recording\\Defaults; }\n\nclass Aliases implements \\Interop\\Recording { use \\Interop\\Recording\\Defaults { recordEntry as entry; } }\n\nfunction run(Inherits $o): int { return $o->Total(); }\n",
+    );
+
+    let observation =
+        analyze_files_with_fixture(&[MATRIX, MARKED, LEDGER, RECORDING], &["MAGO_INVOCATION_ATTRIBUTED_METHODS"])?;
+
+    assert_eq!(
+        observation.invocations,
+        [
+            "attributed-Probe\\Marked-Interop\\Ledger::Total",
+            "attributed-Probe\\Marked-Interop\\Recording::recordEntry",
+            "attributed-Probe\\Marked-Interop\\Recording\\Defaults::recordEntry",
+            "attributed-Probe\\Marked-Demo\\Aliases::entry",
+            "attributed-Probe\\Marked-Demo\\Aliases::recordEntry",
+            "attributed-Probe\\Marked-Demo\\Inherits::Total",
+            "attributed-Probe\\Marked-Demo\\TakesDefaults::recordEntry",
+        ]
     );
 
     Ok(())
@@ -937,6 +1030,35 @@ fn hooks_without_the_subtree_split_sharp_method_and_static_calls() -> Result<(),
             "StaticMethodCall-hook-Calc.make(calc)"
         ]
     );
+
+    Ok(())
+}
+
+/// A provider of the PHP# `Demo\Box::total` provides only `total`, and a hook of `Demo\Box::Total` hooks only `Total`:
+/// the twins are two methods, spec section 24.
+#[test]
+fn a_provider_and_a_hook_of_a_sharp_method_reach_it_and_not_its_twin() -> Result<(), Box<dyn std::error::Error>> {
+    if !php_sdk_is_available() {
+        return Ok(());
+    }
+
+    const BOX: (&str, &str) = (
+        "src/Box.sharp",
+        "namespace Demo;\n\npublic class Box\n{\n    public int total() => 1;\n\n    public int Total() => 2;\n}\n",
+    );
+    const SHELF: (&str, &str) = (
+        "src/Shelf.sharp",
+        "namespace Demo;\n\npublic class Shelf\n{\n    public static int count(Box box) => box.total() + box.Total();\n}\n",
+    );
+
+    let observation =
+        analyze_files_with_fixture(&[BOX, SHELF], &["MAGO_INVOCATION_FUNCTION_ONLY", "MAGO_INVOCATION_TWINS"])?;
+
+    assert_eq!(
+        observation.issues,
+        [(Some("method-name-case".to_owned()), "Method name `Total` should be in camel case.".to_owned())]
+    );
+    assert_eq!(observation.invocations, ["twin-provided-total", "twin-hook-box.Total()"]);
 
     Ok(())
 }

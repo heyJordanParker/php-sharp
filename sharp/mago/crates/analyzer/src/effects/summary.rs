@@ -73,7 +73,6 @@ use crate::statement::function_like::FunctionLikeBody;
 use crate::utils::names::display_function_holder;
 use crate::utils::names::display_sharp_type;
 use crate::utils::names::is_prelude_stub;
-use crate::utils::names::library_namespace;
 
 /// Records the summary of the method, accessor or initial value `body`, which messages name by `member`, and whose
 /// parameters are declared at `parameters`, into `artifacts`, with the summary of each lambda written in it, and with
@@ -302,21 +301,13 @@ pub(crate) fn record_function_values<A>(
         }
     }
 
-    let mut allowed: Option<Vec<Word>> = None;
-    for atomic in declared.types.iter() {
-        let TAtomic::Callable(TCallable::Signature(TCallableSignature { effects: Some(effects), .. })) = atomic else {
-            continue;
-        };
-
-        allowed = Some(match allowed {
-            None => effects.clone(),
-            Some(known) => known
-                .into_iter()
-                .filter(|known| effects.iter().any(|effect| effect.as_bytes().eq_ignore_ascii_case(known.as_bytes())))
-                .collect(),
-        });
-    }
-    let Some(allowed) = allowed else {
+    // A declared type holds one function type at most, as the checker refuses a union that writes `Function` twice.
+    let Some(allowed) = declared.types.iter().find_map(|atomic| match atomic {
+        TAtomic::Callable(TCallable::Signature(TCallableSignature { effects: Some(effects), .. })) => {
+            Some(effects.clone())
+        }
+        _ => None,
+    }) else {
         return;
     };
 
@@ -938,7 +929,7 @@ where
             && let Some(function_type) = self.artifacts.get_expression_type(function)
         {
             let cause = (empty_word(), self.text(function.span()));
-            for effect in declared_effects(function_type) {
+            for effect in declared_effects(self.context.codebase, function_type) {
                 self.summary.effects.push((Effect::Foreign(effect), span, cause));
             }
         }
@@ -1002,7 +993,9 @@ where
         let cause =
             (class_like.original_name, word(property.as_bytes().strip_prefix(b"$").unwrap_or(property.as_bytes())));
         if class_like.flags.is_sharp() {
-            for effect in property_type.map(declared_effects).unwrap_or_default() {
+            for effect in
+                property_type.map(|property_type| declared_effects(codebase, property_type)).unwrap_or_default()
+            {
                 self.summary.effects.push((Effect::Foreign(effect), span, cause));
             }
 
@@ -1151,7 +1144,12 @@ where
         self.method_value(value, span, reached);
 
         // A value the analysis gave no type passes no function type's effects.
-        let effects = self.artifacts.get_expression_type(value).map(declared_effects).unwrap_or_default();
+        let codebase = self.context.codebase;
+        let effects = self
+            .artifacts
+            .get_expression_type(value)
+            .map(|value_type| declared_effects(codebase, value_type))
+            .unwrap_or_default();
         let cause = (empty_word(), self.text(span));
         for effect in effects {
             self.summary.effects.push((Effect::Foreign(effect), span, cause));
@@ -1485,12 +1483,11 @@ where
 
 /// The plain PHP function `function` as the cause of its effects, with no class and the full name PHP# names it by,
 /// and the `extern` declaration a call of it falls under. Spec section 23 names a function a library declares in PHP's
-/// root namespace through its [library namespace](library_namespace), as `Illuminate\Foundation\now` for Laravel's
-/// `now()`, which `extern Foundation.now` declares.
+/// root namespace through the namespace an `extern namespace` line gives it, as `Illuminate\Foundation\now` for
+/// Laravel's `now()` after `extern namespace Foundation for now;`, which `extern Foundation.now` declares.
 fn function_extern(codebase: &CodebaseMetadata, function: Word) -> ((Word, Word), Option<&ExternMetadata>) {
-    let metadata = codebase.get_function(function.as_bytes());
-    let name = metadata.map_or(function, |metadata| metadata.original_name);
-    let cause = match metadata.and_then(|metadata| library_namespace(codebase, metadata.span)) {
+    let name = codebase.get_function(function.as_bytes()).map_or(function, |metadata| metadata.original_name);
+    let cause = match codebase.extern_namespace_of(name.as_bytes()) {
         Some(namespace) if !name.as_bytes().contains(&b'\\') => {
             word([namespace.as_bytes(), b"\\", name.as_bytes()].concat())
         }
@@ -1503,8 +1500,8 @@ fn function_extern(codebase: &CodebaseMetadata, function: Word) -> ((Word, Word)
 /// The `extern` declaration a call of `member` (empty for a function's own name) on `class` (empty for a function)
 /// falls under: the member's, then the class's, then the same for each parent class, nearest first. A function in a
 /// namespace is declared as `extern Pdf.render`, which the binder reads as a class and its member, spec section 23,
-/// and so is one a library declares in PHP's root namespace, through a namespace of the class-likes in its folder, as
-/// `extern Foundation.now` declares Laravel's `now()`.
+/// and so is one a library declares in PHP's root namespace, through the namespace an `extern namespace` line gives it,
+/// as `extern Foundation.now` declares Laravel's `now()` after `extern namespace Foundation for now;`.
 pub(crate) fn extern_of(codebase: &CodebaseMetadata, class: Word, member: Word) -> Option<&ExternMetadata> {
     let declared = |key: (Word, Word)| codebase.externs.get(&key).and_then(|declarations| declarations.first());
     if class.is_empty() {
@@ -1512,10 +1509,7 @@ pub(crate) fn extern_of(codebase: &CodebaseMetadata, class: Word, member: Word) 
             let name = member.as_bytes();
             match name.iter().rposition(|byte| *byte == b'\\') {
                 Some(separator) => declared((word(&name[..separator]), word(&name[separator + 1..]))),
-                None => codebase
-                    .folder_namespaces(codebase.get_function(name)?.span)
-                    .iter()
-                    .find_map(|namespace| declared((ascii_lowercase_word(namespace.as_bytes()), member))),
+                None => declared((ascii_lowercase_word(codebase.extern_namespace_of(name)?.as_bytes()), member)),
             }
         });
     }
@@ -1584,8 +1578,8 @@ fn lambda_literal<'ast, 'arena>(expression: &'ast Expression<'arena>) -> Option<
 }
 
 /// The effects the function types of `value_type` list, each once. A function value with a `source` runs a PHP# body,
-/// whose effects its body's summary records instead.
-fn declared_effects(value_type: &TUnion) -> Vec<Word> {
+/// whose effects its body's summary records instead. An effect is a class-like, named by its key, spec section 24.
+fn declared_effects(codebase: &CodebaseMetadata, value_type: &TUnion) -> Vec<Word> {
     let mut effects: Vec<Word> = Vec::new();
     for atomic in value_type.types.iter() {
         let TAtomic::Callable(TCallable::Signature(signature)) = atomic else {
@@ -1596,7 +1590,8 @@ fn declared_effects(value_type: &TUnion) -> Vec<Word> {
         }
 
         for effect in signature.effects.iter().flatten() {
-            if !effects.iter().any(|known| known.as_bytes().eq_ignore_ascii_case(effect.as_bytes())) {
+            let key = codebase.class_key(effect.as_bytes());
+            if !effects.iter().any(|known| codebase.class_key(known.as_bytes()) == key) {
                 effects.push(*effect);
             }
         }

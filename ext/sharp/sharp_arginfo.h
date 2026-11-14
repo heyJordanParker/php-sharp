@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: aff9437af59373fb4e88926445f001ec1a82ffc0 */
+ * Stub hash: e1f0dd3aa5a304fbfde4222385cd139c55de48c1 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -56,6 +56,26 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_Sharp_Internal_typeArguments arginfo_Sharp_Internal_properties
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_invoke, 0, 4, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO(0, receiver, IS_OBJECT, 0)
+	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, method, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, arguments, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_read, 0, 3, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO(0, receiver, IS_OBJECT, 0)
+	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, property, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_write, 0, 4, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, receiver, IS_OBJECT, 0)
+	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, property, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_readModule, 0, 1, IS_VOID, 0)
 	ZEND_ARG_TYPE_INFO(0, path, IS_STRING, 0)
 ZEND_END_ARG_INFO()
@@ -86,8 +106,9 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_build, 0, 2, IS_M
 	ZEND_ARG_VARIADIC_TYPE_INFO(0, arguments, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_emit, 0, 1, IS_VOID, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_emit, 0, 2, IS_VOID, 0)
 	ZEND_ARG_TYPE_INFO(0, event, IS_OBJECT, 0)
+	ZEND_ARG_TYPE_INFO(0, dispatcher, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_listenersFor, 0, 1, IS_ARRAY, 0)
@@ -270,13 +291,6 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Sharp_Listening___construct, 0, 0, 0)
 ZEND_END_ARG_INFO()
 
-#define arginfo_class_Sharp_Data_Sql___construct arginfo_class_Sharp_Listening___construct
-
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Data_Sql_identifier, 0, 2, IS_STRING, 0)
-	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
-	ZEND_ARG_TYPE_INFO(0, allowed, IS_ARRAY, 0)
-ZEND_END_ARG_INFO()
-
 #define arginfo_class_Sharp_Internal_Sequence___construct arginfo_class_Sharp_Listening___construct
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Internal_Sequence_from, 0, 1, Sharp\\Internal\\Sequence, 0)
@@ -303,7 +317,9 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_class_Sharp_Internal_Listener___construct arginfo_class_Sharp_Listening___construct
 
-#define arginfo_class_Sharp_Internal_Listener_hear arginfo_Sharp_Internal_emit
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Internal_Listener_hear, 0, 1, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, event, IS_OBJECT, 0)
+ZEND_END_ARG_INFO()
 
 ZEND_FUNCTION(Sharp_Internal_accepts);
 ZEND_FUNCTION(Sharp_Internal_statics);
@@ -316,6 +332,9 @@ ZEND_FUNCTION(Sharp_Internal_elements);
 ZEND_FUNCTION(Sharp_Internal_properties);
 ZEND_FUNCTION(Sharp_Internal_methods);
 ZEND_FUNCTION(Sharp_Internal_typeArguments);
+ZEND_FUNCTION(Sharp_Internal_invoke);
+ZEND_FUNCTION(Sharp_Internal_read);
+ZEND_FUNCTION(Sharp_Internal_write);
 ZEND_FUNCTION(Sharp_Internal_readModule);
 ZEND_FUNCTION(Sharp_Internal_testModule);
 ZEND_FUNCTION(Sharp_Internal_startTest);
@@ -362,8 +381,6 @@ ZEND_METHOD(Sharp_Position, __construct);
 ZEND_METHOD(Sharp_Container, get);
 ZEND_METHOD(Sharp_Container, has);
 ZEND_METHOD(Sharp_Listening, __construct);
-ZEND_METHOD(Sharp_Data_Sql, __construct);
-ZEND_METHOD(Sharp_Data_Sql, identifier);
 ZEND_METHOD(Sharp_Internal_Sequence, __construct);
 ZEND_METHOD(Sharp_Internal_Sequence, from);
 ZEND_METHOD(Sharp_Internal_Sequence, filter);
@@ -386,6 +403,9 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "properties"), zif_Sharp_Internal_properties, arginfo_Sharp_Internal_properties, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "methods"), zif_Sharp_Internal_methods, arginfo_Sharp_Internal_methods, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "typeArguments"), zif_Sharp_Internal_typeArguments, arginfo_Sharp_Internal_typeArguments, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "invoke"), zif_Sharp_Internal_invoke, arginfo_Sharp_Internal_invoke, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "read"), zif_Sharp_Internal_read, arginfo_Sharp_Internal_read, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "write"), zif_Sharp_Internal_write, arginfo_Sharp_Internal_write, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "readModule"), zif_Sharp_Internal_readModule, arginfo_Sharp_Internal_readModule, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "testModule"), zif_Sharp_Internal_testModule, arginfo_Sharp_Internal_testModule, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "startTest"), zif_Sharp_Internal_startTest, arginfo_Sharp_Internal_startTest, 0, NULL, NULL)
@@ -444,12 +464,6 @@ static const zend_function_entry class_Sharp_Container_methods[] = {
 
 static const zend_function_entry class_Sharp_Listening_methods[] = {
 	ZEND_ME(Sharp_Listening, __construct, arginfo_class_Sharp_Listening___construct, ZEND_ACC_PRIVATE)
-	ZEND_FE_END
-};
-
-static const zend_function_entry class_Sharp_Data_Sql_methods[] = {
-	ZEND_ME(Sharp_Data_Sql, __construct, arginfo_class_Sharp_Data_Sql___construct, ZEND_ACC_PRIVATE)
-	ZEND_ME(Sharp_Data_Sql, identifier, arginfo_class_Sharp_Data_Sql_identifier, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_FE_END
 };
 
@@ -529,16 +543,6 @@ static zend_class_entry *register_class_Sharp_Listening(void)
 	zend_class_entry ce, *class_entry;
 
 	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Listening", class_Sharp_Listening_methods);
-	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE);
-
-	return class_entry;
-}
-
-static zend_class_entry *register_class_Sharp_Data_Sql(void)
-{
-	zend_class_entry ce, *class_entry;
-
-	INIT_NS_CLASS_ENTRY(ce, "Sharp\\Data", "Sql", class_Sharp_Data_Sql_methods);
 	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE);
 
 	return class_entry;

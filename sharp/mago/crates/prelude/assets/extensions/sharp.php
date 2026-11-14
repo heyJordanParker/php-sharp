@@ -261,28 +261,6 @@ final class Listening
     private function __construct() {}
 }
 
-namespace Sharp\Data;
-
-/**
- * SQL a query writes from the application's own names, which the engine declares.
- */
-final class Sql
-{
-    private function __construct() {}
-
-    /**
-     * `$name` as SQL, a column or a table chosen while the code runs, when it is one of `$allowed`, so it passes to a
-     * plain PHP `literal-string` parameter as one of the application's own names. Throws `ValueError` for any other.
-     *
-     * @param list<string> $allowed
-     *
-     * @return literal-string
-     *
-     * @throws \ValueError
-     */
-    public static function identifier(string $name, array $allowed): string {}
-}
-
 namespace Sharp\Internal;
 
 /**
@@ -361,6 +339,14 @@ final class AcceptsAnyEffect {}
  */
 #[\Attribute(\Attribute::TARGET_METHOD)]
 final class StartsListener {}
+
+/**
+ * Marks the standard library interface every `emit` hands its event to, as `Dispatcher` is, so the app's binding of it
+ * is its dispatcher. The checker, the compile command and the lowering of `emit` read the mark, so none copies the
+ * library's name.
+ */
+#[\Attribute(\Attribute::TARGET_CLASS)]
+final class DispatchesEmits {}
 
 /**
  * Marks a standard library generic method that parses a value into its type argument with the type's `parse`, as
@@ -472,8 +458,9 @@ function listen(string $event, \Closure $listener): \Sharp\Listening {}
  * The instance properties and fields of the class the class value `$type` names, its own first and then those it
  * inherits, in the order they are declared. The standard library's `Class<T>.properties()` makes a `Property` of each.
  *
- * @return list<list<string>> the class that declares each, its name, the class value of its type without `?`, and the
- * `?` the type ends with, or "" for a type that is not nullable.
+ * @return list<list<string>> the class that declares each, its name, the class value of its type without `?`, the `?`
+ * the type ends with, or "" for a type that is not nullable, and the access modifier that declares it: "public",
+ * "internal", "protected" or "private".
  */
 function properties(string $type): array {}
 
@@ -483,9 +470,10 @@ function properties(string $type): array {}
  * standard library's `Class<T>.methods()` makes a `Method` of each, and a `Parameter` of each of its parameters.
  *
  * @return list<list<list<string>>> for each, first the class that declares it, its name, the class value of its result
- * type without `?`, and the `?` the type ends with, or "" for a type that is not nullable, then one list per parameter:
- * its name, the class value of its type without `?`, the `?` the type ends with, and "optional" for one a call may
- * leave out, or "".
+ * type without `?`, the `?` the type ends with, or "" for a type that is not nullable, "static" for a static method or
+ * "", and the access modifier that declares it, as `properties()` gives a property's, then one list per parameter: its
+ * name, the class value of its type without `?`, the `?` the type ends with, "optional" for one a call may leave out or
+ * "", and "variadic" for the one that takes the rest of a call's arguments or "".
  */
 function methods(string $type): array {}
 
@@ -496,6 +484,26 @@ function methods(string $type): array {}
  * @return list<string>
  */
 function typeArguments(string $type): array {}
+
+/**
+ * The result of the method `$method` that `$class` declares, called on `$receiver` with `$arguments` as a direct call
+ * from the caller's code would be. The standard library's `Method.invoke` returns it.
+ *
+ * @param list<mixed> $arguments
+ */
+function invoke(object $receiver, string $class, string $method, array $arguments): mixed {}
+
+/**
+ * The value of the property `$property` that `$class` declares, read on `$receiver` as a direct read from the caller's
+ * code would be. The standard library's `Property.get` returns it.
+ */
+function read(object $receiver, string $class, string $property): mixed {}
+
+/**
+ * Writes `$value` into the property `$property` that `$class` declares on `$receiver`, as a direct write from the
+ * caller's code would. The standard library's `Property.set` runs it.
+ */
+function write(object $receiver, string $class, string $property, mixed $value): void {}
 
 /**
  * The listeners of `$event`, one function per listener that takes the event, as `emit` gives them to the dispatcher.

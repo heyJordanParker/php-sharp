@@ -1,0 +1,9 @@
+namespace App.Calls;
+
+// A subclass that overrides `name`, and reaches `Till`'s protected member as a subclass does.
+public class Register : Till
+{
+    public override string name() => "register";
+
+    public static Any? guardedFrom(Till till) => Calls.method("guarded").invoke(till, []);
+}

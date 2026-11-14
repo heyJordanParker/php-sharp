@@ -161,7 +161,7 @@ function heard(string $case, Closure $raise): void
 
 heard('an app class emits', fn () => (new App\Events\Payer())->pay(1));
 heard('the recorder sees an event no listener hears', fn () => (new App\Events\Payer())->ignore(2));
-heard('plain PHP emits', fn () => Sharp\Internal\emit(new App\Events\Paid(3)));
+heard('plain PHP emits', fn () => Sharp\Internal\emit(new App\Events\Paid(3), 'Sharp\Dispatcher'));
 heard('a PHP# package in vendor/ emits', fn () => (new Acme\Billing\Biller())->bill(4));
 
 Sharp\Internal\testModule('Tests\LaterTest', [['app', 'Sharp\Dispatcher', null, 'singleton', 'App\Testing\Later']]);
@@ -178,7 +178,7 @@ Sharp\Internal\testModule('Tests\Billing\RetryTest', [['tests\billing', 'Sharp\D
 Sharp\Internal\startTest('Tests\Billing\RetryTest');
 heard('a test module of any namespace binds one that retries a listener once', function (): void {
     App\Events\Hears::$failures = 1;
-    Sharp\Internal\emit(new App\Events\Paid(7));
+    Sharp\Internal\emit(new App\Events\Paid(7), 'Sharp\Dispatcher');
 });
 Sharp\Internal\endTest();
 

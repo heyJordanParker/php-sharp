@@ -80,7 +80,7 @@ array(6) {
   [5]=>
   string(9) "vip,5,tea"
 }
-OutOfRangeException: No element matches the predicate in Tagged.sharp on line 44
+OutOfRangeException: `first` finds an element the predicate matches, and none does. in Tagged.sharp on line 44
 array(7) {
   [0]=>
   bool(true)

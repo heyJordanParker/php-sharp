@@ -168,6 +168,9 @@ pub(crate) struct Impurity {
     pub(crate) cause: (Word, Word),
     /// The effect of the call, or `None` when the cause is a place written.
     pub(crate) effect: Option<Effect>,
+    /// Whether the path ends at a member of the standard library that may have every effect, spec section 29, as
+    /// `Method.invoke`, whose plain PHP call with no `extern` the caller can't declare.
+    pub(crate) every_effect: bool,
 }
 
 /// The cause of the effect a member of a `foreign` class has by itself, spec section 29, which no call or write gives:
@@ -189,6 +192,12 @@ impl Impurity {
                 Some(body) => format!("reaches `{}`, {class}", written(*body, class_name)),
                 None => format!("is {class}"),
             };
+        }
+
+        if self.every_effect
+            && let Some(body) = self.path.last()
+        {
+            return format!("reaches `{}`, which may have every effect", written(*body, class_name));
         }
 
         let cause = written(self.cause, class_name);
@@ -274,6 +283,8 @@ pub struct Effects {
     bodies: Vec<Body>,
     /// Each body's lowercase class name and its member as messages name it.
     names: Vec<(Word, Word)>,
+    /// Whether each body is a member of the standard library, whose calls a caller sees only through that member.
+    standard_library: Vec<bool>,
     /// The imports and the scope of each body's file, which name the classes of a message about the body.
     imports: Vec<Arc<WordMap<Word>>>,
     scopes: Vec<Arc<NamespaceScope>>,
@@ -381,6 +392,15 @@ impl Effects {
                         (class, summary.member)
                     }
                     Body::Lambda(_) => (empty_word(), summary.member),
+                })
+                .collect(),
+            standard_library: summaries
+                .iter()
+                .map(|summary| match summary.body {
+                    Body::Method(class, _) | Body::Accessor(class, _, _) | Body::InitialValue(class, _) => codebase
+                        .get_class_like(class.as_bytes())
+                        .is_some_and(|metadata| codebase.is_standard_library_file(metadata.span.file_id)),
+                    Body::Lambda(_) => false,
                 })
                 .collect(),
             imports: summaries.iter().map(|summary| Arc::clone(&summary.imports)).collect(),
@@ -538,9 +558,9 @@ impl Effects {
     }
 
     /// Why `body` has an effect that `allowed` does not list.
-    fn effect_outside(&self, body: Body, allowed: &[Word]) -> Option<Impurity> {
+    fn effect_outside(&self, codebase: &CodebaseMetadata, body: Body, allowed: &[Word]) -> Option<Impurity> {
         self.first_item(body, |item| match item {
-            Item::Effect(effect) => is_outside(effect, allowed),
+            Item::Effect(effect) => is_outside(codebase, effect, allowed),
             Item::Changed(_) => false,
         })
     }
@@ -555,6 +575,7 @@ impl Effects {
 
         let span = origin.span;
         let mut path = Vec::new();
+        let mut every_effect = false;
         // Each item a call brings in was already its callee's, so the chain ends at a body's own call or write.
         while let Some((callee, callee_item)) = origin.via
             && let Some((_, callee_origin)) = self.solved[callee].iter().find(|(known, _)| *known == callee_item)
@@ -562,6 +583,16 @@ impl Effects {
             path.push(self.names[callee]);
             item = callee_item;
             origin = *callee_origin;
+            // A plain PHP call with no `extern` in the standard library is the member's own, as `Method.invoke` runs
+            // any method, so for code outside the library the chain ends at the member it calls. The library's own
+            // code is told the `extern` to write.
+            if !self.standard_library[position]
+                && self.standard_library[callee]
+                && matches!(item, Item::Effect(Effect::Unknown(_)))
+            {
+                every_effect = true;
+                break;
+            }
         }
 
         let effect = match item {
@@ -569,15 +600,18 @@ impl Effects {
             Item::Changed(_) => None,
         };
 
-        Some(Impurity { span, path, cause: origin.cause, effect })
+        Some(Impurity { span, path, cause: origin.cause, effect, every_effect })
     }
 
     /// The first function value given each place that has an effect its place's function type does not list, with
     /// what it runs as messages name it, a class and a member, the imports and the scope of the file that gives the
     /// value, and the call that has the effect: a call in the body it runs, or the value itself for a plain PHP method.
-    fn unfit_function_values(
-        &self,
-    ) -> impl Iterator<Item = (&FunctionValue, (Word, Word), &WordMap<Word>, &NamespaceScope, Impurity)> + '_ {
+    fn unfit_function_values<'effects>(
+        &'effects self,
+        codebase: &'effects CodebaseMetadata,
+    ) -> impl Iterator<
+        Item = (&'effects FunctionValue, (Word, Word), &'effects WordMap<Word>, &'effects NamespaceScope, Impurity),
+    > + 'effects {
         let mut reported: Vec<Span> = Vec::new();
         self.function_values.iter().filter_map(move |(value, giver)| {
             if reported.contains(&value.span) {
@@ -585,11 +619,21 @@ impl Effects {
             }
 
             let (name, impurity) = match &value.runs {
-                Runs::Body(body) => (self.names[*self.index.get(body)?], self.effect_outside(*body, &value.allowed)?),
+                Runs::Body(body) => {
+                    (self.names[*self.index.get(body)?], self.effect_outside(codebase, *body, &value.allowed)?)
+                }
                 Runs::Foreign { callee, effects } => {
-                    let effect = effects.iter().find(|effect| is_outside(**effect, &value.allowed))?;
+                    let effect = effects.iter().find(|effect| is_outside(codebase, **effect, &value.allowed))?;
 
-                    (*callee, Impurity { span: value.span, path: Vec::new(), cause: *callee, effect: Some(*effect) })
+                    let impurity = Impurity {
+                        span: value.span,
+                        path: Vec::new(),
+                        cause: *callee,
+                        effect: Some(*effect),
+                        every_effect: false,
+                    };
+
+                    (*callee, impurity)
                 }
             };
             reported.push(value.span);
@@ -624,7 +668,7 @@ impl Effects {
 
                 metadata.all_parent_classes.iter().chain(&metadata.all_parent_interfaces).find_map(|ancestor| {
                     let declaration = holding_declaration(codebase, *ancestor, method)?;
-                    let impurity = self.effect_outside(*body, &declaration.uses)?;
+                    let impurity = self.effect_outside(codebase, *body, &declaration.uses)?;
 
                     Some((
                         self.names[position],
@@ -670,15 +714,17 @@ impl Effects {
 }
 
 /// Whether `allowed` does not list `effect`: a foreign effect it does not name, an unknown one, or an `emit` when it
-/// does not name `Sharp\Events`.
-fn is_outside(effect: Effect, allowed: &[Word]) -> bool {
+/// does not name `Sharp\Events`. An effect is a class-like, named by its key, spec section 24, so the PHP# `Db` and
+/// `DB` are two effects.
+fn is_outside(codebase: &CodebaseMetadata, effect: Effect, allowed: &[Word]) -> bool {
     let named = match effect {
         Effect::Foreign(effect) | Effect::Carried { effect, .. } => effect,
         Effect::Emit => events(),
         Effect::Unknown(_) => return true,
     };
+    let named = codebase.class_key(named.as_bytes());
 
-    !allowed.iter().any(|known| known.as_bytes().eq_ignore_ascii_case(named.as_bytes()))
+    !allowed.iter().any(|known| codebase.class_key(known.as_bytes()) == named)
 }
 
 /// The effect an `emit` has, the class the standard library marks `EffectOfEmit`.
@@ -699,14 +745,14 @@ pub(crate) fn holding_declaration(
     codebase.get_method(ancestor.as_bytes(), method.as_bytes()).filter(|declaration| {
         declaration.flags.is_sharp()
             && declaration.method_metadata.as_ref().is_some_and(|method| method.is_abstract)
-            && !declaration.has_attribute(ACCEPTS_ANY_EFFECT.as_bytes())
+            && !declaration.has_attribute(codebase, ACCEPTS_ANY_EFFECT.as_bytes())
     })
 }
 
 /// Whether `name`, a class name as the binder resolves it, is an effect, spec section 29: a `foreign` class, the
 /// standard library's among them, or `Events`.
 fn is_effect(codebase: &CodebaseMetadata, name: &[u8]) -> bool {
-    name.eq_ignore_ascii_case(events().as_bytes())
+    codebase.class_key(name) == codebase.class_key(events().as_bytes())
         || codebase.get_class_like(name).is_some_and(|class| class.flags.is_foreign())
 }
 

@@ -1,0 +1,7 @@
+namespace Payloads;
+
+public enum SortColumn : string
+{
+    case Name = "name";
+    case CreatedAt = "created_at";
+}

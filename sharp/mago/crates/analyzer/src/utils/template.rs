@@ -607,10 +607,10 @@ where
     let [TAtomic::Object(TObject::Named(given_object))] = input.types.as_ref() else {
         return unchanged(issue);
     };
+    // A class-like is named by its key, spec section 24, so the PHP# `Box` is not `BOX`.
+    let given = codebase.class_key(given_object.name.as_bytes());
     let Some((wanted, wanted_object)) = expected.types.iter().find_map(|atomic| match atomic {
-        TAtomic::Object(TObject::Named(object))
-            if object.name.as_bytes().eq_ignore_ascii_case(given_object.name.as_bytes()) =>
-        {
+        TAtomic::Object(TObject::Named(object)) if codebase.class_key(object.name.as_bytes()) == given => {
             Some((atomic, object))
         }
         _ => None,
@@ -743,8 +743,9 @@ pub(crate) fn written_type_argument(union: &TUnion, codebase: &CodebaseMetadata)
 
 /// `union` with each enum case in it as its enum, each tuple as the tuple of its elements' written types, spec section
 /// 30, each other array as the `List`, `Map` or `Set` of its key and value types, the arrays inside one too, and each
-/// `array-key`, as a plain PHP template's default gives it, as `int|string`, spec section 12.
-fn written_type(union: &TUnion, codebase: &CodebaseMetadata) -> TUnion {
+/// `array-key`, as a plain PHP template's default gives it, as `int|string`, spec section 12: the type a PHP#
+/// declaration writes for it.
+pub(crate) fn written_type(union: &TUnion, codebase: &CodebaseMetadata) -> TUnion {
     TUnion::from_vec(
         union
             .types

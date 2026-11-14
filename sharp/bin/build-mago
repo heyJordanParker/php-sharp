@@ -13,17 +13,66 @@ target="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/m
 
 # Cargo never deletes a copy of a crate it no longer uses. Each distinct `cargo test -p` or `cargo clippy -p` list
 # compiles its own copy of the shared crates, and so does each version bump or Cargo.lock change. A fresh build holds
-# 5.9 GiB, 7 lists took one slot from 5.85 to 7.37 GiB, and live slots reached 16 GiB. So in a builder's slot, above
-# 10 GiB the folder goes, and mago builds from nothing.
+# 5.9 GiB, 7 lists took one slot from 5.85 to 7.37 GiB, and live slots reached 16 GiB. So in a builder's slot, a
+# profile folder above 10 GiB goes, and mago builds it from nothing.
 # In CI the folder is a cache that CI keeps itself. clean-kept-build bounds it on the self-hosted Macs. On GitHub-hosted
 # runners mago-cache restores it with a manifest, $target/sources, which a delete would lose, so a later restore would
 # rebuild every crate. sharp/docker/run doesn't pass GITHUB_ACTIONS into the container, so a hosted Linux job shows by that manifest.
+# A profile folder in use stays. Cargo holds the flock on the folder's .cargo-lock while it builds there, and releases
+# it before it runs the test binaries, which run from the folder, as each mago the tests start does. So the prune
+# skips the folder while it can't take that flock without waiting, or while a process runs from the build. Each
+# sharp/docker/run is its own container with its own processes, so a prune there can't see a test binary another
+# container runs from the same folder: run one sharp/docker/run at a time per slot.
 if [[ -z ${GITHUB_ACTIONS:-} && ! -e $target/sources && -d $target ]]; then
-  size=$(du -sk "$target" | cut -f1)
-  if (( size > 10 * 1024 * 1024 )); then
-    echo "$target held $((size / 1024)) MiB, above the 10 GiB bound, so mago builds from nothing." >&2
-    rm -rf "$target"
-  fi
+  # Runs the rest of the line while it holds the flock on the lock file, or exits 75 at once when another process
+  # holds it: util-linux's flock on Linux, and BSD's lockf on macOS, which has no flock command.
+  holding() {
+    local lock=$1
+    shift
+    if command -v flock > /dev/null; then
+      flock --nonblock --conflict-exit-code 75 "$lock" "$@"
+    else
+      /usr/bin/lockf -s -k -t 0 "$lock" "$@"
+    fi
+  }
+
+  shopt -s nullglob
+  # Each profile folder: debug, and one a tool builds below the folder, as cargo-llvm-cov's llvm-cov-target/debug.
+  for lock in "$target"/*/.cargo-lock "$target"/*/*/.cargo-lock; do
+    profile=$(dirname "$lock")
+    size=$(du -sk "$profile" | cut -f1)
+    if (( size <= 10 * 1024 * 1024 )); then
+      continue
+    fi
+    held="$profile held $((size / 1024)) MiB, above the 10 GiB bound, but"
+    status=0
+    holding "$lock" true || status=$?
+    if (( status == 75 )); then
+      echo "$held a cargo holds $lock, so it is building there, and the folder stays." >&2
+      continue
+    fi
+    if ! command -v pgrep > /dev/null; then
+      echo "$held pgrep is missing, so no check sees a process running from $target, and the folder stays." >&2
+      continue
+    fi
+    running=$(pgrep -d, -f "$target/" || true)
+    if [[ -n $running ]]; then
+      echo "$held these processes run from $target, so the folder stays:" >&2
+      ps -o pid=,command= -p "$running" >&2
+      continue
+    fi
+    status=0
+    holding "$lock" rm -rf "$profile" || status=$?
+    if (( status == 75 )); then
+      echo "$held a cargo holds $lock, so it is building there, and the folder stays." >&2
+      continue
+    fi
+    if (( status != 0 )); then
+      exit "$status"
+    fi
+    echo "$profile held $((size / 1024)) MiB, above the 10 GiB bound, so mago builds it from nothing." >&2
+  done
+  shopt -u nullglob
 fi
 
 PATH="$(dirname "$cargo"):$PATH" exec "$cargo" test --workspace --locked --no-run \

@@ -20,6 +20,7 @@ use mago_analyzer::analysis_result::AnalysisResult;
 use mago_analyzer::effects::Effects;
 use mago_analyzer::plugin::PluginRegistry;
 use mago_analyzer::settings::Settings;
+use mago_codex::metadata::r#extern::extern_namespace_classes;
 use mago_codex::scanner::scan_program;
 use mago_database::file::File;
 use mago_names::resolver::ChangingMembers;
@@ -222,9 +223,9 @@ pub fn checked_file<R>(
             scan_program(&arena, file, program, &names, settings.version)
         })
         .collect();
-    let namespace_classes = NamespaceClasses::new(
-        scanned.iter().flat_map(|scan| scan.class_likes.values().map(|class_like| class_like.original_name)),
-    );
+    let namespace_classes = NamespaceClasses::new(scanned.iter().flat_map(|scan| {
+        scan.class_likes.values().map(|class_like| (class_like.original_name, class_like.flags.is_sharp()))
+    }));
     let changing_members = ChangingMembers::new(scanned.iter().flat_map(|scan| {
         scan.function_likes
             .values()
@@ -234,9 +235,7 @@ pub fn checked_file<R>(
             })
             .map(|member| member.original_name)
     }));
-    let extern_namespaces = ExternNamespaces::new(
-        scanned.iter().flat_map(|scan| scan.extern_namespaces.iter().map(|declaration| declaration.namespace)),
-    );
+    let extern_namespaces = ExternNamespaces::new(extern_namespace_classes(&scanned.iter().collect::<Vec<_>>()));
     for (library_file, library_program) in &library {
         let names = NameResolver::new(&arena).resolve_in(
             library_program,

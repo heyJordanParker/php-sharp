@@ -212,7 +212,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 | 5:155 | A named constructor | Refused: "A named constructor without `public`, `protected` or `private` is not supported yet in PHP#." | Decision 4 |
 | — | A field or a constant that declares several names | Refused: "A field declaring several names is not supported yet in PHP#.", and the same for a constant | Question 1 |
 
-## Crossings a real app makes
+## Crossings a Laravel codebase makes
 
 - **`Any?` from Eloquent's `getAttribute()`** needs `as` on every read. That is line 3081's rule working, and `record.getAttribute("name") as string ?? ""` gives `'Ada'`.
 - **A plain PHP `array` assigned to a typed local** is a compile error: `Map<string, Any?> attributes = record.toArray();` gives "Invalid assignment to `attributes`: it is declared as `Map<string, Any?>`." `as Map<string, Any?>` is the form that compiles.

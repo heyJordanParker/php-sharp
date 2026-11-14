@@ -1,0 +1,17 @@
+namespace App.Facts;
+
+// A member at each access level, a static method, and a method whose parameters have defaults, a `new` and a call
+// among them, and a variadic one.
+public class Ledger
+{
+    internal string code { get; } = "ledger";
+    protected int level = 1;
+    int count = 0;
+
+    public static Ledger open() => new Ledger();
+
+    internal int total(int limit = 2, Tag tag = new Tag("first"), int start = "abc".length(), string ...notes)
+        => limit + start + this.count + this.level;
+
+    protected void reset(int depth) { }
+}
