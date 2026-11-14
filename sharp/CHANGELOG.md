@@ -13,6 +13,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - `attributes<Object>()` gives every attribute of a class, a method, a property or a parameter, spec section 25, as any other bound gives the attributes of its class. 0.6.11 threw `Error` with "Class "Object" not found", since PHP's `getAttributes` takes a class to filter by, and `Object` is the root bound and no class.
 - The class value of a type that is no class, as `typeof(Object)`, `typeof(int)` or `typeof(List<int>)`, has no `properties()`, no `methods()` and no `attributes<T>()`, spec section 25, as .NET's `typeof(object).GetProperties()` gives none. 0.6.11 threw `Error` with "Class "Object" not found" from the first two and `ReflectionException` from the third.
 - `Class.of(value)` of a value of a type parameter with no bound, as `TValue`, is refused with "`TValue` does not satisfy the bound `Object` of type parameter `T`.", spec section 11, as `Any` and `Object?` are, and as C#'s CS0314 names the type parameter. 0.6.11 said "Invalid argument type for argument #1 of `Class.of`: expected `T`, but found `TValue`.", which named no bound.
+- `mago convert` writes `Externs.sharp` in the first PSR-4 folder `composer.json` lists, and a folder of root functions with no namespaced class, in a `composer.json` that names no package, takes the first PSR-4 namespace it lists. 0.6.11 took the first in alphabetical order, so `"Zoo\\": "zoo/", "App\\": "app/"` put the file in `app/` and gave the functions `App`.
 
 ## [0.6.11] - 2026-11-14
 
