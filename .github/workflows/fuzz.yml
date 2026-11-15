@@ -9,12 +9,14 @@ on:
   schedule:
     - cron: '43 3 * * *'
   workflow_dispatch:
+  # A release's bump rewrites the fuzz crate's Cargo.lock with the version alone, which mago.yml's checks job checks.
   pull_request:
     branches:
       - master
     paths:
       - .github/workflows/fuzz.yml
       - sharp/mago/crates/syntax/fuzz/**
+      - '!sharp/mago/crates/syntax/fuzz/Cargo.lock'
 permissions:
   contents: read
 concurrency:

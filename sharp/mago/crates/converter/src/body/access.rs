@@ -1,8 +1,13 @@
 //! Member and constant access: `->` and `::` become `.`, `?->` becomes `?.` (spec section 4), `X::class` becomes
 //! `typeof(X)`, and a static is reached through its class's name or a type parameter (spec sections 11 and 25).
 
+use mago_codex::metadata::property::PropertyMetadata;
+use mago_codex::metadata::ttype::TypeMetadata;
+use mago_codex::ttype::TType;
 use mago_codex::ttype::atomic::TAtomic;
 use mago_codex::ttype::atomic::scalar::TScalar;
+use mago_codex::ttype::get_mixed;
+use mago_codex::ttype::union::TUnion;
 use mago_span::HasSpan;
 use mago_span::Span;
 use mago_syntax::cst::Access;
@@ -11,14 +16,17 @@ use mago_syntax::cst::ClassLikeMemberSelector;
 use mago_syntax::cst::ConstantAccess;
 use mago_syntax::cst::Expression;
 use mago_syntax::cst::MagicConstant;
+use mago_syntax::cst::StaticPropertyAccess;
 use mago_syntax::cst::Variable;
 
 use super::Kind;
 use super::builtins::runs_nothing;
+use super::is_primary;
+use super::natively_checked;
 use crate::Converter;
 use crate::library::short;
 
-impl Converter<'_, '_> {
+impl<'input> Converter<'input, '_> {
     /// A constant: a library's, through its namespace as its functions are (spec section 23), or PHP's own, which the
     /// standard library names.
     pub(super) fn constant(&mut self, expression: &Expression<'_>, constant: &ConstantAccess<'_>) {
@@ -161,7 +169,7 @@ impl Converter<'_, '_> {
             }
             Access::StaticProperty(access) => {
                 if !self.static_class(access.class) {
-                    return self.refuse(expression.span(), self.held_static(expression));
+                    return self.held_static_read(expression, access);
                 }
                 self.edits.replace(access.double_colon, ".");
                 match &access.property {
@@ -195,7 +203,7 @@ impl Converter<'_, '_> {
                     return self.edits.replace(expression.span(), format!("Class.of({object})"));
                 }
                 if !self.static_class(access.class) {
-                    return self.refuse(expression.span(), self.held_static(expression));
+                    return self.held_constant_read(expression, access.class, constant.value);
                 }
                 if constant.value.eq_ignore_ascii_case(b"class") {
                     // `X::class` is the class value `typeof(X)` (spec section 25).
@@ -247,12 +255,180 @@ impl Converter<'_, '_> {
         self.declares(&parameter).then(|| parameter.parameter_name.as_str_lossy().into_owned())
     }
 
-    /// Why `access`, a static property or constant reached through a class held at run time, as `$class::$count`, has
-    /// no PHP# form.
-    fn held_static(&self, access: &Expression<'_>) -> String {
-        let shown = String::from_utf8_lossy(self.text(access.span()));
+    /// Whether `place` is a static property reached through a class held at run time, as `$kind::$count`, which PHP#
+    /// reads and writes through reflection.
+    pub(super) fn held_static_place(&self, place: &Expression<'_>) -> bool {
+        matches!(place, Expression::Access(Access::StaticProperty(access))
+            if !names_class(access.class) && self.class_parameter(access.class).is_none())
+    }
 
-        format!("`{shown}` reaches a static through a class held at run time, which has no PHP# form: {HELD_CLASS}")
+    /// The reflection of the static property `access` names, through the class value it is reached through, as
+    /// `kind.properties().first(property => property.name == "count")`, which finds the property of the class the
+    /// value holds, as PHP's `$kind::$count` does (spec section 25), with the property's declaration. A refusal at
+    /// `span` where the value may hold something other than a class value, or the analysis finds no such property.
+    fn held_property(
+        &mut self,
+        span: Span,
+        access: &StaticPropertyAccess<'_>,
+    ) -> Option<(String, &'input PropertyMetadata)> {
+        let Variable::Direct(variable) = &access.property else {
+            self.refuse(access.property.span(), "a property named by a variable has no PHP# form (spec section 25)");
+            return None;
+        };
+        if !self.holds_class_value(span, access.class) {
+            return None;
+        }
+        let codebase = self.input.codebase;
+        let Some(declared) = self
+            .held_class(access.class)
+            .and_then(|class| codebase.get_declaring_property(class.as_bytes(), variable.name))
+        else {
+            self.unknown_member(span, access.class, "static property", variable.name);
+            return None;
+        };
+        let class = self.held_class_text(access.class);
+        let found = self.unused_name("property", &[]);
+        let name = String::from_utf8_lossy(&variable.name[1..]);
+
+        Some((format!("{class}.properties().first({found} => {found}.name == \"{name}\")"), declared))
+    }
+
+    /// Whether `class`, which `span` reaches a static through, holds a class value a second read gives again, which
+    /// reflection reads through. A refusal at `span` where it doesn't.
+    pub(super) fn holds_class_value(&mut self, span: Span, class: &Expression<'_>) -> bool {
+        if self.is(class, &[Kind::Class]) && runs_nothing(class) {
+            return true;
+        }
+        let shown = String::from_utf8_lossy(self.text(span)).into_owned();
+        let held = self.shown(class);
+        self.refuse(
+            span,
+            format!("`{shown}` reaches a static through `{held}`, which holds no class value a second read gives again, and has no PHP# form: {HELD_CLASS}"),
+        );
+
+        false
+    }
+
+    /// Refuses `span`, which reaches the `kind` `name` through the class value `class`, where the analysis finds no
+    /// such member of the class it holds to type it by.
+    pub(super) fn unknown_member(&mut self, span: Span, class: &Expression<'_>, kind: &str, name: &[u8]) {
+        let shown = String::from_utf8_lossy(self.text(span)).into_owned();
+        let held = self.shown(class);
+        self.refuse(
+            span,
+            format!("`{shown}` reaches a static through a class held at run time, which PHP# reaches through reflection, and the analysis finds no {kind} `{}` of `{held}` to type it by (spec section 25)", String::from_utf8_lossy(name)),
+        );
+    }
+
+    /// `class`, a class value reflection reads through, as PHP# writes it before a member, in parentheses where it
+    /// needs them.
+    pub(super) fn held_class_text(&mut self, class: &Expression<'_>) -> String {
+        self.expression(class, None);
+        let text = self.render(class);
+
+        if is_primary(class) { text } else { format!("({text})") }
+    }
+
+    /// `expression`, a read of a static of a class held at run time, as `reflected`, the read through reflection,
+    /// whose `Any?` [`Converter::checked`] takes into `read`, the type of the read (spec section 21), in parentheses,
+    /// since `as` and `??` bind looser than the operators around a read. `native` is the type the member's declaration
+    /// states.
+    fn reflected_read(
+        &mut self,
+        expression: &Expression<'_>,
+        reflected: String,
+        read: Option<TUnion>,
+        native: Option<&TypeMetadata>,
+    ) {
+        self.edits.replace(expression.span(), reflected);
+        let Some(read) = read.filter(|read| !read.has_mixed()) else {
+            return;
+        };
+        let read = &read;
+        let natively = natively_checked(native, read, self.input.codebase);
+        if self.checked(expression, &get_mixed(), read, "Value", natively) {
+            let checked = self.render(expression);
+            self.edits.replace(expression.span(), format!("({checked})"));
+        } else {
+            let shown = String::from_utf8_lossy(self.text(expression.span())).into_owned();
+            self.refuse(
+                expression.span(),
+                format!("`{shown}` reaches a static through a class held at run time, which PHP# reads through reflection as `Any?`, and no PHP# test gives it the `{}` the static holds (spec section 21)", read.get_id()),
+            );
+        }
+    }
+
+    /// `$kind::$count`, a static property of a class held at run time, as the read through reflection PHP# makes it
+    /// with, `….get(null)`.
+    fn held_static_read(&mut self, expression: &Expression<'_>, access: &StaticPropertyAccess<'_>) {
+        let Some((property, declared)) = self.held_property(expression.span(), access) else {
+            return;
+        };
+        let read = self.type_of(expression).cloned();
+        self.reflected_read(
+            expression,
+            format!("{property}.get(null)"),
+            read,
+            declared.type_declaration_metadata.as_ref(),
+        );
+    }
+
+    /// `$kind::MAX`, a constant `constant` of a class held at run time, as the read through reflection PHP# makes it
+    /// with, `kind.constants().first(constant => constant.name == "MAX").value()`, which reads the constant of the
+    /// class the value holds, as PHP's `$kind::MAX` does (spec section 25). The read takes the type the constant
+    /// declares, which a subclass's constant keeps, and not the value the analysis finds in the class it names.
+    fn held_constant_read(&mut self, expression: &Expression<'_>, class: &Expression<'_>, constant: &[u8]) {
+        let span = expression.span();
+        if !self.holds_class_value(span, class) {
+            return;
+        }
+        let codebase = self.input.codebase;
+        let Some((held, declared)) = self
+            .held_class(class)
+            .and_then(|held| codebase.get_class_constant(held.as_bytes(), constant).map(|declared| (held, declared)))
+        else {
+            return self.unknown_member(span, class, "constant", constant);
+        };
+        let read = match &declared.type_metadata {
+            Some(metadata) => metadata.type_union.clone(),
+            None if declared.flags.is_final()
+                || codebase.get_class_like(held.as_bytes()).is_some_and(|held| held.flags.is_final()) =>
+            {
+                let Some(mut read) = self.type_of(expression).cloned() else {
+                    return self.unknown_member(span, class, "constant", constant);
+                };
+                read.widen_literals();
+                read
+            }
+            None => {
+                let shown = String::from_utf8_lossy(self.text(span)).into_owned();
+                return self.refuse(
+                    span,
+                    format!("`{shown}` reads a constant that declares no type, which a subclass of `{held}` may give a value of another type, and PHP# reads through reflection as `Any?`: declare its type, as `const int {}`, or the constant or the class `final` (spec section 25)", String::from_utf8_lossy(constant)),
+                );
+            }
+        };
+        let class = self.held_class_text(class);
+        let found = self.unused_name("constant", &[]);
+        let name = String::from_utf8_lossy(constant);
+        let reflected = format!("{class}.constants().first({found} => {found}.name == \"{name}\").value()");
+        self.reflected_read(expression, reflected, Some(read), declared.type_declaration.as_ref());
+    }
+
+    /// `$kind::$count = $value;`, a write of a static property of a class held at run time, as the statement PHP#
+    /// writes it through reflection with, `….set(null, value)`, which checks the value against the property's type,
+    /// as PHP's write does (spec section 25).
+    pub(super) fn held_static_write(&mut self, statement: &Expression<'_>, lhs: &Expression<'_>, rhs: &Expression<'_>) {
+        let Expression::Access(Access::StaticProperty(access)) = lhs else {
+            return;
+        };
+        let Some((property, declared)) = self.held_property(lhs.span(), access) else {
+            return;
+        };
+        let place = declared.type_metadata.as_ref().map(|metadata| metadata.type_union.clone());
+        self.expression(rhs, place.as_ref());
+        let value = self.render(rhs);
+        self.edits.replace(statement.span(), format!("{property}.set(null, {value})"));
     }
 }
 

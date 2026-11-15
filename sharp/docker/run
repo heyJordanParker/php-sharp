@@ -19,8 +19,9 @@ exec docker run --rm --init \
   --env XDG_CACHE_HOME=/src/sharp/build/cache \
   --env COMPOSER_HOME=/src/sharp/build/composer-home \
   --env GOPATH=/src/sharp/build/go \
-  --env MAKEFLAGS \
   --env CARGO_BUILD_JOBS \
+  --env CC \
+  --env CXX \
   "${volumes[@]}" \
   --workdir /src \
   php-sharp-linux "$@"

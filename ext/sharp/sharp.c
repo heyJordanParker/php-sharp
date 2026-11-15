@@ -6666,6 +6666,135 @@ ZEND_FUNCTION(Sharp_Internal_enumCases)
 	} ZEND_HASH_FOREACH_END();
 }
 
+/* The type the class constant `constant`, named `name`, declares, read on a class value of `ce` whose type arguments are
+ * `arguments`, as sharp_declared_types reads it: the line `::name` of its PHP# class, or its PHP declaration's type,
+ * `Any?` for one with none. */
+static const sharp_type *sharp_constant_declared_type(const zend_class_constant *constant, const zend_string *name,
+	const zend_class_entry *ce, const sharp_type *arguments)
+{
+	smart_str key = {0};
+	smart_str_appends(&key, "::");
+	smart_str_append(&key, name);
+	smart_str_0(&key);
+	sharp_declared_member line;
+	smart_str written = {0};
+	if (!sharp_declared_line(constant->ce, ZSTR_VAL(key.s), ZSTR_LEN(key.s), &line)) {
+		sharp_php_type_text(&written, constant->type, constant->ce, ce);
+		smart_str_0(&written);
+		line.type = ZSTR_VAL(written.s);
+		line.type_length = ZSTR_LEN(written.s);
+	}
+	const sharp_type *types = sharp_declared_types(line.type, line.type_length, constant->ce, ce, arguments);
+	smart_str_free(&written);
+	smart_str_free(&key);
+
+	return types ? types->members[0] : NULL;
+}
+
+/* Spec section 25: what `Class<T>.constants()` reads, the constants of the class `type` names, its own first and then
+ * those it inherits, in the order they are declared, at every visibility, without an enum's cases, which
+ * `enumCases()` reads, and without a hidden one the bridge names with `#`. Each is the list of the class that declares
+ * it, its name, and its type as sharp_add_declared_type adds it. A class's are read once a request, see
+ * request_reflected. */
+ZEND_FUNCTION(Sharp_Internal_constants)
+{
+	zend_string *value;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	const sharp_type *arguments;
+	zend_class_entry *ce = sharp_class_value_declaring(value, &arguments);
+	if (!ce) {
+		RETURN_THROWS();
+	}
+	zend_string *key;
+	zval *read = sharp_reflected('c', ce, arguments, &key);
+	if (read) {
+		zend_string_release_ex(key, false);
+		RETURN_COPY(read);
+	}
+
+	array_init(return_value);
+	zend_string *name;
+	zend_class_constant *constant;
+	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(CE_CONSTANTS_TABLE(ce), name, constant) {
+		if ((ZEND_CLASS_CONST_FLAGS(constant) & ZEND_CLASS_CONST_IS_CASE) || memchr(ZSTR_VAL(name), '#', ZSTR_LEN(name))) {
+			continue;
+		}
+		const sharp_type *type = sharp_constant_declared_type(constant, name, ce, arguments);
+		if (!type) {
+			zend_string_release_ex(key, false);
+			zend_throw_error(NULL, "PHP# reads no type for %s::%s. This is a bug in PHP#", ZSTR_VAL(constant->ce->name),
+				ZSTR_VAL(name));
+			zval_ptr_dtor(return_value);
+			RETVAL_NULL();
+			RETURN_THROWS();
+		}
+		zval row;
+		array_init_size(&row, 3);
+		add_next_index_str(&row, zend_string_copy(constant->ce->name));
+		add_next_index_str(&row, zend_string_copy(name));
+		sharp_add_declared_type(&row, type);
+		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &row);
+	} ZEND_HASH_FOREACH_END();
+	sharp_reflected_keep(key, return_value);
+}
+
+/* Spec section 25: `Constant.value()`, the value of the constant `name` that `class` declares, as a direct read of
+ * `Class.NAME` from the code that called `value()` gives it, which reaches a private constant only from its class and
+ * a protected one from the class and its subclasses. A `Map` or `Set` constant holds the PHP array of its value, and
+ * gives the object a direct read makes of it, kept under the key a direct read keeps it by, see Sharp_Internal_keep,
+ * so the two share it. */
+ZEND_FUNCTION(Sharp_Internal_constant)
+{
+	zend_string *class_name;
+	zend_string *name;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_STR(class_name)
+		Z_PARAM_STR(name)
+	ZEND_PARSE_PARAMETERS_END();
+
+	const zend_execute_data *caller = sharp_reflection_caller(execute_data);
+	zend_class_entry *scope = caller ? caller->func->common.scope : NULL;
+	zval *read = zend_get_class_constant_ex(class_name, name, scope, ZEND_FETCH_CLASS_EXCEPTION);
+	if (!read || EG(exception)) {
+		RETURN_THROWS();
+	}
+	ZVAL_DEREF(read);
+	zend_class_entry *ce = zend_lookup_class(class_name);
+	const zend_class_constant *constant = ce ? zend_hash_find_ptr(CE_CONSTANTS_TABLE(ce), name) : NULL;
+	const sharp_type *type = constant && Z_TYPE_P(read) == IS_ARRAY
+		? sharp_constant_declared_type(constant, name, ce, NULL)
+		: NULL;
+	zval plan;
+	ZVAL_NULL(&plan);
+	if (type) {
+		sharp_type_plan(&plan, type);
+	}
+	if (Z_TYPE(plan) == IS_NULL) {
+		RETURN_COPY(read);
+	}
+	zend_string *kept_key = zend_strpprintf(0, "%s::%s#constant", ZSTR_VAL(constant->ce->name), ZSTR_VAL(name));
+	zval *kept = zend_hash_find(&SHARP_G(container_singletons), kept_key);
+	if (kept) {
+		zend_string_release_ex(kept_key, false);
+		zval_ptr_dtor(&plan);
+		RETURN_COPY(kept);
+	}
+	bool crossed = sharp_crossed(return_value, read, &plan, type);
+	zval_ptr_dtor(&plan);
+	if (!crossed) {
+		zend_string_release_ex(kept_key, false);
+		RETURN_THROWS();
+	}
+	Z_TRY_ADDREF_P(return_value);
+	zend_hash_update(&SHARP_G(container_singletons), kept_key, return_value);
+	zend_string_release_ex(kept_key, false);
+}
+
 /* Whether each class `node` and the types inside it name exists, as sharp_type_class loads it. */
 static bool sharp_type_node_names_classes(sharp_type_node *node)
 {
@@ -7873,6 +8002,87 @@ ZEND_FUNCTION(Sharp_Internal_resolve)
 	}
 	zend_hash_destroy(&seen);
 	freeaddrinfo(found);
+}
+
+/* Spec section 29: the processors Sharp.System.Environment.processorCount gives, those online, as .NET's
+ * Environment.ProcessorCount and Rust's available_parallelism count them, and 1 where the system cannot say. */
+ZEND_FUNCTION(Sharp_Internal_processorCount)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	long online = sysconf(_SC_NPROCESSORS_ONLN);
+	RETURN_LONG(online > 0 ? online : 1);
+}
+
+/* Orders two values as PHP#'s < orders two values of their type, spec section 19, -1, 0 or 1: an object by the
+ * operator <=> its class declares, which the bridge writes as the static op_Comparison, two tuples element by element,
+ * as Rust orders tuples, two strings by their bytes, and two numbers as numbers. A null sorts before every other value,
+ * as sharp_order_keys puts it. An object whose class declares no <=> throws ValueError. A call that throws leaves the
+ * exception for the caller to throw. */
+static int sharp_compare_values(zval *left, zval *right)
+{
+	ZVAL_DEREF(left);
+	ZVAL_DEREF(right);
+	if (Z_TYPE_P(left) == IS_NULL || Z_TYPE_P(right) == IS_NULL) {
+		return (Z_TYPE_P(left) != IS_NULL) - (Z_TYPE_P(right) != IS_NULL);
+	}
+	if (Z_TYPE_P(left) == IS_ARRAY && Z_TYPE_P(right) == IS_ARRAY) {
+		uint32_t left_count = zend_hash_num_elements(Z_ARRVAL_P(left));
+		uint32_t right_count = zend_hash_num_elements(Z_ARRVAL_P(right));
+		for (uint32_t index = 0; index < MIN(left_count, right_count); index++) {
+			int result = sharp_compare_values(zend_hash_index_find(Z_ARRVAL_P(left), index),
+				zend_hash_index_find(Z_ARRVAL_P(right), index));
+			if (result || EG(exception)) {
+				return result;
+			}
+		}
+
+		return ZEND_THREEWAY_COMPARE(left_count, right_count);
+	}
+	if (Z_TYPE_P(left) == IS_OBJECT) {
+		zend_class_entry *ce = Z_OBJCE_P(left);
+		/* A class with exact names keys its methods as written, spec section 24, and any other in lowercase. */
+		zend_function *operator = (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES)
+			? zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("op_Comparison"))
+			: zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("op_comparison"));
+		if (!operator) {
+			zend_value_error("%s declares no operator <=>, so it has no order: give the collection a comparison",
+				ZSTR_VAL(ce->name));
+			return 0;
+		}
+		zval operands[2], result;
+		ZVAL_COPY_VALUE(&operands[0], left);
+		ZVAL_COPY_VALUE(&operands[1], right);
+		ZVAL_UNDEF(&result);
+		zend_call_known_function(operator, NULL, operator->common.scope, &result, 2, operands, NULL);
+		int order = Z_TYPE(result) == IS_LONG ? ZEND_NORMALIZE_BOOL(Z_LVAL(result)) : 0;
+		zval_ptr_dtor(&result);
+
+		return order;
+	}
+	if (Z_TYPE_P(left) == IS_STRING && Z_TYPE_P(right) == IS_STRING) {
+		return ZEND_NORMALIZE_BOOL(zend_binary_zval_strcmp(left, right));
+	}
+
+	return zend_compare(left, right);
+}
+
+/* Spec section 12: the order SortedMap, SortedSet and PriorityQueue keep their keys in when they take no comparison,
+ * as Rust's BTreeMap orders by Ord: the order sharp_compare_values gives. */
+ZEND_FUNCTION(Sharp_Internal_compare)
+{
+	zval *left, *right;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ZVAL(left)
+		Z_PARAM_ZVAL(right)
+	ZEND_PARSE_PARAMETERS_END();
+
+	int order = sharp_compare_values(left, right);
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+	RETURN_LONG(order);
 }
 
 /* Spec section 12: PHP# passes plain PHP `\Sharp\Internal\arrayOf($value)`, the PHP array sharp_array_of gives. Through
@@ -9274,22 +9484,177 @@ static void sharp_copy_literal(zval *copy, const zval *value)
 	} ZEND_HASH_FOREACH_END();
 }
 
-/* Runs a module file's op_array for the rows it returns, as zend_execute does, but in a symbol table of its own.
- * zend_execute would give the PHP code that called the engine a symbol table, which a tracing-JIT frame never frees. */
-static void sharp_container_execute(zend_op_array *op_array, zval *rows)
+/* Runs a file's op_array in the symbol table symbols for what it returns, as zend_execute does, but in a table the
+ * engine's caller gives. zend_execute would give the PHP code that called the engine a symbol table, which a
+ * tracing-JIT frame never frees, and a table of PHP's global scope would leave a frame suspended in a fiber with the
+ * values the file moved out of it. */
+static void sharp_execute_file(zend_op_array *op_array, HashTable *symbols, zval *returned)
 {
-	HashTable symbols;
-	zend_execute_data *execute_data;
-
-	zend_hash_init(&symbols, 8, NULL, ZVAL_PTR_DTOR, false);
-	execute_data = zend_vm_stack_push_call_frame(ZEND_CALL_TOP_CODE | ZEND_CALL_HAS_SYMBOL_TABLE,
+	zend_execute_data *execute_data = zend_vm_stack_push_call_frame(ZEND_CALL_TOP_CODE | ZEND_CALL_HAS_SYMBOL_TABLE,
 		(zend_function *) op_array, 0, NULL);
-	execute_data->symbol_table = &symbols;
-	zend_init_code_execute_data(execute_data, op_array, rows);
+	execute_data->symbol_table = symbols;
+	zend_init_code_execute_data(execute_data, op_array, returned);
 	ZEND_OBSERVER_FCALL_BEGIN(execute_data);
 	zend_execute_ex(execute_data);
 	zend_vm_stack_free_call_frame(execute_data);
+}
+
+/* The slot of the global variable name, through the compiled variable of the script's own frame that holds it, or NULL
+ * when it is not set. A superglobal PHP fills on first use, as $_SERVER is under auto_globals_jit, is filled first. */
+static zval *sharp_global_slot(zend_string *name)
+{
+	zend_is_auto_global(name);
+	zval *slot = zend_hash_find(&EG(symbol_table), name);
+	if (slot && Z_TYPE_P(slot) == IS_INDIRECT) {
+		slot = Z_INDIRECT_P(slot);
+	}
+	if (!slot || Z_TYPE_P(slot) == IS_UNDEF) {
+		return NULL;
+	}
+	return slot;
+}
+
+/* Sets the global variable name to value, as PHP's $GLOBALS[name] = value does: through a reference to it, and
+ * through the compiled variable of the script's own frame that holds it. */
+static void sharp_assign_global(zend_string *name, zval *value)
+{
+	zval *slot = zend_hash_find(&EG(symbol_table), name);
+	if (slot && Z_TYPE_P(slot) == IS_INDIRECT) {
+		slot = Z_INDIRECT_P(slot);
+	}
+	if (!slot) {
+		zval copy;
+		ZVAL_COPY_DEREF(&copy, value);
+		zend_hash_add_new(&EG(symbol_table), name, &copy);
+		return;
+	}
+	ZVAL_DEREF(slot);
+	zval old;
+	ZVAL_COPY_VALUE(&old, slot);
+	ZVAL_COPY_DEREF(slot, value);
+	zval_ptr_dtor(&old);
+}
+
+/* Spec section 29: what PhpGlobals.get and PhpGlobals.read give, the global variable name, or its element at key, as
+ * PHP's $GLOBALS[name][key] reads it, or null when either is not set. */
+ZEND_FUNCTION(Sharp_Internal_readGlobal)
+{
+	zend_string *name, *key = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_STR(name)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_STR_OR_NULL(key)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zval *value = sharp_global_slot(name);
+	if (value) {
+		ZVAL_DEREF(value);
+	}
+	if (value && key) {
+		value = Z_TYPE_P(value) == IS_ARRAY ? zend_symtable_find(Z_ARRVAL_P(value), key) : NULL;
+	}
+	if (!value) {
+		RETURN_NULL();
+	}
+	RETURN_COPY_DEREF(value);
+}
+
+/* Spec section 29: what PhpGlobals.set and PhpGlobals.write run, setting the global variable name, or its element at
+ * key, to value, as PHP's $GLOBALS[name][key] = value does. A global that is not set becomes an array for its first
+ * element, and one that holds no array throws. */
+ZEND_FUNCTION(Sharp_Internal_writeGlobal)
+{
+	zend_string *name, *key = NULL;
+	zval *value;
+
+	ZEND_PARSE_PARAMETERS_START(2, 3)
+		Z_PARAM_STR(name)
+		Z_PARAM_ZVAL(value)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_STR_OR_NULL(key)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!key) {
+		zend_is_auto_global(name);
+		sharp_assign_global(name, value);
+		return;
+	}
+	zval *array = sharp_global_slot(name);
+	if (!array) {
+		zval empty;
+		array_init(&empty);
+		sharp_assign_global(name, &empty);
+		zval_ptr_dtor(&empty);
+		array = sharp_global_slot(name);
+	}
+	ZVAL_DEREF(array);
+	if (Z_TYPE_P(array) == IS_NULL) {
+		array_init(array);
+	} else if (Z_TYPE_P(array) != IS_ARRAY) {
+		zend_value_error("PhpGlobals.write: $%s holds %s, not an array", ZSTR_VAL(name), zend_zval_value_name(array));
+		RETURN_THROWS();
+	}
+	SEPARATE_ARRAY(array);
+	zval copy;
+	ZVAL_COPY_DEREF(&copy, value);
+	zend_symtable_update(Z_ARRVAL_P(array), key, &copy);
+}
+
+/* Spec section 29: what PhpGlobals.include runs, the PHP file at path in PHP's global scope, as a page's own include
+ * runs it. The file runs in a symbol table of its own, sharp_execute_file's, which holds each global variable as
+ * `global $name` holds one in a function, a reference the global shares, so the file reads each global and its writes
+ * reach it. Each variable the file declares, or binds anew, is a global after it, though it throws. */
+ZEND_FUNCTION(Sharp_Internal_includeGlobal)
+{
+	zend_string *path;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_PATH_STR(path)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_stat_t status = {0};
+	zend_op_array *op_array = VCWD_STAT(ZSTR_VAL(path), &status) == 0 ? compile_filename(ZEND_INCLUDE, path) : NULL;
+	if (!op_array) {
+		if (!EG(exception)) {
+			zend_throw_exception_ex(spl_ce_RuntimeException, 0, "PhpGlobals.include: \"%s\" cannot be read",
+				ZSTR_VAL(path));
+		}
+		RETURN_THROWS();
+	}
+
+	HashTable symbols;
+	zend_hash_init(&symbols, zend_hash_num_elements(&EG(symbol_table)), NULL, ZVAL_PTR_DTOR, false);
+	zend_string *name;
+	zval *global;
+	ZEND_HASH_FOREACH_STR_KEY_VAL(&EG(symbol_table), name, global) {
+		if (Z_TYPE_P(global) == IS_INDIRECT) {
+			global = Z_INDIRECT_P(global);
+		}
+		if (!name || Z_TYPE_P(global) == IS_UNDEF || zend_hash_exists(CG(auto_globals), name)) {
+			continue;
+		}
+		ZVAL_MAKE_REF(global);
+		Z_ADDREF_P(global);
+		zend_hash_add_new(&symbols, name, global);
+	} ZEND_HASH_FOREACH_END();
+
+	zval returned;
+	ZVAL_UNDEF(&returned);
+	sharp_execute_file(op_array, &symbols, &returned);
+	zval_ptr_dtor(&returned);
+
+	zval *value;
+	ZEND_HASH_FOREACH_STR_KEY_VAL(&symbols, name, value) {
+		zval *bound = name ? sharp_global_slot(name) : NULL;
+		if (name && !(bound && Z_ISREF_P(bound) && Z_ISREF_P(value) && Z_REF_P(bound) == Z_REF_P(value))) {
+			sharp_assign_global(name, value);
+		}
+	} ZEND_HASH_FOREACH_END();
 	zend_hash_destroy(&symbols);
+	zend_destroy_static_vars(op_array);
+	destroy_op_array(op_array);
+	efree_size(op_array, sizeof(zend_op_array));
 }
 
 /* Adds the module whose file is at path, if one is, to bindings once: under each namespace and service id, a list of
@@ -9312,7 +9677,10 @@ static void sharp_container_read(const char *path, HashTable *bindings)
 		if (op_array && !EG(exception)) {
 			zval returned;
 			ZVAL_UNDEF(&returned);
-			sharp_container_execute(op_array, &returned);
+			HashTable symbols;
+			zend_hash_init(&symbols, 8, NULL, ZVAL_PTR_DTOR, false);
+			sharp_execute_file(op_array, &symbols, &returned);
+			zend_hash_destroy(&symbols);
 			if (!EG(exception) && Z_TYPE(returned) == IS_ARRAY) {
 				sharp_copy_literal(&rows, &returned);
 			}

@@ -569,6 +569,10 @@ foreach (['DateTimeImmutable', 'DateTimeInterface', 'DateTimeZone'] as $class) {
 foreach (['__construct', 'createFromFormat', 'modify'] as $member) {
     $externs[] = "extern DateTimeImmutable.$member uses Clock;";
 }
+// A BcMath\Number is an exact number once created, and its members read nothing outside it, so the standard library's
+// Decimal and BigInteger, which are structs and so pure, run on it.
+$imports[] = 'import BcMath.Number;';
+$externs[] = 'extern Number;';
 
 $license = file_get_contents("$stubs/LICENSE");
 $notice = implode("\n", array_map(static fn (string $line): string => rtrim("// $line"), explode("\n", trim($license))));

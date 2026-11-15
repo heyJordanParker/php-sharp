@@ -496,7 +496,7 @@ public class CartTest : TestCase
 
 **A static field or property with storage needs an initial value, whatever its type,** so it holds a value of its type before any code reads it, the static constructor included.
 
-**A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under php-fpm the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value and by its class's static constructor. In a class without a static constructor, a throw in an initial value reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
+**A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under FrankenPHP outside worker mode the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value and by its class's static constructor. In a class without a static constructor, a throw in an initial value reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
 
 **Plain PHP reaches a static with an accessor body, a computed body or an observer only through a method,** because PHP has no hooks on a static property. Reading or writing it directly from plain PHP is PHP's access error.
 
@@ -960,7 +960,7 @@ public class Receipt
 }
 ```
 
-- **PHP is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation. A bare call names a local or nothing, so calling a built-in function by its bare name from `.sharp` code is the compile error a misspelled name gets. The eleven effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
+- **PHP is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation. A bare call names a local or nothing, so calling a built-in function by its bare name from `.sharp` code is the compile error a misspelled name gets. The twelve effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
 - **A built-in the standard library has no member for is declared with `[Import]`,** a static method without a body whose PHP# types check each argument and the result, as C#'s `[DllImport]` declares a native function (section 23).
 - **PHP's constants are reached the same way,** as `Int.MAX` gives the largest `int`. A bare `CURLOPT_TIMEOUT` is a compile error, because a bare uppercase name is always the code's own constant.
 
@@ -1120,6 +1120,7 @@ A `struct` is a value type.
 - **A struct never changes.** A method returns a changed copy, usually built with `with`, as Kotlin's data class `copy` does. `point.x = 5` is a compile error that names a method returning a changed copy.
 - **A struct has no effects** (section 29). Its methods, `get` bodies and operators reach no database, network, file, clock or event, as a value is the same wherever it is read, so `public int inEuros(Http http) => http.get(url).status;` is a compile error: "`Money.inEuros` has the effect `Http`, and a struct has no effects." A class that takes the value does the work.
 - **`readonly struct` is a compile error,** because every struct is already read-only.
+- **A struct takes every visibility a class takes,** `public` and `internal` (section 5), as C#'s `internal struct` does, and is `internal` when it names neither. An `internal struct` reaches its namespace and every namespace below it, so a module keeps a value type of its own private. Any other modifier, as `abstract` or `final`, is a compile error.
 - **`==` compares values.** `===` works on classes only (section 19).
 - **A struct cannot inherit or be inherited,** but it can implement interfaces.
 - **A struct has no default value.** Every property or field without an initial value must be set when the struct is created, and `= null` makes a nullable one optional, as in Rust, Swift, Kotlin and TypeScript.
@@ -1154,6 +1155,47 @@ Point q = p.moved(1, 0);              // compiles: q is a changed copy, and p is
 p.x = 5;                              // compile error: a struct never changes; return a changed copy from a method, such as moved
 Point origin = new Point { x: 0 };    // compile error: y has no initial value, so set it when the Point is created
 ```
+
+<!-- example internal-struct -->
+```csharp
+// app/Shop/CheckoutTotals.sharp
+namespace App.Shop;
+
+internal struct CheckoutTotals
+{
+    public CheckoutTotals(public int subtotal { get; }, public int shipping { get; }) { }
+}
+```
+
+<!-- example internal-struct -->
+```csharp
+// app/Shop/Checkout.sharp
+namespace App.Shop;
+
+public class Checkout
+{
+    public int total(int subtotal)
+    {
+        const totals = new CheckoutTotals(subtotal, 499);   // compiles: CheckoutTotals is internal to App.Shop, and this is App.Shop
+
+        return totals.subtotal + totals.shipping;
+    }
+}
+```
+
+<!-- example internal-struct -->
+```csharp
+// app/Reports/Revenue.sharp
+namespace App.Reports;
+
+import App.Shop.CheckoutTotals;                             // compile error: CheckoutTotals is internal to App.Shop, and App.Reports is outside it
+
+public class Revenue { }
+```
+<!-- run internal-struct
+import App.Shop.Checkout;
+new Checkout().total(2500);   // 2999
+-->
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
 
@@ -2056,6 +2098,45 @@ List<int> ids = [3, 5];
 tags.join(", ");                            // "vip, new"
 ids.map(id => `#${id}`).join(" ");          // "#3 #5"
 ids.join(", ");                             // compile error: only a List<string> has join
+```
+
+**`toCsv()` writes a `List<string>` as one CSV record of RFC 4180,** the write side of a `string`'s `parseCsv()`, which reads it back. A field that holds a comma, a quote, a carriage return or a line feed is quoted, with each quote doubled, and every other field is written as it is:
+
+<!-- example list-csv: statements -->
+```csharp
+const record = ["A-1", "Mug, large", "12.50"].toCsv();
+record.parseCsv();                          // ["A-1", "Mug, large", "12.50"]
+record.length();                            // 22: A-1,"Mug, large",12.50
+```
+
+**`SortedMap<TKey, TValue>` and `SortedSet<T>`, in `Sharp.Collections`, keep their keys in order,** as Rust's `BTreeMap` and `BTreeSet` do. Each has every member a `Map` or a `Set` has, and a loop reads it in key order. `first()` and `last()` give the value of the smallest and the largest key, or the smallest and the largest element, and throw `OutOfRangeException` on an empty one. `floor(key)` and `ceiling(key)` give the nearest key at or below `key` and at or above it, or null. `range(from, to)` gives the entries from `from` up to `to`, with `to` left out, as Rust's `range(from..to)`. They order by the key's `operator <=>`, as `<` orders two keys (section 19), or by a `Function<int(T, T)>` the constructor takes, which gives below 0 when its first key goes first. Two keys that order at 0 are one key. Without a comparison, a key whose class declares no `<=>` throws `ValueError` at its first comparison.
+
+**`PriorityQueue<TElement, TPriority>`, in `Sharp.Collections`, gives the element of the lowest priority first,** as .NET's does: `enqueue(element, priority)`, `dequeue()`, `peek()`, `count()` and `isEmpty()`. It orders its priorities as a `SortedMap` orders its keys, and gives elements of one priority in no set order. `dequeue()` and `peek()` throw `UnderflowException` on an empty queue:
+
+<!-- example sorted-collections: statements
+import Sharp.Collections.PriorityQueue;
+import Sharp.Collections.SortedMap;
+import Sharp.Collections.SortedSet;
+-->
+```csharp
+const prices = new SortedMap<string, int>();
+prices["pear"] = 4;
+prices["apple"] = 5;
+prices["fig"] = 2;
+prices.keys();                              // ["apple", "fig", "pear"]
+prices.first();                             // 5
+prices.floor("banana");                     // "apple"
+prices.ceiling("banana");                   // "fig"
+prices.range("b", "p").keys();              // ["fig"]
+const sizes = new SortedSet<int>((int a, int b) => b - a);
+sizes.add(3);
+sizes.add(9);
+sizes.first();                              // 9: the comparison puts the largest first
+const tasks = new PriorityQueue<string, int>();
+tasks.enqueue("ship", 9);
+tasks.enqueue("plan", 1);
+tasks.dequeue();                            // "plan"
+tasks.count();                              // 1
 ```
 
 The complete method list is specified with the standard library.
@@ -4842,13 +4923,15 @@ public class Layout
 - `Sharp.Text` holds the members of `string`, `Regex` and `Html`.
 - `Sharp.Time` holds `Clock`, `Instant`, `Duration`, `Date`, `DateTime`, `TimeZone`, `Weekday` and `Month`, and the members of a plain PHP date in `DateTimeInterfaceMembers`.
 - `Sharp.IO` holds `Files`, `Path` and `Console`.
-- `Sharp.System` holds `Process`, `ProcessResult` and `Environment`.
-- `Sharp.Net` holds `Http`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `Url`, `Ip`, `Dns`, `Mail`, `MailMessage` and `MailAddress`.
+- `Sharp.System` holds `Process`, `ProcessResult`, `ChildProcess` and `Environment`.
+- `Sharp.Net` holds `Http`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `Url`, `Ip`, `IpAddress`, `IpFamily`, `Dns`, `Mail`, `MailMessage` and `MailAddress`.
+- `Sharp.Collections` holds `SortedMap`, `SortedSet` and `PriorityQueue`.
 - `Sharp.Data` holds `Database` and `Cache`.
 - `Sharp.Encoding` holds `Json`, `Serialized`, `PhpLiteral`, `Base64`, `Hex` and `Compression`.
 - `Sharp.Security` holds `Hash`, `Hmac` and `Password`.
+- `Sharp.Interop` holds `PhpGlobals` and `Superglobal`.
 
-**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Math` is `Sharp.Math`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin and Java, `Error` included (section 31):
+**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Math` is `Sharp.Math`, a bare `Decimal` is `Sharp.Decimal`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. `Sharp` holds the number types and their enums: `Int`, `Float`, `Math`, `Decimal`, `BigInteger`, `RoundingMode` and `ByteOrder`. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin and Java, `Error` included (section 31):
 
 <!-- example own-namespace-shadows -->
 ```csharp
@@ -5213,6 +5296,43 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 - PHP# has no user-defined conversion operators, such as C#'s `implicit operator`. A type converts only through a property or method it declares, such as `username.value`.
 - `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`. `(array)` and `(object)` are parse errors, as any form outside PHP# is (section 1), and the code below replaces them.
 - PHP's cast aliases `(integer)`, `(double)`, `(boolean)` and `(binary)` do not exist.
+- An `int` writes its 8 bytes with `toBytes(order)`, in the `ByteOrder` `Big` by default or `Little`, and `Int.fromBytes(bytes, order)` reads them back, as Rust's `to_be_bytes` and `from_be_bytes` do. The bytes are a `string`, as `Ip.toBinary` gives, and a negative `int` writes its two's complement. `Int.fromBytes` of any length but 8 throws `ValueError`.
+- `Base64.encode(data, urlSafe: true)` writes the URL-safe alphabet of RFC 4648, with `-` and `_` for `+` and `/`, and no padding, as .NET's `Base64Url` does. `Base64.decode(text, urlSafe: true)` reads it with or without padding, and throws `ValueError` on a `+` or a `/`.
+
+<!-- example int-bytes: statements
+import Sharp.Encoding.Base64;
+import Sharp.Encoding.Hex;
+-->
+```csharp
+Hex.encode(258.toBytes());                          // "0000000000000102"
+Hex.encode(258.toBytes(ByteOrder.Little));          // "0201000000000000"
+Int.fromBytes((-1).toBytes());                      // -1
+Base64.encode(Hex.decode("fbff"), urlSafe: true);   // "-_8"
+Base64.decode("-_8", urlSafe: true).bytes();        // [251, 255]
+Int.fromBytes("short");                             // throws ValueError
+```
+
+**`Decimal` is an exact decimal number, and `BigInteger` an integer of any size,** as Java's `BigDecimal` and .NET's `BigInteger` are. Both are structs in `Sharp`, so they need no import, and run on PHP's bcmath, which every engine builds:
+
+- `Decimal.parse(text)` and `Decimal.tryParse(text)` read digits with an optional sign and point, as `"-12.50"`, and `Decimal.of(n)` takes an `int`. The digits after the point are its `scale`, so `"1.50"` has a scale of 2 and writes itself back as `"1.50"`.
+- `+`, `-` and `*` give the exact result: a sum's scale is the larger of both, and a product's their sum. There is no `/`, because an exact quotient can have no end. `divide(divisor, scale, mode)` gives the quotient with `scale` digits after the point, and `round(scale, mode)` rounds the number to `scale` digits, both by a `RoundingMode`, `HalfEven` by default, as banks round. The modes are Java's: `HalfEven`, `HalfUp`, `HalfDown`, `Up` and `Down`, away from 0 and toward it, and `Ceiling` and `Floor`. A divisor of 0 throws `DivisionByZeroError`.
+- `==` and `<=>` compare the number, so `1.5 == 1.50` is true, as .NET's `decimal` compares, and each keeps its scale.
+- `BigInteger.parse(text)`, `BigInteger.tryParse(text)` and `BigInteger.of(n)` make one, `+`, `-` and `*` never overflow, and `/` and `%` round toward 0, as an `int`'s do. `pow(n)` raises it, and a negative exponent throws `ArithmeticError`, as `**` on an `int` does. `toString(radix)` writes it in a base from 2 to 36, and `toIntOrNull()` gives it as an `int`, or null past `Int.MAX` and `Int.MIN`.
+
+<!-- example exact-numbers: statements -->
+```csharp
+Decimal.parse("0.1") + Decimal.parse("0.2") == Decimal.parse("0.3");   // true
+Decimal.parse("10").divide(Decimal.parse("3"), 2).toString();          // "3.33"
+Decimal.parse("2.5").round(0).toString();                              // "2": HalfEven rounds to the even neighbor
+Decimal.parse("2.5").round(0, RoundingMode.HalfUp).toString();         // "3"
+(Decimal.parse("1.50") * Decimal.of(3)).toString();                    // "4.50"
+const past = BigInteger.parse("9223372036854775807") + BigInteger.of(1);
+past.toString();                                                       // "9223372036854775808"
+past.toIntOrNull();                                                    // null
+BigInteger.of(255).toString(16);                                       // "ff"
+(BigInteger.of(-7) / BigInteger.of(2)).toString();                     // "-3"
+Decimal.parse("1") / Decimal.parse("3");                               // compile error: Decimal has no /, so call divide with a scale
+```
 
 **Time is values,** as in Kotlin's `kotlinx.datetime`, Java's `java.time` and JavaScript's Temporal, never an `int` of seconds or a format of PHP's letters. `Sharp.Time` holds them:
 
@@ -5631,6 +5751,35 @@ typeof(Level).enumCases()[1].value as Level == Level.High;    // true
 typeof(Level).baseType();                                     // null
 ```
 
+**`constants()` reads the constants a class declares,** as .NET's `Type.GetFields()` gives a class's literal fields and Kotlin's reflection a companion's `const val`. It gives a `List<Constant>` of every constant, at every visibility, the class's own first and then those it inherits, in the order they are declared, without an enum's cases, which `enumCases()` gives. A `Constant` has its `name`, its `type`, the declared type whole, `Any?` for one declared without a type, the `declaringClass` that declares it, `value()`, which gives its value as `Any?`, and `attributes<TAttribute : Object>()`. `value()` reads the constant as a direct read from the calling code would, so a private one only from its class, which throws `Error` elsewhere, and a `Map` or `Set` constant gives the object a direct read gives:
+
+<!-- example declared-constants -->
+```csharp
+// app/Shelf/Limits.sharp
+namespace App.Shelf;
+
+public class Limits
+{
+    public const int MAX = 10;
+    public const Map<string, int> PER_SIZE = ["small": 2, "large": 5];
+    private const string CODE = "lim";
+}
+```
+
+<!-- example declared-constants: statements
+import App.Shelf.Limits;
+-->
+```csharp
+const constants = typeof(Limits).constants();
+constants.map(constant => constant.name);                     // ["MAX", "PER_SIZE", "CODE"]
+constants[0].type == typeof(int);                             // true
+constants[0].value();                                         // 10
+constants[1].type == typeof(Map<string, int>);                // true
+constants[1].value() as Map<string, int> == Limits.PER_SIZE;  // true
+constants[2].declaringClass == typeof(Limits);                // true
+constants[2].value();                                         // throws Error
+```
+
 **`constructor()`, `createInstance` and `createLazy` reach a class's constructor through its class value,** as .NET keeps `ConstructorInfo` apart from `MethodInfo` and creates through `Activator.CreateInstance`. `constructor()` gives a `Constructor`, with its `visibility`, `parameters()` and `attributes<TAttribute : Object>()`, or null for a class without one. `createInstance(arguments)` creates an object of the class, with the class value's type arguments, by its constructor with the `List<Any?>` of arguments, which the calling code reaches as a direct `new` would. `createLazy(initialize)` creates one empty, with no constructor run, as PHP 8.4's `newLazyGhost` does, and `initialize` runs on it at its first property read or write, as Doctrine loads an entity. Each throws `InvalidArgumentException` for an abstract class, an interface or an enum, and `createInstance` for arguments the constructor's parameters don't take. A `Property` reads the state of such an object:
 
 - **`isInitialized(receiver)`** holds when the property holds a value, as Kotlin's `::prop.isInitialized` reads a `lateinit`, so it is false for a `late` property no code has set and for a lazy object that has not loaded, which the read does not load. A `late` property is set once, so there is no reset.
@@ -5671,7 +5820,7 @@ properties[1].isInitialized(ghost);                           // false
 ghost.owner;                                                  // "grace"
 ```
 
-**Each reflection value keys a `Map` and joins a `Set` as the member it reflects,** however often reflection read it, as C#'s `MethodInfo`, `PropertyInfo` and `ParameterInfo` compare. Two `Method`s, two `Property`s and two `Constructor`s are equal when one class declares them under one name, two `Parameter`s when they are one position of one method, two `EnumCase`s when they are one case of one enum, and two `TupleElement`s when they have one name, or none, and one type. Equal values share their `hash()`, so `Map<Method, List<Relation>>` compiles:
+**Each reflection value keys a `Map` and joins a `Set` as the member it reflects,** however often reflection read it, as C#'s `MethodInfo`, `PropertyInfo` and `ParameterInfo` compare. Two `Method`s, two `Property`s, two `Constant`s and two `Constructor`s are equal when one class declares them under one name, two `Parameter`s when they are one position of one method, two `EnumCase`s when they are one case of one enum, and two `TupleElement`s when they have one name, or none, and one type. Equal values share their `hash()`, so `Map<Method, List<Relation>>` compiles:
 
 <!-- example reflection-keys: statements
 public class Ledger { public int total { get; set; } = 0; public int add(int amount) => this.total + amount; }
@@ -6594,7 +6743,7 @@ extern AsEventListener;          // compiles: AsEventListener carries [Dynamical
 ```
 - **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package declares the effect of each built-in function the standard library calls, so `Files` has the effect `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
 
-**The standard library's eleven effect classes replace PHP's built-ins for their effects.** Each lives in the namespace of its domain (section 23), and a `uses` names it by its class name with no import, whatever the file imports:
+**The standard library's twelve effect classes replace PHP's built-ins for their effects.** Each lives in the namespace of its domain (section 23), and a `uses` names it by its class name with no import, whatever the file imports:
 
 - `Database`, in `Sharp.Data`, replaces PDO.
 - `Http`, in `Sharp.Net`, replaces curl.
@@ -6607,10 +6756,11 @@ extern AsEventListener;          // compiles: AsEventListener carries [Dynamical
 - `Mail`, in `Sharp.Net`, replaces `mail()`.
 - `Dns`, in `Sharp.Net`, replaces `dns_get_record()` and `gethostbyname()`.
 - `Environment`, in `Sharp.System`, replaces `getenv()` and PHP's other environment functions.
+- `PhpGlobals`, in `Sharp.Interop`, replaces `global`, `$GLOBALS` and the superglobals, and runs a plain PHP file in the global scope.
 
 A bare call of a replaced function names no function (section 8), and a PHP built-in class names no class (section 23), so only the standard library reaches them. Inside it, creating a built-in class has the effects its `extern` lists, as creating a `DateTimeImmutable` reads the clock.
 
-**`Dns.addresses(host)` gives every IPv4 and IPv6 address of a host,** each once, in the order the system resolver gives them, as .NET's `Dns.GetHostAddresses`, Go's `net.LookupHost` and Rust's `ToSocketAddrs` do. The system resolver reads the hosts file before it asks a DNS server, so `localhost` resolves with no network. A name that is no host name throws `ValueError` before any lookup, and a host the resolver can't find throws `RuntimeException`, as .NET throws `SocketException`:
+**`Dns.addresses(host)` gives every IPv4 and IPv6 address of a host,** each once, as an `IpAddress`, in the order the system resolver gives them, as .NET's `Dns.GetHostAddresses`, Go's `net.LookupHost` and Rust's `ToSocketAddrs` do. The system resolver reads the hosts file before it asks a DNS server, so `localhost` resolves with no network. A name that is no host name throws `ValueError` before any lookup, and a host the resolver can't find throws `RuntimeException`, as .NET throws `SocketException`:
 
 <!-- example dns -->
 ```csharp
@@ -6623,7 +6773,7 @@ public class WebhookTarget
 {
     public WebhookTarget(private Dns dns) { }
 
-    public List<string> addresses(string host) => this.dns.addresses(host);   // compiles: WebhookTarget holds a Dns, so it has the effect Dns
+    public bool isPublic(string host) => this.dns.addresses(host).all(address => !address.isLoopback() && !address.isPrivate());   // compiles: WebhookTarget holds a Dns, so it has the effect Dns
 }
 ```
 
@@ -6639,9 +6789,62 @@ module
 ```
 <!-- run dns
 public ExampleRun(private WebhookTarget target) { }
-this.target.addresses("localhost").any(address => address == "127.0.0.1" || address == "::1");   // true
-this.target.addresses("nothing.invalid");   // throws RuntimeException
-this.target.addresses("not a host");        // throws ValueError
+this.target.isPublic("localhost");          // false
+this.target.isPublic("nothing.invalid");    // throws RuntimeException
+this.target.isPublic("not a host");         // throws ValueError
+-->
+
+**`IpAddress`, in `Sharp.Net`, is an IPv4 or IPv6 address,** as .NET's `IPAddress` is. `IpAddress.parse(text)` and `IpAddress.tryParse(text)` read either family, and `family` gives `IpFamily.V4` or `IpFamily.V6`. `isLoopback()` is true for `127.0.0.0/8` and `::1`, and `isPrivate()` for RFC 1918's `10.0.0.0/8`, `172.16.0.0/12` and `192.168.0.0/16` and IPv6's unique local `fc00::/7`, as Rust's `is_private` and `is_unique_local` are. `toString()` writes RFC 5952's form, and two addresses are `==` when they are one address, however each was written:
+
+<!-- example ip-address: statements
+import Sharp.Net.IpAddress;
+import Sharp.Net.IpFamily;
+-->
+```csharp
+IpAddress.parse("0:0:0:0:0:0:0:1") == IpAddress.parse("::1");   // true
+IpAddress.parse("2001:DB8::1").toString();                     // "2001:db8::1"
+IpAddress.parse("10.0.0.7").isPrivate();                       // true
+IpAddress.parse("127.0.0.1").family == IpFamily.V4;            // true
+IpAddress.tryParse("example.com");                             // null
+```
+
+**`Process.start(program, arguments)` starts a program and returns while it runs,** as .NET's `Process.Start` and Rust's `Command::spawn` do, where `Process.run` waits for it. The `ChildProcess` it gives writes the program's input with `writeInput(text)` and closes it with `closeInput()`. `readOutput()` and `readError()` give everything the program writes to its output and to its error output, once it ends, as .NET's `ReadToEnd` does. `wait()` closes the input, waits for the program to end and gives its exit code, as Rust's `Child::wait` does, and `kill()` ends the program at once. The output goes to temporary files, so a program that writes a lot never waits for a reader. A `ChildProcess` runs through the `Process` that started it, so code that holds one has the effect `Process`:
+
+<!-- example process-start -->
+```csharp
+// app/Echo.sharp
+namespace App;
+
+import Sharp.System.Process;
+
+public class Echo
+{
+    public Echo(private Process process) { }
+
+    public string back(string line)
+    {
+        const cat = this.process.start("cat");
+        cat.writeInput(line);
+        cat.closeInput();
+
+        return cat.readOutput();   // compiles: Echo holds a Process, so it has the effect Process
+    }
+}
+```
+
+<!-- example process-start -->
+```csharp
+// app/Module.sharp
+namespace App;
+
+module
+{
+    transient Echo = Echo;   // the standard library's module gives it the app's Process
+}
+```
+<!-- run process-start
+public ExampleRun(private Echo echo) { }
+this.echo.back("one line");   // "one line"
 -->
 
 <!-- example pure-interface -->
@@ -6702,7 +6905,7 @@ public foreign class RedisStore
 }
 ```
 
-The standard library's eleven effect classes, listed above, are `foreign` classes. A project declares its own `foreign` classes the same way.
+The standard library's twelve effect classes, listed above, are `foreign` classes. A project declares its own `foreign` classes the same way.
 
 **`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it. A listener runs inside the `emit` that raised its event, under the standard library's dispatcher, so an exception it throws leaves that `emit`, and the listeners after it don't run, as a C# event's handlers and Symfony's dispatcher behave. Code that must keep going catches it around the `emit`.
 
@@ -6714,6 +6917,7 @@ The standard library's eleven effect classes, listed above, are `foreign` classe
 - `string currentDirectory()` reads the directory the process runs in on every call, as Go's `os.Getwd()` and Rust's `env::current_dir()` do.
 - `void changeDirectory(string path)` changes the directory the process runs in.
 - `string require(string name)` reads an environment variable, and throws `ValueError` when it is not set, with the message `Environment.require: the environment variable "NAME" is not set`. A module binding calls it on the `Environment` it takes as a parameter (section 32), as ASP.NET Core's `IConfiguration` is a service.
+- `int processorCount()` gives how many processors the machine has online, at least 1, and `string machineName()` gives its host name, as .NET's `Environment.ProcessorCount` and `Environment.MachineName` do.
 
 <!-- example environment -->
 ```csharp
@@ -6763,6 +6967,39 @@ this.deploy.target();   // throws OutOfRangeException
 -->
 
 `Deploy` holds an `Environment`, so it has that effect (see the rule on a class's effects below).
+
+**Plain PHP that reads globals, such as a legacy page, shares them through `PhpGlobals`,** a standard `foreign` class in `Sharp.Interop`, since PHP# has no `global` statement. Each member reads or writes the globals of the running request:
+
+- `Any? get(string name)` reads the PHP global `name`, or gives null when it is not set.
+- `void set(string name, Any? value)` writes the PHP global `name`.
+- `Any? read(Superglobal which, string key)` reads `key` of a superglobal, or gives null when it is not set. `Superglobal`, in `Sharp.Interop`, has the cases `Server`, `Get`, `Post`, `Files`, `Request`, `Cookie`, `Env` and `Session`.
+- `void write(Superglobal which, string key, Any? value)` writes `key` of a superglobal.
+- `void include(string path)` runs a plain PHP file in the global scope, as PHP's `include` at the top of a script does, so the globals it reads are the ones `set` wrote, and a global it writes is what `get` reads afterwards. A file that cannot be read throws `RuntimeException`.
+
+<!-- example php-globals -->
+```csharp
+// app/LegacyPage.sharp
+namespace App;
+
+import Sharp.Interop.PhpGlobals;
+import Sharp.Interop.Superglobal;
+
+public class LegacyPage
+{
+    public LegacyPage(private PhpGlobals globals) { }
+
+    public Any? render(string tenant)
+    {
+        this.globals.set("tenant", tenant);
+        this.globals.write(Superglobal.Server, "HTTP_HOST", "shop.example");
+        this.globals.include("legacy/header.php");   // the file reads $tenant and $_SERVER['HTTP_HOST']
+
+        return this.globals.get("title");             // a global the file wrote
+    }
+}
+```
+
+`LegacyPage` holds a `PhpGlobals`, so it has that effect.
 
 **A `foreign` object is an ordinary type in a constructor, a method parameter and a return value:**
 
@@ -7141,7 +7378,7 @@ module
 
 **The host defines each lifetime, as ASP.NET Core's host does.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.
 
-**A host starts and ends each scope with `Scope.run(body)`.** While `body` runs, each `scoped` service it builds lives until `body` returns or throws, and is then dropped. `Scope.run` returns what `body` returns, and has `body`'s effects (section 29). PHP's own request is the default scope, so php-fpm, the CLI and FrankenPHP outside worker mode need no call. A long-running host wraps each unit of work in it, such as an Octane request, a FrankenPHP worker request or a queued job, as ASP.NET Core's `CreateScope()` and Node's `AsyncLocalStorage.run` start one. Plain PHP calls it as `\Sharp\Scope::run(fn () => …)`.
+**A host starts and ends each scope with `Scope.run(body)`.** While `body` runs, each `scoped` service it builds lives until `body` returns or throws, and is then dropped. `Scope.run` returns what `body` returns, and has `body`'s effects (section 29). PHP's own request is the default scope, so the CLI and FrankenPHP outside worker mode need no call. A long-running host wraps each unit of work in it, such as an Octane request, a FrankenPHP worker request or a queued job, as ASP.NET Core's `CreateScope()` and Node's `AsyncLocalStorage.run` start one. Plain PHP calls it as `\Sharp\Scope::run(fn () => …)`.
 
 <!-- example host-scope -->
 ```csharp

@@ -52,9 +52,9 @@ The standard library covers what Rust's `std` and .NET's base class library cove
 | Map: read or add | `entry().or_insert_with` | `CollectionsMarshal.GetValueRefOrAddDefault` | `getOrPut(key, defaultValue)` | |
 | Map: keys, values | `keys`, `values` | `Keys`, `Values` | `keys()`, `values()` | |
 | Set: union, intersection, difference, subset | `union`, `intersection`, `difference`, `is_subset` | `UnionWith`, `IntersectWith`, `ExceptWith`, `IsSubsetOf` | `union(other)`, `intersect(other)`, `subtract(other)`, `isSubsetOf(other)` | |
-| Sorted map and set | `BTreeMap`, `BTreeSet` | `SortedDictionary`, `SortedSet` | **missing** | |
+| Sorted map and set | `BTreeMap`, `BTreeSet` | `SortedDictionary`, `SortedSet` | `SortedMap<TKey, TValue>`, `SortedSet<T>`, with every `Map` and `Set` member, `first()`, `last()`, `floor(key)`, `ceiling(key)` and `range(from, to)` | a sorted `List`, and the engine's `Sharp\Internal\compare` for a key's `operator <=>` |
 | Queue, stack, double-ended queue | `VecDeque` | `Queue<T>`, `Stack<T>`, `LinkedList<T>` | a `List` with `add`, `removeFirst` and `removeLast` | |
-| Priority queue | `BinaryHeap` | `PriorityQueue<T, P>` | **missing** | |
+| Priority queue | `BinaryHeap` | `PriorityQueue<T, P>` | `PriorityQueue<TElement, TPriority>`: `enqueue`, `dequeue()`, `peek()`, `count()`, `isEmpty()` | a binary heap in a `List` |
 | Lazy sequences | `Iterator` | `IEnumerable<T>` with deferred LINQ | an `Iterable`'s `filter`, `map`, `take`, `toList()` | |
 
 ## I/O and files
@@ -100,7 +100,7 @@ The standard library covers what Rust's `std` and .NET's base class library cove
 | Trigonometry | `sin`, `cos`, `atan2` | `Math.Sin`, `Cos`, `Atan2` | `Math.sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2` | `sin`, `cos`, `atan2` |
 | Integer division, a remainder that rounds down | `/`, `div_euclid`, `rem_euclid` | `/`, `Math.DivRem` | `a / b` on two `int`s (section 24), `a.floorDiv(b)`, `a.mod(b)` | |
 | Checked, saturating arithmetic | `checked_add`, `saturating_add` | `checked`, `Math.Clamp` | `n.checkedAdd(m)`, `checkedSubtract`, `checkedMultiply`, `saturatingAdd`, `saturatingSubtract`, `saturatingMultiply` | |
-| Big integers, decimals | `num-bigint` crate | `BigInteger`, `decimal` | **missing** | |
+| Big integers, decimals | `num-bigint` crate | `BigInteger`, `decimal` | `BigInteger.parse`, `of`, `+ - * / %`, `pow`, `toString(radix)`, `toIntOrNull()`; `Decimal.parse`, `of`, `+ - *`, `divide(divisor, scale, mode)`, `round(scale, mode)`, `scale`, with `RoundingMode` | `BcMath\Number`, of the `bcmath` extension every engine builds |
 | Limits, constants | `i64::MAX`, `f64::consts::PI` | `long.MaxValue`, `Math.PI`, `Math.E` | `Int.MAX`, `Int.MIN`, `Math.PI`, `Math.E` | `M_PI`, `M_E` |
 | Finite, not a number | `is_finite`, `is_nan` | `double.IsFinite`, `IsNaN` | `x.isFinite()`, `x.isNaN()` | `is_finite`, `is_nan` |
 | Write and read another base | `format!("{:x}")`, `from_str_radix` | `ToString("x")`, `Convert.ToInt64(text, 16)` | `n.toHex()`, `Int.parse(text, radix)`, `Int.tryParse(text, radix)` | `dechex`, `intval` |
@@ -112,13 +112,13 @@ The standard library covers what Rust's `std` and .NET's base class library cove
 | Operation | Rust | .NET | PHP# | Runs on |
 | --- | --- | --- | --- | --- |
 | JSON: read any value, read a type, write | `serde_json` crate | `JsonDocument.Parse`, `JsonSerializer.Deserialize<T>`, `Serialize` | `Json.parse(text)`, `Json.decode<T>(text)`, `Json.encode(value)` | `json_decode`, `json_encode` |
-| Base64, URL-safe Base64 | `base64` crate | `Convert.ToBase64String`, `FromBase64String`, `Base64Url` | `Base64.encode`, `Base64.decode`; URL-safe: **missing** | `base64_encode` |
+| Base64, URL-safe Base64 | `base64` crate | `Convert.ToBase64String`, `FromBase64String`, `Base64Url` | `Base64.encode`, `Base64.decode`; URL-safe: `urlSafe: true` on each | `base64_encode`, `strtr` |
 | Hex | `hex` crate | `Convert.ToHexString`, `FromHexString` | `Hex.encode`, `Hex.decode` | `bin2hex`, `hex2bin` |
 | URL encoding, a query string | `percent-encoding` crate | `Uri.EscapeDataString`, `HttpUtility.ParseQueryString` | `Url.encode`, `Url.encodeForm`, `Url.decode`, `Url.buildQuery`, `Url.parseQuery` | `rawurlencode`, `http_build_query` |
 | Compression | `flate2` crate | `GZipStream`, `ZLibStream`, `BrotliStream` | `Compression.compress`, `Compression.uncompress` | `gzcompress` |
-| Integers to and from bytes | `to_le_bytes`, `from_le_bytes` | `BinaryPrimitives`, `BitConverter` | **missing** | |
+| Integers to and from bytes | `to_le_bytes`, `from_le_bytes` | `BinaryPrimitives`, `BitConverter` | `n.toBytes(order)`, `Int.fromBytes(bytes, order)`, with `ByteOrder` | `pack`, `unpack` |
 | XML | `quick-xml` crate | `XDocument`, `XmlReader` | **missing** | |
-| CSV | `csv` crate | none | `text.parseCsv()`; writing: **missing** | `str_getcsv` |
+| CSV | `csv` crate | none | `text.parseCsv()`, `fields.toCsv()` on a `List<string>` | `str_getcsv` |
 | PHP's own formats | | | `Serialized.encode`, `Serialized.decode(text, allowedClasses)`, `PhpLiteral.of(value)` | `serialize`, `var_export` |
 | Hash, compare in constant time | `sha2` crate | `SHA256.HashData`, `CryptographicOperations.FixedTimeEquals` | `Hash.of(algorithm, data)`, `Hash.equals` | `hash`, `hash_equals` |
 | HMAC | `hmac` crate | `HMACSHA256.HashData` | `Hmac.of(algorithm, data, key)`, `Hmac.verify` | `hash_hmac` |
@@ -131,10 +131,10 @@ The standard library covers what Rust's `std` and .NET's base class library cove
 | --- | --- | --- | --- | --- |
 | HTTP requests | `reqwest` crate | `HttpClient.GetAsync`, `SendAsync`, `HttpRequestMessage` | `Http.get(url)`, `Http.send(request)` with an `HttpRequest` and an `HttpResponse` | `curl` |
 | A URL: parse, read its parts, write | `url` crate | `Uri`, `UriBuilder` | `Url.parse`, `Url.tryParse`, `scheme`, `host`, `port`, `path`, `query`, `queryValues()`, `toString()`, `Url.isValid` | `parse_url` |
-| IP addresses | `IpAddr::from_str`, `octets` | `IPAddress.Parse`, `TryParse`, `GetAddressBytes` | `Ip.isValid`, `Ip.toBinary`; an address value: **missing** | `inet_pton` |
+| IP addresses | `IpAddr::from_str`, `octets` | `IPAddress.Parse`, `TryParse`, `GetAddressBytes` | `Ip.isValid`, `Ip.toBinary`; the struct `IpAddress`: `parse`, `tryParse`, `family`, `isLoopback()`, `isPrivate()`, `toString()`, `==` | `inet_pton`, `inet_ntop` |
 | Mail | `lettre` crate | `SmtpClient`, `MailMessage`, `MailAddress` | `Mail.send(message)`, `MailMessage`, `MailAddress` | `mail` |
 | TCP and UDP sockets | `TcpStream`, `TcpListener`, `UdpSocket` | `Socket`, `TcpClient`, `UdpClient` | **missing** | |
-| Name lookup | `ToSocketAddrs` | `Dns.GetHostAddresses` | `Dns.addresses(host)` | `getaddrinfo`, through the engine's `Sharp\Internal\resolve` |
+| Name lookup | `ToSocketAddrs` | `Dns.GetHostAddresses` | `Dns.addresses(host)`, a `List<IpAddress>` | `getaddrinfo`, through the engine's `Sharp\Internal\resolve` |
 | An HTTP server | `hyper` crate | `HttpListener` | **missing**, the web framework serves | |
 
 ## Processes and environment
@@ -142,13 +142,14 @@ The standard library covers what Rust's `std` and .NET's base class library cove
 | Operation | Rust | .NET | PHP# | Runs on |
 | --- | --- | --- | --- | --- |
 | Run a program and capture its output | `Command::output` | `Process.Start`, `StandardOutput` | `Process.run(program, arguments, timeout)`, a `ProcessResult` with `exitCode`, `output`, `errorOutput` | `proc_open` |
-| Start a program without waiting, pipe its input | `Command::spawn`, `Child::stdin` | `Process.Start`, `StandardInput` | **missing** | |
+| Start a program without waiting, pipe its input | `Command::spawn`, `Child::stdin` | `Process.Start`, `StandardInput` | `Process.start(program, arguments)`, a `ChildProcess` with `writeInput`, `closeInput()`, `readOutput()`, `readError()`, `wait()`, `kill()` | `proc_open` |
 | Exit, this process's id | `process::exit`, `process::id` | `Environment.Exit`, `Environment.ProcessId` | `Process.exit(code)`, `Process.id()` | `exit`, `getmypid` |
 | Arguments | `env::args` | `Environment.GetCommandLineArgs` | `Environment.arguments` | |
 | Environment variables | `env::var`, `vars`, `set_var` | `GetEnvironmentVariable`, `GetEnvironmentVariables`, `SetEnvironmentVariable` | `Environment.variable(name)`, `Environment.require(name)`, `Environment.variables()`, `Environment.setVariable` | `getenv`, `putenv` |
 | The current directory | `env::current_dir`, `set_current_dir` | `Environment.CurrentDirectory` | `Environment.currentDirectory()`, `Environment.changeDirectory` | `getcwd`, `chdir` |
-| The machine: its system, processors, name | `env::consts::OS`, `thread::available_parallelism` | `Environment.OSVersion`, `ProcessorCount`, `MachineName` | **missing** | |
+| The machine: its system, processors, name | `env::consts::OS`, `thread::available_parallelism` | `Environment.OSVersion`, `ProcessorCount`, `MachineName` | `Environment.processorCount()`, `Environment.machineName()`; its system: **missing** | `sysconf`, through the engine's `Sharp\Internal\processorCount`, `gethostname` |
 | Signals | `signal-hook` crate | `PosixSignalRegistration` | **missing** | |
+| PHP's globals and superglobals, a legacy PHP file run in the global scope | | | `PhpGlobals.get(name)`, `set(name, value)`, `read(which, key)`, `write(which, key, value)`, `include(path)`, with the enum `Superglobal` | `EG(symbol_table)`, through the engine's `Sharp\Internal\readGlobal`, `writeGlobal`, `includeGlobal` |
 
 ## Concurrency
 
@@ -187,10 +188,8 @@ The standard library covers what Rust's `std` and .NET's base class library cove
 
 Every operation marked **missing** above, by domain, for later batches to plan:
 
-- Collections: a sorted map and set, a priority queue.
 - I/O and files: streams that read a chunk and seek, permissions, file locks, watching.
-- Math and random: big integers and decimals.
-- Encoding and cryptography: URL-safe Base64, integers to and from bytes, XML, writing CSV, encryption.
-- Networking: an IP address value, TCP and UDP sockets, name lookup, an HTTP server.
-- Processes and environment: starting a program without waiting and piping its input, the machine's system, processors and name, signals.
+- Encoding and cryptography: XML, encryption.
+- Networking: TCP and UDP sockets, an HTTP server.
+- Processes and environment: the machine's system, signals.
 - Concurrency: threads and tasks, asynchronous code, channels, locks and atomics, cancelling.

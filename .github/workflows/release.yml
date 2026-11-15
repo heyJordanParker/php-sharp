@@ -7,11 +7,11 @@ name: Release
 # IMAGE_TAGS job publishes the engine's images from the same tag, and its COMPOSER job publishes
 # heyjordanparker/php-sharp-composer.
 #
-# A release builds its binaries once, as Humble and Farley's Continuous Delivery asks. The bump's pull request builds
-# every asset beside its CI: sharp.yml's RELEASE_ASSETS calls this workflow once RELEASE_BUMP passed. The tag then
-# publishes exactly those assets, as bump_assets explains, and builds them itself only when no run of the bump passed,
-# or its assets expired or were built from another tree. A dispatch checks what a tag would publish, and publishes
-# nothing.
+# A release builds its binaries once, as Humble and Farley's Continuous Delivery asks. The push of the bump's merge
+# commit to master builds every asset: sharp.yml's RELEASE_ASSETS calls this workflow when the push changes
+# sharp/mago/Cargo.toml's version. The tag on that commit then publishes exactly those assets, as bump_assets explains,
+# and builds them itself only when no push run built them, or they expired or were built from another tree. A dispatch
+# checks what a tag would publish, and publishes nothing.
 on:
   workflow_call:
   workflow_dispatch:
@@ -20,7 +20,7 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+*"
 
 # Every artifact is kept as long as the repository's artifact retention sets, 90 days, GitHub's longest, so the
-# assets a bump's pull request built are still there for its tag after a slow review.
+# assets a bump's push built are still there for its tag.
 env:
   CICD_INTERMEDIATES_DIR: ${{ github.workspace }}/_cd-intermediates
 
@@ -32,14 +32,13 @@ defaults:
     working-directory: sharp/mago
 
 jobs:
-  # Every other job needs crate_metadata, which needs ci, so a release publishes only a tree whose every Mago CI job
-  # already ran and passed, on master, on the pull request that merged it or in a full run, and whose full PHP# run
-  # passed all 9 test jobs, through the same check as sharp.yml's CHANGES, so the two workflows publish a tag or
-  # neither does. The suites do not run again here. On the bump's pull request, CI runs beside this workflow, so ci
-  # skips there, and the tag checks it.
+  # Every other job needs crate_metadata, which needs ci, so a release publishes only a commit whose own push runs of
+  # Mago CI and PHP# CI passed on master, through the same check as sharp.yml's CHANGES, so the two workflows publish a
+  # tag or neither does. The suites do not run again here. In the push run that calls this workflow, CI runs beside it,
+  # so ci skips there, and the tag checks it.
   ci:
-    name: Mago CI and the full PHP# run passed on the tree
-    if: github.event_name != 'pull_request'
+    name: Mago CI and PHP# CI passed on the commit's push
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -52,47 +51,45 @@ jobs:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # patch-coverage runs only on a pull request. A pull request's run skips release-build unless it is the full run,
-      # as mago.yml's CHANGES explains, so the run that passes is a full run, the bump's pull request's among them, or
-      # the push of the commit to master. A push that reused its pull request's Linux results skipped checks, so it
-      # passes only with a dispatched full run, as the error says.
-      - name: Find the Mago CI run that passed every job on the commit's tree
-        id: passed
+      # The push run's ci-passed and CI_PASSED pass only when every job the push runs passed, the macOS ones among them,
+      # and the Linux ones passed on that run or on the pull request whose tree it is, as mago.yml's and sharp.yml's
+      # CHANGES explain.
+      - name: Find the commit's Mago CI push run that passed
+        id: mago
         uses: ./.github/actions/passed-tree
         with:
           workflow: mago.yml
-          events: push pull_request schedule workflow_dispatch
-          passed: all(.jobs[]; .conclusion == "success" or .name == "patch-coverage")
+          events: push
+          passed: any(.jobs[]; .name == "ci-passed" and .conclusion == "success")
+          on-master: true
 
-      - name: Every Mago CI job ran and passed on the commit's tree
-        env:
-          RUN: ${{ steps.passed.outputs.run }}
-        run: |
-          if [[ -z $RUN ]]; then
-            echo "::error::No Mago CI run passed every job on commit $GITHUB_SHA's tree, on master, on a pull request into master that names it or in a full run. Push a branch at the commit with git push origin $GITHUB_SHA:refs/heads/full-run, dispatch one on it with gh workflow run mago.yml --ref full-run, and once it passes, rerun this run with gh run rerun $GITHUB_RUN_ID."
-            exit 1
-          fi
-          echo "Every Mago CI job ran and passed on this tree in $RUN."
-
-      - name: Find the full PHP# run that passed all 9 test jobs on the commit's tree
-        id: full
+      - name: Find the commit's PHP# CI push run that passed
+        id: sharp
         uses: ./.github/actions/passed-tree
         with:
-          events: pull_request schedule workflow_dispatch
-          full: true
-          on-master: ${{ github.ref_type == 'tag' }}
+          workflow: sharp.yml
+          events: push
+          passed: any(.jobs[]; .name == "CI_PASSED" and .conclusion == "success")
+          on-master: true
 
-      - name: The full PHP# run passed on the commit's tree
+      - name: Both push runs passed on the commit
         env:
-          RUN: ${{ steps.full.outputs.run }}
+          MAGO: ${{ steps.mago.outputs.run }}
+          SHARP: ${{ steps.sharp.outputs.run }}
         run: |
-          if [[ -z $RUN ]]; then
-            echo "::error::No full PHP# CI run, the bump's pull request's, nightly or dispatched, passed all 9 test jobs on commit $GITHUB_SHA's tree, so sharp.yml's gate would refuse this tag too. Release a commit whose tree passed one."
+          for workflow in "Mago CI:$MAGO" "PHP# CI:$SHARP"; do
+            if [[ -z ${workflow#*:} ]]; then
+              echo "::error::No push run of ${workflow%%:*} passed on master's commit $GITHUB_SHA. Wait for it to pass, or rerun it, and once it passes, rerun this run with gh run rerun $GITHUB_RUN_ID."
+              failed=true
+            fi
+          done
+          if [[ ${failed:-} == true ]]; then
             exit 1
           fi
-          echo "All 9 PHP# test jobs ran and passed on this tree in $RUN."
+          echo "Commit $GITHUB_SHA passed Mago CI in $MAGO and PHP# CI in $SHARP."
 
-  # ci skips on the bump's pull request, and a job that needs a skipped job runs only by a condition of its own.
+  # ci skips in the push run that builds the assets, and a job that needs a skipped job runs only by a condition of its
+  # own.
   crate_metadata:
     name: extract crate metadata
     runs-on: ubuntu-latest
@@ -144,9 +141,9 @@ jobs:
             exit 1
           fi
           cat "$notes"
-      # Only the release job reads them, from its own run, so the bump's pull request uploads none.
+      # Only the release job reads them, from its own run, so the push run that builds the assets uploads none.
       - name: "Artifact upload: release notes"
-        if: github.event_name != 'pull_request'
+        if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-notes
@@ -160,17 +157,17 @@ jobs:
       homepage: ${{ steps.crate_metadata.outputs.homepage }}
       msrv: ${{ steps.crate_metadata.outputs.msrv }}
 
-  # The run of the bump's pull request that built this tree's assets: the newest sharp.yml run whose RELEASE_ASSETS
-  # wrote their SHA-256s, on this commit's tree, as .github/actions/passed-tree finds it. The tag publishes its assets
-  # only when each one is still kept, matches its SHA-256 and its attestation, and the commit the attestation names,
-  # the pull request's merge commit, has this commit's tree. When no run holds them, or they expired, or they were built
-  # from another tree, this run builds them, and says so. An asset that fails its SHA-256 or its attestation fails the
-  # release instead, because it was changed after the build.
+  # The push run that built this commit's assets: the sharp.yml push run on master whose RELEASE_ASSETS wrote their
+  # SHA-256s, on this commit's tree, as .github/actions/passed-tree finds it. The tag publishes its assets only when
+  # each one is still kept, matches its SHA-256 and its attestation, and the commit the attestation names has this
+  # commit's tree. When no run holds them, or they expired, or they were built from another tree, this run builds them,
+  # and says so. An asset that fails its SHA-256 or its attestation fails the release instead, because it was changed
+  # after the build.
   bump_assets:
-    name: Find the assets the bump's pull request built
+    name: Find the assets the bump's push built
     runs-on: ubuntu-latest
     needs: crate_metadata
-    if: github.event_name != 'pull_request'
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     permissions:
       actions: read
       attestations: read
@@ -189,12 +186,12 @@ jobs:
         with:
           sparse-checkout: .github/actions
 
-      - name: Find the bump's pull request run that built the assets of the commit's tree
+      - name: Find the bump's push run that built the assets of the commit's tree
         id: bump
         uses: ./.github/actions/passed-tree
         with:
           workflow: sharp.yml
-          events: pull_request
+          events: push
           passed: any(.jobs[]; .name == "RELEASE_ASSETS / Write the SHA-256 of every asset" and .conclusion == "success")
 
       - name: Download the bump's assets, and check their SHA-256s, their attestations and the tree they were built from
@@ -208,7 +205,7 @@ jobs:
             exit 0
           }
           if [[ -z $RUN ]]; then
-            build "No pull request run built the assets of commit $GITHUB_SHA's tree."
+            build "No push run built the assets of commit $GITHUB_SHA's tree."
           fi
           id=${RUN##*/}
           sums="mago-$VERSION-sha256sums.txt"
@@ -256,7 +253,7 @@ jobs:
           echo "::notice::This run publishes the assets run $RUN built from commit $GITHUB_SHA's tree, and builds none."
 
   # sharp/mago/.gitattributes leaves Mago's sources out of git archive, and so out of php-sharp's own tag archives.
-  # It and build run on the bump's pull request, and on a tag only when bump_assets found no assets to publish.
+  # It and build run on the bump's push, and on a tag only when bump_assets found no assets to publish.
   source_archive:
     name: Create source code archives
     runs-on: ubuntu-latest
@@ -329,12 +326,12 @@ jobs:
           # Each job in this matrix defines a build target. The following custom keys control the pipeline steps:
           # - `smoke: true`: Smoke-checks the built binary. Only targets the job's runner can execute set it.
           # - `pgo: true`: Builds with profile-guided optimization, profiled on corpus/. Only aarch64-apple-darwin
-          #   sets it. x86_64 macOS's PGO job, which profiled under Rosetta, took up to 59 minutes, and nothing here
-          #   measures what PGO gains, so it and x86_64 musl build without it, as rust-lang/rust's Apple dist jobs do.
+          #   sets it.
+          #
+          # The targets PHP# runs on: macOS on Apple silicon, and glibc Linux on arm64 and x86_64.
 
-          ## macOS: aarch64, x86_64, on the self-hosted Apple silicon runners. The x86_64 binary cross-compiles there,
-          ## and its smoke check runs it under Rosetta. GitHub's macos-latest never started either on throwaway bump
-          ## #248: twice its jobs ended "not acquired by Runner of type hosted even after multiple attempts", for
+          ## macOS: aarch64, on the self-hosted Apple silicon runners. GitHub's macos-latest never started on throwaway
+          ## bump #248: twice its jobs ended "not acquired by Runner of type hosted even after multiple attempts", for
           ## macOS arm64's capacity, so a release that waits on it can't publish.
           - {
               target: aarch64-apple-darwin,
@@ -342,25 +339,10 @@ jobs:
               smoke: true,
               pgo: true,
             }
-          - {
-              target: x86_64-apple-darwin,
-              os: macos-arm64-local,
-              smoke: true,
-            }
           ## Linux: aarch64, x86_64
           - { target: aarch64-unknown-linux-gnu, os: ubuntu-latest, smoke: false }
           - {
-              target: aarch64-unknown-linux-musl,
-              os: ubuntu-latest,
-              smoke: false,
-            }
-          - {
               target: x86_64-unknown-linux-gnu,
-              os: ubuntu-latest,
-              smoke: true,
-            }
-          - {
-              target: x86_64-unknown-linux-musl,
               os: ubuntu-latest,
               smoke: true,
             }
@@ -406,8 +388,7 @@ jobs:
           toolchain: ${{ needs.crate_metadata.outputs.msrv }}
           targets: ${{ matrix.job.target }}
 
-      # No cache: a pull request's or a tag's cache is restored only by that ref's own runs, and no later run of a bump
-      # or a tag builds again.
+      # No cache: a bump's push builds the assets once, and no later run of a bump or a tag builds again.
       - name: install PGO tools
         if: matrix.job.pgo
         shell: bash
@@ -579,8 +560,7 @@ jobs:
   # install.sh checks a download against these SHA-256s when gh is missing, and the composer job pins them in the tag's
   # heyjordanparker/mago-sharp version. They are written where the assets were built, so a tag that publishes the
   # bump's assets publishes the bump's SHA-256s too. A job whose condition names no status function runs only when
-  # every job before it passed, and ci and bump_assets skip on the bump's pull request, so each job after them names
-  # its own.
+  # every job before it passed, and ci and bump_assets skip on the bump's push, so each job after them names its own.
   sums:
     name: Write the SHA-256 of every asset
     runs-on: ubuntu-latest
@@ -606,11 +586,8 @@ jobs:
           mago-${VERSION}-source.tar.gz
           mago-${VERSION}-source.zip
           mago-${VERSION}-aarch64-apple-darwin.tar.gz
-          mago-${VERSION}-x86_64-apple-darwin.tar.gz
           mago-${VERSION}-aarch64-unknown-linux-gnu.tar.gz
-          mago-${VERSION}-aarch64-unknown-linux-musl.tar.gz
           mago-${VERSION}-x86_64-unknown-linux-gnu.tar.gz
-          mago-${VERSION}-x86_64-unknown-linux-musl.tar.gz
           EOF
           find assets -type f -printf '%f\n' | sort > downloaded-assets.txt
           diff -u expected-assets.txt downloaded-assets.txt || {
@@ -638,7 +615,7 @@ jobs:
     name: Publish the release
     runs-on: ubuntu-latest
     needs: [crate_metadata, bump_assets, sums]
-    if: ${{ !failure() && !cancelled() && github.event_name != 'pull_request' }}
+    if: ${{ !failure() && !cancelled() && (github.ref_type == 'tag' || github.event_name == 'workflow_dispatch') }}
     permissions:
       actions: read
       contents: write

@@ -61,16 +61,17 @@ echo $cart->total();
 Run these from the repository root:
 
 ```sh
-sharp/bin/build             # build sharp/build/<os>-<arch>/sapi/cli/php
-sharp/bin/test              # run the PHP# suite, Zend/tests/sharp/
-sharp/bin/test --upstream   # run php-src's own suites against the upstream baseline
+sharp/bin/build                   # build the thread-safe engine, sharp/build/<os>-<arch>/sapi/cli/php
+sharp/bin/test                    # run the PHP# suite, Zend/tests/sharp/
+sharp/bin/test --linux --upstream # run php-src's own suites against the upstream baseline
+sharp/bin/check                   # run the checks a pull request's CI runs, on this machine
 ```
 
 [sharp/README.md](sharp/README.md) lists every option, the macOS dependencies, the Linux image and CI.
 
 ## Runtime images
 
-`sharp/docker/runtime/` builds two images from this repository, with PHP# built in: docker-library's `php:8.5-fpm-trixie`, and FrankenPHP's own image on docker-library's `php:8.5-zts-trixie`. An app switches to PHP# by changing only its `FROM` line. Each version tag, such as `v0.1.0`, publishes them as `ghcr.io/heyjordanparker/php-sharp:<version>` and `ghcr.io/heyjordanparker/php-sharp:<version>-frankenphp`.
+`sharp/docker/runtime/` builds one image from this repository, with PHP# built in: FrankenPHP's own image on docker-library's `php:8.5-zts-trixie`, since PHP# runs on FrankenPHP and its engine is thread-safe. An app on FrankenPHP's image switches to PHP# by changing only its `FROM` line. Each version tag, such as `v0.1.0`, publishes it as `ghcr.io/heyjordanparker/php-sharp:<version>`.
 
 A long-running host, such as FrankenPHP's worker mode or Octane, runs each unit of work in `Scope.run`, which plain PHP calls as `\Sharp\Scope::run(fn () => …)`, so each request gets its own `scoped` services ([spec section 32](docs/spec.md#32-modules)).
 

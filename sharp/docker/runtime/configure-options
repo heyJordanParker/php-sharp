@@ -1,16 +1,15 @@
 #!/bin/sh
 set -eu
 
-# Prints a runtime image's ./configure options, one per line, in docker-library's order: fpm for Dockerfile's
-# php-fpm engine, zts for frankenphp.Dockerfile's thread-safe one. Each Dockerfile passes them after its own --build
-# and paths, and so does .github/workflows/sharp.yml's UBUNTU_WERROR, so the line CI builds with Ubuntu's gcc 13 is
-# the one the images ship and sharp/README.md tells a source build to run. The order keeps php -i's
-# "Configure Command" as docker-library's images print it.
+# Prints the runtime image's ./configure options, one per line, in docker-library's zts order, for
+# frankenphp.Dockerfile's thread-safe engine. The Dockerfile passes them after its own --build and paths, so the line
+# the image ships is the one sharp/README.md tells a source build to run. The order keeps php -i's "Configure Command"
+# as docker-library's images print it.
 
-case "${1:-}" in
-	fpm|zts) ;;
-	*) echo "usage: sharp/docker/runtime/configure-options fpm|zts" >&2; exit 2 ;;
-esac
+if [ $# -ne 0 ]; then
+	echo "usage: sharp/docker/runtime/configure-options" >&2
+	exit 2
+fi
 # An assignment of its own, so a failure stops the script.
 multiarch="$(dpkg-architecture --query DEB_BUILD_MULTIARCH)"
 
@@ -29,6 +28,8 @@ echo --with-pic
 echo --enable-mbstring
 # PHP#: the standard library's string.normalized() runs on intl's Normalizer, so every engine builds it
 echo --enable-intl
+# PHP#: the standard library's Decimal and BigInteger run on bcmath's BcMath\Number, so every engine builds it
+echo --enable-bcmath
 # --enable-mysqlnd is included here because it's harder to compile after the fact than extensions are (since it's a plugin for several extensions, not an extension in itself)
 echo --enable-mysqlnd
 # https://wiki.php.net/rfc/argon2_password_hash
@@ -45,31 +46,18 @@ echo --with-openssl
 echo --with-readline
 echo --with-zlib
 
-if [ "$1" = fpm ]; then
-	# https://github.com/bwoebi/phpdbg-docs/issues/1#issuecomment-163872806 ("phpdbg is primarily a CLI debugger, and is not suitable for debugging an fpm stack.")
-	echo --disable-phpdbg
-else
-	# https://github.com/docker-library/php/pull/1259
-	echo --enable-phpdbg
-	echo --enable-phpdbg-readline
-fi
+# https://github.com/docker-library/php/pull/1259
+echo --enable-phpdbg
+echo --enable-phpdbg-readline
 
 # in PHP 7.4+, the pecl/pear installers are officially deprecated (requiring an explicit "--with-pear")
 echo --with-pear
 
 echo --with-libdir="lib/$multiarch"
 
-if [ "$1" = fpm ]; then
-	echo --disable-cgi
+# https://github.com/docker-library/php/pull/939#issuecomment-730501748
+echo --enable-embed
 
-	echo --enable-fpm
-	echo --with-fpm-user=www-data
-	echo --with-fpm-group=www-data
-else
-	# https://github.com/docker-library/php/pull/939#issuecomment-730501748
-	echo --enable-embed
-
-	echo --enable-zts
-	# https://externals.io/message/118859
-	echo --disable-zend-signals
-fi
+echo --enable-zts
+# https://externals.io/message/118859
+echo --disable-zend-signals

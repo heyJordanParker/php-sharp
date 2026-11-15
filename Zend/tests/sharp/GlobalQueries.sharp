@@ -1,0 +1,27 @@
+namespace Demo;
+
+import Sharp.Interop.PhpGlobals;
+import Sharp.Interop.Superglobal;
+
+class GlobalQueries
+{
+    public static List<string> page(PhpGlobals globals, string path)
+    {
+        globals.set("tenant", "acme");
+        globals.write(Superglobal.Server, "HTTP_HOST", "shop.example");
+        globals.include(path);
+
+        return [
+            globals.get("rendered") is string rendered ? rendered : "none",
+            globals.get("tenant") is string tenant ? tenant : "none",
+            globals.get("counter") is int counter ? `${counter}` : "none",
+            globals.read(Superglobal.Server, "HTTP_HOST") is string host ? host : "none",
+            globals.read(Superglobal.Get, "absent") is string ? "set" : "unset",
+        ];
+    }
+
+    public static void missing(PhpGlobals globals)
+    {
+        globals.include("/nonexistent/legacy-page.php");
+    }
+}

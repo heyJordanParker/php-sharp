@@ -26,9 +26,9 @@ function fixture(string $name, string $extension = 'sharp'): void
     }
     // A collection's member a call can't run in place, as a member's value, runs on the standard library's class of
     // the collection's members, and a class value's on `ClassMembers`, which makes each `Property`, `Method`,
-    // `Parameter`, `Constructor`, `EnumCase` and `TupleElement`, gives each member its `Visibility`, and a type its
-    // `TypeKind`.
-    $reflection = ['ClassMembers', 'Property', 'Method', 'Parameter', 'Constructor', 'EnumCase', 'TupleElement', 'TypeKind'];
+    // `Parameter`, `Constructor`, `Constant`, `EnumCase` and `TupleElement`, gives each member its `Visibility`, and a
+    // type its `TypeKind`.
+    $reflection = ['ClassMembers', 'Property', 'Method', 'Parameter', 'Constructor', 'Constant', 'EnumCase', 'TupleElement', 'TypeKind'];
     foreach (['ListMembers', 'MapMembers', 'SetMembers', 'IterableMembers', ...$reflection, 'Visibility'] as $members) {
         $files["Sharp\\$members"] = dirname(__DIR__, 4) . "/sharp/composer/library/Sharp/$members.sharp";
     }

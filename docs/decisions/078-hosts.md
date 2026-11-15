@@ -2,9 +2,9 @@
 
 ## Decision
 
-Each lifetime means the same thing under every host: php-fpm, the CLI, FrankenPHP and Laravel Octane.
+Each lifetime means the same thing under every host: the CLI, FrankenPHP in and outside worker mode, and Laravel Octane.
 
-- **The app is what the host keeps in memory.** Under php-fpm and the CLI the app runs for one request or one command. Under a long-running host, such as Octane or FrankenPHP's worker mode, one app serves request after request. A host that runs several workers runs one app in each.
+- **The app is what the host keeps in memory.** Under FrankenPHP outside worker mode and the CLI the app runs for one request or one command. Under a long-running host, such as Octane or FrankenPHP's worker mode, one app serves request after request. A host that runs several workers runs one app in each.
 - **A static and a `singleton` live as long as the app runs.** A static's initial value runs once, when the app first uses its class's statics, so under a long-running host each request sees what the last one left.
 - **A `scoped` service lives for one scope, and the host starts and ends each scope with the standard library's `Scope.run(body)`.** `Scope.run` returns what `body` returns and takes on `body`'s effects, as a method takes on the effects of each function it is given ([decision 79](079-function-parameter-effects.md)). PHP's own request is the default scope. A long-running host wraps each unit of work in it: an Octane request, a FrankenPHP worker request, a queued job. PHP# ships no framework code for it.
 - **A scope follows the fiber that runs in it.** A fiber started inside `Scope.run` belongs to that scope, and a `Scope.run` inside a fiber is that fiber's own. A `scoped` service resolved after its scope ended throws `Sharp\ContainerError`.

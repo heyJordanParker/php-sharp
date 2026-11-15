@@ -7,11 +7,11 @@ require __DIR__ . '/project.inc';
 $files = [
     'mago.toml' => "[source]\npaths = [\".\"]\nextensions = [\"sharp\", \"inc\"]\n",
     'Billing.inc' => file_get_contents(__DIR__ . '/harness/Billing.inc'),
-    // The fixtures sort Lists and read Maps, whose members the standard library declares, and a List's members call
-    // an int's.
+    // The fixtures sort Lists and read Maps, whose members the standard library declares, a List's members call an
+    // int's, and an int's take a ByteOrder.
     'vendor/heyjordanparker/php-sharp-composer/composer.json' => '{"name": "heyjordanparker/php-sharp-composer"}',
 ];
-foreach (['ListMembers', 'MapMembers', 'Int'] as $members) {
+foreach (['ListMembers', 'MapMembers', 'Int', 'ByteOrder'] as $members) {
     $files["vendor/heyjordanparker/php-sharp-composer/library/Sharp/$members.sharp"] = file_get_contents(__DIR__ . "/../../../sharp/composer/library/Sharp/$members.sharp");
 }
 foreach (glob(__DIR__ . '/Operators/*.sharp') as $file) {

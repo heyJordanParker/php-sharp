@@ -4,8 +4,9 @@
 // by their paths under the library's Sharp folder. A project that holds the library's module holds these.
 const LIBRARY_MODULE = [
     'Module', 'Dispatcher', 'ImmediateDispatcher', 'System/Environment', 'Time/Clock', 'Random', 'IO/Console',
-    'System/Process', 'System/ProcessResult', 'IO/Files', 'Net/Http', 'Net/Mail', 'Net/Dns', 'Time/Duration', 'Time/Instant',
-    'Time/DateTime', 'Time/Date', 'Time/TimeOfDay', 'Time/TimeZone', 'Time/DateTimeInterfaceMembers', 'Time/Weekday', 'Time/Month', 'Int', 'Math', 'Net/HttpMethod', 'Net/HttpRequest',
+    'System/Process', 'System/ProcessResult', 'System/ChildProcess', 'IO/Files', 'Net/Http', 'Net/Mail', 'Net/Dns', 'Net/IpAddress',
+    'Net/IpFamily', 'Interop/PhpGlobals', 'Interop/Superglobal', 'Time/Duration', 'Time/Instant',
+    'Time/DateTime', 'Time/Date', 'Time/TimeOfDay', 'Time/TimeZone', 'Time/DateTimeInterfaceMembers', 'Time/Weekday', 'Time/Month', 'Int', 'ByteOrder', 'Math', 'Net/HttpMethod', 'Net/HttpRequest',
     'Net/HttpResponse', 'Net/MailAddress', 'Net/MailMessage', 'Net/Url', 'Text/StringMembers', 'Text/NormalizationForm', 'ListMembers',
     'MapMembers', 'SetMembers', 'IterableMembers',
 ];

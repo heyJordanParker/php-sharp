@@ -100,6 +100,7 @@ namespace {
     @mkdir("$package/library/Sharp/Text", 0777, true);
     @mkdir("$package/library/Sharp/IO", 0777, true);
     @mkdir("$package/library/Sharp/System", 0777, true);
+    @mkdir("$package/library/Sharp/Interop", 0777, true);
     copy("$root/sharp/composer/autoload.php", "$package/autoload.php");
     copy("$root/sharp/composer/require-engine.php", "$package/require-engine.php");
     file_put_contents("$package/composer.json", '{"name": "heyjordanparker/php-sharp-composer"}');

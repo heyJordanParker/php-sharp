@@ -13,10 +13,11 @@
             "dist": {
                 "type": "path",
                 "url": "../composer",
-                "reference": "9f6f77330132cad50d020c47ee42feb53427dbce"
+                "reference": "2c25f8d0d7039603a89f37b061880568f4edec23"
             },
             "require": {
                 "composer-plugin-api": "^2.0",
+                "ext-bcmath": "*",
                 "ext-intl": "*",
                 "psr/container": "^2.0",
                 "psr/event-dispatcher": "^1.0"

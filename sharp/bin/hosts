@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Serves sharp/hosts from php-fpm and from FrankenPHP's worker mode, and compares what each request prints with
-# sharp/hosts/expected/<host>.txt. php-fpm runs from the build sharp/bin/build makes, and FrankenPHP is built with Go
-# against the one sharp/bin/build --zts installs.
+# Serves sharp/hosts from FrankenPHP's worker mode, and compares what each request prints with
+# sharp/hosts/expected/frankenphp.txt. FrankenPHP is built with Go against the engine sharp/bin/build installs.
 usage() {
   echo "usage: sharp/bin/hosts [--linux]" >&2
   exit 2
@@ -27,14 +26,11 @@ if [[ "$(uname -s)" != Linux ]]; then
 fi
 
 build_dir="$root/sharp/build/linux-$(uname -m)"
-fpm="$build_dir/sapi/fpm/php-fpm"
-install="$build_dir-zts/install"
-for needed in "$fpm:sharp/bin/build" "$install/bin/php-config:sharp/bin/build --zts"; do
-  if [[ ! -x "${needed%%:*}" ]]; then
-    echo "${needed%%:*} is missing. Run ${needed#*:} first." >&2
-    exit 1
-  fi
-done
+install="$build_dir/install"
+if [[ ! -x "$install/bin/php-config" ]]; then
+  echo "$install/bin/php-config is missing. Run sharp/bin/build first." >&2
+  exit 1
+fi
 
 "$root/sharp/bin/build-mago" --quiet
 mago="$build_dir/mago/debug/mago"
@@ -50,9 +46,9 @@ composer install --no-interaction --no-progress --quiet --working-dir="$fixture"
 # the release sharp/docker/runtime/frankenphp.Dockerfile builds, so the fixture is served by the server teams ship, and
 # each release builds in a folder of its own, so a new one never reuses an older one's source.
 frankenphp_release=v1.13.5
-frankenphp="$build_dir-zts/frankenphp/$frankenphp_release/frankenphp"
+frankenphp="$build_dir/frankenphp/$frankenphp_release/frankenphp"
 if [[ ! -x "$frankenphp" || "$install/lib/libphp.so" -nt "$frankenphp" ]]; then
-  source="$build_dir-zts/frankenphp/$frankenphp_release/source"
+  source="$build_dir/frankenphp/$frankenphp_release/source"
   if [[ ! -d "$source" ]]; then
     git clone --quiet --depth 1 --branch "$frankenphp_release" https://github.com/php/frankenphp.git "$source"
   fi
@@ -60,10 +56,10 @@ if [[ ! -x "$frankenphp" || "$install/lib/libphp.so" -nt "$frankenphp" ]]; then
   # php-config names libphp's folder in neither flag, so the link and the binary's run-time search path name it. Go's
   # build cache never reads the PHP headers a C file includes, so it lives in the build's folder and goes with it.
   (cd "$source/caddy/frankenphp" \
-    && GOCACHE="$build_dir-zts/frankenphp/go-build" \
+    && GOCACHE="$build_dir/frankenphp/go-build" \
       CGO_CFLAGS="$("$php_config" --includes)" \
       CGO_LDFLAGS="-L$install/lib -Wl,-rpath,$install/lib $("$php_config" --ldflags) $("$php_config" --libs)" \
-      go build -tags nobadger,nomysql,nopgx,nowatcher,nobrotli -buildvcs=false -o "$frankenphp")
+      go build -p "$("$root/sharp/bin/jobs")" -tags nobadger,nomysql,nopgx,nowatcher,nobrotli -buildvcs=false -o "$frankenphp")
 fi
 
 # Each request prints its path and what the fixture answers. /types runs 1,000 times, and its memory line becomes
@@ -95,12 +91,6 @@ requests() {
   echo "${last%%$'\n'memory:*}"
   echo "GET /"
   "$get" /
-}
-
-fpm_get() {
-  # cgi-fcgi prints the response's headers, a blank line, then its body.
-  SCRIPT_FILENAME="$fixture/public/index.php" REQUEST_METHOD=GET REQUEST_URI="$1" \
-    cgi-fcgi -bind -connect 127.0.0.1:9000 | tr -d '\r' | sed '1,/^$/d'
 }
 
 frankenphp_get() {
@@ -136,19 +126,10 @@ compare() {
   fi
 }
 
-echo "== php-fpm"
-"$fpm" -n -y "$fixture/php-fpm.conf" &
-host_pid=$!
-wait_for fpm_get /types
-compare php-fpm "$(requests fpm_get)"
-kill "$host_pid"
-wait "$host_pid" 2> /dev/null || true
-host_pid=
-
 echo "== FrankenPHP, in worker mode"
 # Caddy keeps its state under these folders, which the build's folder holds.
 (cd "$fixture" \
-  && XDG_CONFIG_HOME="$build_dir-zts/frankenphp/config" XDG_DATA_HOME="$build_dir-zts/frankenphp/data" \
+  && XDG_CONFIG_HOME="$build_dir/frankenphp/config" XDG_DATA_HOME="$build_dir/frankenphp/data" \
     exec "$frankenphp" run --config Caddyfile) &
 host_pid=$!
 wait_for frankenphp_get /types

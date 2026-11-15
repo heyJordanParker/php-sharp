@@ -1,0 +1,22 @@
+namespace Demo;
+
+import Sharp.Encoding.Base64;
+
+class EncodingQueries
+{
+    public static string encode(string data, bool urlSafe) => Base64.encode(data, urlSafe);
+
+    public static string decode(string text, bool urlSafe) => Base64.decode(text, urlSafe);
+
+    public static string toBytes(int value, ByteOrder order) => value.toBytes(order);
+
+    public static string bigEndian(int value) => value.toBytes();
+
+    public static int fromBytes(string bytes, ByteOrder order) => Int.fromBytes(bytes, order);
+
+    public static int fromBigEndian(string bytes) => Int.fromBytes(bytes);
+
+    public static string toCsv(List<string> fields) => fields.toCsv();
+
+    public static List<string> parseCsv(string text) => text.parseCsv();
+}

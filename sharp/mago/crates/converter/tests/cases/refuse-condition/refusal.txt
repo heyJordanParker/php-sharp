@@ -1,3 +1,2 @@
-18:17: a condition of `App\Untested` reads PHP's truthiness, which PHP# has no test for: a PHP# condition is a `bool` (spec section 21)
-23:16: a condition of `mixed` reads PHP's truthiness, which PHP# has no test for: a PHP# condition is a `bool` (spec section 21)
-28:16: a condition of `string` has no PHP# form here: its PHP# test reads the value more than once, which gives what PHP's one read gives only for a variable or a property
+20:17: a condition of `array<string, int>|int` reads PHP's truthiness, which PHP# has no test for: a PHP# condition is a `bool`, and no pattern matches an empty `Map` (spec section 21)
+30:17: a condition of the type parameter `T` reads PHP's truthiness of a value that may be a scalar PHP reads as false, which PHP# has no test for: a PHP# pattern compares with `==`, which a type parameter has only through a bound (spec section 21)
