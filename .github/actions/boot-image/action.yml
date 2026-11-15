@@ -4,8 +4,7 @@ description: >-
   goes, and requests that page from the image's server. php-fpm answers FastCGI on port 9000 for the app in
   /var/www/html, and FrankenPHP's default Caddyfile serves /app/public on https://localhost with its own certificate.
   A wrong entrypoint, or a server that serves no page in 30 seconds, fails the step and prints the container's log.
-  sharp.yml's PHP_EXTENSIONS runs it on the image it builds, and IMAGE on each digest it pushes, before a tag can
-  publish it.
+  sharp.yml's IMAGE runs it on each digest it pushes, before a tag can publish it.
 
 inputs:
   image:

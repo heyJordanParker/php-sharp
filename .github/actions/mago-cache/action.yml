@@ -1,11 +1,11 @@
 name: Restore the Rust and Mago caches
 description: >-
   Restores a job's Rust toolchain and registry, and the Mago target folder sharp/build/<os>-<arch>/mago, where
-  sharp/bin/build-mago builds and CARGO_TARGET_DIR points. As Deno's ci.ts keeps its target folder, master's full run
-  saves that folder under its commit, and every other run restores the newest one it saved and saves nothing, so the
-  caches hold one target per job for master's recent full runs. Only master saves the Rust cache too: a cache another
-  ref saves only that ref's runs restore, so a bump's full run or a branch's dispatch restores and never saves. A
-  checkout gives every file a newer time than any
+  sharp/bin/build-mago builds and CARGO_TARGET_DIR points. As Deno's ci.ts keeps its target folder, the job of a master
+  push run that saves it, such as sharp.yml's CACHE, saves that folder under its commit, and every other run restores
+  the newest one it saved and saves nothing, so the caches hold one target per job for master's recent pushes. Only
+  master saves the Rust cache too: a cache another ref saves only that ref's runs restore, so a pull request's run
+  restores and never saves. A checkout gives every file a newer time than any
   cached build, so cargo would rebuild every Mago crate. As Deno's mtime_cache action does, each file the cached build
   was built from, by its blob, and each folder whose entries are the same, goes back to a time before that build. A
   file that changed keeps the checkout's time, and so does a folder that gained or lost an entry, which a build script
@@ -24,7 +24,7 @@ inputs:
     description: The folders that hold the job's Rust toolchain and crates, one per line.
     required: true
   save:
-    description: true on a full run, which on master saves the target folder under its commit.
+    description: true in the job that saves the target folder under its commit, on master.
     required: false
     default: ''
   target-dir-env:
@@ -51,7 +51,7 @@ runs:
     # The trailing dash matches only a commit's folder: a restore key that matches a key exactly restores that cache
     # before any newer one. A change to the hashed files misses the first restore key, as every Cargo.toml change
     # did, so the second restores the newest target of any hash, and cargo rebuilds only what the change reaches.
-    - name: Mago cache, saved at the end of master's full run
+    - name: Mago cache, saved at the end of the job on master
       if: runner.environment == 'github-hosted' && inputs.save == 'true' && github.ref == 'refs/heads/master'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:

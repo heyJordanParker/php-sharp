@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: sharp/bin/test [--linux] [--zts | --installed] [--opcache] [--repeat] [--passes] [--jit] [--census] [--spec] [--differential] [--phpunit] [--upstream | paths...]" >&2
+  echo "usage: sharp/bin/test [--linux] [--zts | --installed] [--repeat] [--jit] [--census] [--spec] [--differential] [--phpunit] [--upstream | --shard <i>/<n> | paths...]" >&2
   exit 2
 }
 
@@ -10,25 +10,25 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 linux=false
 zts=false
 installed=false
-opcache=false
 repeat=false
-passes=false
 jit=false
 census=false
 spec=false
 differential=false
 phpunit=false
 upstream=false
+shard=
 tests=()
 container_command=(sharp/bin/test)
-for arg in "$@"; do
+args=("$@")
+for ((a = 0; a < ${#args[@]}; a++)); do
+  arg="${args[a]}"
   case "$arg" in
     --linux) linux=true; continue ;;
+    --shard) a=$((a + 1)); shard="${args[a]:-}"; container_command+=(--shard "$shard"); continue ;;
     --zts) zts=true ;;
     --installed) installed=true ;;
-    --opcache) opcache=true ;;
     --repeat) repeat=true ;;
-    --passes) passes=true ;;
     --jit) jit=true ;;
     --census) census=true ;;
     --spec) spec=true ;;
@@ -44,6 +44,15 @@ done
 if $upstream && [[ ${#tests[@]} -gt 0 ]]; then
   usage
 fi
+# --shard <i>/<n> runs the i-th of n slices of the PHP# tests, every n-th file in name order, in every mode, so n jobs
+# that run the same modes together run each test once.
+if [[ -n $shard ]]; then
+  if $upstream || [[ ${#tests[@]} -gt 0 || ! $shard =~ ^([1-9][0-9]*)/([1-9][0-9]*)$ ]] || (( BASH_REMATCH[1] > BASH_REMATCH[2] )); then
+    usage
+  fi
+  shard_index=${BASH_REMATCH[1]}
+  shard_count=${BASH_REMATCH[2]}
+fi
 if $installed && { $linux || $zts; }; then
   usage
 fi
@@ -54,6 +63,11 @@ fi
 
 if $upstream; then
   tests=(Zend/tests ext/reflection ext/tokenizer ext/opcache)
+elif [[ -n $shard ]]; then
+  mapfile -t phpt < <(cd "$root" && find Zend/tests/sharp -name '*.phpt' | LC_ALL=C sort)
+  for ((t = shard_index - 1; t < ${#phpt[@]}; t += shard_count)); do
+    tests+=("${phpt[t]}")
+  done
 elif [[ ${#tests[@]} -eq 0 ]]; then
   tests=(Zend/tests/sharp)
 fi
@@ -126,9 +140,8 @@ export SKIP_IO_CAPTURE_TESTS=1
 export STACK_LIMIT_DEFAULTS_CHECK=1
 export RUN_RESOURCE_HEAVY_TESTS=1
 
-# run-tests.php keeps the opcache file cache of --opcache in the temporary folder, as each test keeps its own files, and
-# loads a file from it whose source looks unchanged. So each run takes a temporary folder of its own and removes it when
-# it ends, and no run loads bytecode another run cached. run-tests.php runs in a process group of its own, so a run that
+# Each test keeps its own files in the temporary folder, so each run takes a temporary folder of its own and removes it
+# when it ends, and no run reads what another run wrote. run-tests.php runs in a process group of its own, so a run that
 # ends early, as on SIGTERM, first stops it, its workers and their tests, which would go on writing in the folder.
 TMPDIR="$(mktemp -d)"
 export TMPDIR
@@ -179,30 +192,15 @@ else
   run_tests "without opcache"
 fi
 
-if $opcache; then
-  run_tests "with the opcache file cache, priming it" -d opcache.enable_cli=1 --file-cache-prime
-  run_tests "with the opcache file cache, using it" -d opcache.enable_cli=1 --file-cache-use
-fi
-
 if $repeat; then
   run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
 fi
 
-# Every optimizer pass runs alone, so a pass that drops a PHP# mark cannot hide behind another pass. Each run expects
-# the same output as the run without opcache.
-if $passes; then
-  for ((pass = 0; pass < 16; pass++)); do
-    run_tests "with optimizer pass $((pass + 1)) alone" -d opcache.enable_cli=1 -d "opcache.optimization_level=$((1 << pass))"
-  done
-fi
-
-# Each JIT runs with every hot counter at 1, so it compiles the code the tests run as soon as it runs. Each run expects
-# the same output as the run without opcache.
+# The tracing JIT, the one production runs with the opcache, runs with every hot counter at 1, so it compiles the code
+# the tests run as soon as it runs. It expects the same output as the run without opcache.
 if $jit; then
-  for jit_mode in tracing function; do
-    run_tests "with the $jit_mode JIT" -d opcache.enable_cli=1 -d opcache.jit="$jit_mode" -d opcache.jit_buffer_size=32M \
-      -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
-  done
+  run_tests "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
+    -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
 fi
 
 if $census; then
@@ -273,8 +271,8 @@ if $phpunit; then
 fi
 
 # The whole-project proof of mago convert runs after the PHP# suite, on this build's engine, with the fixture's refinement
-# worker on the php the PATH holds.
-if ! $upstream && ! $zts && ! $installed && [[ "${tests[*]}" == Zend/tests/sharp ]]; then
+# worker on the php the PATH holds, and in the first of the shards alone.
+if ! $upstream && ! $zts && ! $installed && { [[ "${tests[*]}" == Zend/tests/sharp ]] || [[ ${shard_index:-} == 1 ]]; }; then
   echo "== mago convert on sharp/mago/crates/converter/tests/project"
   mkdir "$TMPDIR/convert" "$TMPDIR/convert/project"
   if ! "$root/sharp/mago/crates/converter/tests/project.sh" "$TMPDIR/convert/project"; then

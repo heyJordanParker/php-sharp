@@ -3,6 +3,8 @@
 // Checks every csharp, ts and php block of README.md and docs/spec.md against its annotations, as
 // docs/architecture/spec-examples.md describes, and fails when the examples that fail differ from sharp/baseline/spec.
 // sharp/bin/test --spec runs it on the built engine, with sharp/bin/test's mago in TEST_MAGO_EXECUTABLE.
+// With --shard <i>/<n>, it checks only every n-th example from the i-th, and compares only their entries in the list,
+// so n jobs check every example once. The first shard also compares the entries that name no example.
 //
 // With --base <commit>, it instead compares sharp/baseline/spec and the examples with that commit. The SPEC_GUARD job
 // runs the base commit's copy of this script on the pull request's merge commit, so a pull request's own files never
@@ -58,8 +60,10 @@ exit(match (true) {
     count($argv) === 3 && $argv[1] === '--base' => compare_with_base($root, $argv[2]),
     count($argv) === 2 && $argv[1] === '--completes' => completes($root, (string) getenv('BODY')),
     count($argv) === 2 && $argv[1] === '--self-test' => self_test($root),
+    count($argv) === 3 && $argv[1] === '--shard' && preg_match('~^([1-9]\d*)/([1-9]\d*)$~', $argv[2], $shard) === 1
+        && (int) $shard[1] <= (int) $shard[2] => check($root, (int) $shard[1], (int) $shard[2]),
     count($argv) === 1 => check($root),
-    default => fail('usage: sharp/bin/spec [--base <commit> | --completes | --self-test]'),
+    default => fail('usage: sharp/bin/spec [--base <commit> | --completes | --self-test | --shard <i>/<n>]'),
 });
 
 function fail(string $message): never
@@ -1153,10 +1157,16 @@ function check_reached(array $example, array $reads): void
     }
 }
 
-function check(string $root): int
+function check(string $root, int $shard = 1, int $shards = 1): int
 {
     $build = build_folder($root);
-    $examples = examples($root);
+    $every = examples($root);
+    $examples = [];
+    foreach (array_keys($every) as $k => $id) {
+        if ($k % $shards === $shard - 1) {
+            $examples[$id] = $every[$id];
+        }
+    }
     $results = measure($root, "$build/spec", $examples);
 
     $failing = [];
@@ -1181,7 +1191,11 @@ function check(string $root): int
     $ignored = count($examples) - $checked;
     echo "Checked $checked examples, ignored $ignored, and " . count($failing) . " fail.\n";
 
-    $listed = listed($root);
+    $listed = array_filter(
+        listed($root),
+        static fn (int|string $id): bool => isset($examples[$id]) || (!isset($every[$id]) && $shard === 1),
+        ARRAY_FILTER_USE_KEY,
+    );
     $commands = [];
     foreach ($failing as $id => $section) {
         if (($listed[$id] ?? null) !== $section) {

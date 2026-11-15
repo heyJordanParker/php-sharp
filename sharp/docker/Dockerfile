@@ -5,13 +5,15 @@ FROM ${GOLANG_IMAGE} AS golang
 
 FROM ${BASE_IMAGE}
 
-# procps gives sharp/bin/build-mago's prune pgrep and ps, which find a process running from the build folder.
+# procps gives sharp/bin/build-mago's prune pgrep and ps, which find a process running from the build folder. ccache
+# compiles the engine in CI, which sets CC and CXX to it, and a build without them compiles as before.
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       autoconf \
       bison \
       build-essential \
       ca-certificates \
+      ccache \
       composer \
       curl \
       elan \

@@ -21,6 +21,8 @@ exec docker run --rm --init \
   --env GOPATH=/src/sharp/build/go \
   --env MAKEFLAGS \
   --env CARGO_BUILD_JOBS \
+  --env CC \
+  --env CXX \
   "${volumes[@]}" \
   --workdir /src \
   php-sharp-linux "$@"
