@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.13] - 2026-11-15
+
 ### Upgrading from 0.6.12
 
 - `Property.type`, `Method.type` and `Parameter.type` hold the declared type whole, `?` included, and their `isNullable` is gone, spec section 25. Compare a nullable type whole, as `p.type == typeof(int?)`, where 0.6.12 compared `p.type == typeof(int)` and read `p.isNullable`. A member typed by a type parameter, read on a class value without type arguments, as `typeof(Crate)`, is that type parameter: `p.type.name()` is `"TItem"`, where 0.6.12 gave its bound. `Method.invoke`, `Property.get` and `Property.set` take an `Object?` receiver.
@@ -1020,7 +1022,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.12...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.13...HEAD
+[0.6.13]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.12...v0.6.13
 [0.6.12]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.11...v0.6.12
 [0.6.11]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.10...v0.6.11
 [0.6.10]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.9...v0.6.10
