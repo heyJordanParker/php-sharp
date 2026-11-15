@@ -4903,6 +4903,21 @@ public class Stamp
 }
 ```
 
+**PHP 8.4's HTML DOM is the standard library's way to read an HTML page, so a `.sharp` file names its classes,** as .NET names a platform type through its namespace. The standard library names `Dom.HTMLDocument`, `Dom.Element`, `Dom.Node`, `Dom.NodeList`, `Dom.HTMLCollection`, `Dom.Text`, `Dom.Attr` and the rest of PHP's `Dom` namespace that reads a page, and a file imports each by its full name, as `import Dom.HTMLDocument;`. They run as PHP's own classes. PHP's older `DOMDocument` is one of PHP's other classes, so its import is still an import of no class:
+
+<!-- example html-dom -->
+```csharp
+// app/Pages/Summary.sharp
+namespace App.Pages;
+
+import Dom.HTMLDocument;
+
+public static class Summary
+{
+    public static string? first(string html) => HTMLDocument.createFromString(html).querySelector("p")?.textContent;   // compiles: Dom.HTMLDocument is the standard library's
+}
+```
+
 **A static class in a standard library namespace needs one import line,** and the import's last part is the class, as for any class:
 
 <!-- example standard-library-import: statements
