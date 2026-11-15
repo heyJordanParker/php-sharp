@@ -32,8 +32,10 @@ jobs:
   #
   # A tree runs the Linux suites once, as bors's "not rocket science" rule tests the exact tree that lands once. A push
   # to master skips them when a pull request's run passed them all on its tree, as .github/actions/passed-tree explains,
-  # and links that run. A push whose tree no pull request's run passed runs them, as the check of the merge. A tag runs
-  # none of them: it publishes only a commit whose own push run passed, and the images and assets that run built.
+  # and links that run. A push whose tree no pull request's run passed runs them, as the check of the merge. A release's
+  # bump runs the Mac suites once too: its push skips them when its tree is the last passed push run's with the bump
+  # alone, as .github/actions/release-bump checks. A tag runs none of them: it publishes only a commit whose own push run
+  # passed, and the images and assets that run built.
   CHANGES:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
@@ -47,6 +49,7 @@ jobs:
       code: ${{ steps.diff.outputs.code }}
       images-run-id: ${{ steps.images.outputs.run-id }}
       linux-passed: ${{ steps.linux.outputs.run && 'true' || '' }}
+      mac-passed: ${{ steps.mac.outputs.only == 'true' && 'true' || '' }}
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -107,16 +110,21 @@ jobs:
       # A push's changes start at the commit of master's newest push run that GitHub didn't cancel, so a merge whose
       # pending run a later push replaced still counts, and a red run's issue names every commit it tests. Pushes run
       # one at a time, so every earlier run has ended. Only an earlier run counts, so a rerun of an old run diffs from
-      # the run before it, as its first attempt did. With none among the last 100 runs, every job runs.
+      # the run before it, as its first attempt did. With none among the last 100 runs, every job runs. When that run
+      # passed, its URL is the passed output.
       - name: Find the commit of master's last push run that ran
         id: base
         if: github.event_name == 'push' && github.ref_type == 'branch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sharp.yml/runs?branch=master&event=push&status=completed&per_page=100" \
-            --jq '[.workflow_runs[] | select(.conclusion != "cancelled" and .id < (env.GITHUB_RUN_ID | tonumber))][0].head_sha // empty')
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sharp.yml/runs?branch=master&event=push&status=completed&per_page=100" \
+            --jq '[.workflow_runs[] | select(.conclusion != "cancelled" and .id < (env.GITHUB_RUN_ID | tonumber))][0] // empty | "\(.head_sha) \(.conclusion) \(.html_url)"')
+          read -r sha conclusion url <<< "$run"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [[ $conclusion == success ]]; then
+            echo "passed=$url" >> "$GITHUB_OUTPUT"
+          fi
           echo "This push's changes start at ${sha:-no commit, so every job runs}."
       - name: Find changes outside documentation
         id: diff
@@ -147,6 +155,21 @@ jobs:
             echo "bump=true" >> "$GITHUB_OUTPUT"
             echo "::notice::sharp/mago/Cargo.toml moves from $old to $new, so RELEASE_ASSETS builds the release's assets."
           fi
+      # A bump's push whose tree is the last push run's with the bump alone, when that run passed, as the bump's pull
+      # request is right after its update with master, skips the Mac suites: that run ran them on the same code, or
+      # skipped them for the same reason. So the Mac builds the release's asset alone: 0.6.15's PGO build took 22 minutes
+      # for its instrumented half beside the Mac suites, and 10 for its optimized half once they had ended.
+      - name: Make the bump again on the last push run's tree
+        id: mac
+        if: steps.bump.outputs.bump && steps.base.outputs.passed
+        uses: ./.github/actions/release-bump
+        with:
+          base: ${{ steps.base.outputs.sha }}
+      - name: The Mac suites don't run again
+        if: steps.mac.outputs.only == 'true'
+        env:
+          RUN: ${{ steps.base.outputs.passed }}
+        run: echo "::notice::This tree is the one $RUN passed, with the release's bump, so MACOS and LINUX_ARM64 don't run."
   # Every Linux suite job builds what it needs itself in the sharp/docker image, on 4 cores, from the caches CACHE saves
   # on master: the engine through ccache, and mago on master's target. A build job the suites waited on would add its
   # minutes to every one of them. .github/actions/linux-build builds the engine while the target restores.
@@ -329,7 +352,9 @@ jobs:
   # never sets them up: the first step only checks that Docker answers there.
   LINUX_ARM64:
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true' && github.event_name == 'push' && github.ref_type == 'branch'
+    if: >-
+      needs.CHANGES.outputs.code == 'true' && github.event_name == 'push' && github.ref_type == 'branch'
+      && needs.CHANGES.outputs.mac-passed != 'true'
     runs-on: macos-arm64-local
     timeout-minutes: 120
     steps:
@@ -414,7 +439,9 @@ jobs:
   # Mac, and three suites at once each ran past the 60-minute limit.
   MACOS:
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true' && github.event_name == 'push' && github.ref_type == 'branch'
+    if: >-
+      needs.CHANGES.outputs.code == 'true' && github.event_name == 'push' && github.ref_type == 'branch'
+      && needs.CHANGES.outputs.mac-passed != 'true'
     runs-on: macos-arm64-suite
     timeout-minutes: 120
     # The 12-core Mac runs this job beside the other runners' jobs and the work the suite checks, and two or three jobs
@@ -491,30 +518,25 @@ jobs:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The bump, made again on the base, must give the pull request's tree.
+      - name: Make the bump again on the base
+        id: bump
+        uses: ./.github/actions/release-bump
+        with:
+          base: ${{ github.event.pull_request.base.sha }}
       - name: The pull request changes only what the version bump writes, and the changelog
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          OLD: ${{ steps.bump.outputs.old }}
+          NEW: ${{ steps.bump.outputs.new }}
+          ONLY: ${{ steps.bump.outputs.only }}
         run: |
-          git fetch --depth=1 origin "$BASE"
-          version() { git show "$1:sharp/mago/Cargo.toml" | sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q}'; }
-          old=$(version "$BASE")
-          new=$(version "$GITHUB_SHA")
-          if [[ $old == "$new" ]]; then
-            echo "::error::sharp/mago/Cargo.toml's version is still $old. Run php sharp/mago/scripts/set-version.php <version>."
+          if [[ $OLD == "$NEW" ]]; then
+            echo "::error::sharp/mago/Cargo.toml's version is still $OLD. Run php sharp/mago/scripts/set-version.php <version>."
             exit 1
           fi
-          git switch --quiet --detach "$BASE"
-          php sharp/mago/scripts/set-version.php "$new"
-          sed -i "s/^#define PHP_SHARP_VERSION \"${old//./\\.}\"\$/#define PHP_SHARP_VERSION \"$new\"/" ext/sharp/php_sharp.h
-          sed -i "s/^Version => ${old//./\\.}\$/Version => $new/" Zend/tests/sharp/ri_sharp.phpt
-          git checkout "$GITHUB_SHA" -- sharp/CHANGELOG.md
-          git add --all
-          if ! git diff --cached --quiet "$GITHUB_SHA"; then
-            git diff --cached -R "$GITHUB_SHA"
-            echo "::error::The pull request changes more than the bump from $old to $new and sharp/CHANGELOG.md: the diff above is what it changes beyond them. Move that change to a pull request of its own."
+          if [[ $ONLY != true ]]; then
+            echo "::error::The pull request changes more than the bump from $OLD to $NEW and sharp/CHANGELOG.md: the diff the step before printed is what it changes beyond them. Move that change to a pull request of its own."
             exit 1
           fi
-          echo "The pull request changes only the bump from $old to $new and sharp/CHANGELOG.md."
       # The release's section is new text, so the changelog loses only the old link of [Unreleased].
       - name: sharp/CHANGELOG.md gains the release's section and links, and loses nothing else
         env:
