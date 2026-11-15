@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.16] - 2026-11-16
+
 ### Upgrading from 0.6.15
 
 - A `Map` or a `Set` that user code passes to plain PHP, or to an `[Import]` function, arrives as a PHP array whatever its PHP# type, spec section 12, a type parameter, `Any?` and a union included. Code that handed plain PHP the `Sharp\Map` object through one of those passes it to a parameter that takes only objects, such as `object` or `\Countable`, which still takes the `Map` itself.
@@ -1087,7 +1089,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.15...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.16...HEAD
+[0.6.16]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.15...v0.6.16
 [0.6.15]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.14...v0.6.15
 [0.6.14]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.13...v0.6.14
 [0.6.13]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.12...v0.6.13
