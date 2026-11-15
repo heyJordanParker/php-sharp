@@ -25,10 +25,12 @@ jobs:
   # runs their examples. sharp/bin/check --changes holds these rules, so the local end gate chooses its gates as this
   # job does.
   #
-  # A pull request runs the Linux suites, each on 4 cores and under 8 minutes, so its CI ends under 10. The push to
-  # master runs what needs the Mac, the arm64 Linux suite, the runtime image and, for a release's bump, the release
-  # assets, and saves the caches every pull request's run restores. A defect only those find lands on
-  # master first, and a red push opens an issue, as CI_PASSED does, for a pull request that fixes it forward.
+  # A pull request runs the Linux suites, each job on 4 cores. The push to master runs what needs the Mac, the arm64
+  # Linux suite, the runtime image and, for a release's bump, the release assets, and saves the caches every pull
+  # request's run restores. A defect only those find lands on master first, and a red push opens an issue, as CI_PASSED
+  # does, for a pull request that fixes it forward. GitHub runs 20 of the account's hosted jobs at once, and a job past
+  # them waits: a pull request's runs hold 16 at most, and a push run whose tree passed on its pull request holds 3, so
+  # the two fit together.
   #
   # A tree runs the Linux suites once, as bors's "not rocket science" rule tests the exact tree that lands once. A push
   # to master skips them when a pull request's run passed them all on its tree, as .github/actions/passed-tree explains,
@@ -41,6 +43,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       actions: read
+      checks: read
       contents: read
       pull-requests: read
     outputs:
@@ -53,7 +56,11 @@ jobs:
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The 10 Linux suite jobs a pull request's run passes, the same as a push runs them.
+      # .github/actions/passed-tree finds the runs that passed a tree by this notice. A pull request's run checks out the
+      # pull request merged into master, so the tree it tests is that merge's, not its head's.
+      - name: Name the tree this run tests
+        run: echo "::notice title=Tested tree::$(git rev-parse 'HEAD^{tree}')"
+      # The Linux suite jobs a pull request's run passes, the same as a push runs them.
       - name: Find the pull request run that passed every Linux suite on this tree
         id: linux
         if: github.event_name == 'push' && github.ref_type == 'branch'
@@ -62,8 +69,8 @@ jobs:
           workflow: sharp.yml
           events: pull_request
           passed: >-
-            [.jobs[] | select(.conclusion == "success" and (.name | test("^(LINUX|SPEC) \\(")
-            or . == "UPSTREAM" or . == "HOSTS"))] | length == 10
+            [.jobs[] | select(.name | test("^(LINUX|SPEC) \\(") or . == "UPSTREAM" or . == "HOSTS")]
+            | length > 0 and all(.conclusion == "success")
       - name: The Linux suites don't run again
         if: steps.linux.outputs.run
         env:
@@ -170,7 +177,7 @@ jobs:
         env:
           RUN: ${{ steps.base.outputs.passed }}
         run: echo "::notice::This tree is the one $RUN passed, with the release's bump, so MACOS and LINUX_ARM64 don't run."
-  # Every Linux suite job builds what it needs itself in the sharp/docker image, on 4 cores, from the caches CACHE saves
+  # Every Linux suite job builds what it needs itself in the sharp/docker image, on 4 cores, from the caches HOSTS saves
   # on master: the engine through ccache, and mago on master's target. A build job the suites waited on would add its
   # minutes to every one of them. .github/actions/linux-build builds the engine while the target restores.
   #
@@ -276,15 +283,18 @@ jobs:
           sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/5
   # The fixture in sharp/hosts, served from FrankenPHP's worker mode. HOSTS builds the engine FrankenPHP is built against
   # with Go, and mago itself, beside the suites, so it never waits for their tests. It runs on every push to master, even
-  # one whose tree a pull request's run passed, because only that push saves the Go modules and Go's build cache of
-  # FrankenPHP's packages, which every pull request's run restores.
+  # one whose tree a pull request's run passed, because that push's HOSTS saves what every pull request's run restores:
+  # the engine's ccache, the Mago target with the Rust toolchain and crates, as .github/actions/mago-cache explains, and
+  # the Go modules and Go's build cache of FrankenPHP's packages. A cache only its own ref's runs would restore is no use
+  # to the next pull request, so only master saves. CI_PASSED, which runs after it, deletes the caches it replaced. The
+  # push's jobs share the 20 jobs GitHub runs at once with every pull request's, so one job builds and saves them all.
   HOSTS:
     needs: CHANGES
     if: >-
       needs.CHANGES.outputs.code == 'true' && (needs.CHANGES.outputs.linux-passed != 'true'
       || github.event_name == 'push' && github.ref == 'refs/heads/master')
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: read
@@ -296,9 +306,12 @@ jobs:
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # sharp/bin/hosts builds mago before it compiles the fixture, as sharp/bin/test does in LINUX.
+      # sharp/bin/hosts builds mago before it compiles the fixture, as sharp/bin/test does in LINUX, so the target holds
+      # every test binary too, as sharp/bin/build-mago builds them.
       - name: Build and install the engine, and restore the Rust and Mago caches
         uses: ./.github/actions/linux-build
+        with:
+          save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
       # sharp/bin/hosts keeps Go's build cache in the build's folder, because the cache never reads the PHP headers
       # FrankenPHP's C files include, as it explains. So the key holds the hash of the headers the engine just installed,
       # and a change to them restores nothing, as a new build folder would hold nothing.
@@ -320,32 +333,6 @@ jobs:
             sharp/build/go/pkg/mod
             sharp/build/linux-x86_64/frankenphp/go-build
           key: SHARP_HOSTS_GO-${{ runner.arch }}-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile', 'sharp/build/linux-x86_64/install/include/**') }}-${{ github.sha }}
-  # The push to master builds the engine and mago as the suites do and saves what they restore: the engine's ccache,
-  # and the Mago target with the Rust toolchain and crates, as .github/actions/mago-cache explains. A cache only
-  # its own ref's runs would restore is no use to the next pull request, so only master saves. CI_PASSED, which runs
-  # after it, deletes the targets and ccaches its new ones replaced.
-  CACHE:
-    needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      packages: read
-    env:
-      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
-      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-      CC: ccache gcc
-      CXX: ccache g++
-    steps:
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build the engine, and restore the Rust and Mago caches, saved under this commit
-        uses: ./.github/actions/linux-build
-        with:
-          save: true
-      - name: Build mago
-        run: sharp/docker/run sharp/bin/build-mago --quiet
   # The PHP# suite on arm64 Linux, the platform of the Linux VMs on the Mac, in the arm64 sharp/docker image on the
   # self-hosted Mac runners, whose Docker keeps the image and whose kept build folder holds sharp/build/linux-aarch64. It
   # runs on the push to master, so a pull request never waits for the Mac. A job never installs on those runners, and
@@ -580,6 +567,7 @@ jobs:
     permissions:
       actions: read
       attestations: write
+      checks: read
       contents: write
       id-token: write
       pull-requests: read
@@ -590,7 +578,7 @@ jobs:
   CI_PASSED:
     if: always() && github.event_name != 'schedule'
     needs:
-      [CHANGES, LINUX, UPSTREAM, SPEC, HOSTS, CACHE, LINUX_ARM64, MACOS, WORKFLOWS, RELEASE_BUMP, RELEASE_ASSETS, IMAGE]
+      [CHANGES, LINUX, UPSTREAM, SPEC, HOSTS, LINUX_ARM64, MACOS, WORKFLOWS, RELEASE_BUMP, RELEASE_ASSETS, IMAGE]
     runs-on: ubuntu-24.04
     permissions:
       actions: write
@@ -607,7 +595,7 @@ jobs:
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
           allowed-skips: >-
-            LINUX, UPSTREAM, SPEC, HOSTS, CACHE, LINUX_ARM64, MACOS, RELEASE_BUMP, RELEASE_ASSETS, IMAGE
+            LINUX, UPSTREAM, SPEC, HOSTS, LINUX_ARM64, MACOS, RELEASE_BUMP, RELEASE_ASSETS, IMAGE
           jobs: ${{ toJSON(needs) }}
       # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed run on master
@@ -616,10 +604,10 @@ jobs:
         with:
           title: A push to master failed PHP# CI
           range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
-      # CACHE saved its target and ccache, and HOSTS its Go caches, when they ended, so this job, which needs them,
-      # deletes the ones they replaced.
+      # HOSTS saved its target, ccache and Go caches on master when it ended, so this job, which needs it, deletes the
+      # ones they replaced.
       - name: Delete the caches this run replaced
-        if: always() && (needs.CACHE.result == 'success' || github.event_name == 'push' && needs.HOSTS.result == 'success')
+        if: always() && github.event_name == 'push' && needs.HOSTS.result == 'success'
         uses: ./.github/actions/mago-cache-prune
   COMPOSER:
     needs: [CHANGES, LINUX, MACOS]
@@ -683,7 +671,9 @@ jobs:
   # login, so no pull is an anonymous Docker Hub pull (#86). The engine changes PHP's internal structures, so an
   # extension can stop building or loading: each pushed image then installs the extensions a typical Laravel app
   # installs on top, the way such an app's Dockerfile does. It runs on the push to master, and on a tag only when CHANGES
-  # found the tagged commit's push run kept none.
+  # found the tagged commit's push run kept none. The two platforms build one after the other, 10 and 13 minutes on
+  # pull request #334's push, so the push holds fewer of the 20 jobs GitHub runs at once, and a pull request's run that
+  # starts beside it never waits. They end about 24 minutes into the push.
   IMAGE:
     name: IMAGE (${{ matrix.platform }})
     if: >-
@@ -697,6 +687,7 @@ jobs:
       packages: write
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         platform: [linux/amd64, linux/arm64]
     env:
