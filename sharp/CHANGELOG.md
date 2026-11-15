@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.15] - 2026-11-15
+
 ### Upgrading from 0.6.14
 
 - A release publishes `mago` for macOS on Apple silicon and for glibc Linux on arm64 and x86_64, the platforms PHP# runs on, and no longer for Intel macOS (`x86_64-apple-darwin`) or musl Linux (`aarch64-unknown-linux-musl`, `x86_64-unknown-linux-musl`). On one of those, `install.sh`, `mago self-update` and `heyjordanparker/mago-sharp` stop and say that no release has a binary for it: build `mago` from `sharp/mago/` with `cargo install --path .`. A Linux host without `ldd` takes the glibc binary, where 0.6.14 took the musl one.
@@ -1078,7 +1080,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.14...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.15...HEAD
+[0.6.15]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.14...v0.6.15
 [0.6.14]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.13...v0.6.14
 [0.6.13]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.12...v0.6.13
 [0.6.12]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.11...v0.6.12
