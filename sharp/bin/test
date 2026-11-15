@@ -2,21 +2,19 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: sharp/bin/test [--linux] [--zts | --installed] [--repeat] [--jit] [--census] [--spec] [--differential] [--phpunit] [--upstream | --shard <i>/<n> | paths...]" >&2
+  echo "usage: sharp/bin/test [--linux] [--census] [--spec] [--differential] [--phpunit] [--upstream | --mago | --shard <i>/<n> | paths...]" >&2
+  echo "       sharp/bin/test [--linux] --mago [--shard <i>/<n>]" >&2
   exit 2
 }
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 linux=false
-zts=false
-installed=false
-repeat=false
-jit=false
 census=false
 spec=false
 differential=false
 phpunit=false
 upstream=false
+mago=false
 shard=
 tests=()
 container_command=(sharp/bin/test)
@@ -26,26 +24,25 @@ for ((a = 0; a < ${#args[@]}; a++)); do
   case "$arg" in
     --linux) linux=true; continue ;;
     --shard) a=$((a + 1)); shard="${args[a]:-}"; container_command+=(--shard "$shard"); continue ;;
-    --zts) zts=true ;;
-    --installed) installed=true ;;
-    --repeat) repeat=true ;;
-    --jit) jit=true ;;
     --census) census=true ;;
     --spec) spec=true ;;
     --differential) differential=true ;;
     --phpunit) phpunit=true ;;
     --upstream) upstream=true ;;
+    --mago) mago=true ;;
     -*) usage ;;
     *) tests+=("$arg") ;;
   esac
   container_command+=("$arg")
 done
 
-if $upstream && [[ ${#tests[@]} -gt 0 ]]; then
+if { $upstream || $mago; } && [[ ${#tests[@]} -gt 0 ]] || { $upstream && $mago; }; then
   usage
 fi
-# --shard <i>/<n> runs the i-th of n slices of the PHP# tests, every n-th file in name order, in every mode, so n jobs
-# that run the same modes together run each test once.
+if $mago && { $census || $spec || $differential || $phpunit; }; then
+  usage
+fi
+# --shard <i>/<n> runs the i-th of n slices, so n jobs that run the same modes together run each test once.
 if [[ -n $shard ]]; then
   if $upstream || [[ ${#tests[@]} -gt 0 || ! $shard =~ ^([1-9][0-9]*)/([1-9][0-9]*)$ ]] || (( BASH_REMATCH[1] > BASH_REMATCH[2] )); then
     usage
@@ -53,59 +50,172 @@ if [[ -n $shard ]]; then
   shard_index=${BASH_REMATCH[1]}
   shard_count=${BASH_REMATCH[2]}
 fi
-if $installed && { $linux || $zts; }; then
-  usage
-fi
 
 if $linux; then
   exec "$root/sharp/docker/run" "${container_command[@]}"
 fi
 
+os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+build_dir="$root/sharp/build/$os-$(uname -m)"
+jobs="$("$root/sharp/bin/jobs")"
+
+# Each run keeps its own files in a temporary folder of its own and removes it when it ends, so no run reads what
+# another run wrote. A test command runs in a process group of its own, so a run that ends early, as on SIGTERM, first
+# stops it, its workers and their tests, which would go on writing in the folder.
+TMPDIR="$(mktemp -d)"
+export TMPDIR
+tests_group=
+trap 'if [[ -n $tests_group ]]; then kill -KILL -- "-$tests_group" || true; wait "$tests_group" || true; fi; rm -rf "$TMPDIR"' EXIT
+
+# Every step runs, and the script fails at the end if any step failed.
+failed=()
+
+# Runs the command from the folder, in a process group of its own, and records the step as failed when it fails.
+run_step() {
+  local step="$1" folder="$2"
+  shift 2
+  set -m
+  (cd "$folder" && exec "$@") &
+  tests_group=$!
+  set +m
+  if ! wait "$tests_group"; then
+    failed+=("$step")
+  fi
+  tests_group=
+}
+
+finish() {
+  if [[ ${#failed[@]} -gt 0 ]]; then
+    printf 'Failed: %s\n' "${failed[@]}" >&2
+    exit 1
+  fi
+  exit 0
+}
+
+# sharp/mago's workspace tests: every test binary sharp/bin/build-mago builds, run from its package's folder as cargo
+# test runs it, then the doc tests and the property tests of mago-codex, which builds with a feature of its own. With
+# --shard, every n-th test of all the binaries' tests, in binary and name order, from the i-th, so a set of slow tests,
+# such as the compile:: tests of tests/main.rs, spreads over the slices, and the last slice also runs the doc and the
+# property tests. A test binary runs the tests of its slice by skipping the others by exact name, which both libtest
+# and libtest-mimic's harnesses take as often as needed.
+if $mago; then
+  cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
+  # The tests run a PHP SDK worker from sharp/mago's vendor folder, and lake, which mago compile proves laws with:
+  # installing the pinned Lean first keeps the tests that run lake at once from each installing it.
+  composer install --no-interaction --no-progress --quiet --working-dir="$root/sharp/mago"
+  elan toolchain install "$(cat "$root/sharp/mago/crates/sharp-lean/lean/lean-toolchain")"
+  "$root/sharp/bin/build-mago" --quiet --message-format=json > "$TMPDIR/build.json"
+  binaries=()
+  while read -r line; do
+    if [[ $line == *'"reason":"compiler-artifact"'* && $line =~ \"profile\":\{[^}]*\"test\":true &&
+      $line =~ \"executable\":\"([^\"]+)\" ]]; then
+      executable="${BASH_REMATCH[1]}"
+      [[ $line =~ \"manifest_path\":\"([^\"]+)\" ]]
+      binaries+=("$executable"$'\t'"$(dirname "${BASH_REMATCH[1]}")")
+    fi
+  done < "$TMPDIR/build.json"
+  mapfile -t binaries < <(printf '%s\n' "${binaries[@]}" | LC_ALL=C sort -u)
+
+  index=0
+  for binary in "${binaries[@]}"; do
+    executable="${binary%%$'\t'*}"
+    folder="${binary#*$'\t'}"
+    skips=()
+    selected=0
+    while IFS= read -r name; do
+      if [[ -z $shard ]] || (( index % shard_count == shard_index - 1 )); then
+        selected=$((selected + 1))
+      else
+        skips+=(--skip "$name")
+      fi
+      index=$((index + 1))
+    done < <(cd "$folder" && "$executable" --list --format terse | sed -n 's/: test$//p')
+    if (( selected > 0 )); then
+      echo "== $selected tests of ${executable##*/}, from ${folder#"$root"/}"
+      run_step "${executable##*/}" "$folder" "$executable" --exact --test-threads "$jobs" "${skips[@]}"
+    fi
+  done
+  if [[ -z $shard ]] || (( shard_index == shard_count )); then
+    echo "== the doc tests"
+    run_step "the doc tests" "$root" env PATH="$(dirname "$cargo"):$PATH" "$cargo" test --workspace --locked --doc \
+      --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" --jobs "$jobs" -- --test-threads "$jobs"
+    echo "== mago-codex's property tests"
+    run_step "mago-codex's property tests" "$root" env PATH="$(dirname "$cargo"):$PATH" "$cargo" test -p mago-codex \
+      --features property-tests --locked --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" \
+      --jobs "$jobs" -- --test-threads "$jobs"
+  fi
+  finish
+fi
+
+# sharp/baseline/linux holds the upstream results of the Linux engine CI's UPSTREAM runs.
+if $upstream && [[ $os != linux ]]; then
+  echo "The upstream tests run on Linux, as CI's UPSTREAM runs them. Run sharp/bin/test --linux --upstream." >&2
+  exit 2
+fi
+
+# The whole-project proof of mago convert runs after the PHP# suite, on this build's engine, with the fixture's
+# refinement worker on the php the PATH holds: in the run of the whole suite, and in the one slice the slices give it.
+proof=sharp/mago/crates/converter/tests/project.sh
+run_proof=false
 if $upstream; then
   tests=(Zend/tests ext/reflection ext/tokenizer ext/opcache)
 elif [[ -n $shard ]]; then
-  mapfile -t phpt < <(cd "$root" && find Zend/tests/sharp -name '*.phpt' | LC_ALL=C sort)
-  for ((t = shard_index - 1; t < ${#phpt[@]}; t += shard_count)); do
-    tests+=("${phpt[t]}")
+  # The slices balance by the seconds sharp/baseline/seconds lists, from CI's slow-test summaries: a test's seconds
+  # summed over the three modes, and the proof's own, which hold the whole slice while it runs, so it weighs them times
+  # the workers. A test the file doesn't list ran under a second in each mode, so it weighs 1. Each item, heaviest
+  # first, goes to the slice that weighs least so far, so every slice computes the same split.
+  declare -A seconds=()
+  while IFS=$'\t' read -r weight path; do
+    seconds[$path]=$weight
+  done < "$root/sharp/baseline/seconds"
+  items=()
+  while read -r test; do
+    items+=("${seconds[$test]:-1} $test")
+  done < <(cd "$root" && find Zend/tests/sharp -name '*.phpt')
+  items+=("$((${seconds[$proof]} * jobs)) $proof")
+  mapfile -t items < <(printf '%s\n' "${items[@]}" | LC_ALL=C sort -k1,1nr -k2,2)
+  loads=()
+  for ((slice = 0; slice < shard_count; slice++)); do
+    loads[slice]=0
+  done
+  for item in "${items[@]}"; do
+    lightest=0
+    for ((slice = 1; slice < shard_count; slice++)); do
+      if ((loads[slice] < loads[lightest])); then
+        lightest=$slice
+      fi
+    done
+    loads[lightest]=$((loads[lightest] + ${item%% *}))
+    if ((lightest == shard_index - 1)); then
+      if [[ ${item#* } == "$proof" ]]; then
+        run_proof=true
+      else
+        tests+=("${item#* }")
+      fi
+    fi
   done
 elif [[ ${#tests[@]} -eq 0 ]]; then
   tests=(Zend/tests/sharp)
+  run_proof=true
 fi
 
-os="$(uname -s | tr '[:upper:]' '[:lower:]')"
-build_dir="$root/sharp/build/$os-$(uname -m)"
-# mago doesn't depend on thread safety, so both builds' tests use the one in the other build's folder.
-mago_dir="$build_dir/mago"
-rebuild="Run sharp/bin/build"
-if $zts; then
-  build_dir+=-zts
-  rebuild+=" --zts"
-fi
 php="$build_dir/sapi/cli/php"
-# The engine a runtime image installs runs with the php.ini and conf.d it ships, so the extensions they enable load.
-if $installed; then
-  php="$(command -v php)" || { echo "--installed tests the php on the PATH, and there is none." >&2; exit 1; }
-  rebuild="Install this tree's engine"
-fi
 if [[ ! -x "$php" ]]; then
-  echo "$php is missing. $rebuild first." >&2
+  echo "$php is missing. Run sharp/bin/build first." >&2
   exit 1
 fi
 
+# A build folder an older sharp/bin/build configured can hold an engine without thread safety, which PHP# no longer
+# runs, at the tree's version.
 version="$(sed -n 's/^#define PHP_SHARP_VERSION "\(.*\)"$/\1/p' "$root/ext/sharp/php_sharp.h")"
 engine_version="$("$php" -n --ri sharp | sed -n 's/^Version => //p')"
-if [[ "$engine_version" != "$version" ]]; then
-  echo "The engine $php is $engine_version, but the tree is $version. $rebuild." >&2
+if [[ "$engine_version" != "$version" || "$("$php" -n -r 'echo PHP_ZTS;')" != 1 ]]; then
+  echo "The engine $php is $engine_version$("$php" -n -r 'echo PHP_ZTS ? "" : " without thread safety";'), but the tree is the thread-safe $version. Run sharp/bin/build." >&2
   exit 1
 fi
 
-jobs="${CARGO_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN)}"
-if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
-  jobs="${BASH_REMATCH[2]}"
-fi
-
-"$root/sharp/bin/build-mago" --quiet --jobs "$jobs"
-mago="$mago_dir/debug/mago"
+"$root/sharp/bin/build-mago" --quiet
+mago="$build_dir/mago/debug/mago"
 
 # run-tests.php writes each test's script beside it as <test>.php, and mago compile writes each PHP# class's companion
 # beside its source as <Class>.php. A disk that ignores case, as macOS's does, keeps one file for both when the two
@@ -140,23 +250,11 @@ export SKIP_IO_CAPTURE_TESTS=1
 export STACK_LIMIT_DEFAULTS_CHECK=1
 export RUN_RESOURCE_HEAVY_TESTS=1
 
-# Each test keeps its own files in the temporary folder, so each run takes a temporary folder of its own and removes it
-# when it ends, and no run reads what another run wrote. run-tests.php runs in a process group of its own, so a run that
-# ends early, as on SIGTERM, first stops it, its workers and their tests, which would go on writing in the folder.
-TMPDIR="$(mktemp -d)"
-export TMPDIR
-tests_group=
-trap 'if [[ -n $tests_group ]]; then kill -KILL -- "-$tests_group" || true; wait "$tests_group" || true; fi; rm -rf "$TMPDIR"' EXIT
-
-# Every mode runs, and the script fails at the end if any mode failed.
-failed=()
-
 run_tests() {
   local mode="$1"
   shift
   echo "== $mode"
-  set -m
-  (cd "$root" && exec "$php" run-tests.php -P -q \
+  run_step "$mode" "$root" "$php" run-tests.php -P -q \
     -d opcache.jit=disable \
     -d opcache.protect_memory=1 \
     -j"$jobs" \
@@ -166,17 +264,11 @@ run_tests() {
     --show-diff \
     --show-slow 1000 \
     --set-timeout 120 \
-    "$@" "${tests[@]}") &
-  tests_group=$!
-  set +m
-  if ! wait "$tests_group"; then
-    failed+=("$mode")
-  fi
-  tests_group=
+    "$@" "${tests[@]}"
 }
 
 if $upstream; then
-  baseline="sharp/baseline/$os"
+  baseline=sharp/baseline/linux
   results="$build_dir/upstream-results"
   run_tests "without opcache, compared with $baseline" -W "$results"
   awk -F '\t' -v OFS='\t' -v prefix="$root/" '
@@ -189,36 +281,28 @@ if $upstream; then
     failed+=("the comparison with $baseline")
   fi
 else
+  # The PHP# suite runs in the three ways production runs the engine: without opcache, in opcache shared memory with
+  # each test twice in one process, and under the tracing JIT, the one production runs with the opcache, with every
+  # hot counter at 1, so it compiles the code the tests run as soon as it runs. Each expects the output of the run
+  # without opcache. Apple silicon has no thread-safe JIT, as ext/opcache/config.m4 warns, so macOS runs the first two.
   run_tests "without opcache"
-fi
-
-if $repeat; then
   run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
-fi
-
-# The tracing JIT, the one production runs with the opcache, runs with every hot counter at 1, so it compiles the code
-# the tests run as soon as it runs. It expects the same output as the run without opcache.
-if $jit; then
-  run_tests "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
-    -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
+  if [[ $os == linux ]]; then
+    run_tests "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
+      -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
+  fi
 fi
 
 if $census; then
   echo "== every write and comparison of a field that holds a PHP# mark"
-  if ! "$php" "$root/sharp/bin/census"; then
-    failed+=("the census of PHP# marks")
-  fi
+  run_step "the census of PHP# marks" "$root" "$php" sharp/bin/census
 fi
 
 if $spec; then
   echo "== every rule of sharp/bin/spec, on the examples of sharp/spec-self-test.md"
-  if ! "$php" "$root/sharp/bin/spec" --self-test; then
-    failed+=("the self-test of sharp/bin/spec")
-  fi
+  run_step "the self-test of sharp/bin/spec" "$root" "$php" sharp/bin/spec --self-test
   echo "== every code example in docs/spec.md and README.md, compared with sharp/baseline/spec"
-  if ! "$php" "$root/sharp/bin/spec"; then
-    failed+=("the code examples of docs/spec.md and README.md")
-  fi
+  run_step "the code examples of docs/spec.md and README.md" "$root" "$php" sharp/bin/spec
 fi
 
 check_differential() {
@@ -270,17 +354,10 @@ if $phpunit; then
   check_phpunit
 fi
 
-# The whole-project proof of mago convert runs after the PHP# suite, on this build's engine, with the fixture's refinement
-# worker on the php the PATH holds, and in the first of the shards alone.
-if ! $upstream && ! $zts && ! $installed && { [[ "${tests[*]}" == Zend/tests/sharp ]] || [[ ${shard_index:-} == 1 ]]; }; then
+if $run_proof; then
   echo "== mago convert on sharp/mago/crates/converter/tests/project"
   mkdir "$TMPDIR/convert" "$TMPDIR/convert/project"
-  if ! "$root/sharp/mago/crates/converter/tests/project.sh" "$TMPDIR/convert/project"; then
-    failed+=("the whole-project proof of mago convert")
-  fi
+  run_step "the whole-project proof of mago convert" "$root" "$proof" "$TMPDIR/convert/project"
 fi
 
-if [[ ${#failed[@]} -gt 0 ]]; then
-  printf 'Failed: %s\n' "${failed[@]}" >&2
-  exit 1
-fi
+finish

@@ -22,8 +22,9 @@ defaults:
 jobs:
   # ci-passed is this workflow's one required check, so the workflow always runs, and every other job skips a change
   # that leaves Mago alone: one outside sharp/mago/, sharp/composer/, the sharp/harness/Psr/ interfaces sharp/composer's
-  # mago.toml includes, sharp/phpunit/, this workflow, sharp/bin/coverage, sharp/bin/build-mago and the sharp/docker
-  # image the Linux tests run in, and the actions it runs, as sharp.yml's CHANGES skips a change to documentation alone.
+  # mago.toml includes, sharp/phpunit/, this workflow, the scripts its jobs run, the sharp/docker image the Linux tests
+  # run in, and the actions it runs, as sharp.yml's CHANGES skips a change to documentation alone. sharp/bin/check
+  # --changes holds these rules, so the local end gate chooses its gates as this job does.
   # A pull request's run has no macOS job, so a merge never waits for the Mac, and the push to master runs them after
   # the merge. So a defect only macOS finds, such as one in the watch mode's FSEvents code, lands on master first, and
   # its red push opens an issue, as ci-passed does, for a pull request that fixes it forward. The push skips the Linux
@@ -81,13 +82,7 @@ jobs:
             exit 0
           fi
           git fetch --depth=1 origin "$BASE"
-          if git diff --quiet "$BASE" HEAD -- sharp/mago sharp/composer sharp/harness/Psr sharp/phpunit .github/workflows/mago.yml \
-            sharp/bin/coverage sharp/bin/build-mago sharp/docker .github/actions/setup-lean .github/actions/clean-kept-build \
-            .github/actions/mago-cache .github/actions/mago-cache-prune .github/actions/red-master-issue; then
-            echo mago=false >> "$GITHUB_OUTPUT"
-          else
-            echo mago=true >> "$GITHUB_OUTPUT"
-          fi
+          sharp/bin/check --changes "$BASE" >> "$GITHUB_OUTPUT"
 
       # The 5 Linux test jobs, which a pull request's run runs as a push's do, so their pass holds for the push.
       - name: Find the pull request run that passed every Linux test job on this tree
@@ -151,94 +146,32 @@ jobs:
           php-version: "8.3"
           tools: "composer:v2"
 
-      - name: Install composer dependencies
-        run: composer install
-
-      - name: Install just and typos
+      - name: Install typos
         uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
         with:
-          tool: just,typos
+          tool: typos
 
-      - name: Search for misspellings
-        run: typos
-
-      - name: Test PHP SDK
-        run: just test-sdk
-
-      - name: cargo check
-        run: cargo check --workspace --locked
-
-      # Workspace builds merge features, so only a build of the bridge alone shows what php links.
-      - name: cargo check the PHP# bridge alone
-        run: cargo check -p mago-sharp-bridge --locked
-
-      # The fuzz crate is a workspace of its own, which fuzz.yml builds only when it changes, so a version bump that
-      # leaves its lock behind fails here, on the pull request that makes it.
-      - name: The fuzz crate's Cargo.lock is current
-        run: cargo metadata --locked --format-version 1 --manifest-path crates/syntax/fuzz/Cargo.toml > /dev/null
-
-      - name: keep the file watcher out of the PHP# bridge
-        run: |
-          if output=$(cargo tree -p mago-sharp-bridge -e normal -i notify --locked 2>&1); then
-            echo "$output"
-            echo "::error::mago-sharp-bridge depends on notify, so php would link a file watcher"
-            exit 1
-          fi
-          echo "$output" | grep -q "did not match any packages"
-
-      - name: Verify the PHP SDK's NodeKind is generated from the syntax tree
-        run: |
-          php scripts/regen-sdk-node-kinds.php
-          git diff --exit-code composer/src/Sdk/Syntax/NodeKind.php
-
-      - name: cargo fmt
-        run: cargo fmt --all -- --check
-
-      - name: cargo clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-
-      # The test-run binary, which behaves as release's without its fat LTO, as release-build builds macOS's.
-      # sharp/bin/build-mago builds the dev mago, which logs at DEBUG and reports a missing code that release never
-      # prints, so this builds the profile itself, as sharp/mago/Cargo.toml explains.
-      - name: Build mago in the test-run profile
-        id: build
-        run: |
-          cargo build --locked --profile test-run --bin mago
-          echo "binary=$CARGO_TARGET_DIR/test-run/mago" >> "$GITHUB_OUTPUT"
-
-      # The PHP# standard library, with the sharp/harness interfaces its mago.toml includes, analyzes with no note.
-      - name: Check the standard library
+      # sharp/bin/check mago-checks runs them, as a builder's end gate does: typos, the PHP SDK's tests, cargo check of
+      # the workspace and of the PHP# bridge alone, the fuzz crate's Cargo.lock, no file watcher in the bridge, the PHP
+      # SDK's generated NodeKind, rustfmt and clippy, then the test-run mago, which analyzes the standard library and
+      # formats, lints and analyzes the Composer code, with the issues as annotations.
+      - name: Mago's checks, and the test-run mago
+        working-directory: .
         env:
-          MAGO: ${{ steps.build.outputs.binary }}
-        run: '"$MAGO" --colors never --workspace "$GITHUB_WORKSPACE/sharp/composer" analyze --minimum-fail-level note'
+          MAGO_REPORTING_FORMAT: github
+        run: sharp/bin/check mago-checks
 
       - name: Upload the binary for plain-php
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mago-${{ runner.os }}
-          path: ${{ steps.build.outputs.binary }}
+          path: ${{ env.CARGO_TARGET_DIR }}/test-run/mago
           if-no-files-found: error
-
-      - name: Validate composer code format
-        env:
-          MAGO: ${{ steps.build.outputs.binary }}
-        run: '"$MAGO" format --dry-run'
-
-      - name: Lint composer code
-        env:
-          MAGO: ${{ steps.build.outputs.binary }}
-        run: '"$MAGO" lint --reporting-format=github'
-
-      - name: Analyze composer code
-        env:
-          MAGO: ${{ steps.build.outputs.binary }}
-        run: '"$MAGO" analyze --reporting-format=github'
 
   # The workspace's tests on Linux, in 5 jobs, in the sharp/docker image on the target sharp/bin/build-mago builds there,
   # which sharp.yml's CACHE saves on master and its suites restore, so Linux keeps one dev build of Mago and one cache.
-  # Each job selects cargo test's targets, and libtest names within them, so no job compiles the workspace another way:
-  # its tests/main.rs targets' compile:: tests, their sharp:: tests and the rest, the converter's cases, and every other
-  # target with the doc tests and the property tests. A test target no job names fails the job that lists them.
+  # Each job runs every fifth test of every test binary, by exact name, with sharp/bin/test --mago --shard, so a set of
+  # slow tests spreads over the 5 jobs, and the last also runs the doc tests and the property tests.
   tests:
     name: tests (${{ matrix.shard }}/5)
     needs: CHANGES
@@ -253,12 +186,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { shard: 1, select: '--test main -- compile::' }
-          - { shard: 2, select: '--test main -- sharp::' }
-          - { shard: 3, select: '--test main -- --skip compile:: --skip sharp::' }
-          - { shard: 4, select: '--test cases' }
-          - { shard: 5, select: '--lib --bins --test suite --test pragma --test process_group --test mod --test binder' }
+        shard: [1, 2, 3, 4, 5]
 
     defaults:
       run:
@@ -290,38 +218,8 @@ jobs:
             sharp/build/cargo
             sharp/build/rustup
 
-      # The targets cargo test --workspace builds, each of which one of the 5 jobs selects.
-      - name: Build mago and every test binary, and check that a job selects each test target
-        run: |
-          sharp/docker/run sharp/bin/build-mago --message-format=json > "$RUNNER_TEMP/build.json"
-          unknown=$(jq -r 'select(.reason == "compiler-artifact" and .profile.test and (.target.kind | any(. == "test")))
-            | .target.name | select(IN("main", "cases", "suite", "pragma", "process_group", "mod", "binder") | not)' "$RUNNER_TEMP/build.json" | sort -u)
-          if [[ -n $unknown ]]; then
-            echo "::error::No tests job selects these test targets, so they never run: $unknown. Add each to a job's select in mago.yml."
-            exit 1
-          fi
-
-      # The workspace's tests run a PHP SDK worker from sharp/mago's vendor folder, and lake, which mago compile proves
-      # laws with: installing the pinned Lean up front keeps the tests that run lake in parallel from each installing it.
-      - name: Install composer dependencies and Lean
-        run: |
-          sharp/docker/run composer install --no-interaction --no-progress --working-dir=sharp/mago
-          sharp/docker/run elan toolchain install "$(cat sharp/mago/crates/sharp-lean/lean/lean-toolchain)"
-
-      - name: cargo test ${{ matrix.select }}
-        run: |
-          toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' ext/sharp/rust-toolchain.toml)
-          # shellcheck disable=SC2086 # select is cargo's arguments.
-          sharp/docker/run rustup run "$toolchain" cargo test --workspace --locked --manifest-path sharp/mago/Cargo.toml \
-            --target-dir "sharp/build/linux-$(uname -m)/mago" ${{ matrix.select }}
-
-      - name: cargo test --doc, and the property tests
-        if: matrix.shard == 5
-        run: |
-          toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' ext/sharp/rust-toolchain.toml)
-          target="sharp/build/linux-$(uname -m)/mago"
-          sharp/docker/run rustup run "$toolchain" cargo test --workspace --locked --manifest-path sharp/mago/Cargo.toml --target-dir "$target" --doc
-          sharp/docker/run rustup run "$toolchain" cargo test -p mago-codex --features property-tests --locked --manifest-path sharp/mago/Cargo.toml --target-dir "$target"
+      - name: Test every fifth test of the workspace
+        run: sharp/bin/test --linux --mago --shard ${{ matrix.shard }}/5
 
   # The workspace's tests on macOS arm64, which covers the few lines of Mago that differ there, such as the watch mode's
   # FSEvents, on the self-hosted Mac runners, on the push to master.
@@ -468,110 +366,20 @@ jobs:
         with:
           toolchain: ${{ needs.CHANGES.outputs.rust }}
 
+      # Into the target folder sharp/bin/check plain-php reads the test-run mago from.
       - name: Download the binary the job before built
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-${{ runner.os }}
-          path: ${{ runner.temp }}/mago
+          path: ${{ runner.temp }}/target/test-run
 
-      - name: Run mago from Composer on plain PHP
-        run: |
-          php -v
-          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "mago") | .version')
-          package="$RUNNER_TEMP/mago-sharp-package"
-          project="$RUNNER_TEMP/project"
-          mkdir -p "$package" "$project/src/App"
-          git archive HEAD | tar -x -C "$package"
-          cd "$project"
-          cat > composer.json <<JSON
-          {
-              "repositories": [
-                  { "type": "path", "url": "$GITHUB_WORKSPACE/sharp/composer" },
-                  {
-                      "type": "path",
-                      "url": "$package",
-                      "options": {"symlink": false, "versions": {"heyjordanparker/mago-sharp": "$version"}}
-                  }
-              ],
-              "autoload": { "psr-4": { "App\\\\": "src/App/" } },
-              "config": { "allow-plugins": { "heyjordanparker/php-sharp-composer": true } }
-          }
-          JSON
-          cat > mago.toml <<'TOML'
-          [source]
-          paths = ["src"]
-          extensions = ["sharp"]
-          TOML
-          cat > src/App/Counter.sharp <<'SHARP'
-          namespace App;
-
-          class Counter
-          {
-              private int count = 0;
-
-              public int add(int amount)
-              {
-                  this.count += amount;
-                  return this.count;
-              }
-          }
-          SHARP
-          composer require --no-interaction heyjordanparker/php-sharp-composer:@dev
-          composer require --no-interaction --dev "heyjordanparker/mago-sharp:$version"
-          mkdir -p "$RUNNER_TEMP/upstream-host"
-          cat > "$RUNNER_TEMP/upstream-host/composer.json" <<'JSON'
-          {
-              "name": "probe/upstream-host",
-              "version": "0.1.0",
-              "require": { "carthage-software/mago": "^1.50" }
-          }
-          JSON
-          composer config repositories.upstream-host path "$RUNNER_TEMP/upstream-host"
-          composer require --no-interaction --dev probe/upstream-host:0.1.0
-          test ! -e vendor/carthage-software/mago
-          # A host that needs a later upstream release than the one this checker left from gets no install.
-          mkdir -p "$RUNNER_TEMP/later-host"
-          cat > "$RUNNER_TEMP/later-host/composer.json" <<'JSON'
-          {
-              "name": "probe/later-host",
-              "version": "0.1.0",
-              "require": { "carthage-software/mago": "^1.57" }
-          }
-          JSON
-          composer config repositories.later-host path "$RUNNER_TEMP/later-host"
-          if composer require --no-interaction --dev probe/later-host:0.1.0; then
-            echo "A host that requires carthage-software/mago ^1.57 installed beside mago-sharp." >&2
-            exit 1
-          fi
-          binary_dir="vendor/heyjordanparker/mago-sharp/composer/bin/$version/mago-$version-$(rustc -vV | sed -n 's/^host: //p')"
-          mkdir -p "$binary_dir"
-          install -m 755 "$RUNNER_TEMP/mago/mago" "$binary_dir/mago"
-          output=$(vendor/bin/mago --version 2>&1)
-          echo "$output"
-          test "$output" = "mago $version"
-          vendor/bin/mago analyze
-          vendor/bin/mago compile
-
-      # Plain PHP prints a .sharp file's source, and PHPUnit includes the fixture's .sharp test file itself, past the
-      # plugin's loader. The fixture's bootstrap, sharp/composer/require-engine.php, stops the run before it does.
-      - name: Stop sharp/phpunit's tests on plain PHP before a .sharp test file's source prints
-        working-directory: sharp/phpunit
-        run: |
-          composer install --no-interaction --no-progress
-          if output=$(vendor/bin/phpunit 2>&1); then
-            echo "$output"
-            echo "::error::PHPUnit passed on plain PHP."
-            exit 1
-          fi
-          echo "$output"
-          if ! grep -q 'This project needs the PHP# engine' <<<"$output"; then
-            echo "::error::PHPUnit stopped on plain PHP without the engine's error."
-            exit 1
-          fi
-          if grep -q 'singleton Mailer = LogMailer' <<<"$output"; then
-            echo "::error::PHPUnit printed tests/Shop/CheckoutTest.sharp's source."
-            exit 1
-          fi
+      # sharp/bin/check plain-php runs mago from Composer on plain PHP, then stops sharp/phpunit's tests on plain PHP
+      # before a .sharp test file's source prints, as a builder's end gate does.
+      - name: Run mago from Composer on plain PHP, and stop sharp/phpunit's tests on it
+        working-directory: .
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/target
+        run: sharp/bin/check plain-php
 
   # Fails unless a test runs every line the pull request adds to Mago's analyzer, semantics and sharp-bridge crates.
   # sharp/bin/coverage measures that, with the dated nightly it installs and the cargo-llvm-cov this job installs. A

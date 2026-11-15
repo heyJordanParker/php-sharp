@@ -6,7 +6,8 @@ FROM ${GOLANG_IMAGE} AS golang
 FROM ${BASE_IMAGE}
 
 # procps gives sharp/bin/build-mago's prune pgrep and ps, which find a process running from the build folder. ccache
-# compiles the engine in CI, which sets CC and CXX to it, and a build without them compiles as before.
+# compiles the engine in CI, which sets CC and CXX to it, and a build without them compiles as before. Composer runs on
+# Debian's php-cli, so php-bcmath gives it the ext-bcmath heyjordanparker/php-sharp-composer requires.
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       autoconf \
@@ -18,7 +19,7 @@ RUN apt-get update \
       curl \
       elan \
       git \
-      libfcgi-bin \
+      php-bcmath \
       php-cli \
       php-xml \
       pkg-config \
@@ -37,7 +38,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # sharp/bin/hosts builds FrankenPHP with the Go its v1.13.5 release names, as sharp/docker/runtime/frankenphp.Dockerfile
-# does, and serves the fixture through php-fpm with libfcgi-bin's cgi-fcgi.
+# does.
 COPY --from=golang /usr/local/go /usr/local/go
 ENV PATH=/usr/local/go/bin:$PATH \
     GOTOOLCHAIN=local

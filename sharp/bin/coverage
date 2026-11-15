@@ -41,9 +41,12 @@ fi
 composer install --no-interaction --no-progress --working-dir="$root/sharp/mago"
 export MAGO_REQUIRE_PHP_SDK_TESTS=1
 
-# cargo-llvm-cov builds in CARGO_TARGET_DIR's llvm-cov-target, beside the mago sharp/bin/build-mago builds.
+# cargo-llvm-cov builds in CARGO_TARGET_DIR's llvm-cov-target, beside the mago sharp/bin/build-mago builds, and builds
+# and tests with the jobs sharp/bin/jobs prints.
 CARGO_TARGET_DIR="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago"
-export CARGO_TARGET_DIR
+CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")"
+RUST_TEST_THREADS="$CARGO_BUILD_JOBS"
+export CARGO_TARGET_DIR CARGO_BUILD_JOBS RUST_TEST_THREADS
 report="$CARGO_TARGET_DIR/llvm-cov-target"
 
 # Every test of the three packages, because their code is shared with plain PHP and the PHP tests cover that part.

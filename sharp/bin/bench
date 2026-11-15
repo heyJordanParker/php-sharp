@@ -60,7 +60,7 @@ if [[ ! -x "$php" ]]; then
 fi
 
 # callgrind counts the engine's instructions alone, so the rows compile with the mago sharp/bin/test builds.
-"$root/sharp/bin/build-mago" --quiet --jobs "${CARGO_BUILD_JOBS:-2}"
+"$root/sharp/bin/build-mago" --quiet
 # mago compile keeps a workspace's .sharp folder to the files of its own project, so a compile of the rows in the tree
 # would delete the compiled fixtures a sharp/bin/test run there reads. The rows compile in a copy of sharp/bench and
 # sharp/composer in the throwaway container's /tmp instead, with a .sharp folder of their own. /tmp is as long as the

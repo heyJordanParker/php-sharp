@@ -22,12 +22,12 @@ concurrency:
 jobs:
   # CI_PASSED is this workflow's one required check, so the workflow always runs, and every suite skips a change to
   # documentation alone. docs/spec.md, README.md and sharp/spec-self-test.md count as code, because SPEC compiles and
-  # runs their examples. UBUNTU_WERROR skips a change only to Mago, its coverage script sharp/bin/coverage, the Composer
-  # plugin, the sharp/hosts, sharp/phpunit and sharp/bench fixtures, tests or documentation, none of which it compiles.
+  # runs their examples. sharp/bin/check --changes holds these rules, so the local end gate chooses its gates as this
+  # job does.
   #
   # A pull request runs the Linux suites, each on 4 cores and under 8 minutes, so its CI ends under 10. The push to
-  # master runs what needs the Mac, the arm64 Linux suite, UBUNTU_WERROR, the runtime images and, for a release's bump,
-  # the release assets, and saves the caches every pull request's run restores. A defect only those find lands on
+  # master runs what needs the Mac, the arm64 Linux suite, the runtime image and, for a release's bump, the release
+  # assets, and saves the caches every pull request's run restores. A defect only those find lands on
   # master first, and a red push opens an issue, as CI_PASSED does, for a pull request that fixes it forward.
   #
   # A tree runs the Linux suites once, as bors's "not rocket science" rule tests the exact tree that lands once. A push
@@ -45,13 +45,12 @@ jobs:
       base: ${{ steps.base.outputs.sha }}
       bump: ${{ steps.bump.outputs.bump }}
       code: ${{ steps.diff.outputs.code }}
-      engine: ${{ steps.diff.outputs.engine }}
       images-run-id: ${{ steps.images.outputs.run-id }}
       linux-passed: ${{ steps.linux.outputs.run && 'true' || '' }}
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The 11 Linux suite jobs a pull request's run passes, the same as a push runs them.
+      # The 8 Linux suite jobs a pull request's run passes, the same as a push runs them.
       - name: Find the pull request run that passed every Linux suite on this tree
         id: linux
         if: github.event_name == 'push' && github.ref_type == 'branch'
@@ -60,8 +59,8 @@ jobs:
           workflow: sharp.yml
           events: pull_request
           passed: >-
-            [.jobs[] | select(.conclusion == "success" and (.name | test("^(LINUX|SPEC|LINUX_ZTS) \\(")
-            or . == "UPSTREAM" or . == "HOSTS"))] | length == 11
+            [.jobs[] | select(.conclusion == "success" and (.name | test("^(LINUX|SPEC) \\(")
+            or . == "UPSTREAM" or . == "HOSTS"))] | length == 8
       - name: The Linux suites don't run again
         if: steps.linux.outputs.run
         env:
@@ -98,9 +97,9 @@ jobs:
         run: |
           id=${RUN##*/}
           kept=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/artifacts?per_page=100" \
-            --jq '.artifacts[] | select((.name | startswith("digest-")) and (.expired | not)) | .name' | wc -l)
-          if [[ $kept != 4 ]]; then
-            echo "::warning::Run $RUN keeps $kept of its 4 images' digests: the others expired, were deleted or were never pushed. So IMAGE builds both images from commit $GITHUB_SHA."
+            --jq '.artifacts[] | select((.name | startswith("digest-frankenphp-")) and (.expired | not)) | .name' | wc -l)
+          if [[ $kept != 2 ]]; then
+            echo "::warning::Run $RUN keeps $kept of its image's 2 platform digests: the others expired, were deleted or were never pushed. So IMAGE builds the image from commit $GITHUB_SHA."
             exit 0
           fi
           echo "run-id=$id" >> "$GITHUB_OUTPUT"
@@ -119,7 +118,7 @@ jobs:
             --jq '[.workflow_runs[] | select(.conclusion != "cancelled" and .id < (env.GITHUB_RUN_ID | tonumber))][0].head_sha // empty')
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "This push's changes start at ${sha:-no commit, so every job runs}."
-      - name: Find changes outside documentation, and changes to the engine
+      - name: Find changes outside documentation
         id: diff
         if: github.ref_type != 'tag'
         env:
@@ -127,29 +126,10 @@ jobs:
         run: |
           if [[ -z $BASE ]]; then
             echo code=true >> "$GITHUB_OUTPUT"
-            echo engine=true >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git fetch --depth=1 origin "$BASE"
-          git diff --name-only --no-renames "$BASE" HEAD > "$RUNNER_TEMP/changed"
-          code=false
-          engine=false
-          while read -r file; do
-            case "$file" in
-              docs/spec.md|README.md|sharp/spec-self-test.md) code=true ;;
-              .github/CODEOWNERS|.github/ISSUE_TEMPLATE/*|*.md|*.rst|docs/*) ;;
-              EXTENSIONS|LICENSE|NEWS|UPGRADING|UPGRADING.INTERNALS) ;;
-              *) code=true ;;
-            esac
-            case "$file" in
-              sharp/mago/*|sharp/bin/coverage|sharp/composer/*|sharp/hosts/*|sharp/phpunit/*|sharp/bench/*|*/tests/*) ;;
-              .github/CODEOWNERS|.github/ISSUE_TEMPLATE/*|*.md|*.rst|docs/*) ;;
-              EXTENSIONS|LICENSE|NEWS|UPGRADING|UPGRADING.INTERNALS) ;;
-              *) engine=true ;;
-            esac
-          done < "$RUNNER_TEMP/changed"
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "engine=$engine" >> "$GITHUB_OUTPUT"
+          sharp/bin/check --changes "$BASE" >> "$GITHUB_OUTPUT"
       # A push whose sharp/mago/Cargo.toml version differs from the last push run's is a release's bump: RELEASE_ASSETS
       # builds its assets, and the tag on its commit publishes them.
       - name: Find a release's bump
@@ -175,9 +155,10 @@ jobs:
   # Each of those jobs compiles through ccache in the image, which sharp/docker/run passes CC and CXX into, with its
   # folder at sharp/build/cache/ccache, under the XDG_CACHE_HOME sharp/docker/run sets.
   #
-  # LINUX runs the PHP# suite in three slices, each without opcache, in shared memory twice per process, and under the
-  # tracing JIT production runs with the opcache. The first slice also runs mago convert's whole-project proof, the
-  # second the census, the differential and PHPUnit, and the third the checks of generated files.
+  # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in three slices, each without opcache, in shared
+  # memory twice per process, and under the tracing JIT production runs with the opcache. The slices balance by the seconds sharp/baseline/seconds lists, and
+  # the one that weighs least runs mago convert's whole-project proof, as sharp/bin/test explains. The second slice also
+  # runs the census, the differential and PHPUnit, and the third the checks of generated files.
   LINUX:
     name: LINUX (${{ matrix.shard }}/3)
     needs: CHANGES
@@ -206,13 +187,6 @@ jobs:
           echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
           docker pull "$BASE_IMAGE"
           docker pull "$GOLANG_IMAGE"
-      - name: Keep local sources out of Cargo.lock
-        if: matrix.shard == 3
-        run: |
-          if git grep -nE '(path|git)\+file://' -- '*Cargo.lock'; then
-            echo "::error::A committed Cargo.lock names a local source. Keep a [patch] in an untracked .cargo/config.toml."
-            exit 1
-          fi
       # sharp/bin/test builds mago with sharp/bin/build-mago, inside the image, where CARGO_HOME and RUSTUP_HOME are
       # sharp/build/cargo and sharp/build/rustup. Every Linux job that builds mago in the image shares these caches.
       - name: Rust and Mago caches
@@ -236,39 +210,11 @@ jobs:
           sharp/docker/run ccache --show-stats
       - name: Test PHP#
         run: >-
-          sharp/bin/test --linux --repeat --jit --shard ${{ matrix.shard }}/3
+          sharp/bin/test --linux --shard ${{ matrix.shard }}/3
           ${{ matrix.shard == 2 && '--census --differential --phpunit' || '' }}
-      - name: Verify generated files are up to date
+      - name: Verify the generated files, and that no Cargo.lock names a local source
         if: matrix.shard == 3
-        run: |
-          sharp/docker/run scripts/dev/credits
-          sharp/docker/run scripts/dev/genfiles
-          sharp/docker/run scripts/gdb/debug_gdb_scripts_gen.php
-          sharp/docker/run Zend/zend_vm_gen.php
-          sharp/docker/run ext/tokenizer/tokenizer_data_gen.php
-          sharp/docker/run build/gen_stub.php -f --generate-optimizer-info --verify
-          # Use the -a flag for a bug in git 2.46.0, which doesn't consider changed -diff files.
-          git add . -N && git diff -a --exit-code
-      - name: Verify the native interface is generated from the standard library's extern declarations
-        if: matrix.shard == 3
-        run: |
-          sharp/docker/run sharp/bin/native
-          git diff --exit-code ext/sharp/sharp_native.h sharp/composer/native.php
-      - name: Verify the built-in function declarations are generated from php-8-stubs by rules whose every row passes
-        if: matrix.shard == 3
-        run: |
-          sharp/docker/run sharp/bin/builtins --self-test
-          sharp/docker/run sharp/bin/builtins
-          git diff --exit-code sharp/composer/library/Sharp/Internal/Builtins.sharp
-      - name: Verify ext/sharp/sharp_unit.h, with its sharp_kind, SHARP_T_ tokens and SHARP_UNIT_ABI, is the header sharp/mago generates from Zend/zend_ast.h and Zend/zend_language_parser.h
-        if: matrix.shard == 3
-        run: |
-          sharp/docker/run php sharp/mago/scripts/regen-sharp-kinds.php Zend/zend_ast.h Zend/zend_language_parser.h | diff -u sharp/mago/crates/sharp-bridge/src/kind.rs -
-          # cargo builds nothing for the mago sharp/bin/test built, and names the out_dir of the bridge it links.
-          # `-p mago-sharp-bridge` resolves other features, so it built a second bridge and its dependencies beside it.
-          sharp/docker/run sharp/bin/build-mago --message-format=json > "$RUNNER_TEMP/build.json"
-          header="$(jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("mago-sharp-bridge"))) | .out_dir | ltrimstr("/src/")' "$RUNNER_TEMP/build.json")/sharp_unit.h"
-          diff -u ext/sharp/sharp_unit.h "$header"
+        run: sharp/bin/check generated
   # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before, and
   # sharp/bin/spec's rules on the examples of sharp/spec-self-test.md, on the same build.
   UPSTREAM:
@@ -370,61 +316,15 @@ jobs:
         run: |
           build="sharp/build/linux-$(uname -m)"
           sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/3
-  # The thread-safe build, which FrankenPHP and Octane on Swoole run, in three slices of the PHP# suite, without opcache,
-  # in shared memory twice per process, and under the tracing JIT, since Linux has a thread-safe JIT.
-  LINUX_ZTS:
-    name: LINUX_ZTS (${{ matrix.shard }}/3)
-    needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: read
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    env:
-      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
-      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-      CC: ccache gcc
-      CXX: ccache g++
-    steps:
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Pull the base images from ghcr.io
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-          docker pull "$BASE_IMAGE"
-          docker pull "$GOLANG_IMAGE"
-      # sharp/bin/test --zts builds mago into the other build's folder, sharp/build/<os>-<arch>/mago, as LINUX does.
-      - name: Rust and Mago caches
-        uses: ./.github/actions/mago-cache
-        with:
-          name: SHARP_LINUX
-          rust: SHARP_LINUX
-          rust-paths: |
-            sharp/build/cargo
-            sharp/build/rustup
-      - name: ccache, saved by CACHE on master
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/cache/ccache
-          key: SHARP_LINUX_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/Dockerfile') }}-${{ github.sha }}
-          restore-keys: SHARP_LINUX_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/Dockerfile') }}-
-      - name: Build
-        run: sharp/bin/build --linux --zts
-      - name: Test PHP#
-        run: sharp/bin/test --linux --zts --repeat --jit --shard ${{ matrix.shard }}/3
-  # The fixture in sharp/hosts, served from php-fpm and from FrankenPHP's worker mode. HOSTS builds php-fpm, the
-  # thread-safe engine FrankenPHP is built against with Go, and mago itself, beside the suites, so it never waits for
-  # their tests.
+  # The fixture in sharp/hosts, served from FrankenPHP's worker mode. HOSTS builds the engine FrankenPHP is built against
+  # with Go, and mago itself, beside the suites, so it never waits for their tests. It runs on every push to master, even
+  # one whose tree a pull request's run passed, because only that push saves the Go modules and Go's build cache of
+  # FrankenPHP's packages, which every pull request's run restores.
   HOSTS:
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
+    if: >-
+      needs.CHANGES.outputs.code == 'true' && (needs.CHANGES.outputs.linux-passed != 'true'
+      || github.event_name == 'push' && github.ref == 'refs/heads/master')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -460,19 +360,31 @@ jobs:
           path: sharp/build/cache/ccache
           key: SHARP_LINUX_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/Dockerfile') }}-${{ github.sha }}
           restore-keys: SHARP_LINUX_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/Dockerfile') }}-
-      - name: Go module cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/go/pkg/mod
-          key: SHARP_HOSTS_GO-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile') }}
-      - name: Build php-fpm
+      - name: Build and install the engine
         run: sharp/bin/build --linux
-      - name: Build and install the thread-safe engine
-        run: sharp/bin/build --linux --zts
-      - name: Serve the fixture from php-fpm and FrankenPHP
+      # sharp/bin/hosts keeps Go's build cache in the build's folder, because the cache never reads the PHP headers
+      # FrankenPHP's C files include, as it explains. So the key holds the hash of the headers the engine just installed,
+      # and a change to them restores nothing, as a new build folder would hold nothing.
+      - name: Go modules and build cache, saved by the push to master
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            sharp/build/go/pkg/mod
+            sharp/build/linux-x86_64/frankenphp/go-build
+          key: SHARP_HOSTS_GO-${{ runner.arch }}-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile', 'sharp/build/linux-x86_64/install/include/**') }}-${{ github.sha }}
+          restore-keys: SHARP_HOSTS_GO-${{ runner.arch }}-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile', 'sharp/build/linux-x86_64/install/include/**') }}-
+      - name: Serve the fixture from FrankenPHP
         run: sharp/bin/hosts --linux
-  # The push to master builds the engine and mago as the suites do and saves what they restore: the ccache of both
-  # builds, and the Mago target with the Rust toolchain and crates, as .github/actions/mago-cache explains. A cache only
+      - name: Save the Go modules and build cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            sharp/build/go/pkg/mod
+            sharp/build/linux-x86_64/frankenphp/go-build
+          key: SHARP_HOSTS_GO-${{ runner.arch }}-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile', 'sharp/build/linux-x86_64/install/include/**') }}-${{ github.sha }}
+  # The push to master builds the engine and mago as the suites do and saves what they restore: the engine's ccache,
+  # and the Mago target with the Rust toolchain and crates, as .github/actions/mago-cache explains. A cache only
   # its own ref's runs would restore is no use to the next pull request, so only master saves. CI_PASSED, which runs
   # after it, deletes the targets and ccaches its new ones replaced.
   CACHE:
@@ -513,11 +425,10 @@ jobs:
           path: sharp/build/cache/ccache
           key: SHARP_LINUX_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/Dockerfile') }}-${{ github.sha }}
           restore-keys: SHARP_LINUX_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/Dockerfile') }}-
-      - name: Build both engines and mago
+      - name: Build the engine and mago
         run: |
           sharp/docker/run ccache --zero-stats
           sharp/bin/build --linux
-          sharp/bin/build --linux --zts
           sharp/docker/run ccache --show-stats
           sharp/docker/run sharp/bin/build-mago --quiet
   # The PHP# suite on arm64 Linux, the platform of the Linux VMs on the Mac, in the arm64 sharp/docker image on the
@@ -543,49 +454,7 @@ jobs:
       - name: Build
         run: sharp/bin/build --linux
       - name: Test PHP#
-        run: sharp/bin/test --linux --repeat --jit --census --differential --phpunit
-  # The engine at -O2 with --enable-werror, on the runner itself, with Ubuntu 24.04's gcc 13, which warns where the
-  # Debian trixie image's gcc 14 doesn't, as #255 found by hand (2d4ac5f6c7b). It builds sharp/bin/build --release,
-  # then both images' configure lines, sharp/docker/runtime/configure-options's, so the extensions only the images
-  # build, such as ext/readline, where #255's warning was, compile with gcc 13 too. They build out of the tree, as
-  # sharp/bin/build does, with Ubuntu's own CFLAGS, as a source build that sharp/README.md describes runs them. The push
-  # to master runs it for a change to the engine's own code, as CHANGES explains.
-  UBUNTU_WERROR:
-    needs: CHANGES
-    if: needs.CHANGES.outputs.engine == 'true' && github.event_name == 'push' && github.ref_type == 'branch'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    # The build's packages, as sharp/docker/Dockerfile installs them, then those the images' options add, as
-    # sharp/docker/runtime/Dockerfile installs them, with dpkg-dev for configure-options's dpkg-architecture.
-    env:
-      PACKAGES: >-
-        autoconf bison pkg-config re2c libcurl4-openssl-dev libicu-dev libonig-dev libpq-dev libsodium-dev libsqlite3-dev
-        libxml2-dev libzip-dev libargon2-dev libreadline-dev libssl-dev dpkg-dev
-    steps:
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: apt
-        run: |
-          sudo apt-get update
-          # shellcheck disable=SC2086 # PACKAGES is a list of packages.
-          sudo apt-get install --yes --no-install-recommends $PACKAGES
-      # Each build prints the CFLAGS its Makefile passes gcc, since make's output is hidden and configure adds -Werror
-      # without a word, so the log shows -O2 and -Werror reach the compiler.
-      - name: Build at -O2 with --enable-werror
-        run: |
-          sharp/bin/build --release
-          grep -E '^CFLAGS(_CLEAN)? =' "sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)-release/Makefile"
-      # sharp/bin/build wrote configure.
-      - name: Build both images' configure lines at -O2 with --enable-werror
-        run: |
-          for image in fpm zts; do
-            options="$(sharp/docker/runtime/configure-options "$image")"
-            mkdir "$RUNNER_TEMP/$image"
-            # shellcheck disable=SC2086 # configure-options prints one option per line.
-            (cd "$RUNNER_TEMP/$image" && "$GITHUB_WORKSPACE/configure" $options && grep -E '^CFLAGS(_CLEAN)? =' Makefile && make -j"$(nproc)" >/dev/null)
-          done
+        run: sharp/bin/test --linux --census --differential --phpunit
   # The engine built with AddressSanitizer, so a memory error of the engine fails a test, nightly on master's tip.
   # sharp/bin/build has no flag for php-src's --enable-address-sanitizer, so it builds as php-src's own CI does: a debug
   # build whose CFLAGS and LDFLAGS add -fsanitize=address and ZEND_TRACK_ARENA_ALLOC. sharp/docker/run passes no CFLAGS
@@ -601,8 +470,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-    # The build's packages, as sharp/docker/Dockerfile installs them. sharp/bin/build alone needs no more, so it leaves
-    # out those UBUNTU_WERROR adds for the images' options.
+    # The build's packages, as sharp/docker/Dockerfile installs them.
     env:
       PACKAGES: >-
         autoconf bison pkg-config re2c libcurl4-openssl-dev libicu-dev libonig-dev libpq-dev libsodium-dev libsqlite3-dev
@@ -639,15 +507,16 @@ jobs:
           SKIP_ASAN: 1
           SKIP_PERF_SENSITIVE: 1
           LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan-suppressions.txt
-        run: sharp/bin/test --repeat --jit
+        run: sharp/bin/test
       # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed nightly run
         if: failure()
         uses: ./.github/actions/red-master-issue
         with:
           title: The nightly ASAN run failed
-  # The checks only macOS can fail: the engine's build, mago compile and the plain run on a disk that ignores case, the
-  # census and the differential. The push to master runs it, so a merge never waits for the Mac. A job never installs
+  # The checks only macOS can fail: the engine's build, mago compile and the suite on a disk that ignores case, without
+  # opcache and in shared memory, since Apple silicon has no thread-safe JIT, the census and the differential. The push
+  # to master runs it, so a merge never waits for the Mac. A job never installs
   # on the self-hosted Mac runners, so they check that Homebrew already has the build's formulae and build without
   # ccache. Only the runner labelled macos-arm64-suite takes it, so suites queue one at a time: the runners share one
   # Mac, and three suites at once each ran past the 60-minute limit.
@@ -694,10 +563,10 @@ jobs:
         run: sharp/bin/build
       - name: Test PHP#
         run: sharp/bin/test --census --differential
-  # The checks that keep the release pipeline on pinned code. An action that is not ours runs only at a full commit
-  # SHA, so a moved tag can't change what runs. No Dockerfile under sharp/docker names a `# syntax=` frontend, which
-  # BuildKit pulls from Docker Hub with no login (#86). actionlint passes over every workflow, with the runner labels
-  # .github/actionlint.yaml sets.
+  # The checks that keep the release pipeline on pinned code, which sharp/bin/check workflows runs: an action that is not
+  # ours runs only at a full commit SHA, so a moved tag can't change what runs, no Dockerfile under sharp/docker names a
+  # `# syntax=` frontend, which BuildKit pulls from Docker Hub with no login (#86), and actionlint, at the version this
+  # job installs, passes over every workflow, with the runner labels .github/actionlint.yaml sets.
   WORKFLOWS:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
@@ -706,27 +575,16 @@ jobs:
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Every action that is not ours is pinned to a full commit SHA
-        run: |
-          if git grep -nE '^[[:space:]]*(-[[:space:]]+)?uses:' -- .github/workflows .github/actions \
-            | grep -vE 'uses:[[:space:]]+(\./|[^@[:space:]]+@[0-9a-f]{40}([[:space:]]|$)|docker://[^@[:space:]]+@sha256:[0-9a-f]{64}([[:space:]]|$))'; then
-            echo "::error::Pin each action above to the full commit SHA its release tag names, with the release as a comment: uses: actions/checkout@<40-character SHA> # v7.0.1."
-            exit 1
-          fi
-      - name: No Dockerfile under sharp/docker names a syntax frontend
-        run: |
-          if git grep -nE '^#[[:space:]]*syntax[[:space:]]*=' -- sharp/docker; then
-            echo "::error::Remove each # syntax= line above. BuildKit pulls the frontend it names from Docker Hub with no login (#86), and builds with its own Dockerfile frontend without one."
-            exit 1
-          fi
       - name: Install actionlint
         run: |
           archive="$RUNNER_TEMP/actionlint.tar.gz"
           curl -fsSL https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o "$archive"
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $archive" | sha256sum -c
-          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
-      - name: actionlint
-        run: '"$RUNNER_TEMP/actionlint"'
+          mkdir "$RUNNER_TEMP/actionlint"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/actionlint" actionlint
+          echo "$RUNNER_TEMP/actionlint" >> "$GITHUB_PATH"
+      - name: The actions are pinned, no Dockerfile names a syntax frontend, and actionlint passes
+        run: sharp/bin/check workflows
   # A release's pull request, whose title starts with "chore: release", changes only what the bump writes: what
   # sharp/mago/scripts/set-version.php writes for the new version, PHP_SHARP_VERSION in ext/sharp/php_sharp.h and the
   # version Zend/tests/sharp/ri_sharp.phpt expects, and the release's section of sharp/CHANGELOG.md. Its tree differs
@@ -818,8 +676,7 @@ jobs:
   CI_PASSED:
     if: always() && github.event_name != 'schedule'
     needs:
-      [CHANGES, LINUX, UPSTREAM, SPEC, LINUX_ZTS, HOSTS, CACHE, LINUX_ARM64, UBUNTU_WERROR, MACOS, WORKFLOWS, RELEASE_BUMP,
-      RELEASE_ASSETS, IMAGE]
+      [CHANGES, LINUX, UPSTREAM, SPEC, HOSTS, CACHE, LINUX_ARM64, MACOS, WORKFLOWS, RELEASE_BUMP, RELEASE_ASSETS, IMAGE]
     runs-on: ubuntu-24.04
     permissions:
       actions: write
@@ -836,8 +693,7 @@ jobs:
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
           allowed-skips: >-
-            LINUX, UPSTREAM, SPEC, LINUX_ZTS, HOSTS, CACHE, LINUX_ARM64, UBUNTU_WERROR, MACOS, RELEASE_BUMP, RELEASE_ASSETS,
-            IMAGE
+            LINUX, UPSTREAM, SPEC, HOSTS, CACHE, LINUX_ARM64, MACOS, RELEASE_BUMP, RELEASE_ASSETS, IMAGE
           jobs: ${{ toJSON(needs) }}
       # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed run on master
@@ -846,9 +702,10 @@ jobs:
         with:
           title: A push to master failed PHP# CI
           range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
-      # CACHE saved its target and ccache when it ended, so this job, which needs it, deletes the ones they replaced.
+      # CACHE saved its target and ccache, and HOSTS its Go caches, when they ended, so this job, which needs them,
+      # deletes the ones they replaced.
       - name: Delete the caches this run replaced
-        if: always() && needs.CACHE.result == 'success'
+        if: always() && (needs.CACHE.result == 'success' || github.event_name == 'push' && needs.HOSTS.result == 'success')
         uses: ./.github/actions/mago-cache-prune
   COMPOSER:
     needs: [CHANGES, LINUX, MACOS]
@@ -904,17 +761,17 @@ jobs:
             exit 0
           fi
           git push origin "FETCH_HEAD:$GITHUB_REF"
-  # One image per host, under one name: php-fpm's as <version>, FrankenPHP's as <version>-frankenphp, as docker-library
-  # names 8.5-fpm and 8.5-zts. Each platform builds on a runner of its own architecture with -O2 and --enable-werror,
-  # where GCC finds -Wmaybe-uninitialized and libcurl's type checks, so a warning one architecture alone finds fails.
-  # Each pushes its image by digest, with BuildKit's provenance and SBOM attestations, and IMAGE_TAGS tags the two as one.
+  # The runtime image, FrankenPHP on the thread-safe engine, as <version>. Each platform builds on a runner of its own
+  # architecture with -O2 and --enable-werror, where GCC finds -Wmaybe-uninitialized and libcurl's type checks, so a
+  # warning one architecture alone finds fails. Each pushes its image by digest, with BuildKit's provenance and SBOM
+  # attestations, and IMAGE_TAGS tags the two as one.
   # BuildKit, its SBOM scanner and the bases are base-images.yml's copies in ghcr.io at pinned digests, pulled after the
   # login, so no pull is an anonymous Docker Hub pull (#86). The engine changes PHP's internal structures, so an
   # extension can stop building or loading: each pushed image then installs the extensions a typical Laravel app
   # installs on top, the way such an app's Dockerfile does. It runs on the push to master, and on a tag only when CHANGES
   # found the tagged commit's push run kept none.
   IMAGE:
-    name: IMAGE (${{ matrix.host.file }}, ${{ matrix.platform }})
+    name: IMAGE (${{ matrix.platform }})
     if: >-
       ${{ !failure() && !cancelled() && (github.ref_type == 'tag' && !needs.CHANGES.outputs.images-run-id
       || github.event_name == 'push' && github.ref_type == 'branch' && needs.CHANGES.outputs.code == 'true') }}
@@ -927,16 +784,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        host:
-          - { file: sharp/docker/runtime/Dockerfile, name: fpm, sapi: fpm-fcgi, php: php }
-          - { file: sharp/docker/runtime/frankenphp.Dockerfile, name: frankenphp, sapi: frankenphp, php: frankenphp php-cli }
         platform: [linux/amd64, linux/arm64]
     env:
       EXTENSIONS: bcmath exif gd imagick intl pcntl pdo_pgsql pgsql redis zip
-      # The same extensions but intl, which both images build, so sharp/bin/php-extensions checks the image's own.
-      # imagick and redis build from the release tags the image adds from GitHub, because pecl.php.net outages failed
-      # this job.
-      INSTALL: bcmath exif gd /usr/src/imagick pcntl pdo_pgsql pgsql /usr/src/phpredis zip
+      # The same extensions but bcmath and intl, which the image builds, so sharp/bin/php-extensions checks the image's
+      # own. imagick and redis build from the release tags the image adds from GitHub, because pecl.php.net outages
+      # failed this job.
+      INSTALL: exif gd /usr/src/imagick pcntl pdo_pgsql pgsql /usr/src/phpredis zip
     steps:
       # For .github/actions/boot-image and sharp/bin/php-extensions. The build fetches its own context.
       - name: git checkout
@@ -958,7 +812,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ${{ github.server_url }}/${{ github.repository }}.git#${{ github.sha }}
-          file: ${{ matrix.host.file }}
+          file: sharp/docker/runtime/frankenphp.Dockerfile
           platforms: ${{ matrix.platform }}
           build-args: REGISTRY=ghcr.io/heyjordanparker
           provenance: mode=max
@@ -981,7 +835,6 @@ jobs:
         uses: ./.github/actions/boot-image
         with:
           image: ghcr.io/heyjordanparker/php-sharp@${{ steps.build.outputs.digest }}
-          sapi: ${{ matrix.host.sapi }}
       # rustup comes after the extensions, so they build as in the app's image. The builder is Docker's own, which reads
       # the pulled image, where Buildx's would not.
       - name: Install the extensions
@@ -999,10 +852,10 @@ jobs:
           ARG INSTALL
           RUN install-php-extensions $INSTALL
           DOCKERFILE
-      - name: Check that php -m lists each extension, and call into each one from ${{ matrix.host.php }}
+      - name: Check that php -m lists each extension, and call into each one from FrankenPHP's php-cli
         run: |
           # shellcheck disable=SC2086 # EXTENSIONS is a list of extensions.
-          docker run --rm --volume "$PWD:/src" --workdir /src php-sharp-extensions ${{ matrix.host.php }} sharp/bin/php-extensions $EXTENSIONS
+          docker run --rm --volume "$PWD:/src" --workdir /src php-sharp-extensions frankenphp php-cli sharp/bin/php-extensions $EXTENSIONS
       # The file is named by the digest and holds the commit the image was built from.
       - name: Keep the digest for IMAGE_TAGS
         env:
@@ -1010,18 +863,18 @@ jobs:
         run: |
           mkdir "$RUNNER_TEMP/digests"
           echo "$GITHUB_SHA" > "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
-      # Kept as long as release.yml's assets, as the repository's artifact retention sets.
+      # Kept as long as release.yml's assets, as the repository's artifact retention sets. The name keeps the frankenphp
+      # of the runs that also built php-fpm's image, so a tag of their commits tags FrankenPHP's alone.
       - name: Upload the digest for IMAGE_TAGS
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: digest-${{ matrix.host.name }}-${{ strategy.job-index }}
+          name: digest-frankenphp-${{ strategy.job-index }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
-  # Tags each host's two platform images as one image, and attests its provenance with the repository's identity,
+  # Tags the image's two platform images as one image, and attests its provenance with the repository's identity,
   # which `gh attestation verify oci://ghcr.io/heyjordanparker/php-sharp:<tag> --repo heyJordanParker/php-sharp`
   # checks. The images are the ones the tagged commit's push run pushed, or the ones IMAGE pushed in this run.
   IMAGE_TAGS:
-    name: IMAGE_TAGS (${{ matrix.host.name }})
     needs: [CHANGES, IMAGE]
     if: ${{ !failure() && !cancelled() && github.ref_type == 'tag' }}
     runs-on: ubuntu-24.04
@@ -1031,16 +884,11 @@ jobs:
       packages: write
       id-token: write
       attestations: write
-    strategy:
-      matrix:
-        host:
-          - { name: fpm, suffix: '' }
-          - { name: frankenphp, suffix: -frankenphp }
     steps:
       - name: Download the platforms' digests
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: digest-${{ matrix.host.name }}-*
+          pattern: digest-frankenphp-*
           path: ${{ runner.temp }}/digests
           merge-multiple: true
           run-id: ${{ needs.CHANGES.outputs.images-run-id || github.run_id }}
@@ -1054,11 +902,9 @@ jobs:
       - name: Tag the platforms' images as one image
         id: tag
         working-directory: ${{ runner.temp }}/digests
-        env:
-          SUFFIX: ${{ matrix.host.suffix }}
         run: |
           image=ghcr.io/heyjordanparker/php-sharp
-          tag="$image:${GITHUB_REF_NAME#v}$SUFFIX"
+          tag="$image:${GITHUB_REF_NAME#v}"
           sources=()
           for digest in *; do
             sources+=("$image@sha256:$digest")

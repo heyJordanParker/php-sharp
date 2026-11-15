@@ -145,9 +145,9 @@ RUN set -eux; \
 			;; \
 	esac; \
 	test "$PHP_INI_DIR" != "${PHP_INI_DIR%/php}"; \
-# PHP#: the options are sharp/docker/runtime/configure-options's, which sharp.yml's UBUNTU_WERROR builds with gcc 13,
-# one per line, so $options splits into one word each. Its own line, so its failure stops the build.
-	options="$(sharp/docker/runtime/configure-options zts)"; \
+# PHP#: the options are sharp/docker/runtime/configure-options's, one per line, so $options splits into one word each.
+# Its own line, so its failure stops the build.
+	options="$(sharp/docker/runtime/configure-options)"; \
 	./configure \
 		--build="$gnuArch" \
 		--sysconfdir="${PHP_INI_DIR%/php}" \
