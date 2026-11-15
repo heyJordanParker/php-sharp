@@ -134,7 +134,7 @@ The standard library covers what Rust's `std` and .NET's base class library cove
 | IP addresses | `IpAddr::from_str`, `octets` | `IPAddress.Parse`, `TryParse`, `GetAddressBytes` | `Ip.isValid`, `Ip.toBinary`; an address value: **missing** | `inet_pton` |
 | Mail | `lettre` crate | `SmtpClient`, `MailMessage`, `MailAddress` | `Mail.send(message)`, `MailMessage`, `MailAddress` | `mail` |
 | TCP and UDP sockets | `TcpStream`, `TcpListener`, `UdpSocket` | `Socket`, `TcpClient`, `UdpClient` | **missing** | |
-| Name lookup | `ToSocketAddrs` | `Dns.GetHostAddresses` | **missing** | |
+| Name lookup | `ToSocketAddrs` | `Dns.GetHostAddresses` | `Dns.addresses(host)` | `getaddrinfo`, through the engine's `Sharp\Internal\resolve` |
 | An HTTP server | `hyper` crate | `HttpListener` | **missing**, the web framework serves | |
 
 ## Processes and environment

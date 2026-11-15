@@ -2,9 +2,12 @@
 # include <config.h>
 #endif
 
+#include <arpa/inet.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netdb.h>
+#include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -7831,6 +7834,45 @@ ZEND_FUNCTION(Sharp_Internal_jsonDecode)
 		zend_throw_exception(php_json_exception_ce, php_json_get_error_msg(code), code);
 		RETURN_THROWS();
 	}
+}
+
+/* Spec section 29: the addresses Sharp.Net.Dns.addresses gives, each as text, once, in the order the system resolver
+ * gives them, as .NET's Dns.GetHostAddresses reads them through getaddrinfo, the hosts file included. A host the
+ * resolver cannot find throws RuntimeException, as .NET throws SocketException. */
+ZEND_FUNCTION(Sharp_Internal_resolve)
+{
+	char *host;
+	size_t host_length;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_PATH(host, host_length)
+	ZEND_PARSE_PARAMETERS_END();
+
+	struct addrinfo hints = {0}, *found;
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	int failure = getaddrinfo(host, NULL, &hints, &found);
+	if (failure != 0) {
+		zend_throw_exception_ex(spl_ce_RuntimeException, 0, "Dns.addresses: \"%s\" cannot be resolved: %s", host,
+			gai_strerror(failure));
+		RETURN_THROWS();
+	}
+
+	array_init(return_value);
+	HashTable seen;
+	zend_hash_init(&seen, 8, NULL, NULL, false);
+	for (struct addrinfo *entry = found; entry; entry = entry->ai_next) {
+		char text[INET6_ADDRSTRLEN];
+		const void *address = entry->ai_family == AF_INET6
+			? (const void *) &((struct sockaddr_in6 *) entry->ai_addr)->sin6_addr
+			: (const void *) &((struct sockaddr_in *) entry->ai_addr)->sin_addr;
+		if (inet_ntop(entry->ai_family, address, text, sizeof text)
+			&& zend_hash_str_add_empty_element(&seen, text, strlen(text))) {
+			add_next_index_string(return_value, text);
+		}
+	}
+	zend_hash_destroy(&seen);
+	freeaddrinfo(found);
 }
 
 /* Spec section 12: PHP# passes plain PHP `\Sharp\Internal\arrayOf($value)`, the PHP array sharp_array_of gives. Through

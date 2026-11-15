@@ -4,6 +4,14 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.13
+
+- PHP's name lookups, `dns_get_record`, `dns_check_record`, `checkdnsrr`, `dns_get_mx`, `getmxrr`, `gethostbyname`, `gethostbynamel` and `gethostbyaddr`, have the effect `Dns`, spec section 29, where 0.6.13 gave them `Http`. Code that calls one declares `uses Dns` where it declared `uses Http`, or calls `Dns.addresses` instead.
+
+### Added
+
+- `Sharp.Net.Dns`, the effect class `Dns`, spec section 29: `dns.addresses(host)` gives every IPv4 and IPv6 address of a host, once, in the order the system resolver gives them, the hosts file's included, as .NET's `Dns.GetHostAddresses` does. A name that is no host name throws `ValueError`, and a host the resolver can't find throws `RuntimeException`. 0.6.13 reached a host's addresses only through PHP's `dns_get_record`, which asks a DNS server and never reads the hosts file.
+
 ## [0.6.13] - 2026-11-15
 
 ### Upgrading from 0.6.12
