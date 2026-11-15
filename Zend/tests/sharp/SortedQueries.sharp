@@ -1,0 +1,157 @@
+namespace Demo;
+
+import Sharp.Collections.PriorityQueue;
+import Sharp.Collections.SortedMap;
+import Sharp.Collections.SortedSet;
+
+class SortedQueries
+{
+    public static SortedMap<string, int> stock()
+    {
+        const stock = new SortedMap<string, int>();
+        stock.set("pear", 3);
+        stock["apple"] = 5;
+        stock.set("fig", 0);
+        stock.set("banana", 2);
+        stock["pear"] = 4;
+
+        return stock;
+    }
+
+    public static List<string> entries(SortedMap<string, int> map)
+    {
+        List<string> written = [];
+        for (const [key, value] of map) {
+            written.add(`${key}=${value}`);
+        }
+
+        return written;
+    }
+
+    public static List<string> reads()
+    {
+        const stock = SortedQueries.stock();
+
+        return [
+            `${stock.count()} ${stock.isEmpty()} ${stock.isNotEmpty()} ${stock.get("fig") ?? -1} ${stock.get("kiwi") ?? -1} ${stock["apple"] ?? -1}`,
+            `${stock.has("banana")} ${stock.has("kiwi")} ${stock.keys().join(",")} ${stock.values().map((int n) => `${n}`).join(",")}`,
+            `${stock.first()} ${stock.first((int n) => n > 4)} ${stock.firstOrNull((int n) => n > 9) ?? -1} ${stock.last()} ${stock.any((int n) => n == 0)}`,
+            `${stock.floor("cherry") ?? "none"} ${stock.ceiling("cherry") ?? "none"} ${stock.floor("apple") ?? "none"} ${stock.floor("a") ?? "none"} ${stock.ceiling("zebra") ?? "none"}`,
+            `${SortedQueries.entries(stock.range("b", "p")).join(",")} ${SortedQueries.entries(stock.filter((int n) => n > 2)).join(",")}`,
+            `${stock.sumOf((int n) => n)} ${stock.map((int n) => n * 10).map((int n) => `${n}`).join(",")} ${stock.sortedBy((int n) => -n).map((int n) => `${n}`).join(",")}`,
+            `${stock.toList().map(([string key, int count] entry) => `${entry.key}:${entry.count}`).join(",")} ${stock.groupBy((int n) => n > 2).count()} ${stock.associateBy((int n) => n).count()}`,
+        ];
+    }
+
+    public static List<string> writes()
+    {
+        const stock = SortedQueries.stock();
+        const removed = stock.remove("fig");
+        const missing = stock.remove("kiwi");
+        const put = stock.getOrPut("cherry", () => 7);
+        const kept = stock.getOrPut("apple", () => 99);
+
+        return [`${removed} ${missing} ${put} ${kept}`, SortedQueries.entries(stock).join(",")];
+    }
+
+    public static List<string> versions()
+    {
+        const releases = new SortedMap<Version, string>();
+        releases.set(new Version(1, 10), "ten");
+        releases.set(new Version(1, 2), "two");
+        releases.set(new Version(0, 9), "beta");
+        releases.set(new Version(1, 2), "two again");
+
+        return [releases.keys().map((Version v) => v.toString()).join(","), releases.values().join(","), releases.floor(new Version(1, 5))?.toString() ?? "none"];
+    }
+
+    public static List<string> descending()
+    {
+        const names = new SortedSet<string>((string a, string b) => b.compareTo(a));
+        names.add("ann");
+        names.add("cy");
+        names.add("bo");
+
+        return names.toList();
+    }
+
+    public static List<string> sets()
+    {
+        const numbers = new SortedSet<int>();
+        const added = [numbers.add(5), numbers.add(1), numbers.add(9), numbers.add(5), numbers.add(3)];
+        const others = new SortedSet<int>();
+        others.add(3);
+        others.add(4);
+        others.add(5);
+        List<string> written = [];
+        for (const number of numbers) {
+            written.add(`${number}`);
+        }
+
+        return [
+            `${added.map((bool b) => b ? "added" : "held").join(",")} ${written.join(",")} ${numbers.count()} ${numbers.contains(9)} ${numbers.contains(2)}`,
+            `${numbers.first()} ${numbers.first((int n) => n > 3)} ${numbers.last()} ${numbers.floor(4) ?? -1} ${numbers.ceiling(4) ?? -1} ${numbers.floor(0) ?? -1} ${numbers.ceiling(10) ?? -1}`,
+            `${numbers.range(3, 9).toList().map((int n) => `${n}`).join(",")} ${numbers.range(9, 3).count()} ${numbers.filter((int n) => n > 1).toList().map((int n) => `${n}`).join(",")}`,
+            `${numbers.union(others).toList().map((int n) => `${n}`).join(",")} ${numbers.intersect(others).toList().map((int n) => `${n}`).join(",")} ${numbers.subtract(others).toList().map((int n) => `${n}`).join(",")}`,
+            `${numbers.intersect(others).isSubsetOf(others)} ${numbers.isSubsetOf(others)} ${numbers.remove(9)} ${numbers.remove(9)} ${numbers.sumOf((int n) => n)} ${numbers.any((int n) => n > 4)}`,
+            `${numbers.firstOrNull((int n) => n > 7) ?? -1} ${numbers.map((int n) => n * 2).map((int n) => `${n}`).join(",")} ${numbers.sortedBy((int n) => -n).map((int n) => `${n}`).join(",")} ${numbers.isNotEmpty()}`,
+        ];
+    }
+
+    public static List<string> cleared()
+    {
+        const numbers = new SortedSet<int>();
+        numbers.add(1);
+        numbers.clear();
+
+        return [`${numbers.isEmpty()} ${numbers.count()}`];
+    }
+
+    public static List<string> queue()
+    {
+        const tasks = new PriorityQueue<string, int>();
+        tasks.enqueue("write", 3);
+        tasks.enqueue("ship", 9);
+        tasks.enqueue("plan", 1);
+        tasks.enqueue("test", 5);
+        tasks.enqueue("review", 4);
+        List<string> order = [];
+        const count = tasks.count();
+        const peeked = tasks.peek();
+        while (!tasks.isEmpty()) {
+            order.add(tasks.dequeue());
+        }
+
+        return [`${count} ${peeked} ${tasks.count()} ${tasks.isEmpty()}`, order.join(",")];
+    }
+
+    public static List<string> latestFirst()
+    {
+        const releases = new PriorityQueue<string, Version>((Version a, Version b) => b <=> a);
+        releases.enqueue("old", new Version(1, 2));
+        releases.enqueue("new", new Version(2, 0));
+        releases.enqueue("mid", new Version(1, 10));
+        List<string> order = [];
+        while (!releases.isEmpty()) {
+            order.add(releases.dequeue());
+        }
+
+        return order;
+    }
+
+    public static string emptyQueue() => new PriorityQueue<string, int>().dequeue();
+
+    public static string emptyPeek() => new PriorityQueue<string, int>().peek();
+
+    public static int emptyMap() => new SortedMap<string, int>().first();
+
+    public static int emptySet() => new SortedSet<int>().last();
+
+    public static bool unordered()
+    {
+        const crates = new SortedSet<Crate>();
+        crates.add(new Crate());
+
+        return crates.add(new Crate());
+    }
+}

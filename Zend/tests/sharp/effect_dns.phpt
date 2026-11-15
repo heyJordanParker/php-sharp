@@ -1,11 +1,13 @@
 --TEST--
-PHP# Dns gives the addresses the system resolver finds for a host, the hosts file's included, and throws for a host it cannot find or a name that is no host name
+PHP# Dns gives the addresses the system resolver finds for a host, each an IpAddress, the hosts file's included, and throws for a host it cannot find or a name that is no host name
 --FILE--
 <?php
 require __DIR__ . '/effect_classes.inc';
 
 $dns = new Sharp\Net\Dns();
-$local = $dns->addresses('localhost');
+$addresses = $dns->addresses('localhost');
+var_dump($addresses !== [] && array_filter($addresses, fn ($address) => !$address instanceof Sharp\Net\IpAddress) === []);
+$local = array_map(fn (Sharp\Net\IpAddress $address) => $address->toString(), $addresses);
 var_dump(in_array('127.0.0.1', $local, true) || in_array('::1', $local, true));
 var_dump($local === array_values(array_unique($local)));
 
@@ -25,6 +27,7 @@ foreach (['not a host', '', 'shop..example.com'] as $host) {
 }
 ?>
 --EXPECT--
+bool(true)
 bool(true)
 bool(true)
 RuntimeException: names the host and the failure

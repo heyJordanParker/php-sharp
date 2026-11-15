@@ -92,6 +92,16 @@ function jsonDecode(string $json): mixed {}
 
 function resolve(string $host): array {}
 
+function processorCount(): int {}
+
+function compare(mixed $left, mixed $right): int {}
+
+function readGlobal(string $name, ?string $key = null): mixed {}
+
+function writeGlobal(string $name, mixed $value, ?string $key = null): void {}
+
+function includeGlobal(string $path): void {}
+
 function accessors(string $type, string $name): array {}
 
 function createLazy(string $type, callable $initialize): object {}
@@ -135,6 +145,10 @@ function enumBackingType(string $type): ?string {}
 function makeGenericType(string $type, array $arguments): string {}
 
 function enumCases(string $type): array {}
+
+function constants(string $type): array {}
+
+function constant(string $class, string $name): mixed {}
 
 function createInstance(string $type, array $arguments): object {}
 

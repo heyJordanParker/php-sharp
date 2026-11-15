@@ -6,10 +6,10 @@
 // A test requires this file, and a test that preloads it finds the classes already declared, so it skips the requires.
 if (!class_exists(Sharp\Time\Clock::class, false)) {
     foreach ([
-        'Int', 'Time/Duration', 'Time/Instant', 'Time/DateTimeInterfaceMembers', 'Net/Url', 'Net/HttpMethod', 'Net/HttpRequest', 'Net/HttpResponse',
+        'Int', 'ByteOrder', 'Time/Duration', 'Time/Instant', 'Time/DateTimeInterfaceMembers', 'Net/Url', 'Net/HttpMethod', 'Net/HttpRequest', 'Net/HttpResponse',
         'Net/MailAddress', 'Net/MailMessage', 'System/ProcessResult', 'System/Environment', 'Time/Clock', 'Random',
-        'IO/Console', 'System/Process', 'IO/Files', 'Text/StringMembers', 'Net/Http', 'Data/Cache', 'Net/Mail',
-        'Net/Dns', 'Data/Database', 'ListMembers', 'MapMembers', 'SetMembers',
+        'IO/Console', 'System/Process', 'System/ChildProcess', 'IO/Files', 'Text/StringMembers', 'Net/Http', 'Data/Cache', 'Net/Mail',
+        'Net/IpFamily', 'Net/IpAddress', 'Net/Dns', 'Interop/Superglobal', 'Interop/PhpGlobals', 'Data/Database', 'ListMembers', 'MapMembers', 'SetMembers',
     ] as $class) {
         require __DIR__ . "/../../../sharp/composer/library/Sharp/$class.sharp";
     }

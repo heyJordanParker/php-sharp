@@ -1,0 +1,10 @@
+namespace Demo;
+
+public struct Version
+{
+    public Version(public int major { get; }, public int minor { get; }) { }
+
+    public static int operator <=>(Version a, Version b) => a.major != b.major ? a.major <=> b.major : a.minor <=> b.minor;
+
+    public string toString() => `${this.major}.${this.minor}`;
+}
