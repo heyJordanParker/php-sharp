@@ -1,0 +1,18 @@
+namespace Matched;
+
+public static class Checks
+{
+    public static bool maybe(Any? value) => value is int?;
+
+    public static bool other(Any? value) => value is not int or 5;
+
+    public static string noted(int value)
+    {
+        let note = "";
+        match (value) {
+            0 => note = "zero",
+            default => { note = "other"; },
+        }
+        return note;
+    }
+}

@@ -514,9 +514,12 @@ bool sharp_hash(zval *value, uint32_t *hash)
 		case IS_DOUBLE:
 			*hash = sharp_hash_double(Z_DVAL_P(value));
 			return true;
-		case IS_STRING:
-			*hash = (uint32_t) ZSTR_HASH(Z_STR_P(value));
+		case IS_STRING: {
+			/* A class value with type arguments hashes as its whole type, which its == compares. */
+			const sharp_type *type = sharp_class_value_type(Z_STR_P(value));
+			*hash = (uint32_t) ZSTR_HASH(type ? type->text : Z_STR_P(value));
 			return true;
+		}
 		case IS_ARRAY: {
 			/* A List, in order. */
 			zval *element;
@@ -650,9 +653,14 @@ bool sharp_equal(zval *a, zval *b, bool *equal)
 	}
 
 	switch (Z_TYPE_P(a)) {
-		case IS_STRING:
-			*equal = zend_string_equals(Z_STR_P(a), Z_STR_P(b));
+		case IS_STRING: {
+			/* Two class values compare by their whole type, as C# compares two Type objects, so
+			 * `typeof(Box<Order>) == typeof(Box<Invoice>)` is false though both texts are the bare class name. */
+			const sharp_type *type = sharp_class_value_type(Z_STR_P(a));
+			const sharp_type *other = sharp_class_value_type(Z_STR_P(b));
+			*equal = type || other ? sharp_type_equals(type, other) : zend_string_equals(Z_STR_P(a), Z_STR_P(b));
 			return true;
+		}
 		case IS_ARRAY:
 			return sharp_equal_arrays(Z_ARRVAL_P(a), Z_ARRVAL_P(b), equal);
 		case IS_OBJECT: {

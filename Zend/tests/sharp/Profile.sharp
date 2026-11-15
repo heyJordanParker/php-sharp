@@ -5,7 +5,7 @@ class Profile
     public int views { get; private set; } = 0;
     public string name { get; set; } = "guest";
     public int id { get; }
-    public float score { get; protected set; }
+    public float score { get; private set; }
 
     public Profile(int id)
     {

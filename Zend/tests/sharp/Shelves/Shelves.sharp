@@ -1,0 +1,8 @@
+namespace Shelves;
+
+public static class Shelves
+{
+    public static Shelf<int> numbers(string label) => new Shelf<int>(label);
+
+    public static bool holdsNumbers(Any? value) => value is Shelf<int>;
+}

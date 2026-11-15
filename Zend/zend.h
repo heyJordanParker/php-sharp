@@ -245,10 +245,15 @@ struct _zend_class_entry {
 			/* PHP#: a PHP# class-like's metadata, see ext/sharp/php_sharp.h. sharp_bounds is the type text of the
 			 * bounds of its type parameters, or NULL when it declares none. sharp_header is the type text of the type
 			 * arguments its header gives each generic parent and interface, or NULL. sharp_variance is one `+`
-			 * (`out`), `-` (`in`) or `=` per type parameter, or NULL when none has `in` or `out`. */
+			 * (`out`), `-` (`in`) or `=` per type parameter, or NULL when none has `in` or `out`. sharp_declared is what
+			 * reflection reads, spec section 25: a first line of its type parameters' names, then a line per member
+			 * the class-like declares, `$name: T` for a property and `name: Function<R(P1, P2)>` for a method, each type
+			 * as declared, tuple element names included. Between a name and its `: ` stand the words of what writes a
+			 * property, `set private`, and its `virtual` and `override`. NULL for a class-like plain PHP declares. */
 			zend_string *sharp_bounds;
 			zend_string *sharp_header;
 			zend_string *sharp_variance;
+			zend_string *sharp_declared;
 		} user;
 		struct {
 			const struct _zend_function_entry *builtin_functions;

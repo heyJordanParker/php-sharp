@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls every member of Sharp.Time's Date, Instant, DateTime and Duration: ISO-8601 text both ways, calendar arithmetic that clamps a month's last day, instants before 1970, a zone's offset across a clock change, a DateTime whose offset is not its zone's, <, <=, >, >= and <=> on each, where two DateTimes at one instant in different zones are != and order by their zones' names, a plain PHP date that becomes an Instant or a DateTime in its zone, where a zone that is only an offset throws ValueError and +00:00 is UTC, an Instant or a DateTime that becomes a plain PHP DateTimeImmutable and back, to the microsecond, with no clock, and a ValueError for a day, an instant, a nanosecond or a zone that does not exist, whatever PHP's default time zone is
+A PHP# class calls every member of Sharp.Time's Date, Instant, DateTime and Duration: ISO-8601 text both ways, calendar arithmetic that clamps a month's last day, instants before 1970, a zone's offset across a clock change, a DateTime whose offset is not its zone's, <, <=, >, >= and <=> on each, where two DateTimes at one instant in different zones are != and order by their zones' names, a plain PHP date that becomes an Instant or a DateTime in its zone, where a fixed offset is its zone, +00:00 is UTC, a database zone at offset 0 stays itself, and an abbreviation throws ValueError, an Instant or a DateTime that becomes a plain PHP DateTimeImmutable and back, to the microsecond, with no clock, and a ValueError for a day, an instant, a nanosecond or a zone that does not exist, whatever PHP's default time zone is
 --INI--
 date.timezone=America/New_York
 --FILE--
@@ -57,6 +57,7 @@ foreach ([59, 60] as $minutes) {
 echo "PHP dates\n";
 var_dump(DateCalls::phpZoned('2026-10-22 21:30:00', 'Europe/Sofia'), DateCalls::phpInstant('2026-10-22 21:30:00', 'Europe/Sofia'));
 var_dump(DateCalls::phpZoned('2026-10-22 18:30:00', '+00:00'), DateCalls::phpInstant('2026-10-22 21:30:00', '+03:00'), DateCalls::mutablePhpZoned('1969-12-31 23:59:59.5', 'UTC'));
+var_dump(DateCalls::phpZoned('2026-10-22 21:30:00', '+03:00'), DateCalls::phpZoned('2026-01-22 12:00:00', 'Europe/London'));
 var_dump(DateCalls::zonedCrossedBack('2026-10-22T21:30:00+03:00[Europe/Sofia]'), DateCalls::zonedCrossedBack('2026-10-22T21:30:00.123456789+03:00[Europe/Sofia]'));
 var_dump(DateCalls::instantCrossedBack('2026-10-22T18:30:00Z'), DateCalls::instantCrossedBack('1969-12-31T23:59:59.5Z'));
 foreach ([Sharp\Time\DateTime::parse('2026-10-22T21:30:00.25+03:00[Europe/Sofia]'), Sharp\Time\Instant::parse('2026-10-22T18:30:00Z')] as $value) {
@@ -74,7 +75,6 @@ foreach ([
     fn () => DateCalls::inZone('2026-10-22T18:30:00Z', 'Nowhere/City'),
     fn () => DateCalls::zoned('2026-10-22T21:30:00+02:00[Europe/Sofia]'),
     fn () => DateCalls::duration('one hour'),
-    fn () => DateCalls::phpZoned('2026-10-22 21:30:00', '+03:00'),
     fn () => DateCalls::phpZoned('2026-10-22 21:30:00', 'EEST'),
 ] as $refused) {
     try {
@@ -185,6 +185,8 @@ string(20) "2026-10-22T18:30:00Z"
 string(30) "2026-10-22T18:30:00+00:00[UTC]"
 string(20) "2026-10-22T18:30:00Z"
 string(34) "1969-12-31T23:59:59.500+00:00[UTC]"
+string(33) "2026-10-22T21:30:00+03:00[+03:00]"
+string(40) "2026-01-22T12:00:00+00:00[Europe/London]"
 string(39) "2026-10-22T21:30:00+03:00[Europe/Sofia]"
 string(46) "2026-10-22T21:30:00.123456+03:00[Europe/Sofia]"
 string(20) "2026-10-22T18:30:00Z"
@@ -197,8 +199,7 @@ ValueError: `Date` takes a day of the calendar, and 2026-0-1 is not one.
 ValueError: `Date.parse` reads an ISO-8601 day, such as "2026-10-22", and "2026-1-1" is not.
 ValueError: `Instant.parse` reads ISO-8601 with an offset, such as "2026-10-22T18:30:00Z", and "yesterday" is not.
 ValueError: `Instant` takes a nanosecond from 0 to 999999999, and it is outside that range.
-ValueError: `TimeZone` takes a name from the time zone database, such as "Europe/Sofia", and "Nowhere/City" is not one. `TimeZone.tryOf` gives null for it instead.
+ValueError: `TimeZone` takes a name from the time zone database, such as "Europe/Sofia", or an offset from -18:00 to +18:00, such as "+03:00", and "Nowhere/City" is neither. `TimeZone.tryOf` gives null for it instead.
 ValueError: `DateTime.parse` reads ISO-8601 with an offset and a zone, such as "2026-10-22T21:30:00+03:00[Europe/Sofia]", and "2026-10-22T21:30:00+02:00[Europe/Sofia]" is not.
 ValueError: `Duration.parse` reads ISO-8601, such as "PT1H30M", and "one hour" is not.
-ValueError: `toDateTime` needs a zone such as "Europe/Sofia", and "+03:00" is an offset or an abbreviation, not a zone of the time zone database. `toInstant()` keeps the instant without a zone.
-ValueError: `toDateTime` needs a zone such as "Europe/Sofia", and "EEST" is an offset or an abbreviation, not a zone of the time zone database. `toInstant()` keeps the instant without a zone.
+ValueError: `toDateTime` needs a zone such as "Europe/Sofia" or an offset such as "+03:00", and "EEST" is an abbreviation, not a zone of the time zone database. `toInstant()` keeps the instant without a zone.

@@ -1,5 +1,5 @@
 --TEST--
-PHP# auto-properties are public properties with their set visibility and initial values
+PHP# auto-properties are public properties with their set visibility and initial values, and a set that reaches its namespace runs as PHP's public set, which reflection writes
 --FILE--
 <?php
 
@@ -28,13 +28,18 @@ foreach (['views', 'id', 'score'] as $name) {
         echo $e->getMessage(), "\n";
     }
 }
+
+// A `set` reaches its namespace, which the checker holds it to, and runs as PHP's public set, so reflection writes it.
+(new ReflectionProperty(Demo\Profile::class, 'name'))->setValue($profile, 'grace');
+echo $profile->name, "\n";
 ?>
 --EXPECT--
 public private(set) int views = 0
 public string name = 'guest'
 public readonly int id
-public protected(set) float score
+public private(set) float score
 2 ada 7 0.5
 Cannot modify private(set) property Demo\Profile::$views from global scope
 Cannot modify readonly property Demo\Profile::$id
-Cannot modify protected(set) property Demo\Profile::$score from global scope
+Cannot modify private(set) property Demo\Profile::$score from global scope
+grace

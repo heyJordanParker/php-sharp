@@ -13,4 +13,8 @@ public class Errors
         }
         return 1;
     }
+
+    public static Result<int, never> one() => Result.Ok(1);
+
+    public static int ignored(never value) => 1;
 }

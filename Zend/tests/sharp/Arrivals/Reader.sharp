@@ -65,7 +65,10 @@ public class Reader
 
     public string? late(Source source) => source.madeBySelf().get("status");
 
-    public string? ofClass(Source source) => Class.of(source).made().get("status");
+    // Only the run-time class is known, so its static runs through reflection, spec section 25.
+    public string? ofClass(Source source)
+        => (Class.of(source).methods().first(method => method.name == "made").invoke(null, []) as Map<string, string>)
+            ?.get("status");
 
     public string? maybe(Source? source) => source?.status().get("status");
 

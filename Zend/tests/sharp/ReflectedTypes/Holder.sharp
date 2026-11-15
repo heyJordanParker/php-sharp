@@ -1,0 +1,20 @@
+namespace ReflectedTypes;
+
+// One member of each type the Story names, as a property and as a method's parameters and result.
+public class Holder
+{
+    public Class<Tone> toneClass { get; set; } = typeof(Tone);
+    public Function<int(string, Box<int>)>? reader { get; set; } = null;
+    public Box<Tone>|Tone mixed { get; set; } = Tone.Warm;
+    public List<Box<Tone>?> boxes { get; set; } = [];
+    public [string method, int count] pair { get; set; } = ["a", 1];
+
+    public Function<int(string, Box<int>)>? swap(
+        Class<Tone> toneClass,
+        Box<Tone>|Tone mixed,
+        List<Box<Tone>?> boxes,
+        [string method, int count] pair
+    ) => null;
+
+    public void join(Mark & Labeled joined) { }
+}

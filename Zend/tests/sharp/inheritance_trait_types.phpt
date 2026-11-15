@@ -1,5 +1,5 @@
 --TEST--
-A plain PHP trait is a PHP# type: is, a parameter from plain PHP and a List element hold any object whose class, a class it extends or a trait it uses uses the trait
+A plain PHP trait is a PHP# type: is, as, a match arm, a parameter from plain PHP and a List element hold any object whose class, a class it extends or a trait it uses uses the trait, a value of an open class's included
 --FILE--
 <?php
 
@@ -27,6 +27,19 @@ final class Wrapped
     use Wraps;
 }
 
+class Book extends Lib\Document
+{
+    use Lib\Copies;
+}
+
+final class Novel extends Book
+{
+}
+
+final class Memo extends Lib\Document
+{
+}
+
 class Greeting implements Demo\Greets
 {
     public function hi(): string
@@ -48,6 +61,11 @@ foreach ([new Demo\Draft(), Demo\Shade::Light, new LegacyCopy(), new SubCopy(), 
 
 echo Seeder::seed(new SubCopy()), "\n";
 echo Seeder::count([new LegacyCopy(), new Wrapped()]), "\n";
+
+// `is`, `as` and a `match` arm test a value of an open class by the traits of its class and its parents.
+foreach ([new Book(), new Novel(), new Memo()] as $document) {
+    echo get_class($document), ': ', var_export(Seeder::held($document), true), ' ', var_export(Seeder::cast($document), true), ' ', Seeder::kind($document), "\n";
+}
 // A struct's and an event's headers name the trait, as a class's does.
 echo (new Demo\Seal(3))->copy(), "\n", (new Demo\Copied(4))->copy(), "\n";
 var_dump(Seeder::owns(new Demo\Seal(3)), Seeder::owns(new Demo\Copied(4)));
@@ -77,6 +95,9 @@ stdClass: false
 'Lib\\Copies': false
 copied SubCopy
 2
+Book: true 'copied Book' copies
+Novel: true 'copied Novel' copies
+Memo: false NULL plain
 copied Demo\Seal
 copied Demo\Copied
 bool(true)

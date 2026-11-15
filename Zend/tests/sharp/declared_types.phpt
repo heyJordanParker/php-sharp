@@ -1,5 +1,5 @@
 --TEST--
-Class<T>.properties() gives each instance property and field of a class, its own first and then those it inherits, with its name, the class value of its type, whether it is nullable and its attributes, every one of them for the root bound Object, and Class<T>.typeArguments() gives a type's type arguments as class values
+Class<T>.properties() gives each instance property and field of a class, its own first and then those it inherits, with its name, the class value of its whole declared type, `?` included, and its attributes, every one of them for the root bound Object, and Class<T>.typeArguments() gives a type's type arguments as class values
 --FILE--
 <?php
 require __DIR__ . '/harness/Attributes.inc';
@@ -13,10 +13,10 @@ foreach ($report->describe() as $line) {
 var_dump($report->compare());
 ?>
 --EXPECT--
-tags: List<string> nullable=false arguments=[string] attributes=[Field()]
-stock: int nullable=true arguments=[] attributes=[Field(units)]
-related: Map<string, Declared.Product> nullable=false arguments=[string, Declared.Product] attributes=[]
-id: int nullable=false arguments=[] attributes=[]
+tags: List<string> arguments=[string] attributes=[Field()]
+stock: int? arguments=[] attributes=[Field(units)]
+related: Map<string, Declared.Product> arguments=[string, Declared.Product] attributes=[]
+id: int arguments=[] attributes=[]
 array(7) {
   [0]=>
   bool(true)

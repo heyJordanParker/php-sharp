@@ -1,0 +1,6 @@
+namespace IterableKinds;
+
+public class Stream : Feed<int>
+{
+    public Iterable<int> elements() => [1, 2, 3];
+}

@@ -112,7 +112,8 @@ $files = [
         SHARP,
 ];
 // typeof(X).attributes<T>() is a member of a class value, which the library declares with the types it gives.
-foreach (['ClassMembers', 'Visibility', 'Property', 'Method', 'Parameter', 'ListMembers', 'Int'] as $class) {
+$members = ['ClassMembers', 'Visibility', 'Property', 'Method', 'Parameter', 'Constructor', 'EnumCase', 'TupleElement', 'TypeKind'];
+foreach ([...$members, 'ListMembers', 'Int'] as $class) {
     $files["$library/library/Sharp/$class.sharp"] = file_get_contents(__DIR__ . "/../../../sharp/composer/library/Sharp/$class.sharp");
 }
 $root = compile_project('extern-attributes', $files);

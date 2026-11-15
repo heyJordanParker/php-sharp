@@ -60,6 +60,13 @@ Observed\Tally::last()->count = 9;
 // A static's initial value ran no observer, and a later write runs it.
 echo "static\n";
 echo Observed\Account::reopen(), "\n";
+
+// A `return` in `willSet` ends `willSet`, from inside a loop or after `??`, and the write still runs, as in Swift.
+echo "return\n";
+$account->limit = 2;
+$account->limit = 5;
+echo $account->limit, "\n";
+var_dump(Observed\Account::relabel(null), Observed\Account::relabel('x'));
 ?>
 --EXPECT--
 constructor [  start  ] [  ]
@@ -95,3 +102,12 @@ count 9
 static
 opened 3
 3
+return
+step 2
+limit is 2
+limit 5
+limit is 5
+5
+label x
+NULL
+string(1) "x"

@@ -44,7 +44,7 @@ try {
     echo $error->getMessage(), "\n";
 }
 
-// An interface states `size` with `set`, and a write through the interface reaches the class's property.
+// An interface states `size` get-only, since a `set` reaches its own namespace at most, and the class gives it `set`.
 echo Overrides\Box::grow(new Overrides\Box()), ' ';
 $size = new ReflectionProperty(Overrides\Sized::class, 'size');
 echo $size->hasHook(PropertyHookType::Set) ? 'set' : 'no set', "\n";
@@ -123,7 +123,7 @@ untyped, 1 Override
 Ada named
 Bo
 Cannot modify private(set) property Overrides\Account::$name from global scope
-2 set
+2 no set
 3 READY 7
 Cannot modify private(set) property Overrides\Registry::$size from global scope
 1 no code

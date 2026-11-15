@@ -88,6 +88,12 @@ function equals(mixed $value, mixed $other): bool {}
 
 function jsonEncode(mixed $value, int $flags, int $indent): string {}
 
+function jsonDecode(string $json): mixed {}
+
+function accessors(string $type, string $name): array {}
+
+function createLazy(string $type, callable $initialize): object {}
+
 function arrayOf(mixed $value, mixed $receiver = null): mixed {}
 
 function returned(mixed $result, object|string|null $implementer, string $method, string $types, string $target): mixed {}
@@ -98,13 +104,43 @@ function properties(string $type): array {}
 
 function methods(string $type): array {}
 
+function constructor(string $type): ?array {}
+
 function typeArguments(string $type): array {}
 
-function invoke(object $receiver, string $class, string $method, array $arguments): mixed {}
+function typeKind(string $type): string {}
 
-function read(object $receiver, string $class, string $property): mixed {}
+function isNullable(string $type): bool {}
 
-function write(object $receiver, string $class, string $property, mixed $value): void {}
+function nonNullable(string $type): string {}
+
+function typeParts(string $type): array {}
+
+function tupleNames(string $type): array {}
+
+function genericDefinition(string $type): ?string {}
+
+function typeParameters(string $type): array {}
+
+function baseType(string $type): ?string {}
+
+function interfaces(string $type): array {}
+
+function classFacts(string $type): array {}
+
+function enumBackingType(string $type): ?string {}
+
+function makeGenericType(string $type, array $arguments): string {}
+
+function enumCases(string $type): array {}
+
+function createInstance(string $type, array $arguments): object {}
+
+function invoke(?object $receiver, string $class, string $method, array $arguments, string $readOn): mixed {}
+
+function read(?object $receiver, string $class, string $property): mixed {}
+
+function write(?object $receiver, string $class, string $property, mixed $value, bool $beforeLoad = false): void {}
 
 function readModule(string $path): void {}
 

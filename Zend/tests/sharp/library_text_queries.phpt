@@ -27,7 +27,7 @@ echo TextQueries::titled("hello wORLD o'neil"), "\n";
 echo TextQueries::replaced('banana', 'a', 'o', 1), ' ', TextQueries::replaced('banana', 'a', 'o', 0), ' ';
 echo TextQueries::replaced('banana', 'a', 'o', 5), ' ', TextQueries::replaced('banana', 'a', 'o', null), ' ', TextQueries::replacedAll('banana', 'an', '_'), "\n";
 refused(fn () => TextQueries::replaced('banana', 'a', 'o', -1));
-refused(fn () => TextQueries::replaced('banana', '', 'o', 1));
+echo TextQueries::replaced('ab', '', '-', 1), ' ', TextQueries::replaced('ab', '', '-', 2), ' ', TextQueries::replaced('ab', '', '-', 9), "\n";
 echo TextQueries::character(65), ' ', TextQueries::character(0x1F600), "\n";
 foreach ([0xD800, -1, 0x110000] as $codePoint) {
     refused(fn () => TextQueries::character($codePoint));
@@ -50,7 +50,7 @@ refused(fn () => TextQueries::composed("\xff"));
 Hello World O'neil
 bonana banana bonono bonono b__a
 ValueError: `replace` takes a limit of 0 or more, and it is negative.
-ValueError: `replace` needs text to replace, and it is empty.
+-ab -a-b -a-b-
 A 😀
 ValueError: `toCharacter` needs a Unicode scalar value, from 0 to 0x10FFFF and no surrogate, and the value is not one.
 ValueError: `toCharacter` needs a Unicode scalar value, from 0 to 0x10FFFF and no surrogate, and the value is not one.

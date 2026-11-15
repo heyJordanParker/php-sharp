@@ -10,5 +10,5 @@ public class Badge
 
     public static Class<Badge> own() => typeof(Self);
 
-    public static string ownTag() => typeof(Self).tag();
+    public static string ownTag() => Self.tag();
 }

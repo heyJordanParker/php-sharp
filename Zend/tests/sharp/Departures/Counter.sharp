@@ -2,7 +2,7 @@ namespace Departures;
 
 public class Counter
 {
-    public int count { get; protected set; } = 0;
+    public int count { get; private set; } = 0;
 
     public string result { get => this.count > 0 ? "counted" : "empty"; }
 }

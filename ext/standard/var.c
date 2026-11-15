@@ -1307,12 +1307,20 @@ again:
 					size_t serialized_length;
 
 					if (ce->serialize(struc, &serialized_data, &serialized_length, (zend_serialize_data *)var_hash) == SUCCESS) {
+						/* PHP#: an object of a generic PHP# class keeps its type arguments ahead of the data its
+						 * `serialize` writes, as the entry the O: format keeps after its properties, spec section 11. */
+						const sharp_type *type_arguments = sharp_type_arguments(Z_OBJ_P(struc));
+						smart_str kept = {0};
+						if (type_arguments) {
+							php_var_serialize_type_arguments(&kept, type_arguments->text);
+						}
+						size_t kept_length = kept.s ? ZSTR_LEN(kept.s) : 0;
 						char b1[32], b2[32];
 						char *s1 = zend_print_long_to_buf(b1 + sizeof(b1) - 1, ZSTR_LEN(Z_OBJCE_P(struc)->name));
 						size_t l1 = b1 + sizeof(b1) - 1 - s1;
-						char *s2 = zend_print_long_to_buf(b2 + sizeof(b2) - 1, serialized_length);
+						char *s2 = zend_print_long_to_buf(b2 + sizeof(b2) - 1, kept_length + serialized_length);
 						size_t l2 = b2 + sizeof(b2) - 1 - s2;
-						char *res = smart_str_extend(buf, 2 + l1 + 2 + ZSTR_LEN(Z_OBJCE_P(struc)->name) + 2 + l2 + 2 + serialized_length + 1);
+						char *res = smart_str_extend(buf, 2 + l1 + 2 + ZSTR_LEN(Z_OBJCE_P(struc)->name) + 2 + l2 + 2 + kept_length + serialized_length + 1);
 						res = zend_mempcpy(res, "C:", 2);
 						res = zend_mempcpy(res, s1, l1);
 						res = zend_mempcpy(res, ":\"", 2);
@@ -1320,6 +1328,10 @@ again:
 						res = zend_mempcpy(res, "\":", 2);
 						res = zend_mempcpy(res, s2, l2);
 						res = zend_mempcpy(res, ":{", 2);
+						if (kept.s) {
+							res = zend_mempcpy(res, ZSTR_VAL(kept.s), kept_length);
+							smart_str_free(&kept);
+						}
 						memcpy(res, (char *) serialized_data, serialized_length);
 						res[serialized_length] = '}';
 					} else {

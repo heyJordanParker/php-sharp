@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls every member of Sharp.Time.TimeZone: names lists the time zone database, utc and tryOf name a zone, an older name of the database included, tryOf gives null for a name the database lacks, an offset, an abbreviation and a name in another case, the constructor's ValueError for one names tryOf, and offsetAt follows a zone's clock changes
+A PHP# class calls every member of Sharp.Time.TimeZone: names lists the time zone database, utc and tryOf name a zone, an older name of the database included, a fixed offset from -18:00 to +18:00 names a zone, as Java's ZoneId.of and Kotlin's TimeZone.of take one, tryOf gives null for a name the database lacks, an offset outside the range or written another way, an abbreviation and a name in another case, the constructor's ValueError for one names tryOf, and offsetAt follows a zone's clock changes and gives a fixed offset's own
 --FILE--
 <?php
 foreach (['Int', 'Math', 'Time/Duration', 'Time/Instant', 'Time/Date', 'Time/TimeZone', 'ListMembers', 'MapMembers', 'SetMembers'] as $file) {
@@ -12,13 +12,15 @@ use Demo\TimeZoneCalls;
 $names = TimeZoneCalls::names();
 var_dump(array_is_list($names), $names[0], in_array('Europe/Sofia', $names, true), in_array('UTC', $names, true));
 var_dump(TimeZoneCalls::utc(), TimeZoneCalls::named('Europe/Sofia'), TimeZoneCalls::named('Nowhere/City'), TimeZoneCalls::named(''));
-var_dump(TimeZoneCalls::named('Europe/Kiev'), TimeZoneCalls::named('+03:00'), TimeZoneCalls::named('EEST'), TimeZoneCalls::named('europe/sofia'), TimeZoneCalls::named('utc'));
+var_dump(TimeZoneCalls::named('Europe/Kiev'), TimeZoneCalls::named('EEST'), TimeZoneCalls::named('europe/sofia'), TimeZoneCalls::named('utc'));
+var_dump(TimeZoneCalls::named('+03:00'), TimeZoneCalls::named('-18:00'), TimeZoneCalls::named('+18:01'), TimeZoneCalls::named('+3'), TimeZoneCalls::named('+0300'));
 try {
-    TimeZoneCalls::offsetMinutes('+03:00', '2026-01-01T00:00:00Z');
+    TimeZoneCalls::offsetMinutes('+19:00', '2026-01-01T00:00:00Z');
 } catch (ValueError $error) {
     echo get_class($error), ': ', $error->getMessage(), "\n";
 }
 var_dump(TimeZoneCalls::offsetMinutes('Europe/Sofia', '2026-07-01T00:00:00Z'), TimeZoneCalls::offsetMinutes('Europe/Sofia', '2026-12-01T00:00:00Z'), TimeZoneCalls::offsetMinutes('Asia/Kathmandu', '2026-01-01T00:00:00Z'), TimeZoneCalls::offsetMinutes('UTC', '2026-01-01T00:00:00Z'));
+var_dump(TimeZoneCalls::offsetMinutes('+03:00', '2026-07-01T00:00:00Z'), TimeZoneCalls::offsetMinutes('-05:30', '2026-01-01T00:00:00Z'));
 ?>
 --EXPECT--
 bool(true)
@@ -33,9 +35,15 @@ string(11) "Europe/Kiev"
 NULL
 NULL
 NULL
+string(6) "+03:00"
+string(6) "-18:00"
 NULL
-ValueError: `TimeZone` takes a name from the time zone database, such as "Europe/Sofia", and "+03:00" is not one. `TimeZone.tryOf` gives null for it instead.
+NULL
+NULL
+ValueError: `TimeZone` takes a name from the time zone database, such as "Europe/Sofia", or an offset from -18:00 to +18:00, such as "+03:00", and "+19:00" is neither. `TimeZone.tryOf` gives null for it instead.
 int(180)
 int(120)
 int(345)
 int(0)
+int(180)
+int(-330)

@@ -6,9 +6,9 @@ class Order extends Model
 {
     #[\Override] protected $table = "orders";
     #[\Override] protected $fillable = ["number", "total"];
-    #[\Override] protected $with = ["customer"];
+    #[\Override] public $with = ["customer"];
     #[\Override] public $timestamps = false;
-    #[\Override] protected int $perPage = 20;
+    #[\Override] public int $perPage = 20;
 
     public function tableName(): string
     {
@@ -18,5 +18,11 @@ class Order extends Model
     public function pageSize(): int
     {
         return $this->perPage;
+    }
+
+    #[\Override]
+    public function labelled(string ...$parts): string
+    {
+        return \count($parts) . ' parts';
     }
 }

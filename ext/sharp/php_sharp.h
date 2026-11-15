@@ -194,8 +194,12 @@ typedef enum {
 	SHARP_TYPE_INTERSECTION,
 	/* `Function<R(P1, P2)>`: the return type, then each parameter type. */
 	SHARP_TYPE_FUNCTION,
-	/* `[A, B]`, spec section 30: each element type, in order. The checker keeps the element names. */
+	/* `[A, B]`, spec section 30: each element type, in order. The checker keeps the element names, and only a text
+	 * reflection reads writes them, `[string method, int count]`. */
 	SHARP_TYPE_TUPLE,
+	/* A type parameter as reflection reads it, spec section 25: its name and its bound, `TItem : App.Mark`. The bound
+	 * is the one member, and the name is its class_name, which is its class value, so `name()` gives `TItem`. */
+	SHARP_TYPE_PARAMETER,
 } sharp_type_kind;
 
 /* The built-in type a SHARP_TYPE_NAMED type names, so a check of a value reads no text. */
@@ -222,7 +226,8 @@ typedef enum {
 typedef struct _sharp_type sharp_type;
 struct _sharp_type {
 	zend_string *text;
-	/* The class a SHARP_TYPE_NAMED names, as PHP writes it, `App\Order`. NULL for a built-in type. */
+	/* The class a SHARP_TYPE_NAMED names, as PHP writes it, `App\Order`, or a SHARP_TYPE_PARAMETER's name. NULL for a
+	 * built-in type. */
 	zend_string *class_name;
 	sharp_type_kind kind;
 	sharp_built_in built_in;
@@ -301,6 +306,11 @@ bool sharp_type_accepts(const sharp_type *type, zval *value, sharp_type_problems
  * int is never a `float`, as `is float` decides. A NULL list, which ZEND_SHARP_TYPE_ARGS spells for a lambda bound to an
  * object of another class than the one it is written in, throws an Error. */
 bool sharp_type_list_holds(const sharp_type *list, const zval *value);
+
+/* The class with type arguments whose class value is `value`, as sharp_type_list_class_value gives it, or NULL for any
+ * other string. Such a class value is the interned class name sharp_class_values knows it by, so its text is the bare
+ * class name, and it equals and hashes as its whole type, spec section 25. */
+const sharp_type *sharp_class_value_type(const zend_string *value);
 
 /* The class value of the one type of `list`, as a PHP# `typeof` gives it, interned: the class name as PHP writes it, or
  * the type text of a type that is no class. A class with type arguments gives its own interned class name, which

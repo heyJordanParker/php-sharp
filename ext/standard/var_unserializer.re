@@ -892,6 +892,31 @@ static inline int object_custom(UNSERIALIZE_PARAMETER, zend_class_entry *ce, boo
 		return 0;
 	}
 
+	/* PHP#: serialize writes an object's type arguments ahead of the data of its `serialize`, as the entry under
+	 * sharp_type_arguments_key, so `unserialize` gets the data alone and the object gets them back. */
+	zval type_arguments;
+	ZVAL_UNDEF(&type_arguments);
+	const unsigned char *data = *p;
+	zend_long data_length = datalen;
+	if (!keep_payload) {
+		char prefix[32];
+		int prefix_length = snprintf(prefix, sizeof(prefix), "s:%zu:\"", ZSTR_LEN(sharp_type_arguments_key));
+		size_t key_length = prefix_length + ZSTR_LEN(sharp_type_arguments_key) + 2;
+		if ((size_t) datalen > key_length
+			&& memcmp(data, prefix, prefix_length) == 0
+			&& memcmp(data + prefix_length, ZSTR_VAL(sharp_type_arguments_key), ZSTR_LEN(sharp_type_arguments_key)) == 0
+			&& memcmp(data + key_length - 2, "\";", 2) == 0) {
+			const unsigned char *text = data + key_length;
+			if (!php_var_unserialize_internal(&type_arguments, &text, data + datalen, NULL)
+				|| Z_TYPE(type_arguments) != IS_STRING) {
+				zval_ptr_dtor(&type_arguments);
+				return 0;
+			}
+			data_length = datalen - (text - data);
+			data = text;
+		}
+	}
+
 	if (keep_payload) {
 		/* The class was not resolved (see php_var_unserialize_set_incomplete_classes_only()):
 		 * keep the payload verbatim, so that the object serializes back to the same bytes. */
@@ -906,8 +931,19 @@ static inline int object_custom(UNSERIALIZE_PARAMETER, zend_class_entry *ce, boo
 	} else if (ce->unserialize == NULL) {
 		zend_error(E_WARNING, "Class %s has no unserializer", ZSTR_VAL(ce->name));
 		object_init_ex(rval, ce);
-	} else if (ce->unserialize(rval, ce, (const unsigned char*)*p, datalen, (zend_unserialize_data *)var_hash) != SUCCESS) {
+	} else if (ce->unserialize(rval, ce, data, data_length, (zend_unserialize_data *)var_hash) != SUCCESS) {
+		zval_ptr_dtor(&type_arguments);
 		return 0;
+	}
+
+	if (Z_TYPE(type_arguments) != IS_UNDEF) {
+		int filled = Z_TYPE_P(rval) == IS_OBJECT
+			&& sharp_type_arguments_unserialize(Z_OBJ_P(rval), &type_arguments, unserialize_type_argument_class, var_hash) == SUCCESS
+			&& sharp_object_properties_accept(Z_OBJ_P(rval));
+		zval_ptr_dtor(&type_arguments);
+		if (!filled) {
+			return 0;
+		}
 	}
 
 	if (ZEND_HAS_OOM()) {

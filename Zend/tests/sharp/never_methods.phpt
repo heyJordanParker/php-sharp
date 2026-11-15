@@ -1,7 +1,9 @@
 --TEST--
-PHP# a never method throws to its caller, and is PHP's never to plain PHP
+PHP# a never method throws to its caller, and is PHP's never to plain PHP, and never is a whole type: a type argument of a result that cannot fail, and a parameter's type, which is PHP's null
 --FILE--
 <?php
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Error.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Result.sharp';
 require __DIR__ . '/harness/fixture.inc';
 fixture('Nevers');
 
@@ -15,6 +17,9 @@ foreach ([fn () => Nevers\Errors::named(null), fn () => Nevers\Errors::counted(t
     }
 }
 echo (new ReflectionMethod(Nevers\Errors::class, 'fail'))->getReturnType(), "\n";
+$one = Nevers\Errors::one();
+echo $one::class, '<', implode(', ', (new ReflectionObject($one))->getTypeArguments()), ">\n";
+echo (new ReflectionMethod(Nevers\Errors::class, 'ignored'))->getParameters()[0]->getType(), "\n";
 ?>
 --EXPECT--
 ada
@@ -22,3 +27,5 @@ ada
 name is required
 bad count
 never
+Sharp\Result\Ok<int, never>
+null

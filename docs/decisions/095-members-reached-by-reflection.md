@@ -2,6 +2,8 @@
 
 Jordan's ruling of 11-13. Spec section 5's too-wide warning skipped any member with an attribute. It now skips only a member whose attribute says a framework reaches it by reflection.
 
+0.6.13 renamed the mark `[DynamicallyAccessed]`, after .NET's `[DynamicallyAccessedMembers]`, and made too wide a compile error in an application. A marked attribute on a class now covers every public member of the class, and the mark on a member is a compile error. The decision below still holds under the new name.
+
 ## Decision
 
 `[ReachedByReflection]` from `Sharp` marks an attribute class whose attribute a framework reads to reach the member it marks by reflection, as a router reads `[Route]`. A public member that such an attribute marks never warns that it is too wide, since the checker never sees the framework's use. An `[Export]` method stays out of the warning on its own rule, since plain PHP calls it through the global function it declares ([decision 92](092-export.md)), which isn't reflection, so `Export` takes no mark. Any other attribute, as PHP's `[Deprecated]`, `[Import]` or `[Key]`, says nothing about who uses the member, so the member warns as one without an attribute does. A plain PHP attribute class takes the mark as `#[\Sharp\ReachedByReflection]`.

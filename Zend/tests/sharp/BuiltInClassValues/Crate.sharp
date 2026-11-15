@@ -1,0 +1,6 @@
+namespace BuiltInClassValues;
+
+public class Crate<TItem>
+{
+    public Crate(public TItem item { get; }) { }
+}

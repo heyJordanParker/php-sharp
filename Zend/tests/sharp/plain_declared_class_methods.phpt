@@ -12,7 +12,7 @@ foreach (App\Linking\Report::describeMethods() as $line) {
 ?>
 --EXPECT--
 parse(): App.Linking.Chain
-tryParse(): App.Linking.Chain
+tryParse(): App.Linking.Chain?
 copy(): App.Linking.Chain
 fail(): never
 maker(): Closure

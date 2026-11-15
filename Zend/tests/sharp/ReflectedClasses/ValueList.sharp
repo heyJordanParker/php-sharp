@@ -1,0 +1,8 @@
+namespace ReflectedClasses;
+
+public abstract class ValueList<T> : Labeled<List<T>>
+{
+    public static string which() => typeof(Self).name();
+
+    public string label() => "list";
+}

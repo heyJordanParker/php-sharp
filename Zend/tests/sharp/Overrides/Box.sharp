@@ -4,9 +4,9 @@ public class Box : Sized
 {
     public int size { get; set; } = 1;
 
-    public static int grow(Sized sized)
+    public static int grow(Box box)
     {
-        sized.size = sized.size * 2;
-        return sized.size;
+        box.size = box.size * 2;
+        return box.size;
     }
 }

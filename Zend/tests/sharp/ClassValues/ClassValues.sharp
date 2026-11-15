@@ -6,11 +6,16 @@ public class ClassValues
 {
     private Class<Badge> kept = typeof(GoldBadge);
 
-    public string keptTag() => this.kept.tag();
+    public string keptTag() => ClassValues.tag(this.kept);
 
     public static string of(Badge badge) => Class.of(badge);
 
-    public static string directTag(Badge badge) => Class.of(badge).tag();
+    public static string directTag(Badge badge) => ClassValues.tag(Class.of(badge));
+
+    // Only the run-time class is known, so its static runs through reflection, as a class value calls no static, spec
+    // section 25.
+    private static string tag(Class<Badge> type)
+        => type.methods().first(method => method.name == "tag").invoke(null, []) as string ?? "";
 
     public static List<Any> types() => [typeof(int), typeof(List<Badge>), typeof(Map<string, int>), typeof(Set<int>)];
 
@@ -41,7 +46,7 @@ public class ClassValues
     public static string tagOf(Badge badge)
     {
         const type = Class.of(badge);
-        return type.tag();
+        return ClassValues.tag(type);
     }
 
     public static Badge made() => Factory.make(typeof(GoldBadge));

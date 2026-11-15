@@ -25,7 +25,7 @@ var_dump($labels(new ReflectionProperty($class, 'id')), $labels($constructor->ge
 var_dump($labels((new ReflectionProperty($class, 'stock'))->getHook(PropertyHookType::Get)));
 var_dump($labels(new ReflectionMethod($class, 'run')), $labels((new ReflectionMethod($class, 'run'))->getParameters()[0]));
 $size = new ReflectionProperty(AttributeTargets\Sized::class, 'size');
-var_dump($labels($size->getHook(PropertyHookType::Get)), $labels($size->getHook(PropertyHookType::Set)->getParameters()[0]));
+var_dump($labels($size->getHook(PropertyHookType::Get)));
 // The hooks that carry the attributes read and write the storage.
 $ledger = new AttributeTargets\Ledger(7, 2);
 $ledger->total = 5;
@@ -40,6 +40,11 @@ try {
 } catch (Error $error) {
     echo $error->getMessage(), "\n";
 }
+// An observer's attributes go on the `set` it runs inside, a static's on its hidden method, and the observers run.
+var_dump($labels((new ReflectionProperty($class, 'balance'))->getHook(PropertyHookType::Set)));
+var_dump($labels(new ReflectionMethod($class, 'days#set')));
+$ledger->balance = 3;
+var_dump($ledger->balance, $ledger->writes, AttributeTargets\Ledger::date(4), AttributeTargets\Ledger::ticked());
 // A Map's index writes and `remove` reach the storage through a hook an attribute makes.
 var_dump((new AttributeTargets\Tally())->count());
 // An event's and a data case's parameters declare properties, and each list goes on the part its target names.
@@ -68,7 +73,6 @@ string(7) "stocked"
 string(3) "run"
 string(5) "times"
 string(8) "measured"
-string(8) "new size"
 int(5)
 string(4) "cash"
 int(7)
@@ -80,6 +84,12 @@ bool(false)
 bool(true)
 string(2) "L7"
 Cannot modify protected(set) property AttributeTargets\Ledger::$code from global scope
+string(23) "balanced,checked,logged"
+string(5) "dated"
+int(3)
+int(2)
+int(4)
+int(1)
 int(11)
 string(0) ""
 string(5) "order"

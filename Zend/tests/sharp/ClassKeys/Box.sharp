@@ -1,0 +1,5 @@
+namespace ClassKeys;
+
+public class Box<TItem>
+{
+}

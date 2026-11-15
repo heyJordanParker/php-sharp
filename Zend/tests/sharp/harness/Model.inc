@@ -42,4 +42,9 @@ abstract class Model
     {
         $this->perPage = $perPage;
     }
+
+    public function labelled(string ...$parts): string
+    {
+        return implode(',', $parts);
+    }
 }

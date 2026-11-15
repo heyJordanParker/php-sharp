@@ -1,5 +1,5 @@
 --TEST--
-A PHP# member reaches plain PHP as plain PHP's own does: a Map property overriding a plain parent's array property, typed or not, keeps the parent's storage, the PHP array the parent reads, a Map method overriding a plain parent's array method keeps the parent's PHP signature, so its class loads and gives the PHP array through the parent and the child, while PHP# reads the Map, and reflection gives a computed property one get hook and a property with a protected set none
+A PHP# member reaches plain PHP as plain PHP's own does: a Map property overriding a plain parent's array property, typed or not, keeps the parent's storage, the PHP array the parent reads, a Map method overriding a plain parent's array method keeps the parent's PHP signature, so its class loads and gives the PHP array through the parent and the child, while PHP# reads the Map, and reflection gives a computed property one get hook and a property with a private set none
 --FILE--
 <?php
 require __DIR__ . '/harness/Caster.inc';

@@ -173,21 +173,24 @@ public class Repository
     public static int countedThrough<T>(int count)
     {
         Counter<T>.count = count;
-        const type = typeof(Counter<T>);
-        return type.own() + type.count;
+        return Counter<T>.own() + Counter<T>.count;
     }
 
     public static int sourceCounted() => Repository.countedThrough<Source<Order>>(41);
 
-    // A write through a class value writes the static field of the type arguments the value carries.
+    // A write through the class's name writes the static field of the type arguments it names.
     public static List<int> writtenThrough<T>(T item)
     {
-        const type = typeof(Counter<Map<string, T>>);
-        type.count = 5;
-        type.count += 2;
-        type.count++;
-        type.items.add(["k": item]);
-        return [type.count, Counter<Map<string, T>>.count, Counter<Map<string, T>>.items.count(), Counter<Map<int, T>>.count];
+        Counter<Map<string, T>>.count = 5;
+        Counter<Map<string, T>>.count += 2;
+        Counter<Map<string, T>>.count++;
+        Counter<Map<string, T>>.items.add(["k": item]);
+        return [
+            Counter<Map<string, T>>.count,
+            Counter<Map<string, T>>.count,
+            Counter<Map<string, T>>.items.count(),
+            Counter<Map<int, T>>.count,
+        ];
     }
 
     public static List<int> orderWrittenThrough(Order order) => Repository.writtenThrough<Order>(order);
@@ -210,12 +213,15 @@ public class Repository
 
     public static List<string> sharedTallied() => Repository.tallied<SharedOrder>();
 
-    // `Tallies : Tally<Order>` and a class value of `Tally<SharedOrder>` reach the statics of their type arguments.
+    // `Tallies : Tally<Order>` and `Tally<SharedOrder>` reach the statics of their type arguments.
     public static List<string> talliedThrough()
     {
         Tallies.doubled = 50;
-        const type = typeof(Tally<SharedOrder>);
-        return [`${Tally<Order>.doubled} ${Tallies.watched}`, type.label, `${type.doubled}`];
+        return [
+            `${Tally<Order>.doubled} ${Tallies.watched}`,
+            Tally<SharedOrder>.label,
+            `${Tally<SharedOrder>.doubled}`,
+        ];
     }
 
     public static int fragile() => Fragile<Order>.count;

@@ -6117,11 +6117,58 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .php       Property [ public Sharp\Set $tags ]
   .php       Property [ public Sharp\Set $states { get; set; } ]
   .php       Property [ private Sharp\Set $sizes ]
-Store/Order: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+Store/Order: different opcodes and lines in 4 op arrays, same signatures in 1 classes
+  .sharp      ; <file>:1-25
   .sharp L0005 0000 DECLARE_CLASS string("Store\\Order") string("lib\\model")
+  .sharp L0025 0001 RETURN int(1)
+  .sharp      ; (lines=8, args=0, vars=1, tmps=2)
+  .sharp      ; <file>:23-23
+  .sharp L0023 0000 CV0($parts) = RECV_VARIADIC 1
+  .sharp L0023 0001 T1 = COUNT CV0($parts)
+  .sharp L0023 0002 NOP
+  .sharp L0023 0003 T2 = FAST_CONCAT T1 string(" parts")
+  .sharp L0023 0004 VERIFY_RETURN_TYPE T2
+  .sharp L0023 0005 RETURN T2
+  .sharp L0023 0006 VERIFY_RETURN_TYPE
+  .sharp L0023 0007 RETURN null
+  .sharp      ; <file>:1-25
   .sharp 0000 DECLARE_CLASS_DELAYED string("Store\\Order") string("lib\\model")
+  .sharp      ; (lines=8, args=0, vars=1, tmps=2)
+  .sharp      ; <file>:23-23
+  .sharp 0002 NOP
+  .sharp 0003 T2 = FAST_CONCAT T1 string(" parts")
+  .sharp 0004 VERIFY_RETURN_TYPE T2
+  .sharp 0005 RETURN T2
+  .sharp 0006 VERIFY_RETURN_TYPE
+  .sharp 0007 RETURN null
+  .sharp      1: 0002 - 0003 (tmp/var)
+  .sharp      2: 0004 - 0005 (tmp/var)
+  .sharp   @@ <file> 5-24
+  .sharp       @@ <file> 23 - 23
+  .php        ; <file>:1-29
   .php   L0005 0000 DECLARE_CLASS string("store\\order") string("lib\\model")
+  .php   L0029 0001 RETURN int(1)
+  .php        ; (lines=7, args=0, vars=1, tmps=2)
+  .php        ; <file>:24-27
+  .php   L0024 0000 CV0($parts) = RECV_VARIADIC 1
+  .php   L0026 0001 T1 = COUNT CV0($parts)
+  .php   L0026 0002 T2 = CONCAT T1 string(" parts")
+  .php   L0026 0003 VERIFY_RETURN_TYPE T2
+  .php   L0026 0004 RETURN T2
+  .php   L0027 0005 VERIFY_RETURN_TYPE
+  .php   L0027 0006 RETURN null
+  .php        ; <file>:1-29
   .php   0000 DECLARE_CLASS_DELAYED string("store\\order") string("lib\\model")
+  .php        ; (lines=7, args=0, vars=1, tmps=2)
+  .php        ; <file>:24-27
+  .php   0002 T2 = CONCAT T1 string(" parts")
+  .php   0003 VERIFY_RETURN_TYPE T2
+  .php   0004 RETURN T2
+  .php   0005 VERIFY_RETURN_TYPE
+  .php   0006 RETURN null
+  .php        2: 0003 - 0004 (tmp/var)
+  .php     @@ <file> 5-28
+  .php         @@ <file> 24 - 27
 RushOrders/Order: different opcodes and lines in 2 op arrays, same signatures in 1 classes
   .sharp L0005 0000 DECLARE_CLASS string("Rush\\Order") string("lib\\model")
   .sharp 0000 DECLARE_CLASS_DELAYED string("Rush\\Order") string("lib\\model")
