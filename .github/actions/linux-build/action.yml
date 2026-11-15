@@ -1,0 +1,80 @@
+name: Build the engine in the sharp/docker image, beside Mago's target restore
+description: >-
+  Builds the engine sharp/bin/build --linux builds, through the ccache CACHE saves on master, while the Mago target and
+  Rust caches restore, as .github/actions/mago-cache explains. The restore downloads and unpacks the target and the build
+  compiles, so the two run at once, where one after the other they took 1.5 to 3.5 and 2 to 3 minutes of each job that
+  builds the engine. sharp/docker/run builds the image FROM ghcr.io's copies of the base images, which base-images.yml
+  makes, so a pull never meets an anonymous quota. The job sets BASE_IMAGE, GOLANG_IMAGE, and CC and CXX to ccache's.
+
+inputs:
+  save:
+    description: true in CACHE, the job of master's push run that saves the target and the ccache under its commit.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Pull the base images from ghcr.io
+      shell: bash
+      env:
+        TOKEN: ${{ github.token }}
+        ACTOR: ${{ github.actor }}
+      run: |
+        echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+        docker pull "$BASE_IMAGE"
+        docker pull "$GOLANG_IMAGE"
+    # The engine's build runs cargo for ext/sharp with the toolchain under sharp/build/rustup, so that cache comes first.
+    - name: Rust cache
+      uses: ./.github/actions/mago-cache
+      with:
+        rust: SHARP_LINUX
+        rust-paths: |
+          sharp/build/cargo
+          sharp/build/rustup
+    - name: ccache, saved under this commit
+      if: inputs.save == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: sharp/build/cache/ccache
+        key: SHARP_LINUX_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/Dockerfile') }}-${{ github.sha }}
+        restore-keys: SHARP_LINUX_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/Dockerfile') }}-
+    - name: ccache, saved by CACHE on master
+      if: inputs.save != 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: sharp/build/cache/ccache
+        key: SHARP_LINUX_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/Dockerfile') }}-${{ github.sha }}
+        restore-keys: SHARP_LINUX_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/Dockerfile') }}-
+    # The build writes sharp/build/linux-<arch> and the target restores into its mago folder, which the build keeps, as
+    # sharp/bin/build explains. The build's output goes to a file, so the step ends while it runs, and the last step
+    # prints it.
+    - name: Start the engine's build
+      shell: bash
+      run: |
+        (
+          set +e
+          sharp/docker/run ccache --zero-stats
+          sharp/bin/build --linux
+          echo $? > "$RUNNER_TEMP/engine-build.status"
+        ) > "$RUNNER_TEMP/engine-build.log" 2>&1 < /dev/null &
+        echo $! > "$RUNNER_TEMP/engine-build.pid"
+    - name: Mago cache
+      uses: ./.github/actions/mago-cache
+      with:
+        name: SHARP_LINUX
+        save: ${{ inputs.save }}
+    - name: Finish the engine's build
+      shell: bash
+      run: |
+        pid=$(< "$RUNNER_TEMP/engine-build.pid")
+        while kill -0 "$pid" 2> /dev/null; do
+          sleep 1
+        done
+        cat "$RUNNER_TEMP/engine-build.log"
+        if [[ ! -s $RUNNER_TEMP/engine-build.status ]]; then
+          echo "::error::The engine's build stopped before it ended, so it left no status."
+          exit 1
+        fi
+        sharp/docker/run ccache --show-stats
+        exit "$(< "$RUNNER_TEMP/engine-build.status")"

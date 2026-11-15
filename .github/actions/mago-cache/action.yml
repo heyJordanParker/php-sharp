@@ -15,14 +15,21 @@ description: >-
 
 inputs:
   name:
-    description: The target cache's name, one per job that builds Mago a way of its own, such as SHARP_LINUX.
-    required: true
+    description: >-
+      The target cache's name, one per job that builds Mago a way of its own, such as SHARP_LINUX. Without it, only the
+      Rust cache is restored.
+    required: false
+    default: ''
   rust:
-    description: The Rust cache's name, shared by the jobs that fetch the same toolchain and crates.
-    required: true
+    description: >-
+      The Rust cache's name, shared by the jobs that fetch the same toolchain and crates. Without it, only the target
+      cache is restored.
+    required: false
+    default: ''
   rust-paths:
     description: The folders that hold the job's Rust toolchain and crates, one per line.
-    required: true
+    required: false
+    default: ''
   save:
     description: true in the job that saves the target folder under its commit, on master.
     required: false
@@ -35,24 +42,39 @@ inputs:
 runs:
   using: composite
   steps:
-    # rustup's toolchains are binaries for the runner's architecture, so each architecture keeps its own.
+    # rustup's toolchains are binaries for the runner's architecture, so each architecture keeps its own. A change to
+    # the hashed files, as every release's version bump makes, restores the newest Rust cache of any hash, so rustup
+    # and cargo fetch only what changed, where the exact key alone left every job to fetch the toolchain and crates.
     - name: Rust cache, saved on master
-      if: runner.environment == 'github-hosted' && github.ref == 'refs/heads/master'
+      if: runner.environment == 'github-hosted' && inputs.rust != '' && github.ref == 'refs/heads/master'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ inputs.rust-paths }}
         key: ${{ inputs.rust }}_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
+        restore-keys: ${{ inputs.rust }}_RUST-${{ runner.arch }}-
     - name: Rust cache, restored only
-      if: runner.environment == 'github-hosted' && github.ref != 'refs/heads/master'
+      if: runner.environment == 'github-hosted' && inputs.rust != '' && github.ref != 'refs/heads/master'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ inputs.rust-paths }}
         key: ${{ inputs.rust }}_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
+        restore-keys: ${{ inputs.rust }}_RUST-${{ runner.arch }}-
+    # sharp/build/cargo is the CARGO_HOME of cargo in the sharp/docker image, so its config holds for every build of the
+    # target in the image. Without debug info a Mago test binary holds 142 MB where it held 235, so the target restores
+    # and links faster, and a panic still names its file and line. The jobs that share the target write the same
+    # config, so each reuses the others' builds.
+    - name: Build without debug info in the sharp/docker image
+      if: runner.environment == 'github-hosted' && contains(inputs.rust-paths, 'sharp/build/cargo')
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        mkdir -p sharp/build/cargo
+        printf '[profile.dev]\ndebug = false\n' > sharp/build/cargo/config.toml
     # The trailing dash matches only a commit's folder: a restore key that matches a key exactly restores that cache
     # before any newer one. A change to the hashed files misses the first restore key, as every Cargo.toml change
     # did, so the second restores the newest target of any hash, and cargo rebuilds only what the change reaches.
     - name: Mago cache, saved at the end of the job on master
-      if: runner.environment == 'github-hosted' && inputs.save == 'true' && github.ref == 'refs/heads/master'
+      if: runner.environment == 'github-hosted' && inputs.name != '' && inputs.save == 'true' && github.ref == 'refs/heads/master'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: sharp/build/*/mago
@@ -61,7 +83,7 @@ runs:
           ${{ inputs.name }}_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-
           ${{ inputs.name }}_MAGO-${{ runner.arch }}-
     - name: Mago cache, restored only
-      if: runner.environment == 'github-hosted' && (inputs.save != 'true' || github.ref != 'refs/heads/master')
+      if: runner.environment == 'github-hosted' && inputs.name != '' && (inputs.save != 'true' || github.ref != 'refs/heads/master')
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: sharp/build/*/mago
@@ -70,7 +92,7 @@ runs:
           ${{ inputs.name }}_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-
           ${{ inputs.name }}_MAGO-${{ runner.arch }}-
     - name: Give what the cached mago was built from a time before that build
-      if: runner.environment == 'github-hosted'
+      if: runner.environment == 'github-hosted' && inputs.name != ''
       shell: bash
       working-directory: ${{ github.workspace }}
       run: |
