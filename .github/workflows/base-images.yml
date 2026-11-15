@@ -21,11 +21,13 @@ on:
       - master
     paths:
       - .github/workflows/base-images.yml
+      - sharp/docker/Dockerfile
   pull_request:
     branches:
       - master
     paths:
       - .github/workflows/base-images.yml
+      - sharp/docker/Dockerfile
 permissions:
   contents: read
 concurrency:
@@ -69,6 +71,36 @@ jobs:
           done
           echo "::error::No source gave $IMAGE, so $copy keeps the previous copy."
           exit 1
+  # The development image, sharp/docker's Dockerfile built from the copies, as CI builds it through BASE_IMAGE and
+  # GOLANG_IMAGE. It is pushed under the Dockerfile's blob hash, which sharp/docker/run pulls before it builds the image
+  # itself: every hosted job that ran sharp/docker/run built it, 26 to 55 seconds of each on pull requests #337 and #338,
+  # after 10 to 21 seconds of pulling the copies it builds from. It builds each day after the copies, so it takes their
+  # security updates, and on each change to the Dockerfile. A pull request's run builds it and pushes nothing.
+  DEVELOPMENT:
+    needs: MIRROR
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build sharp/docker's image from the copies, and push it under the Dockerfile's blob hash
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          PUSH: ${{ github.event_name != 'pull_request' }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          image="ghcr.io/heyjordanparker/php-sharp-linux:$(git hash-object sharp/docker/Dockerfile)"
+          docker build --pull \
+            --build-arg BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie \
+            --build-arg GOLANG_IMAGE=ghcr.io/heyjordanparker/golang:1.27-trixie \
+            --tag "$image" sharp/docker
+          if [[ $PUSH == true ]]; then
+            docker push "$image"
+          fi
   # The runtime Dockerfiles pin their bases as ${REGISTRY}/name:tag@sha256:digest, and each pin moves to the digest
   # of today's copy. Each source serves the same index digest, so the public default and CI's ghcr.io copy are one
   # image. GITHUB_TOKEN can't push a change to .github/workflows, so sharp.yml's pins of the BuildKit copies, whose

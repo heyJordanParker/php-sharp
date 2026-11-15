@@ -219,7 +219,8 @@ jobs:
       run:
         working-directory: .
 
-    # sharp/docker/run builds the image FROM these copies, as sharp.yml's suites do.
+    # sharp/docker/run pulls the image base-images.yml builds, or builds it FROM these copies when the Dockerfile changed,
+    # as sharp.yml's suites do.
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
@@ -228,13 +229,10 @@ jobs:
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Pull the base images from ghcr.io
+      - name: Log in to ghcr.io
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-          docker pull "$BASE_IMAGE"
-          docker pull "$GOLANG_IMAGE"
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
 
       - name: Rust and Mago caches
         uses: ./.github/actions/mago-cache
@@ -244,10 +242,6 @@ jobs:
           rust-paths: |
             sharp/build/cargo
             sharp/build/rustup
-
-      # sharp/bin/test builds the image too, so this step only shows how long the build takes.
-      - name: Build the sharp/docker image
-        run: sharp/docker/run true
 
       - name: Test every fifth test of the workspace
         run: sharp/bin/test --linux --mago --shard ${{ matrix.shard }}/5
@@ -421,10 +415,9 @@ jobs:
   # sharp/bin/coverage measures that, with the dated nightly it installs and the cargo-llvm-cov this job installs. A
   # builder runs sharp/bin/coverage only to reproduce a failure of this job, after merging the latest origin/master,
   # because this job measures the branch merged into master. The push to master runs it again on the merge, and saves
-  # its instrumented target, which every pull request's run restores. It starts once checks ends, 1 to 2 minutes in, so
-  # the two hold one of the 20 jobs GitHub runs at once: a pull request's run and a push run then fit together.
+  # its instrumented target, which every pull request's run restores.
   patch-coverage:
-    needs: [CHANGES, checks]
+    needs: CHANGES
     if: needs.CHANGES.outputs.mago == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
