@@ -115,7 +115,8 @@ wait_for() {
 
 failed=()
 host_pid=
-trap '[[ -z "$host_pid" ]] || kill "$host_pid" 2> /dev/null || true' EXIT
+deploy=
+trap '[[ -z "$host_pid" ]] || kill "$host_pid" 2> /dev/null || true; [[ -z "$deploy" ]] || rm -rf "$deploy"' EXIT
 
 compare() {
   local host="$1" output="$2"
@@ -126,11 +127,26 @@ compare() {
   fi
 }
 
+# The deploy root the Caddyfile's third site serves, laid out as sharp/README.md's: each release is a copy of the
+# fixture in releases/, compiled there, with public/release.php, which prints the release's name, and `current` names
+# the one served. It lives on the host's own file system, as a server's releases do: on a folder Docker Desktop shares
+# from macOS, a path read through `current` while `mv` replaces it fails for an instant, and that request gets a 404.
+deploy="$(mktemp -d)"
+mkdir -p "$deploy/releases"
+release() {
+  local folder="$deploy/releases/$1"
+  cp -a "$fixture" "$folder"
+  printf '<?php\n\necho basename(dirname(__DIR__)), "\\n";\n' > "$folder/public/release.php"
+  "$mago" --no-version-check --colors never --workspace "$folder" compile
+}
+release one
+ln -s "$deploy/releases/one" "$deploy/current"
+
 echo "== FrankenPHP, in worker mode"
 # Caddy keeps its state under these folders, which the build's folder holds.
 (cd "$fixture" \
   && XDG_CONFIG_HOME="$build_dir/frankenphp/config" XDG_DATA_HOME="$build_dir/frankenphp/data" \
-    exec "$frankenphp" run --config Caddyfile) &
+    SHARP_DEPLOY="$deploy" exec "$frankenphp" run --config Caddyfile) &
 host_pid=$!
 wait_for frankenphp_get /types
 compare frankenphp "$(requests frankenphp_get)"
@@ -148,6 +164,50 @@ if [[ "$same" == 400 ]]; then
 else
   echo "FrankenPHP's four workers: $same of 400 requests printed \"types: the same after unserialize\"" >&2
   failed+=("FrankenPHP's four workers")
+fi
+
+# The README's deploy, while requests keep arriving 8 at a time, in batches of 100: release two compiles in its own
+# folder, `current` moves to it, and FrankenPHP restarts its PHP threads through the admin API. Every request succeeds,
+# and the requests after the restart run release two. `current` moves between the releases 51 times, as 51 deploys do,
+# ending on release two, so a file system that shows the link missing while `mv` replaces it fails a request in every
+# run.
+echo "== FrankenPHP, requests during a deploy"
+release two
+urls=()
+for ((request = 0; request < 100; request++)); do
+  urls+=(http://127.0.0.1:8082/types)
+done
+before="$(curl --silent --show-error --fail http://127.0.0.1:8082/release.php)"
+(
+  while [[ ! -e "$deploy/stop" ]]; do
+    echo batch
+    curl --silent --show-error --parallel --parallel-max 8 --write-out 'status %{http_code}\n' "${urls[@]}" 2>&1 || true
+  done
+) > "$deploy/served.txt" &
+requests_pid=$!
+sleep 0.5
+for ((move = 1; move <= 51; move++)); do
+  moved_to=one
+  if ((move % 2)); then
+    moved_to=two
+  fi
+  ln -sfn "$deploy/releases/$moved_to" "$deploy/current.next"
+  mv -T "$deploy/current.next" "$deploy/current"
+done
+curl --silent --show-error --fail -X POST http://localhost:2019/frankenphp/workers/restart > /dev/null
+sleep 0.5
+touch "$deploy/stop"
+wait "$requests_pid"
+after="$(curl --silent --show-error --fail http://127.0.0.1:8082/release.php)"
+sent=$(($(grep -c '^batch$' "$deploy/served.txt") * 100))
+served="$(grep -c '^types: the same after unserialize$' "$deploy/served.txt" || true)"
+if [[ "$served" == "$sent" && "$before" == one && "$after" == two ]]; then
+  echo "== FrankenPHP's deploy: all $sent requests succeeded, and the restart moved them from release $before to release $after"
+else
+  echo "FrankenPHP's deploy: $served of $sent requests succeeded, release $before before the restart, release $after after it" >&2
+  grep -v -e '^batch$' -e '^types: the same after unserialize$' -e '^memory: [0-9]*$' -e '^status 200$' "$deploy/served.txt" \
+    | head -20 >&2 || true
+  failed+=("FrankenPHP's deploy")
 fi
 
 if [[ ${#failed[@]} -gt 0 ]]; then

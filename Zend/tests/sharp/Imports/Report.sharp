@@ -1,5 +1,7 @@
 namespace Imports;
 
+import Lib;
+
 public static class Report
 {
     public static int distance() => Words.between("kitten", "sitting");
@@ -11,6 +13,29 @@ public static class Report
     public static List<string> keys() => Words.keys(["tea": 3, "milk": 1]);
 
     public static int repeated() => Words.repeated("ab", 2);
+
+    public static List<string|bool> heldMaps() => [
+        Words.serialized([["id": "a"]]),
+        Words.printed([["id": "a"]], true),
+        Words.column([["id": "a"]], "id")[0],
+    ];
+
+    public static List<string> passedMaps()
+    {
+        Any? held = [["id": "a"]];
+        List<Any?> rows = [["id": "a"]];
+        List<Map<string, string>>|Map<string, string> either = [["id": "a"]];
+        return [Lib.serialized(held), Lib.serialized(rows), Lib.serialized(either), Report.send(["id": "a"])];
+    }
+
+    private static string send<T>(T value) => Lib.serialized(value);
+
+    public static List<int> sliced()
+    {
+        List<int> kept = Lib.sliced([5, 6, 7], true);
+        List<int> numbered = Lib.sliced([5, 6, 7], false);
+        return [kept[0], kept.count(), numbered[0], numbered.count()];
+    }
 
     public static void missing()
     {

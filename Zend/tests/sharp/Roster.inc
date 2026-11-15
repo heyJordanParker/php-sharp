@@ -15,7 +15,7 @@ class Roster
         return [
             Probe::join(",", $ranked),
             Probe::join(",", $tens),
-            Probe::join(",", \Sharp\Internal\map($kept, fn ($n) => $n)),
+            Probe::join(",", \Sharp\Internal\arrayOf(\Sharp\Internal\map($kept, fn ($n) => $n))), // a List<Any> may hold a Map
             (string) (\Sharp\Internal\get($busy, Standing::Active) ?? 0),
             (string) (\Sharp\Internal\get($busy, Standing::Closed) ?? 0),
             (string) (\Sharp\Internal\get($members, Standing::Active) ?? 0),

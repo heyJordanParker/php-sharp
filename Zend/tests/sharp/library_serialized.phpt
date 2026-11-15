@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls Sharp.Encoding.Serialized, which allows no classes by default and gives null for text it cannot read or with data after the value, with no warning, and Sharp.Encoding.PhpLiteral
+A PHP# class calls Sharp.Encoding.Serialized, which allows no classes by default and gives null for text it cannot read or with data after the value, with no warning, and Sharp.Encoding.PhpLiteral, which writes a Map, and each Map it holds, as a PHP array literal
 --FILE--
 <?php
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Serialized.sharp';
@@ -14,6 +14,7 @@ var_dump(SerializedCalls::decode('a:1:{s:1:"a";i:1;}'), SerializedCalls::decode(
 var_dump(get_class(SerializedCalls::decode('O:8:"stdClass":0:{}')));
 var_dump(get_class(SerializedCalls::decodeAllowing('O:8:"stdClass":0:{}', ['stdClass'])));
 var_dump(SerializedCalls::literal([1, 'a' => true]));
+var_dump(SerializedCalls::mapLiteral() === var_export(['tea' => 2, 'rows' => [['id' => 'a']]], true));
 var_dump(SerializedCalls::decode('nope'));
 var_dump(SerializedCalls::decode('i:1;junk'));
 ?>
@@ -31,5 +32,6 @@ string(34) "array (
   0 => 1,
   'a' => true,
 )"
+bool(true)
 NULL
 NULL

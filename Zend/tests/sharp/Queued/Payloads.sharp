@@ -31,8 +31,9 @@ public class Payloads
     public static Any? throughSerializedAllowing(Any? value, List<string> allowedClasses)
         => Serialized.decode(Serialized.encode(value), allowedClasses);
 
-    // The class PHP# holds `value` as, or each field's for a Shipment, a Ledger or a Crate. Plain PHP reads a Map or a
-    // Set field as its PHP array, spec section 12, so a row reads each field through PHP#.
+    // The class PHP# holds `value` as, or each field's for a Shipment, a Ledger or a Crate. Plain PHP takes a Map or a
+    // Set as its PHP array wherever it takes an array, spec section 12, so a row reads each field through PHP#, and
+    // names a Map or a Set through a parameter that takes only objects.
     public static string kinds(Any? value)
     {
         if (value is Shipment shipment) {
@@ -43,6 +44,19 @@ public class Payloads
         }
         if (value is Crate crate) {
             return `${Payloads.kinds(crate.byNumber)} ${Payloads.kinds(crate.speeds)} ${Payloads.kinds(crate.batches)}`;
+        }
+        // A PHP array passes a Map's test too, so a List goes first.
+        if (value is List<Any?>) {
+            return Probe.typeName(value);
+        }
+        if (value is Map<string, int> counts) {
+            return Probe.className(counts);
+        }
+        if (value is Map<int, string> numbered) {
+            return Probe.className(numbered);
+        }
+        if (value is Set<Speed> speeds) {
+            return Probe.className(speeds);
         }
         return Probe.typeName(value);
     }

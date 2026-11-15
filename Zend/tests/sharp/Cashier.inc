@@ -22,7 +22,7 @@ class Cashier
         }, 0);
         $recorded = $ledger->record($paid, fn ($price) => ($other->discount)($price));
         return [
-            Probe::join(",", \Sharp\Internal\map($paid, $this->format(...))),
+            Probe::join(",", \Sharp\Internal\arrayOf(\Sharp\Internal\map($paid, $this->format(...)))), // a List<Any> may hold a Map
             (string) $total,
             (string) $count,
             Probe::join(",", $recorded),

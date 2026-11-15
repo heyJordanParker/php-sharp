@@ -19,6 +19,15 @@ public static class Words
     [Import("str_repeat")]
     public static int repeated(string text, int times);
 
+    [Import("serialize")]
+    public static string serialized(List<Any?> value);
+
+    [Import("print_r")]
+    public static string|bool printed(Any? value, bool returned);
+
+    [Import("array_column")]
+    public static List<string> column(List<Map<string, string>>|Map<string, string> rows, string key);
+
     [Import("no_such_function")]
     public static void missing();
 }

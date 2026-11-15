@@ -12,4 +12,6 @@ class SerializedCalls
     public static Any? decodeAllowing(string text, List<string> allowedClasses) => Serialized.decode(text, allowedClasses);
 
     public static string literal(Any? value) => PhpLiteral.of(value);
+
+    public static string mapLiteral() => PhpLiteral.of(["tea": 2, "rows": [["id": "a"]]]);
 }
