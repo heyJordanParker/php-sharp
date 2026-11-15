@@ -960,7 +960,7 @@ public class Receipt
 }
 ```
 
-- **PHP is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation. A bare call names a local or nothing, so calling a built-in function by its bare name from `.sharp` code is the compile error a misspelled name gets. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
+- **PHP is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation. A bare call names a local or nothing, so calling a built-in function by its bare name from `.sharp` code is the compile error a misspelled name gets. The eleven effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
 - **A built-in the standard library has no member for is declared with `[Import]`,** a static method without a body whose PHP# types check each argument and the result, as C#'s `[DllImport]` declares a native function (section 23).
 - **PHP's constants are reached the same way,** as `Int.MAX` gives the largest `int`. A bare `CURLOPT_TIMEOUT` is a compile error, because a bare uppercase name is always the code's own constant.
 
@@ -4843,7 +4843,7 @@ public class Layout
 - `Sharp.Time` holds `Clock`, `Instant`, `Duration`, `Date`, `DateTime`, `TimeZone`, `Weekday` and `Month`, and the members of a plain PHP date in `DateTimeInterfaceMembers`.
 - `Sharp.IO` holds `Files`, `Path` and `Console`.
 - `Sharp.System` holds `Process`, `ProcessResult` and `Environment`.
-- `Sharp.Net` holds `Http`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `Url`, `Ip`, `Mail`, `MailMessage` and `MailAddress`.
+- `Sharp.Net` holds `Http`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `Url`, `Ip`, `Dns`, `Mail`, `MailMessage` and `MailAddress`.
 - `Sharp.Data` holds `Database` and `Cache`.
 - `Sharp.Encoding` holds `Json`, `Serialized`, `PhpLiteral`, `Base64`, `Hex` and `Compression`.
 - `Sharp.Security` holds `Hash`, `Hmac` and `Password`.
@@ -6594,7 +6594,7 @@ extern AsEventListener;          // compiles: AsEventListener carries [Dynamical
 ```
 - **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package declares the effect of each built-in function the standard library calls, so `Files` has the effect `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
 
-**The standard library's ten effect classes replace PHP's built-ins for their effects.** Each lives in the namespace of its domain (section 23), and a `uses` names it by its class name with no import, whatever the file imports:
+**The standard library's eleven effect classes replace PHP's built-ins for their effects.** Each lives in the namespace of its domain (section 23), and a `uses` names it by its class name with no import, whatever the file imports:
 
 - `Database`, in `Sharp.Data`, replaces PDO.
 - `Http`, in `Sharp.Net`, replaces curl.
@@ -6605,9 +6605,44 @@ extern AsEventListener;          // compiles: AsEventListener carries [Dynamical
 - `Random`, in `Sharp`, replaces `random_int`.
 - `Cache`, in `Sharp.Data`, replaces the APCu functions.
 - `Mail`, in `Sharp.Net`, replaces `mail()`.
+- `Dns`, in `Sharp.Net`, replaces `dns_get_record()` and `gethostbyname()`.
 - `Environment`, in `Sharp.System`, replaces `getenv()` and PHP's other environment functions.
 
 A bare call of a replaced function names no function (section 8), and a PHP built-in class names no class (section 23), so only the standard library reaches them. Inside it, creating a built-in class has the effects its `extern` lists, as creating a `DateTimeImmutable` reads the clock.
+
+**`Dns.addresses(host)` gives every IPv4 and IPv6 address of a host,** each once, in the order the system resolver gives them, as .NET's `Dns.GetHostAddresses`, Go's `net.LookupHost` and Rust's `ToSocketAddrs` do. The system resolver reads the hosts file before it asks a DNS server, so `localhost` resolves with no network. A name that is no host name throws `ValueError` before any lookup, and a host the resolver can't find throws `RuntimeException`, as .NET throws `SocketException`:
+
+<!-- example dns -->
+```csharp
+// app/WebhookTarget.sharp
+namespace App;
+
+import Sharp.Net.Dns;
+
+public class WebhookTarget
+{
+    public WebhookTarget(private Dns dns) { }
+
+    public List<string> addresses(string host) => this.dns.addresses(host);   // compiles: WebhookTarget holds a Dns, so it has the effect Dns
+}
+```
+
+<!-- example dns -->
+```csharp
+// app/Module.sharp
+namespace App;
+
+module
+{
+    transient WebhookTarget = WebhookTarget;   // the standard library's module gives it the app's Dns
+}
+```
+<!-- run dns
+public ExampleRun(private WebhookTarget target) { }
+this.target.addresses("localhost").any(address => address == "127.0.0.1" || address == "::1");   // true
+this.target.addresses("nothing.invalid");   // throws RuntimeException
+this.target.addresses("not a host");        // throws ValueError
+-->
 
 <!-- example pure-interface -->
 ```csharp
@@ -6667,7 +6702,7 @@ public foreign class RedisStore
 }
 ```
 
-The standard library's ten effect classes, listed above, are `foreign` classes. A project declares its own `foreign` classes the same way.
+The standard library's eleven effect classes, listed above, are `foreign` classes. A project declares its own `foreign` classes the same way.
 
 **`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it. A listener runs inside the `emit` that raised its event, under the standard library's dispatcher, so an exception it throws leaves that `emit`, and the listeners after it don't run, as a C# event's handlers and Symfony's dispatcher behave. Code that must keep going catches it around the `emit`.
 

@@ -90,6 +90,8 @@ function jsonEncode(mixed $value, int $flags, int $indent): string {}
 
 function jsonDecode(string $json): mixed {}
 
+function resolve(string $host): array {}
+
 function accessors(string $type, string $name): array {}
 
 function createLazy(string $type, callable $initialize): object {}
