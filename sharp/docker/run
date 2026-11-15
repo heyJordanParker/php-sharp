@@ -9,7 +9,19 @@ if [[ -f "$root/.git" ]]; then
   common="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)"
   volumes+=(--volume "$common:$common")
 fi
-docker build --quiet --build-arg BASE_IMAGE --build-arg GOLANG_IMAGE --tag php-sharp-linux "$root/sharp/docker" >/dev/null
+# The image is tagged with the Dockerfile's blob hash, so a run whose tag exists uses it with no network call. Otherwise
+# it pulls the build base-images.yml pushes under that hash each day and on each change, and a run that can't, as on an
+# arm64 Mac or without a login to ghcr.io, builds the image here. sharp/bin/bench runs php-sharp-linux by that name.
+hash="$(git -C "$root" hash-object sharp/docker/Dockerfile)"
+image="php-sharp-linux:$hash"
+if ! docker image inspect "$image" > /dev/null 2>&1; then
+  if docker pull --quiet "ghcr.io/heyjordanparker/php-sharp-linux:$hash" > /dev/null 2>&1; then
+    docker tag "ghcr.io/heyjordanparker/php-sharp-linux:$hash" "$image"
+  else
+    docker build --quiet --build-arg BASE_IMAGE --build-arg GOLANG_IMAGE --tag "$image" "$root/sharp/docker" >/dev/null
+  fi
+fi
+docker tag "$image" php-sharp-linux
 exec docker run --rm --init \
   --user "$(id -u):$(id -g)" \
   --ulimit stack=8388608:-1 \
@@ -24,4 +36,4 @@ exec docker run --rm --init \
   --env CXX \
   "${volumes[@]}" \
   --workdir /src \
-  php-sharp-linux "$@"
+  "$image" "$@"

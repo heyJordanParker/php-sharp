@@ -29,8 +29,9 @@ jobs:
   # Linux suite, the runtime image and, for a release's bump, the release assets, and saves the caches every pull
   # request's run restores. A defect only those find lands on master first, and a red push opens an issue, as CI_PASSED
   # does, for a pull request that fixes it forward. GitHub runs 20 of the account's hosted jobs at once, and a job past
-  # them waits: a pull request's runs hold 16 at most, and a push run whose tree passed on its pull request holds 3, so
-  # the two fit together.
+  # them waits: a pull request's runs hold 17 at most, and a push run whose tree passed on its pull request holds 3, and
+  # a fourth while mago.yml's checks run, which on a pull request run beside patch-coverage, since one after the other
+  # they took 13.4 minutes on pull request #337.
   #
   # A tree runs the Linux suites once, as bors's "not rocket science" rule tests the exact tree that lands once. A push
   # to master skips them when a pull request's run passed them all on its tree, as .github/actions/passed-tree explains,
