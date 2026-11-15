@@ -1,6 +1,11 @@
 {
 	auto_https off
-	admin off
+	# The deploy sharp/bin/hosts runs restarts the PHP threads through the admin API, as sharp/README.md's deploy does.
+	admin localhost:2019
+	# As the README's app.ini sets it: opcache never checks a file it cached, so only the restart runs a new release.
+	frankenphp {
+		php_ini opcache.validate_timestamps 0
+	}
 }
 
 # One worker, so each request after the first sees what the last one left.
@@ -26,5 +31,14 @@
 			num 4
 			match /*
 		}
+	}
+}
+
+# A release under SHARP_DEPLOY, served through the `current` link a deploy moves, as the README's app serves one. The
+# root stays the link, so each PHP thread reads the release the link names when it starts.
+:8082 {
+	php_server {
+		root {$SHARP_DEPLOY}/current/public
+		resolve_root_symlink false
 	}
 }

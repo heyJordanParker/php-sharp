@@ -19,7 +19,7 @@ class Inbox
         return $this->first;
     }
 
-    public function show(string $key): string { return \Demo\Settings::describe($this->read($key)); }
+    public function show(string $key): string { return \Demo\Settings::describe(\Sharp\Internal\arrayOf($this->read($key))); } // an Any may hold a Map
 
     public function isPlan(string $plan): bool { return $this->read("plan") === $plan; }
 
@@ -30,5 +30,5 @@ class Inbox
 
     public function load(string $key) { return $this->saved[$key] ?? null; }
 
-    public function showSaved(string $key): string { return \Demo\Settings::describe($this->saved[$key] ?? null); }
+    public function showSaved(string $key): string { return \Demo\Settings::describe(\Sharp\Internal\arrayOf($this->saved[$key] ?? null)); } // an Any may hold a Map
 }

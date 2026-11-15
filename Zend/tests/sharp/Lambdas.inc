@@ -39,7 +39,7 @@ class Lambdas
             \Sharp\Internal\add($marks, function () use (&$seen) { return $seen; });
             $times -= 1;
         }
-        return Probe::join(",", \Sharp\Internal\map($marks, fn ($read) => $read()));
+        return Probe::join(",", \Sharp\Internal\arrayOf(\Sharp\Internal\map($marks, fn ($read) => $read()))); // a List<Any> may hold a Map
     }
 
     public static function pipeline(array $numbers, \Sharp\Map|array $prices): array { $prices = \is_array($prices) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($prices), $prices))) : $prices; // PHP# makes the array a Map, its keys strings
@@ -54,7 +54,7 @@ class Lambdas
             Probe::join(",", \Sharp\Internal\keys(\Sharp\Internal\associateBy($labels, fn ($label) => $label, "string, string"))),
             Probe::join(",", \Sharp\Internal\keys(\Sharp\Internal\filterEntries($prices, fn ($price) => $price < 100))),
             Probe::join(",", \Sharp\Internal\arrayOf(\Sharp\Internal\filterEntries($prices, fn ($price) => $price < 100))), // PHP# passes plain PHP the Map's array
-            Probe::join(",", \Sharp\Internal\map($prices, fn ($price) => $price * 2)),
+            Probe::join(",", \Sharp\Internal\arrayOf(\Sharp\Internal\map($prices, fn ($price) => $price * 2))), // a List<Any> may hold a Map
         ];
     }
 

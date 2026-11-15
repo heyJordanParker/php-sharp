@@ -22,6 +22,26 @@ function type_of_untyped($value): string
     return get_debug_type($value);
 }
 
+function serialized(mixed $value): string
+{
+    return serialize($value);
+}
+
+/**
+ * array_slice() from the second element, declared as PHP's stubs declare it.
+ *
+ * @template K of array-key
+ * @template V
+ *
+ * @param array<K, V> $array
+ *
+ * @return ($array is list<V> ? ($preserve_keys is true ? array<int, V> : list<V>) : array<K, V>)
+ */
+function sliced(array $array, bool $preserve_keys): array
+{
+    return array_slice($array, 1, null, $preserve_keys);
+}
+
 function type_of_iterable(iterable $value): string
 {
     return get_debug_type($value);

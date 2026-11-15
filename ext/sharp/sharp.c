@@ -7,9 +7,14 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <signal.h>
+#include <sys/file.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#ifdef __linux__
+# include <sys/prctl.h>
+#endif
 
 #include "php.h"
 #include "php_ini.h"
@@ -100,6 +105,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	zval compile_command_report;
 	/* NULL, or why the request's compile command failed: how it ended and the last lines it wrote to stderr. */
 	zend_string *compile_command_failure;
+	/* The descriptor of the project's compile lock while the request holds it, else -1. See sharp_lock_compiles. */
+	int compile_lock;
 	zval arguments;
 	/* The types and argument lists first read from input this request, NULL until there is one. See sharp_types. */
 	HashTable *request_types;
@@ -1119,11 +1126,111 @@ static zend_string *sharp_command_failure(pid_t child, int start_error, int stat
 	return failure.s;
 }
 
+/* The file in a project's .sharp folder whose lock a request holds while it checks its file again and runs
+ * sharp.compile_command, so the project compiles once at a time. mago compile keeps it. */
+#define SHARP_COMPILE_LOCK "compile.lock"
+
+/* Whether the wait of a request ended because the request did: it timed out, or FrankenPHP stops its worker. Either
+ * interrupts a wait on Linux, where the timer and FrankenPHP's stop signal the thread. */
+static bool sharp_request_ending(void)
+{
+	return zend_atomic_bool_load_ex(&EG(timed_out));
+}
+
+static void sharp_unlock_compiles(void)
+{
+	if (SHARP_G(compile_lock) >= 0) {
+		close(SHARP_G(compile_lock));
+		SHARP_G(compile_lock) = -1;
+	}
+}
+
+/* Waits until the request holds the compile lock of the project whose root is the first root_length bytes of path, a
+ * compile another request runs there first included, and keeps its descriptor in compile_lock. Returns false, holding
+ * nothing, when the request ends while it waits, and the request then runs no compile. A lock that can't be taken, as
+ * in a folder the request can't write, leaves the request to run the command, which reports the folder. */
+static bool sharp_lock_compiles(const char *path, size_t root_length)
+{
+	zend_string *lock = zend_strpprintf(0, "%.*s/" SHARP_COMPILED_FOLDER "/" SHARP_COMPILE_LOCK, (int) root_length, path);
+	int fd = open(ZSTR_VAL(lock), O_RDWR | O_CREAT | O_CLOEXEC, 0666);
+
+	zend_string_release(lock);
+	while (fd >= 0 && flock(fd, LOCK_EX) != 0) {
+		if (errno != EINTR || sharp_request_ending()) {
+			close(fd);
+			fd = -1;
+		}
+	}
+	SHARP_G(compile_lock) = fd;
+	if (sharp_request_ending()) {
+		sharp_unlock_compiles();
+		return false;
+	}
+
+	return true;
+}
+
+/* The script of the process that ends a compile's process group when the process that started the compile ends first,
+ * as a FrankenPHP killed mid-compile does: its stdin is a pipe only the engine writes to, which reads its end once no
+ * process holds it open. It sends SIGTERM to the group, which mago passes on to the groups it started its own processes
+ * in, then SIGKILL to what is left a second later, itself included. */
+#define SHARP_COMPILE_WATCHER "read -r _; trap '' TERM; kill -s TERM 0; sleep 1; kill -s KILL 0"
+
+/* Starts the process that ends the process group of the compile leader when the pipe it reads from closes, and
+ * returns it, or -1. It joins the group, or exits at once, so its signals never reach the engine's own group. */
+static pid_t sharp_watch_compile(pid_t leader, int pipe_read)
+{
+	pid_t watcher = fork();
+
+	if (watcher == 0) {
+		int nowhere = open("/dev/null", O_RDWR);
+		sigset_t none;
+
+		sigemptyset(&none);
+#ifdef __linux__
+		/* FrankenPHP kills each child its thread forks when the thread ends, which would end the watcher first. */
+		prctl(PR_SET_PDEATHSIG, 0);
+#endif
+		if (setpgid(0, leader) != 0 || sigprocmask(SIG_SETMASK, &none, NULL) != 0 || nowhere < 0
+				|| dup2(pipe_read, STDIN_FILENO) < 0 || dup2(nowhere, STDOUT_FILENO) < 0
+				|| dup2(nowhere, STDERR_FILENO) < 0) {
+			_exit(127);
+		}
+		execl("/bin/sh", "sh", "-c", SHARP_COMPILE_WATCHER, (char *) NULL);
+		_exit(127);
+	}
+
+	return watcher;
+}
+
+/* Waits for the compile leader to exit, and leaves it to be reaped, so its id still names its group. Returns false when
+ * the request ends first. */
+static bool sharp_wait_for_exit(pid_t leader)
+{
+	siginfo_t exited;
+
+	while (waitid(P_PID, leader, &exited, WEXITED | WNOWAIT) != 0) {
+		if (errno != EINTR || sharp_request_ending()) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static void sharp_reap(pid_t child, int *status)
+{
+	while (waitpid(child, status, 0) < 0 && errno == EINTR);
+}
+
 /* Runs sharp.compile_command through /bin/sh in the project root, the first root_length bytes of path, and waits for
  * it however long it takes. The command runs with MAGO_REPORTING_FORMAT=json, and the checker report it prints is
  * decoded for the request's refusals, and with SHARP_COMPILING=1, so nothing it starts compiles again. What it prints
  * goes to temporary files, read once it exits: a pipe would also wait on every process it leaves running. When it
- * fails, the request's refusals say how. */
+ * fails, the request's refusals say how.
+ * The command runs in a process group of its own, which ends with the request that started it: once the command
+ * exits, every process it left running is killed. A request that ends first, by its timeout or as FrankenPHP stops its
+ * worker, and a process that ends first, as one killed mid-compile, leave the group to the watcher, which ends it. */
 static void sharp_run_compile_command(const char *path, size_t root_length)
 {
 	char *root = estrndup(path, root_length ? root_length : 1);
@@ -1131,16 +1238,25 @@ static void sharp_run_compile_command(const char *path, size_t root_length)
 	php_stream *errors = php_stream_fopen_tmpfile();
 	int output_fd = sharp_temporary_fd(output);
 	int errors_fd = sharp_temporary_fd(errors);
+	int watch[2] = {-1, -1};
 	int start_error = 0;
 	int status = 0;
 	pid_t child;
 
 	ZVAL_NULL(&SHARP_G(compile_command_report));
-	child = fork();
+	if (pipe(watch) != 0 || fcntl(watch[0], F_SETFD, FD_CLOEXEC) != 0 || fcntl(watch[1], F_SETFD, FD_CLOEXEC) != 0) {
+		start_error = errno;
+		child = -1;
+	} else {
+		child = fork();
+	}
 	if (child == 0) {
 		int nowhere = open("/dev/null", O_RDWR);
+		sigset_t none;
 
-		if (chdir(root) != 0 || nowhere < 0 || dup2(nowhere, STDIN_FILENO) < 0
+		sigemptyset(&none);
+		if (setpgid(0, 0) != 0 || sigprocmask(SIG_SETMASK, &none, NULL) != 0 || chdir(root) != 0 || nowhere < 0
+				|| dup2(nowhere, STDIN_FILENO) < 0
 				|| dup2(output_fd >= 0 ? output_fd : nowhere, STDOUT_FILENO) < 0
 				|| dup2(errors_fd >= 0 ? errors_fd : nowhere, STDERR_FILENO) < 0) {
 			_exit(127);
@@ -1150,9 +1266,28 @@ static void sharp_run_compile_command(const char *path, size_t root_length)
 		_exit(127);
 	}
 	if (child < 0) {
-		start_error = errno;
+		start_error = start_error ? start_error : errno;
 	} else {
-		while (waitpid(child, &status, 0) < 0 && errno == EINTR);
+		/* Also here, so the group exists before the watcher joins it, whichever process runs first. */
+		setpgid(child, child);
+		pid_t watcher = sharp_watch_compile(child, watch[0]);
+
+		if (sharp_wait_for_exit(child) || watcher < 0) {
+			kill(-child, SIGKILL);
+		}
+		close(watch[1]);
+		watch[1] = -1;
+		if (watcher > 0) {
+			int ended;
+
+			sharp_reap(watcher, &ended);
+		}
+		sharp_reap(child, &status);
+	}
+	for (int i = 0; i < 2; i++) {
+		if (watch[i] >= 0) {
+			close(watch[i]);
+		}
 	}
 	efree(root);
 	if (output) {
@@ -1184,6 +1319,16 @@ static void sharp_read_host_report(const sharp_compiled *compiled)
 	}
 }
 
+/* Reads the compiled file of filename again, as a compile may have rewritten it, and checks it against source. */
+static sharp_state sharp_check_again(sharp_compiled *compiled, const char *filename, const char *source,
+	size_t source_length)
+{
+	sharp_release(compiled);
+	sharp_locate(compiled, filename);
+
+	return sharp_check(compiled, source, source_length);
+}
+
 static int sharp_parse(void)
 {
 	const char *source = (const char *) LANG_SCNG(yy_start);
@@ -1195,13 +1340,17 @@ static int sharp_parse(void)
 
 	sharp_locate(&compiled, filename);
 	state = sharp_check(&compiled, source, source_length);
-	/* A file with no root has no project to compile, and the current folder is no guess for one. */
+	/* A file with no root has no project to compile, and the current folder is no guess for one. A compile another
+	 * request ran while this one waited for the lock may have compiled the file. */
 	if (state != SHARP_CURRENT && compiled.rooted
-			&& sharp_compiles_on_demand() && Z_ISUNDEF(SHARP_G(compile_command_report))) {
-		sharp_run_compile_command(ZSTR_VAL(compiled.source), compiled.root_length);
-		sharp_release(&compiled);
-		sharp_locate(&compiled, filename);
-		state = sharp_check(&compiled, source, source_length);
+			&& sharp_compiles_on_demand() && Z_ISUNDEF(SHARP_G(compile_command_report))
+			&& sharp_lock_compiles(ZSTR_VAL(compiled.source), compiled.root_length)) {
+		state = sharp_check_again(&compiled, filename, source, source_length);
+		if (state != SHARP_CURRENT) {
+			sharp_run_compile_command(ZSTR_VAL(compiled.source), compiled.root_length);
+			state = sharp_check_again(&compiled, filename, source, source_length);
+		}
+		sharp_unlock_compiles();
 	}
 	if (state != SHARP_CURRENT && compiled.rooted && Z_ISUNDEF(SHARP_G(compile_command_report))) {
 		sharp_read_host_report(&compiled);
@@ -10443,6 +10592,14 @@ static void sharp_read_listener_table(zend_string *path, bool past_opcache, zval
 	}
 }
 
+/* Whether the request runs the compile command for table, the listener table of the root, the first root_length bytes
+ * of path: it compiles on demand, hasn't compiled yet, and the table it read is whole but its inputs changed since. */
+static bool sharp_listener_table_stale(const char *path, size_t root_length, const zval *table)
+{
+	return !Z_ISUNDEF_P(table) && sharp_listener_table_fits(table) && !EG(exception) && sharp_compiles_on_demand()
+		&& Z_ISUNDEF(SHARP_G(compile_command_report)) && !sharp_listener_inputs_current(path, root_length, table);
+}
+
 /* The listener table in the compiled folder of the root, the first root_length bytes of path, read once per request
  * through zend_compile_file, so opcache serves it. A missing table lists no listener and no dispatcher. With
  * sharp.compile_command set, the table is read past opcache, since this request or an earlier one may have rewritten
@@ -10464,11 +10621,16 @@ static HashTable *sharp_listener_table(const char *path, size_t root_length)
 		return Z_ARRVAL_P(known);
 	}
 	sharp_read_listener_table(table_path, developing, &table);
-	if (!Z_ISUNDEF(table) && sharp_listener_table_fits(&table) && !EG(exception) && sharp_compiles_on_demand()
-			&& Z_ISUNDEF(SHARP_G(compile_command_report)) && !sharp_listener_inputs_current(path, root_length, &table)) {
+	/* A compile another request ran while this one waited for the lock may have written the table. */
+	if (sharp_listener_table_stale(path, root_length, &table) && sharp_lock_compiles(path, root_length)) {
 		zval_ptr_dtor(&table);
-		sharp_run_compile_command(path, root_length);
 		sharp_read_listener_table(table_path, true, &table);
+		if (sharp_listener_table_stale(path, root_length, &table)) {
+			zval_ptr_dtor(&table);
+			sharp_run_compile_command(path, root_length);
+			sharp_read_listener_table(table_path, true, &table);
+		}
+		sharp_unlock_compiles();
 	}
 	if (Z_ISUNDEF(table)) {
 		zval none;
@@ -13096,6 +13258,7 @@ static PHP_RINIT_FUNCTION(sharp)
 	SHARP_G(sort) = NULL;
 	ZVAL_UNDEF(&SHARP_G(compile_command_report));
 	SHARP_G(compile_command_failure) = NULL;
+	SHARP_G(compile_lock) = -1;
 	zend_hash_init(&SHARP_G(container_bindings), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_environment), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_modules), 8, NULL, NULL, false);
@@ -13149,6 +13312,8 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 		zend_string_release(SHARP_G(compile_command_failure));
 		SHARP_G(compile_command_failure) = NULL;
 	}
+	/* A fatal error while the request held the lock, as one reading the listener table it compiled, ends it here. */
+	sharp_unlock_compiles();
 	zval_ptr_dtor(&SHARP_G(arguments));
 	ZVAL_UNDEF(&SHARP_G(arguments));
 

@@ -4,6 +4,18 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.15
+
+- A `Map` or a `Set` that user code passes to plain PHP, or to an `[Import]` function, arrives as a PHP array whatever its PHP# type, spec section 12, a type parameter, `Any?` and a union included. Code that handed plain PHP the `Sharp\Map` object through one of those passes it to a parameter that takes only objects, such as `object` or `\Countable`, which still takes the `Map` itself.
+
+### Fixed
+
+- `sharp.compile_command` compiles a project once at a time: a request holds the lock of `.sharp/compile.lock` while it compiles, and a request that finds a file stale meanwhile waits, checks its file again, and compiles only when it is still stale. A failed `mago compile` keeps its record with what it printed, so the next compile with every input as it was prints the same errors and exits 1 without compiling, unless the law checker refused a file, and the command runs in a process group of its own that ends with the request. 0.6.15 started one whole compile per request that found a file stale, compiled a refused file again on every request, and left a compile running after its request ended, so 30 requests ran 30 compiles at once.
+- A `Map` passed to plain PHP arrives as a PHP array by what it is when the call runs, at every depth, whatever the parameter's PHP# type, spec section 12: an `Any?`, a type parameter, a union that holds a `Map`, and a `List` or a `Map` of `Map`s, at a call of plain PHP and at an `[Import]` call, so `update_post_meta($id, $key, $value)` with a `Map` held as `Any?` stores an array. 0.6.15 passed it as a `Sharp\Map` object everywhere its type wasn't a `Map` itself.
+- The result of a plain PHP call whose declared type is conditional reaches PHP# with the keys of the branch the call's arguments pick, so `array_slice(list, 1, null, true)` into a `List<int>` arrives renumbered from 0, spec section 12. 0.6.15 renumbered only where the branch was a shape, and gave a `List` whose keys started at 1.
+- The extension hosts' compile keeps its record whatever the loader and the analysis log from their worker threads, as a symbolic link loop the walk skips, so it compiles only after an input changes. 0.6.15 counted their warnings as the compile's own, kept no record, and compiled again on every run while the warning's cause stayed.
+- The README's FrankenPHP deploy restarts FrankenPHP's PHP threads through its admin API, `POST /frankenphp/workers/restart`, with a Caddyfile that keeps the root the `current` link, so the server answers every request through a deploy, as `sharp/bin/hosts` checks with requests sent during one. 0.6.15's `docker restart app` left a moment with no server running.
+
 ## [0.6.15] - 2026-11-15
 
 ### Upgrading from 0.6.14
