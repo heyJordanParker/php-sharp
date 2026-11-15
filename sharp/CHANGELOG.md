@@ -4,6 +4,16 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.13
+
+- PHP's name lookups, `dns_get_record`, `dns_check_record`, `checkdnsrr`, `dns_get_mx`, `getmxrr`, `gethostbyname`, `gethostbynamel` and `gethostbyaddr`, have the effect `Dns`, spec section 29, where 0.6.13 gave them `Http`. Code that calls one declares `uses Dns` where it declared `uses Http`, or calls `Dns.addresses` instead.
+
+### Added
+
+- `Sharp.Net.Dns`, the effect class `Dns`, spec section 29: `dns.addresses(host)` gives every IPv4 and IPv6 address of a host, once, in the order the system resolver gives them, the hosts file's included, as .NET's `Dns.GetHostAddresses` does. A name that is no host name throws `ValueError`, and a host the resolver can't find throws `RuntimeException`. 0.6.13 reached a host's addresses only through PHP's `dns_get_record`, which asks a DNS server and never reads the hosts file.
+
+## [0.6.13] - 2026-11-15
+
 ### Upgrading from 0.6.12
 
 - `Property.type`, `Method.type` and `Parameter.type` hold the declared type whole, `?` included, and their `isNullable` is gone, spec section 25. Compare a nullable type whole, as `p.type == typeof(int?)`, where 0.6.12 compared `p.type == typeof(int)` and read `p.isNullable`. A member typed by a type parameter, read on a class value without type arguments, as `typeof(Crate)`, is that type parameter: `p.type.name()` is `"TItem"`, where 0.6.12 gave its bound. `Method.invoke`, `Property.get` and `Property.set` take an `Object?` receiver.
@@ -15,7 +25,6 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - A class a module binds reaches code only through injection, spec section 32, as Dagger and Angular hand a bound class only to what they build. A plain PHP call whose result is one, or whose result PHP# code narrows to one with `as` or `is`, is a compile error: "`StoreService` is bound in `App.Shop`'s module, so it reaches code through a constructor or a parameter." 0.6.12 let a service locator, as Laravel's `app(StoreService::class)`, hand one over. Take the class as a constructor or method parameter instead.
 - A struct and an enum have no effects, spec sections 10, 20 and 29: each method, `get` body and operator, a data case's included, reaches no `foreign` object, plain PHP with an `extern` effect, or `emit`. Such a member is a compile error: "`Money.inEuros` has the effect `Http`, and a struct has no effects." Move the work into a class that takes the value.
 - In a project, a public member's types hold no `Any`, `Any?` or `Object` at any depth, spec section 5: "`Store.checkoutPayload` is public, and a public member of an application names its types: `Any` in `Map<string, Any>`." A type parameter is a named type, and an override, a library's members and `internal` members are exempt. Name the type, as a struct that parses the value, or make the member `internal`.
-- PHP's name lookups, `dns_get_record`, `dns_check_record`, `checkdnsrr`, `dns_get_mx`, `getmxrr`, `gethostbyname`, `gethostbynamel` and `gethostbyaddr`, have the effect `Dns`, spec section 29, where 0.6.13 gave them `Http`. Code that calls one declares `uses Dns` where it declared `uses Http`, or calls `Dns.addresses` instead.
 
 ### Added
 
@@ -34,7 +43,6 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 - The standard library has the members of Kotlin, Rust and .NET that PHP# lacked, spec sections 12, 18 and 24. Text: `ignoreCase` on `compareTo`, `equals`, `indexOf`, `lastIndexOf`, `contains`, `startsWith` and `endsWith`, `titlecase()`, `replace(old, new, limit)`, an `int`'s `toCharacter()`, a `List<int>`'s `toByteString()`, the character classes `isLetter()`, `isDigit()`, `isLetterOrDigit()`, `isWhitespace()`, `isUppercase()` and `isLowercase()`, and `normalized(form)` with the enum `NormalizationForm`. `normalized()` runs on PHP's `intl` extension, so both runtime images now build `intl`, and `heyjordanparker/php-sharp-composer` requires `ext-intl`, so Composer refuses to install it on a PHP without it. Math: `Math.log10`, `Math.exp`, the trigonometric functions, `Math.PI`, `Math.E`, a `float`'s `isNaN()`, an `int`'s `checkedAdd`, `checkedSubtract` and `checkedMultiply`, which give null past `Int.MAX` and `Int.MIN`, and `saturatingAdd`, `saturatingSubtract` and `saturatingMultiply`, which stop there, and `Int.parse(text, radix)` and `Int.tryParse(text, radix)`. Time and files: the struct `TimeOfDay`, a `DateTime`'s `timeOfDay`, `Path.join`, `Path.absolute`, and `Files.temporaryDirectory()` and `Files.walk(directory)`, which reads a folder tree lazily. Collections: `firstOrNull` on a `List`, a `Map` and a `Set`, and on a `List` `indexOfFirst`, `minBy`, `maxBy`, `sortedByDescending`, `sortedWith`, `zip`, `windowed`, `partition`, `binarySearch`, `partitionPoint` and `removeAll`, a `Map`'s `getOrPut`, and a `Set`'s `union`, `intersect`, `subtract` and `isSubsetOf`. A `sortedBy` key that is a tuple orders element by element, as Rust orders tuples, so `people.sortedBy(p => [p.last, p.first])` sorts by the last name, then the first, each element by its own `operator <=>`, where 0.6.12 refused it with "`List<string>` is none of them".
 - An `extern` line takes any attribute, which the plain PHP class, method or function it declares carries as its own, spec sections 1 and 29. `[DynamicallyAccessed] extern AsEventListener;` marks a library's attribute class whose source carries no mark, so a method marked `[AsEventListener]` is never too wide. At run time PHP#'s `typeof(X).attributes<T>()` and `Method.attributes<T>()`, and plain PHP's `ReflectionClass`, `ReflectionMethod` and `ReflectionFunction` `getAttributes()`, give the declaration's own attributes and then the line's, though no code loads the file that holds the line: `mago compile` names that file in `.sharp/listeners.php`, and the engine compiles the line's attributes when reflection first reads the declaration's. 0.6.12 refused an attribute before `extern` as a parse error.
-- `Sharp.Net.Dns`, the effect class `Dns`, spec section 29: `dns.addresses(host)` gives every IPv4 and IPv6 address of a host, once, in the order the system resolver gives them, the hosts file's included, as .NET's `Dns.GetHostAddresses` does. A name that is no host name throws `ValueError`, and a host the resolver can't find throws `RuntimeException`. 0.6.13 reached a host's addresses only through PHP's `dns_get_record`, which asks a DNS server and never reads the hosts file.
 
 ### Changed
 
@@ -1022,7 +1030,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.12...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.13...HEAD
+[0.6.13]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.12...v0.6.13
 [0.6.12]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.11...v0.6.12
 [0.6.11]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.10...v0.6.11
 [0.6.10]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.9...v0.6.10
