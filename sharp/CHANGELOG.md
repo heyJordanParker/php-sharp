@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.14] - 2026-11-15
+
 ### Upgrading from 0.6.13
 
 - PHP's name lookups, `dns_get_record`, `dns_check_record`, `checkdnsrr`, `dns_get_mx`, `getmxrr`, `gethostbyname`, `gethostbynamel` and `gethostbyaddr`, have the effect `Dns`, spec section 29, where 0.6.13 gave them `Http`. Code that calls one declares `uses Dns` where it declared `uses Http`, or calls `Dns.addresses` instead.
@@ -1030,7 +1032,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.13...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.14...HEAD
+[0.6.14]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.13...v0.6.14
 [0.6.13]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.12...v0.6.13
 [0.6.12]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.11...v0.6.12
 [0.6.11]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.10...v0.6.11
