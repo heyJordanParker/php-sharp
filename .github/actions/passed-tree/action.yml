@@ -1,12 +1,15 @@
 name: Find the run that passed this tree
 description: >-
   Looks for a run of a workflow that passed on the tree of the commit the job runs on, as bors's "not rocket science"
-  rule tests the exact tree that lands once. It checks the commit's own runs, and the runs of the head of each pull
-  request into master that names the commit, when that head has the same tree, as a merge commit has when its pull
-  request held the latest master. The "master merge gate" ruleset also merges a pull request behind master, whose
-  merge commit's tree no run tested, so nothing passed on it. GitHub empties a
-  run's pull requests once they merge, so a run is tied to master through its pull request, and both workflows run
-  only for a pull request into master.
+  rule tests the exact tree that lands once. Each run's CHANGES job names the tree it tests in a notice titled "Tested
+  tree": a push run tests its commit's tree, and a pull request's run tests the pull request merged into master, the
+  refs/pull/<number>/merge commit GitHub checks out. It checks the commit's own runs, and the runs of the head of each
+  pull request into master that names the commit. So a merge commit passes on its pull request's last run whenever
+  master didn't move after that run started, even when the "master merge gate" ruleset merged the pull request behind
+  master: pull request #334's run tested tree b5fa192, the tree of its merge commit, whose push run still ran every
+  Linux suite again, because its head's tree differed. GitHub empties a run's pull requests once they merge, so a run is
+  tied to master through its pull request, and both workflows run only for a pull request into master. The calling job
+  needs actions: read, checks: read and pull-requests: read.
 
 inputs:
   workflow:
@@ -56,7 +59,7 @@ runs:
         tree=$(api "git/commits/$GITHUB_SHA" .tree.sha)
         commits=$GITHUB_SHA
         for head in $(api "commits/$GITHUB_SHA/pulls" '.[] | select(.base.ref == "master") | .head.sha'); do
-          if [[ $head != "$GITHUB_SHA" && $(api "git/commits/$head" .tree.sha) == "$tree" ]]; then
+          if [[ $head != "$GITHUB_SHA" ]]; then
             commits+=" $head"
           fi
         done
@@ -64,16 +67,24 @@ runs:
         for commit in $commits; do
           for event in $EVENTS; do
             for run in $(api "actions/workflows/$WORKFLOW/runs?head_sha=$commit&event=$event&status=success" '.workflow_runs[] | select(.event != "push" or .head_branch == "master") | .id'); do
-              runs+=" $run:$event"
+              runs+=" $run"
             done
           done
         done
-        for entry in $runs; do
-          run=${entry%%:*}
-          if [[ $(api "actions/runs/$run/jobs?per_page=100" "$PASSED") == true ]]; then
+        checked=
+        for run in $runs; do
+          # The CHANGES job of a run that passed, whose notice names the tree the run tested.
+          changes=$(api "actions/runs/$run/jobs?per_page=100" "if ($PASSED) then .jobs[] | select(.name == \"CHANGES\") | .id else empty end")
+          if [[ -z $changes ]]; then
+            checked+=" $run (it failed what the caller needs)"
+            continue
+          fi
+          tested=$(api "check-runs/$changes/annotations" '.[] | select(.title == "Tested tree") | .message')
+          if [[ $tested == "$tree" ]]; then
             echo "run=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run" >> "$GITHUB_OUTPUT"
             echo "Tree $tree passed in $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run."
             exit 0
           fi
+          checked+=" $run (tree ${tested:-unnamed})"
         done
-        echo "No $WORKFLOW run of $EVENTS passed on tree $tree. Runs checked:${runs:- none}."
+        echo "No $WORKFLOW run of $EVENTS passed on tree $tree. Runs checked:${checked:- none}."

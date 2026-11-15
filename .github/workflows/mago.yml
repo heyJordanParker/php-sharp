@@ -35,6 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      checks: read
       contents: read
       pull-requests: read
     defaults:
@@ -49,6 +50,10 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The notice .github/actions/passed-tree finds a run's tree by, as sharp.yml's CHANGES names it.
+      - name: Name the tree this run tests
+        run: echo "::notice title=Tested tree::$(git rev-parse 'HEAD^{tree}')"
 
       # The root package's rust-version, which release.yml builds the binaries with, so every job tests that toolchain.
       - name: Read the toolchain sharp/mago/Cargo.toml's rust-version names
@@ -90,7 +95,7 @@ jobs:
           git fetch --depth=1 origin "$BASE"
           sharp/bin/check --changes "$BASE" >> "$GITHUB_OUTPUT"
 
-      # The 5 Linux test jobs, which a pull request's run runs as a push's do, so their pass holds for the push.
+      # The Linux test jobs, which a pull request's run runs as a push's do, so their pass holds for the push.
       - name: Find the pull request run that passed every Linux test job on this tree
         id: linux
         if: github.event_name == 'push'
@@ -98,7 +103,9 @@ jobs:
         with:
           workflow: mago.yml
           events: pull_request
-          passed: '[.jobs[] | select(.conclusion == "success" and (.name | startswith("tests (") and . != "tests (macOS)"))] | length == 5'
+          passed: >-
+            [.jobs[] | select(.name | startswith("tests (") and . != "tests (macOS)")]
+            | length > 0 and all(.conclusion == "success")
 
       - name: The Linux tests don't run again
         if: steps.linux.outputs.run
@@ -189,7 +196,7 @@ jobs:
           if-no-files-found: error
 
   # The workspace's tests on Linux, in 5 jobs, in the sharp/docker image on the target sharp/bin/build-mago builds there,
-  # which sharp.yml's CACHE saves on master and its suites restore, so Linux keeps one dev build of Mago and one cache.
+  # which sharp.yml's HOSTS saves on master and its suites restore, so Linux keeps one dev build of Mago and one cache.
   # Each job runs every fifth test of every test binary, by exact name, with sharp/bin/test --mago --shard, so a set of
   # slow tests spreads over the 5 jobs, and the last also runs the doc tests and the property tests.
   tests:
@@ -237,6 +244,10 @@ jobs:
           rust-paths: |
             sharp/build/cargo
             sharp/build/rustup
+
+      # sharp/bin/test builds the image too, so this step only shows how long the build takes.
+      - name: Build the sharp/docker image
+        run: sharp/docker/run true
 
       - name: Test every fifth test of the workspace
         run: sharp/bin/test --linux --mago --shard ${{ matrix.shard }}/5
@@ -410,9 +421,10 @@ jobs:
   # sharp/bin/coverage measures that, with the dated nightly it installs and the cargo-llvm-cov this job installs. A
   # builder runs sharp/bin/coverage only to reproduce a failure of this job, after merging the latest origin/master,
   # because this job measures the branch merged into master. The push to master runs it again on the merge, and saves
-  # its instrumented target, which every pull request's run restores.
+  # its instrumented target, which every pull request's run restores. It starts once checks ends, 1 to 2 minutes in, so
+  # the two hold one of the 20 jobs GitHub runs at once: a pull request's run and a push run then fit together.
   patch-coverage:
-    needs: CHANGES
+    needs: [CHANGES, checks]
     if: needs.CHANGES.outputs.mago == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
