@@ -45,7 +45,6 @@ const RUNTIME = ['value', 'throws', 'message'];
 // the generic `semantics`. Only these move to the `compile error` line inside the construct. A new one joins in a PR of its own.
 const MOVES = ['match-not-exhaustive', 'rejected-nullable-parameter', 'A `match` needs a `default` arm.'];
 const SECTION = '§\d+(?:\.\d+)*|README';
-const PARALLEL = 4;
 const TYPE_DECLARATION = '~^(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign|extern)\s+)*(?:class|struct|enum|interface|event|trait|module)\b|^extern\b|^module\b~';
 const CONTROL_STATEMENT = '~^\s*(?:\}\s*)?(?:if|else|while|for|foreach|do|try|catch|finally)\b~';
 const MEMBER = '~^(?:\[.*\]\s*)*(?:public|private|protected|internal|static)\b|^[\w<>?,|.\[\]]+\s+\w+\s*\([^)]*\)\s*(?:\{|=>)~';
@@ -832,18 +831,23 @@ function put(string $path, string $contents): void
 }
 
 /**
- * Runs every command, PARALLEL at a time.
+ * Runs every command, as many at a time as sharp/bin/jobs prints.
  *
  * @param array<string, array{list<string>, array<string, string>}> $commands the command and its extra environment, by key
  * @return array<string, array{string, string, int}> stdout, stderr and exit status, by key
  */
 function run_all(array $commands): array
 {
+    static $parallel = null;
+    $parallel ??= (int) shell_exec(escapeshellarg(__DIR__ . '/jobs'));
+    if ($parallel < 1) {
+        fail(__DIR__ . '/jobs printed no number of jobs.');
+    }
     $results = [];
     $running = [];
     $pending = $commands;
     while ($pending !== [] || $running !== []) {
-        while ($pending !== [] && count($running) < PARALLEL) {
+        while ($pending !== [] && count($running) < $parallel) {
             $key = array_key_first($pending);
             [$command, $environment] = $pending[$key];
             unset($pending[$key]);

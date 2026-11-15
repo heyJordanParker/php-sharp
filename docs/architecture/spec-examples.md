@@ -307,7 +307,7 @@ Measured on an Apple M-series Mac with `mago` at mago-sharp commit `449377ad4`, 
 - **Four at once with `MAGO_THREADS=1`:** 0.18 seconds for all four.
 - **One run on the engine:** 0.13 seconds for the README's plain PHP caller.
 
-`sharp/bin/spec` runs four single-threaded compiles at a time. A full run over the 276 examples, 275 checked and 1 ignored, took 197 seconds on 10-24, on an Apple M-series Mac with a debug build of `mago` from `sharp/mago/` and a debug build of the engine.
+`sharp/bin/spec` runs as many single-threaded compiles at a time as `sharp/bin/jobs` prints, 6 on the builders' Mac, where 10-24's run below ran four. A full run over the 276 examples, 275 checked and 1 ignored, took 197 seconds on 10-24, on an Apple M-series Mac with a debug build of `mago` from `sharp/mago/` and a debug build of the engine.
 
 ## Files
 
