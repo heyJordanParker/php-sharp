@@ -6759,7 +6759,7 @@ ZEND_FUNCTION(Sharp_Internal_constant)
 
 	const zend_execute_data *caller = sharp_reflection_caller(execute_data);
 	zend_class_entry *scope = caller ? caller->func->common.scope : NULL;
-	zval *read = zend_get_class_constant_ex(class_name, name, scope, 0);
+	zval *read = zend_get_class_constant_ex(class_name, name, scope, ZEND_FETCH_CLASS_EXCEPTION);
 	if (!read || EG(exception)) {
 		RETURN_THROWS();
 	}
