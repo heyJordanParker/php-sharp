@@ -1280,9 +1280,9 @@ ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_GENERIC & (ZEND_ACC_INTERFACE|ZEND_ACC_TRAIT
 ZEND_STATIC_ASSERT(offsetof(zend_class_entry, name) == sizeof(zend_string *),
 	"sharp_flags moved name, so an extension built against upstream's headers reads every field of zend_class_entry wrong");
 #if SIZEOF_SIZE_T == 8
-/* 544 bytes on 64-bit, measured on master d2e2b0f3cd before sharp_flags took its padding, so a new field of
- * zend_class_entry changes its layout only on purpose. */
-ZEND_STATIC_ASSERT(sizeof(zend_class_entry) == 544,
+/* 544 bytes on 64-bit, measured on master d2e2b0f3cd before sharp_flags took its padding, and 552 since
+ * info.user.sharp_declared, so a new field of zend_class_entry changes its layout only on purpose. */
+ZEND_STATIC_ASSERT(sizeof(zend_class_entry) == 552,
 	"a field changed the size of zend_class_entry; move it into padding, or change this size on purpose");
 #endif
 

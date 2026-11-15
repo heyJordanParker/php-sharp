@@ -17,6 +17,7 @@ use mago_orchestrator::error::OrchestratorError;
 use mago_orchestrator::service::incremental_analysis::IncrementalAnalysisService;
 use mago_orchestrator::service::incremental_analysis::compile::Compilation;
 use mago_orchestrator::service::incremental_analysis::compile::DispatcherModule;
+use mago_orchestrator::service::incremental_analysis::compile::ExternAttributes;
 use mago_orchestrator::service::incremental_analysis::compile::Listener;
 use mago_reporting::Issue;
 use mago_reporting::IssueCollection;
@@ -88,6 +89,13 @@ impl Server {
     #[must_use]
     pub fn codebase(&self) -> &CodebaseMetadata {
         self.service.codebase()
+    }
+
+    /// The references between the symbols of the last analysis, as each property write with the member or the file
+    /// that writes it, which `mago convert` reads to find who sets a property.
+    #[must_use]
+    pub fn symbol_references(&self) -> &SymbolReferences {
+        self.service.symbol_references()
     }
 
     /// The issues of `file_id` and what its analysis found in it, as the type of each expression, against the last
@@ -172,6 +180,13 @@ impl Server {
     #[must_use]
     pub fn dispatcher_module(&self) -> Option<DispatcherModule> {
         self.service.dispatcher_module()
+    }
+
+    /// Every `extern` line of the last analysis that gives a class, a method or a function attributes, by what it
+    /// declares, then by the file.
+    #[must_use]
+    pub fn extern_attributes(&self) -> Vec<ExternAttributes> {
+        self.service.extern_attributes()
     }
 
     /// For each of `files`, the source files other than it whose signature edit makes the last analysis's warm path

@@ -164,6 +164,10 @@ enum _zend_ast_kind {
 	ZEND_AST_SHARP_TYPE_ARGS,
 	/* PHP#: whether child 0 is of the type child 1, a type text, spells, type arguments included. */
 	ZEND_AST_SHARP_IS_TYPE,
+	/* PHP#: an `extern` line's attributes, child 1, which the plain PHP class, method (`Class::method`) or function
+	 * child 0 names carries as its own, and whose ZEND_ATTRIBUTE_TARGET_* is the attr. A file runs nothing for it:
+	 * ext/sharp compiles child 1 when reflection reads the declaration's attributes. */
+	ZEND_AST_SHARP_EXTERN,
 
 	/* 3 child nodes */
 	ZEND_AST_METHOD_CALL = 3 << ZEND_AST_NUM_CHILDREN_SHIFT,
@@ -183,17 +187,18 @@ enum _zend_ast_kind {
 	 * in the list is the one the error names, where the check reads less of the value than it says. Child 2 names
 	 * what takes the value, as `local counter`. */
 	ZEND_AST_VERIFY_TYPE_ARGS,
-	/* PHP#: the metadata of a PHP# class-like, in its member list. Child 0 is the type arguments its header gives
-	 * each generic parent and interface, child 1 the bounds of its type parameters, which declares a class's
-	 * hidden type-argument slot, and child 2 their variance, one `+` (`out`), `-` (`in`) or `=` per type
-	 * parameter. Each is a text, or NULL when the class-like has none. */
-	ZEND_AST_SHARP_CLASS_METADATA,
 
 	/* 4 child nodes */
 	ZEND_AST_FOR = 4 << ZEND_AST_NUM_CHILDREN_SHIFT,
 	ZEND_AST_FOREACH,
 	ZEND_AST_ENUM_CASE,
 	ZEND_AST_PROP_ELEM,
+	/* PHP#: the metadata of a PHP# class-like, in its member list. Child 0 is the type arguments its header gives
+	 * each generic parent and interface, child 1 the bounds of its type parameters, which declares a class's
+	 * hidden type-argument slot, child 2 their variance, one `+` (`out`), `-` (`in`) or `=` per type
+	 * parameter, and child 3 the declarations reflection reads, see sharp_declared in zend.h. Each is a text, or
+	 * NULL when the class-like has none. */
+	ZEND_AST_SHARP_CLASS_METADATA,
 
 	/* 5 child nodes */
 

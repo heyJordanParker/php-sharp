@@ -1,0 +1,31 @@
+namespace Demo;
+
+import Sharp.IO.Files;
+import Sharp.IO.Path;
+import Sharp.Time.Instant;
+import Sharp.Time.TimeOfDay;
+import Sharp.Time.TimeZone;
+
+class TimeAndPaths
+{
+    public static string written(int hour, int minute, int second, int nanosecond) => new TimeOfDay(hour, minute, second, nanosecond).toString();
+
+    public static string shortTime(int hour, int minute) => new TimeOfDay(hour, minute).toString();
+
+    public static List<int> ordered(string earlier, string later)
+        => [TimeOfDay.parse(earlier) <=> TimeOfDay.parse(later), TimeOfDay.parse(later) <=> TimeOfDay.parse(earlier), TimeOfDay.parse(earlier) <=> TimeOfDay.parse(earlier)];
+
+    public static bool same(string text, string other) => TimeOfDay.parse(text) == TimeOfDay.parse(other);
+
+    public static string? read(string text) => TimeOfDay.tryParse(text)?.toString();
+
+    public static string onClock(string instant, string zone) => Instant.parse(instant).inZone(new TimeZone(zone)).timeOfDay.toString();
+
+    public static string joined(string first, List<string> rest) => Path.join(first, ...rest);
+
+    public static string absolute(string path) => Path.absolute(path);
+
+    public static string temporary(Files files) => files.temporaryDirectory();
+
+    public static List<string>? walked(Files files, string directory) => files.walk(directory)?.toList();
+}

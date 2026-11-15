@@ -2169,14 +2169,23 @@ ZEND_METHOD(ReflectionFunctionAbstract, getAttributes)
 
 	GET_REFLECTION_OBJECT_PTR(fptr);
 
+	HashTable *attributes;
+
 	if (fptr->common.scope && (fptr->common.fn_flags & (ZEND_ACC_CLOSURE|ZEND_ACC_FAKE_CLOSURE)) != ZEND_ACC_CLOSURE) {
 		target = ZEND_ATTRIBUTE_TARGET_METHOD;
 	} else {
 		target = ZEND_ATTRIBUTE_TARGET_FUNCTION;
 	}
 
+	/* PHP#: a method's and a function's attributes include those of each `extern` line that names it, spec section
+	 * 29. */
+	attributes = sharp_function_attributes(fptr);
+	if (UNEXPECTED(EG(exception))) {
+		RETURN_THROWS();
+	}
+
 	reflect_attributes(INTERNAL_FUNCTION_PARAM_PASSTHRU,
-		fptr->common.attributes, 0, fptr->common.scope, target,
+		attributes, 0, fptr->common.scope, target,
 		fptr->type == ZEND_USER_FUNCTION ? fptr->op_array.filename : NULL);
 }
 /* }}} */
@@ -4621,11 +4630,18 @@ ZEND_METHOD(ReflectionClass, getAttributes)
 {
 	reflection_object *intern;
 	zend_class_entry *ce;
+	HashTable *attributes;
 
 	GET_REFLECTION_OBJECT_PTR(ce);
 
+	/* PHP#: a class's attributes include those of each `extern` line that names it, spec section 29. */
+	attributes = sharp_class_attributes(ce);
+	if (UNEXPECTED(EG(exception))) {
+		RETURN_THROWS();
+	}
+
 	reflect_attributes(INTERNAL_FUNCTION_PARAM_PASSTHRU,
-		ce->attributes, 0, ce, ZEND_ATTRIBUTE_TARGET_CLASS,
+		attributes, 0, ce, ZEND_ATTRIBUTE_TARGET_CLASS,
 		ce->type == ZEND_USER_CLASS ? ce->info.user.filename : NULL);
 }
 /* }}} */

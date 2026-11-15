@@ -39,8 +39,10 @@ foreach ([
     'a row that does not say whether the method takes the event' => "<?php return ['inputs' => [], 'listeners' => [['App\\Demo\\Notices', 'hear', ['App\\Demo\\Paid'], 1]], 'dispatcher' => null];",
     'an input with three fields' => "<?php return ['inputs' => [['app/Demo/*.sharp', 1, 0]], " . $rows,
     'an input whose hash is not 32 hex digits' => "<?php return ['inputs' => [['app/Demo/*.sharp', 1, 0, 'abc']], " . $rows,
-    'a listener class that is gone' => $inputs . "'listeners' => [['App\\Demo\\Gone', 'hear', ['App\\Demo\\Paid'], true]], 'dispatcher' => null];",
-    'a listener method that is gone' => $inputs . "'listeners' => [['App\\Demo\\Notices', 'gone', ['App\\Demo\\Paid'], true]], 'dispatcher' => null];",
+    'a table without its attributes' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => null];",
+    'attributes that are not lists of paths' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => null, 'attributes' => ['app\\demo\\paid' => [1]]];",
+    'a listener class that is gone' => $inputs . "'listeners' => [['App\\Demo\\Gone', 'hear', ['App\\Demo\\Paid'], true]], 'dispatcher' => null, 'attributes' => []];",
+    'a listener method that is gone' => $inputs . "'listeners' => [['App\\Demo\\Notices', 'gone', ['App\\Demo\\Paid'], true]], 'dispatcher' => null, 'attributes' => []];",
 ] as $name => $contents) {
     $contents === null ? unlink($table) : file_put_contents($table, $contents);
     echo $name, ': ';
@@ -64,5 +66,7 @@ a listed type that is not a name: CompileError: .sharp/listeners.php is damaged.
 a row that does not say whether the method takes the event: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 an input with three fields: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 an input whose hash is not 32 hex digits: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
+a table without its attributes: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
+attributes that are not lists of paths: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 a listener class that is gone: CompileError: .sharp/listeners.php is out of date: it lists App.Demo.Gone, which no longer exists. Run vendor/bin/mago compile.
 a listener method that is gone: CompileError: .sharp/listeners.php is out of date: it lists App.Demo.Notices.gone, which no longer exists. Run vendor/bin/mago compile.

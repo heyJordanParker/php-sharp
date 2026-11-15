@@ -549,6 +549,12 @@ foreach ($exceptions as $class) {
 foreach (['Attribute', 'Countable', 'JsonSerializable', 'Throwable'] as $class) {
     $externs[] = "extern $class;";
 }
+// The classes of PHP 8.4's HTML DOM a page reads are named by the standard library, so a .sharp file names each through
+// its import, as `import Dom.HTMLDocument;` (decision 83). They take no extern line, so each keeps the effects PHP's
+// declarations give it, as `HTMLDocument::createFromFile` reads a file.
+foreach (['AdjacentPosition', 'Attr', 'CharacterData', 'ChildNode', 'Comment', 'Document', 'DocumentFragment', 'DocumentType', 'Element', 'HTMLCollection', 'HTMLDocument', 'HTMLElement', 'NamedNodeMap', 'Node', 'NodeList', 'ParentNode', 'Text', 'TokenList'] as $class) {
+    $imports[] = "import Dom.$class;";
+}
 // A date or a time zone is a value once created, and the members that create one from the clock list `Clock` below,
 // so holding and reading one is pure, as is reading any plain PHP date, such as a Carbon, through the interface every
 // one implements. Without the line, each would carry the effects of every declared call that returns one, as

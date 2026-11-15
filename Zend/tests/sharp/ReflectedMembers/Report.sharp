@@ -1,0 +1,189 @@
+namespace ReflectedMembers;
+
+// Uses each member reflection gives a property and a class value beyond reading declarations, spec section 25.
+public static class Report
+{
+    private static Property property(Class<Object> type, string name)
+        => type.properties().first(property => property.name == name);
+
+    // A static read and written through its Property, and a static method invoked with no receiver.
+    public static List<Any?> statics()
+    {
+        const opened = Report.property(typeof(Account), "opened");
+        opened.set(null, 4);
+        return [
+            opened.isStatic,
+            opened.get(null),
+            Account.opened,
+            typeof(Account).methods().first(method => method.name == "kind").invoke(null, []),
+        ];
+    }
+
+    // An object made from its class value, with its constructor's arguments, and the arguments it refuses.
+    public static List<Any?> created()
+    {
+        const account = typeof(Account).createInstance(["ada"]);
+        List<Any?> facts = [account.owner, account.balance];
+        try {
+            typeof(Account).createInstance([]);
+        } catch (InvalidArgumentException failure) {
+            facts.add(failure.getMessage());
+        }
+        try {
+            typeof(Account).createInstance([7]);
+        } catch (InvalidArgumentException failure) {
+            facts.add(failure.getMessage());
+        }
+        return facts;
+    }
+
+    // Whether a `late` property holds a value, before and after its first write.
+    public static List<bool> initialized()
+    {
+        const draft = new Draft();
+        const title = Report.property(typeof(Draft), "title");
+        const before = title.isInitialized(draft);
+        draft.title = "plan";
+        return [
+            before,
+            title.isInitialized(draft),
+            Report.property(typeof(Account), "doubled").isInitialized(new Account("ada")),
+        ];
+    }
+
+    // The accessors of a computed property, of an observed one, and of a plain stored one, which has none.
+    public static List<Any?> accessors()
+    {
+        const account = new Account("ada");
+        const doubled = Report.property(typeof(Account), "doubled");
+        const note = Report.property(typeof(Account), "note");
+        const balance = Report.property(typeof(Account), "balance");
+        const getter = doubled.getter() ?? throw new ValueError("none");
+        const setter = note.setter() ?? throw new ValueError("none");
+        setter.invoke(account, ["seen"]);
+        return [
+            getter.name,
+            getter.type == typeof(int),
+            getter.invoke(account, []),
+            doubled.setter(),
+            setter.name,
+            setter.type == typeof(void),
+            setter.parameters().map(parameter => parameter.type == typeof(string)),
+            account.note,
+            balance.getter(),
+            balance.setter(),
+        ];
+    }
+
+    // Each reflection member value is one key whenever reflection read it, as C#'s MethodInfo compares.
+    public static List<Any?> keys()
+    {
+        const deposit = typeof(Account).methods().first(method => method.name == "deposit");
+        const again = typeof(Account).methods().first(method => method.name == "deposit");
+        Map<Method, List<string>> relations = [deposit: ["ledger"]];
+        Map<Property, int> reads = [Report.property(typeof(Account), "balance"): 1];
+        Set<Parameter> parameters = [...deposit.parameters(), ...again.parameters()];
+        const tuple = typeof([string name, int count]).tupleElements();
+        return [
+            deposit == again,
+            deposit.hash() == again.hash(),
+            relations[again] ?? [],
+            deposit == typeof(Account).methods().first(method => method.name == "kind"),
+            reads[Report.property(typeof(Account), "balance")] ?? 0,
+            reads.has(Report.property(typeof(Account), "note")),
+            parameters.count(),
+            typeof(Account).constructor() == typeof(Account).constructor(),
+            tuple[0] == typeof([string name, bool done]).tupleElements()[0],
+            tuple[0] == tuple[1],
+        ];
+    }
+
+    // The statics that run accessors, listed with the others, read and written through them, as a direct use reaches
+    // them.
+    public static List<Any?> staticAccessors()
+    {
+        const count = Report.property(typeof(Counter), "count");
+        const label = Report.property(typeof(Counter), "label");
+        const limit = Report.property(typeof(Counter), "limit");
+        const getter = limit.getter() ?? throw new ValueError("none");
+        limit.set(null, 5);
+        List<Any?> facts = [
+            typeof(Counter).properties().filter(property => property.isStatic).map(property => property.name),
+            count.visibility == Visibility.Public,
+            count.setVisibility == Visibility.Private,
+            count.type == typeof(int),
+            label.get(null),
+            label.setVisibility,
+            label.setter(),
+            limit.get(null),
+            Counter.count,
+            getter.name,
+            getter.invoke(null, []),
+            Report.property(typeof(Counter), "hidden").visibility == Visibility.Private,
+            Report.property(typeof(Shelf<string>), "made").get(null),
+        ];
+        try {
+            count.set(null, 9);
+        } catch (Throwable failure) {
+            facts.add(failure.getMessage());
+        }
+        try {
+            Report.property(typeof(Counter), "hidden").get(null);
+        } catch (Throwable failure) {
+            facts.add(failure.getMessage());
+        }
+        try {
+            label.set(null, "other");
+        } catch (Throwable failure) {
+            facts.add(failure.getMessage());
+        }
+        return facts;
+    }
+
+    // The initial values a declaration gives, a constant one and one that runs code on each read.
+    public static List<Any?> defaults()
+    {
+        const property = (string name) => Report.property(typeof(Counter), name);
+        const draft = property("draft");
+        return [
+            property("stamp").hasDefaultValue,
+            property("stamp").defaultValue(),
+            property("ticket").defaultValue(),
+            property("ticket").defaultValue(),
+            draft.hasDefaultValue,
+            draft.defaultValue() is Draft,
+            property("plain").defaultValue(),
+            property("later").hasDefaultValue,
+            property("count").defaultValue(),
+            property("serial").hasDefaultValue,
+            property("label").hasDefaultValue,
+            Report.property(typeof(Shelf<string>), "index").defaultValue() is Map<string, Any?>,
+            Report.property(typeof(Shelf<string>), "made").defaultValue(),
+        ];
+    }
+
+    // A lazy object loads at its first property read, and a property written before the load reads without it.
+    public static List<Any?> lazy()
+    {
+        Account.opened = 0;
+        const account = typeof(Account).createLazy(loaded => {
+            Account.opened += 1;
+            loaded.owner = "grace";
+        });
+        Report.property(typeof(Account), "balance").setBeforeLoad(account, 99);
+        List<string> refused = [];
+        try {
+            Report.property(typeof(Account), "pin").setBeforeLoad(account, 1234);
+        } catch (Throwable failure) {
+            refused.add(failure.getMessage());
+        }
+        const preset = account.balance;
+        const held = [
+            Report.property(typeof(Account), "balance").isInitialized(account),
+            Report.property(typeof(Account), "owner").isInitialized(account),
+        ];
+        const before = Account.opened;
+        const owner = account.owner;
+        return [preset, refused, held, before, owner, Account.opened, account.balance];
+    }
+}

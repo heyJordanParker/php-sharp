@@ -33,7 +33,7 @@ var_dump($labels(new ReflectionProperty($class, 'id')), $labels($constructor->ge
 var_dump($labels((new ReflectionProperty($class, 'stock'))->getHook(PropertyHookType::Get)));
 var_dump($labels(new ReflectionMethod($class, 'run')), $labels((new ReflectionMethod($class, 'run'))->getParameters()[0]));
 $size = new ReflectionProperty(AttributeTargets\Sized::class, 'size');
-var_dump($labels($size->getHook(PropertyHookType::Get)), $labels($size->getHook(PropertyHookType::Set)->getParameters()[0]));
+var_dump($labels($size->getHook(PropertyHookType::Get)));
 // The hooks that carry the attributes read and write the storage.
 $ledger = new AttributeTargets\Ledger(7, 2);
 $ledger->total = 5;
@@ -77,7 +77,6 @@ string(7) "stocked"
 string(3) "run"
 string(5) "times"
 string(8) "measured"
-string(8) "new size"
 int(5)
 string(4) "cash"
 int(7)

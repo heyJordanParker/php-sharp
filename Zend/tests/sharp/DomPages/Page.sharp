@@ -1,0 +1,21 @@
+namespace DomPages;
+
+import Dom.Element;
+import Dom.HTMLDocument;
+
+// Reads an HTML page through PHP 8.4's HTML DOM, which the standard library names, decision 83.
+public static class Page
+{
+    public static string? first(string html) => HTMLDocument.createFromString(html).querySelector("p")?.textContent;
+
+    public static List<string> links(string html)
+    {
+        List<string> found = [];
+        for (const link of HTMLDocument.createFromString(html).querySelectorAll("a")) {
+            if (link is Element element) {
+                found.add(element.getAttribute("href") ?? "");
+            }
+        }
+        return found;
+    }
+}

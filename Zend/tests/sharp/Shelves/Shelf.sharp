@@ -1,0 +1,20 @@
+namespace Shelves;
+
+import Lib.Stored;
+
+public class Shelf<TItem> : Stored
+{
+    public string label { get; set; }
+
+    public Shelf(string label)
+    {
+        this.label = label;
+    }
+
+    public string? serialize() => this.label;
+
+    public void unserialize(string data)
+    {
+        this.label = data;
+    }
+}

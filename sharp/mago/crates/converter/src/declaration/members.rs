@@ -4,10 +4,18 @@
 use mago_codex::metadata::class_like::ClassLikeMetadata;
 use mago_codex::metadata::function_like::FunctionLikeMetadata;
 use mago_codex::metadata::property::PropertyMetadata;
+use std::sync::Arc;
+
 use mago_codex::ttype::TType;
+use mago_codex::ttype::atomic::TAtomic;
+use mago_codex::ttype::atomic::iterable::TIterable;
+use mago_codex::ttype::atomic::object::TObject;
+use mago_codex::ttype::combine_union_types;
+use mago_codex::ttype::combiner::CombinerOptions;
 use mago_codex::ttype::comparator::ComparisonResult;
 use mago_codex::ttype::comparator::union_comparator::is_contained_by;
 use mago_codex::ttype::get_mixed;
+use mago_codex::ttype::get_null;
 use mago_codex::ttype::get_php_declared_type;
 use mago_codex::ttype::resolution::TypeResolutionContext;
 use mago_codex::ttype::union::TUnion;
@@ -27,6 +35,7 @@ use mago_syntax::cst::PlainProperty;
 use mago_syntax::cst::PropertyHook;
 use mago_syntax::cst::PropertyHookBody;
 use mago_syntax::cst::PropertyHookConcreteBody;
+use mago_syntax::cst::PropertyHookList;
 use mago_syntax::cst::PropertyItem;
 use mago_syntax::cst::Sequence;
 use mago_syntax::cst::Statement;
@@ -41,9 +50,13 @@ use mago_word::word;
 use crate::Converter;
 use crate::Method;
 use crate::body::Locals;
+use crate::body::natively_checked;
+use crate::types::names_any;
 use crate::types::raw_generic;
+use crate::types::type_text;
 
 use super::NameCase;
+use super::Setters;
 use super::accessors;
 use super::has;
 
@@ -91,6 +104,56 @@ impl<'ast, 'arena> MutWalker<'ast, 'arena, ()> for ThisWrites {
     }
 }
 
+/// The `Iterable` a method with `yield` returns, of the values `declared`, its declared return, gives: a `Generator`'s
+/// second type argument, an `iterable`'s values, or the last type argument of a `Traversable` class, and `mixed` where
+/// the declaration names none. A PHP# `Iterable` gives values alone, so the keys say nothing (spec section 12).
+fn yielded_type(declared: &TUnion) -> TUnion {
+    let values = declared.types.iter().find_map(|atomic| match atomic {
+        TAtomic::Iterable(iterable) => Some((*iterable.value_type).clone()),
+        TAtomic::Object(TObject::Named(named)) => match named.get_type_parameters() {
+            Some([_, value, ..]) | Some([value]) => Some(value.clone()),
+            _ => None,
+        },
+        _ => None,
+    });
+
+    TUnion::from_atomic(TAtomic::Iterable(TIterable::new(
+        Arc::new(get_mixed()),
+        Arc::new(values.unwrap_or_else(get_mixed)),
+    )))
+}
+
+/// A method's head, as `override int?`, which the converter writes once its body is converted, since the values the
+/// body returns may narrow the declared return.
+struct Head {
+    span: Span,
+    /// `virtual `, `override ` or nothing.
+    opening: String,
+    /// The return type, as PHP# writes it.
+    written: String,
+    /// The return type the method declares.
+    declared: TUnion,
+    /// Whether the declared return names `Any`, `Any?` or `Object` on a public member of an application, or the
+    /// method declares none, which only the values the body returns can name.
+    untyped: bool,
+    /// Whether the method declares no return, which the analysis takes from its body.
+    inferred: bool,
+}
+
+/// A property's hooks, declared in the class body or on a constructor's parameter, and what converting them reads.
+#[derive(Clone, Copy)]
+pub(super) struct Hooks<'list, 'arena> {
+    pub(super) list: &'list PropertyHookList<'arena>,
+    /// The property's type.
+    pub(super) union: &'list TUnion,
+    pub(super) declared: &'list PropertyMetadata,
+    /// The variable that names the property.
+    pub(super) variable: &'list DirectVariable<'arena>,
+    /// The class member the hooks belong to, before which the static fields of their `static` locals go: the property,
+    /// or the constructor whose parameter declares it.
+    pub(super) member: Span,
+}
+
 impl Converter<'_, '_> {
     /// A property, written again whole, as a field when it is private or protected storage, or a property with
     /// accessors otherwise. Two names in one declaration become one declaration each, on its own line (spec section
@@ -116,13 +179,14 @@ impl Converter<'_, '_> {
 
         let mut declarations = Vec::new();
         for item in property.items.iter() {
-            let Some((head, union, has_accessors)) = self.property_head(&property.modifiers, item.variable()) else {
+            let Some((head, union, has_accessors, setters)) = self.property_head(&property.modifiers, item.variable())
+            else {
                 continue;
             };
             let Some(value) = self.initial_value(item, &union, property.hint.is_none(), is_static) else {
                 continue;
             };
-            let accessors = accessors(has_accessors, is_readonly, &property.modifiers);
+            let accessors = accessors(has_accessors, is_readonly, &property.modifiers, setters);
             // A property's accessors end it, unless an initial value follows them (spec section 6).
             let end = if accessors.is_empty() || !value.is_empty() { ";" } else { "" };
             declarations.push(format!("{attributes}{head}{accessors}{value}{end}"));
@@ -143,8 +207,17 @@ impl Converter<'_, '_> {
         };
         let metadata = class.metadata;
         let variable = property.item.variable();
+        // An interface's members are public, and a `set` reaches its own namespace at most (spec section 6.1).
+        if metadata.kind.is_interface()
+            && let Some(set) = property.hook_list.hooks.iter().find(|hook| hook.name.value == b"set")
+        {
+            return self.refuse(
+                set.name.span,
+                "an interface property with a `set` hook has no PHP# form: an interface property states `get` or `init` (spec section 22)",
+            );
+        }
         self.attributes(&property.attribute_lists);
-        let Some((head, union, _)) = self.property_head(&property.modifiers, variable) else {
+        let Some((head, union, is_public, setters)) = self.property_head(&property.modifiers, variable) else {
             return;
         };
         let Some(declared) = metadata.properties.get(&word(variable.name)) else {
@@ -171,17 +244,35 @@ impl Converter<'_, '_> {
             .start
             .offset;
         self.edits.replace_range(start, property.item.span().end.offset, head);
+        let hooks = Hooks { list: &property.hook_list, union: &union, declared, variable, member: property.span() };
+        self.hook_list(&hooks, &property.modifiers, has_storage, is_public && setters == Setters::Class);
+        if !value.is_empty() {
+            self.edits.insert(property.hook_list.right_brace.end.offset, format!("{value};"));
+        }
+        self.docblock(property.span());
+    }
 
-        // PHP's `private(set)` and `protected(set)` are the `set` accessor's own access level.
-        let set_access = match property.modifiers.iter().find(|modifier| modifier.is_write_visibility()) {
+    /// The hooks of a property, declared in the class body or on a constructor's parameter, as its accessors (spec
+    /// sections 6 and 9). A property with storage, `has_storage`, gains the accessor it declares no hook for. PHP's
+    /// `private(set)` among `modifiers` is a `private set`, as is the `set` of a public property the class alone sets,
+    /// `set_by_class`, and any other `set` reaches the property's namespace at most, PHP's `protected(set)` too (spec
+    /// section 6.1).
+    pub(super) fn hook_list(
+        &mut self,
+        hooks: &Hooks<'_, '_>,
+        modifiers: &Sequence<'_, Modifier<'_>>,
+        has_storage: bool,
+        set_by_class: bool,
+    ) {
+        let set_access = match modifiers.iter().find(|modifier| modifier.is_write_visibility()) {
             Some(Modifier::PrivateSet(_)) => "private ",
-            Some(Modifier::ProtectedSet(_)) => "protected ",
+            _ if set_by_class => "private ",
             _ => "",
         };
-        let hooks = &property.hook_list.hooks;
-        let has_get = hooks.iter().any(|hook| hook.name.value == b"get");
-        let has_set = hooks.iter().any(|hook| hook.name.value == b"set");
-        if has_storage && let (Some(first), Some(last)) = (hooks.first(), hooks.last()) {
+        let list = &hooks.list.hooks;
+        let has_get = list.iter().any(|hook| hook.name.value == b"get");
+        let has_set = list.iter().any(|hook| hook.name.value == b"set");
+        if has_storage && let (Some(first), Some(last)) = (list.first(), list.last()) {
             if !has_get {
                 self.edits.insert(first.span().start.offset, "get; ");
             }
@@ -190,32 +281,22 @@ impl Converter<'_, '_> {
             }
         } else if has_set && !has_get {
             self.refuse(
-                property.hook_list.left_brace,
+                hooks.list.left_brace,
                 "a property with a `set` hook, no `get` hook and no storage has no PHP# form: a PHP# property needs a `get` accessor (spec section 6)",
             );
         }
-        for hook in hooks.iter() {
+        for hook in list.iter() {
             let is_set = hook.name.value == b"set";
-            self.hook(hook, is_set, &union, declared, variable);
+            self.hook(hook, is_set, hooks);
             if is_set && !set_access.is_empty() {
                 self.edits.insert(hook.name.span.start.offset, set_access);
             }
         }
-        if !value.is_empty() {
-            self.edits.insert(property.hook_list.right_brace.end.offset, format!("{value};"));
-        }
-        self.docblock(property.span());
     }
 
-    /// A hook as an accessor, `get` or `set` by `is_set`, of the property `variable` names, whose type is `union`.
-    fn hook(
-        &mut self,
-        hook: &PropertyHook<'_>,
-        is_set: bool,
-        union: &TUnion,
-        declared: &PropertyMetadata,
-        variable: &DirectVariable<'_>,
-    ) {
+    /// A hook as an accessor, `get` or `set` by `is_set`, of the property `hooks` belongs to.
+    fn hook(&mut self, hook: &PropertyHook<'_>, is_set: bool, hooks: &Hooks<'_, '_>) {
+        let Hooks { union, declared, variable, member, .. } = *hooks;
         self.attributes(&hook.attribute_lists);
         if let Some(ampersand) = hook.ampersand {
             self.refuse(ampersand, "a `get` hook that returns by reference has no PHP# form: PHP# has no references");
@@ -272,6 +353,8 @@ impl Converter<'_, '_> {
         self.method = Some(Method {
             name: None,
             returning: (!is_set).then(|| union.clone()),
+            checks_return: !is_set
+                && natively_checked(declared.type_declaration_metadata.as_ref(), union, self.input.codebase),
             resolution: TypeResolutionContext::default(),
             parameters,
             variadic: None,
@@ -280,6 +363,7 @@ impl Converter<'_, '_> {
             storage: Some(variable.name[1..].to_vec()),
             captures: None,
             returned: Vec::new(),
+            static_fields: Vec::new(),
         });
         match body {
             PropertyHookConcreteBody::Block(block) => self.block(block),
@@ -295,18 +379,41 @@ impl Converter<'_, '_> {
             }
         }
         self.declare_locals();
+        self.static_fields(member);
         self.method = None;
         self.renamed.clear();
     }
 
+    /// Writes the private static fields the `static` locals of the body being converted became, each on its own line
+    /// before `member`, the class member whose body declares them, and before its docblock (spec section 6).
+    fn static_fields(&mut self, member: Span) {
+        let Some(fields) = self.method.as_mut().map(|method| std::mem::take(&mut method.static_fields)) else {
+            return;
+        };
+        if fields.is_empty() {
+            return;
+        }
+        let start = self.docblock_before(member).map_or(member, |(docblock, _)| docblock).start.offset;
+        let indentation = self.indentation(start);
+        // At the start of the member's line, before the indentation, where no rewrite of the member writes.
+        let line = start - u32::try_from(indentation.len()).unwrap_or(0);
+        let mut declared = String::new();
+        for field in &fields {
+            declared.push_str(&indentation);
+            declared.push_str(field);
+            declared.push_str("\n\n");
+        }
+        self.edits.insert(line, declared);
+    }
+
     /// `public override string name`, which the declaration of the property `variable` names starts with, its type,
-    /// and whether it is a property with accessors rather than a field: a public one, or one that replaces its
-    /// parent's (spec sections 6 and 22). An interface's property takes no access modifier (spec section 5).
+    /// whether it is a property with accessors rather than a field: a public one, or one that replaces its parent's
+    /// (spec sections 6 and 22), and who sets it. An interface's property takes no access modifier (spec section 5).
     fn property_head(
         &mut self,
         modifiers: &Sequence<'_, Modifier<'_>>,
         variable: &DirectVariable<'_>,
-    ) -> Option<(String, TUnion, bool)> {
+    ) -> Option<(String, TUnion, bool, Setters)> {
         let metadata = self.class.as_ref()?.metadata;
         // A type the codex marks `inferred` here is inherited: declared in the parent, which the override rules need.
         let Some(declared) = metadata.properties.get(&word(variable.name)) else {
@@ -329,19 +436,21 @@ impl Converter<'_, '_> {
         if self.names_inherited_method(variable) {
             return None;
         }
+        let setters = self.setters(variable)?;
 
-        let visibility = match modifiers.iter().find(|modifier| modifier.is_read_visibility()) {
-            Some(Modifier::Protected(_)) => "protected ",
-            Some(Modifier::Private(_)) => "private ",
-            _ if metadata.kind.is_interface() => "",
-            _ => "public ",
-        };
         // A property that redeclares its parent's, as one that changes its initial value does, replaces it, which
         // only a property with accessors marked `override` does: a field replaces nothing (spec section 22).
         let overrides =
             metadata.overridden_property_ids.get(&word(variable.name)).is_some_and(|parents| !parents.is_empty());
+        let visibility = match modifiers.iter().find(|modifier| modifier.is_read_visibility()) {
+            Some(Modifier::Protected(_)) => "protected ",
+            Some(Modifier::Private(_)) => "private ",
+            _ if metadata.kind.is_interface() => "",
+            _ => self.property_access(variable),
+        };
         let is_static = has(modifiers, |modifier| matches!(modifier, Modifier::Static(_))).is_some();
         let is_abstract = has(modifiers, |modifier| matches!(modifier, Modifier::Abstract(_))).is_some();
+        // A property `internal` or wider has accessors, as a public one does, and a narrower one is storage.
         let is_public = !matches!(visibility, "private " | "protected ");
         // A PHP# property is closed unless it is `virtual` (spec section 6.1), so one a subclass may replace takes it,
         // as an open method does.
@@ -352,6 +461,23 @@ impl Converter<'_, '_> {
             && !metadata.kind.is_interface()
             && !self.class.as_ref().is_some_and(|class| class.is_final)
             && has(modifiers, |modifier| matches!(modifier, Modifier::Final(_))).is_none();
+        // A property another replaces, declares or implements keeps a `set` they share, since a `private set` closes
+        // the property to a subclass's replacement.
+        let shared = is_open || overrides || is_abstract || metadata.kind.is_interface();
+        let setters = if shared { Setters::Namespace } else { setters };
+        // An interface's property is public.
+        if matches!(visibility, "public " | "") && self.untyped_in_application(&written) {
+            let class = self.class.as_ref().map(|class| class.name.clone()).unwrap_or_default();
+            self.refuse(
+                variable.span,
+                format!(
+                    "`{class}::{}` is `{}`, and a public member of an application names its types",
+                    String::from_utf8_lossy(variable.name),
+                    union.get_id()
+                ),
+            );
+            return None;
+        }
         // An override keeps the name of what it replaces.
         let kind = if is_public || overrides { "property" } else { "field" };
         if !overrides && self.misnamed(&variable.name[1..], variable.span, kind, NameCase::Camel) {
@@ -371,7 +497,7 @@ impl Converter<'_, '_> {
             opening.push_str("virtual ");
         }
 
-        Some((format!("{visibility}{opening}{written} {name}"), union, is_public || overrides))
+        Some((format!("{visibility}{opening}{written} {name}"), union, is_public || overrides, setters))
     }
 
     /// Refuses the property `variable` names, a declared or a promoted one, when the class inherits a method of its
@@ -453,31 +579,41 @@ impl Converter<'_, '_> {
             return;
         };
         let metadata = class.metadata;
-        let visibility = match constant.modifiers.iter().find(|modifier| modifier.is_read_visibility()) {
-            Some(Modifier::Protected(_)) => "protected",
-            Some(Modifier::Private(_)) => "private",
-            _ => "public",
-        };
+        let declared = constant.modifiers.iter().find(|modifier| modifier.is_read_visibility());
 
         self.attributes(&constant.attribute_lists);
         let span = constant.span();
         let start = constant.modifiers.first().map_or(constant.r#const.span, HasSpan::span).start.offset;
         let attributes = self.edits.render(self.source, span.start.offset, start);
-        // The lowering writes the type into the constant's PHP, which a subclass's constant of the name must then keep.
-        let overridable = constant.hint.is_none()
-            && visibility != "private"
-            && !metadata.flags.is_final()
-            && !metadata.kind.is_enum();
         let mut declarations = Vec::new();
         for item in constant.items.iter() {
             let name = String::from_utf8_lossy(item.name.value).into_owned();
             if self.misnamed(item.name.value, item.name.span, "constant", NameCase::UpperSnake) {
                 continue;
             }
+            // An interface's constant is public and writes no visibility, as its methods do (spec section 22).
+            let visibility = match declared {
+                _ if metadata.kind.is_interface() => "",
+                Some(Modifier::Protected(_)) => "protected ",
+                Some(Modifier::Private(_)) => "private ",
+                _ => {
+                    let attributes = metadata
+                        .constants
+                        .get(&word(item.name.value))
+                        .map_or(&[][..], |found| found.attributes.as_slice());
+                    self.public_access(word(item.name.value), attributes, false)
+                }
+            };
+            // The lowering writes the type into the constant's PHP, which a subclass's constant of the name must then
+            // keep.
+            let overridable = constant.hint.is_none()
+                && visibility != "private "
+                && !metadata.flags.is_final()
+                && !metadata.kind.is_enum();
             if overridable {
                 self.refuse(
                     item.name.span,
-                    format!("the constant `{name}` has no type in PHP, and the type PHP# gives it would bind a subclass's `{name}` to a compatible one: a constant with no type converts only in a `final` class or as `private`"),
+                    format!("the constant `{name}` has no type in PHP, so a subclass may declare its own `{name}` of any type, and the type PHP# writes in the PHP it compiles to binds a subclass's `{name}` to a compatible one"),
                 );
                 continue;
             }
@@ -499,7 +635,7 @@ impl Converter<'_, '_> {
             };
             self.expression(item.value, Some(&union));
             let value = self.render(item.value);
-            declarations.push(format!("{attributes}{visibility} const {written} {name} = {value};"));
+            declarations.push(format!("{attributes}{visibility}const {written} {name} = {value};"));
         }
 
         let indentation = self.indentation(span.start.offset);
@@ -533,7 +669,10 @@ impl Converter<'_, '_> {
         if is_text {
             self.edits.replace(method.name.span, "toString");
         } else if name.starts_with(b"__") && !is_constructor {
-            self.refuse(method.name.span, format!("the magic method `{shown}` is not converted yet"));
+            self.refuse(
+                method.name.span,
+                format!("the magic method `{shown}` has no PHP# form: a PHP# method's name never starts with `__`, which PHP keeps for its magic methods, and `__toString` alone is a PHP# method, `toString()` (spec section 18)"),
+            );
             return;
         }
         // A method that replaces another keeps the name of what it replaces.
@@ -561,16 +700,33 @@ impl Converter<'_, '_> {
             return;
         }
         self.attributes(&method.attribute_lists);
+        let is_abstract = has(&method.modifiers, |modifier| matches!(modifier, Modifier::Abstract(_))).is_some();
+        let is_narrower =
+            has(&method.modifiers, |modifier| matches!(modifier, Modifier::Private(_) | Modifier::Protected(_)))
+                .is_some();
+        // The access level the converter writes for a method PHP makes public, with no access modifier or `public`.
+        let mut access = None;
         if is_interface {
             for modifier in method.modifiers.iter().filter(|modifier| modifier.is_read_visibility()) {
                 let span = modifier.span();
                 self.edits.delete(span.start.offset, self.skip_whitespace(span.end.offset));
             }
-        } else if let Some(at) = Self::missing_visibility(&method.modifiers, function.span) {
-            self.edits.insert(at, "public ");
+        } else if !is_narrower {
+            let replaces = metadata
+                .overridden_method_ids
+                .get(&ascii_lowercase_word(name))
+                .is_some_and(|parents| !parents.is_empty());
+            let written = self.public_access(ascii_lowercase_word(name), &declared.attributes, replaces);
+            // An abstract method is there to be replaced, which a `private` one never is.
+            let written = if is_abstract && written == "private " { "protected " } else { written };
+            self.write_access(&method.modifiers, function.span, written);
+            access = Some(written);
         }
-        let is_abstract = has(&method.modifiers, |modifier| matches!(modifier, Modifier::Abstract(_))).is_some();
+        let is_public = is_interface || access == Some("public ");
+        let is_private = access == Some("private ")
+            || has(&method.modifiers, |modifier| matches!(modifier, Modifier::Private(_))).is_some();
 
+        let mut head = None;
         if is_constructor {
             let required = if self.class.as_ref().is_some_and(|class| class.required) { "required " } else { "" };
             self.edits.replace_range(
@@ -579,25 +735,27 @@ impl Converter<'_, '_> {
                 format!("{required}{class_name}"),
             );
         } else {
-            // A return the codex marks `inferred` is inherited from the parent, which is declared. A return taken from
-            // the body is the analysis's inference.
-            if declared.return_from_body.is_some() {
-                self.refuse(
-                    method.name.span,
-                    format!("`{shown}`'s return is taken from its body, which the analysis infers, and the converter writes no inferred type"),
-                );
+            // A return the codex marks `inferred` is inherited from the parent, which is declared. A return an extension
+            // host takes from the body is the analysis's reading of it, so the method returns what its body returns.
+            let inferred = declared.return_from_body.is_some();
+            if !inferred
+                && self.narrowed_by_docblock(declared.return_type_metadata.as_ref(), "@return", method.name.span)
+            {
                 return;
             }
-            if self.narrowed_by_docblock(declared.return_type_metadata.as_ref(), "@return", method.name.span) {
-                return;
-            }
-            let returned =
-                declared.return_type_metadata.as_ref().map_or_else(get_mixed, |metadata| metadata.type_union.clone());
+            let returned = match &declared.return_type_metadata {
+                Some(metadata) if !inferred => metadata.type_union.clone(),
+                _ => get_mixed(),
+            };
+            // A method with `yield` returns an `Iterable` of what it yields (spec section 12).
+            let returned = if declared.flags.has_yield() { yielded_type(&returned) } else { returned };
             let Some(written) = self.type_text(&returned, method.name.span) else {
                 return;
             };
+            // A public method of an application that declares `mixed` returns what its body returns, which the body
+            // decides once it is converted.
+            let untyped = inferred || is_public && self.untyped_in_application(&written);
 
-            let is_private = has(&method.modifiers, |modifier| matches!(modifier, Modifier::Private(_))).is_some();
             let is_final = has(&method.modifiers, |modifier| matches!(modifier, Modifier::Final(_)));
             let overrides = metadata.overridden_method_ids.get(&ascii_lowercase_word(name)).is_some_and(|parents| {
                 parents.keys().any(|parent| {
@@ -655,7 +813,21 @@ impl Converter<'_, '_> {
             {
                 self.edits.delete(span.start.offset, self.skip_whitespace(span.end.offset));
             }
-            self.edits.replace(function.span, format!("{opening}{written}"));
+            head = Some(Head {
+                span: function.span,
+                opening: opening.to_owned(),
+                written,
+                declared: returned,
+                untyped,
+                inferred,
+            });
+            // The method's own type parameters follow its name, as `TItem first<TItem>(…)` (spec section 11).
+            let Some(parameters) = self.type_parameters(&declared.template_types, &[], method.name.span) else {
+                return;
+            };
+            if !parameters.is_empty() {
+                self.edits.insert(method.name.span.end.offset, parameters);
+            }
             if let Some(hint) = &method.return_type_hint {
                 self.edits.delete(method.parameter_list.right_parenthesis.end.offset, hint.span().end.offset);
             }
@@ -669,6 +841,7 @@ impl Converter<'_, '_> {
             .iter()
             .find(|parameter| parameter.ellipsis.is_some())
             .map(|parameter| parameter.variable.name.to_vec());
+        let member = format!("{class_name}::{shown}");
         for (index, parameter) in method.parameter_list.parameters.iter().enumerate() {
             let metadata = declared.parameters.get(index).and_then(|parameter| parameter.type_metadata.as_ref());
             let tag = format!("@param {}", String::from_utf8_lossy(parameter.variable.name));
@@ -681,7 +854,12 @@ impl Converter<'_, '_> {
             {
                 continue;
             }
-            self.parameter(parameter, metadata.map(|metadata| metadata.type_union.clone()));
+            self.parameter(
+                parameter,
+                metadata.map(|metadata| metadata.type_union.clone()),
+                is_public.then_some(member.as_str()),
+                method.span(),
+            );
         }
 
         let returning = (!is_constructor).then(|| {
@@ -699,9 +877,13 @@ impl Converter<'_, '_> {
             MethodBody::Concrete(block) => {
                 let resolution = declared.type_resolution_context.clone().unwrap_or_default();
                 self.rename_locals(&parameters, |names| names.walk_block(block, &mut ()));
+                let checks_return = returning.as_ref().is_some_and(|returning| {
+                    natively_checked(declared.return_type_declaration_metadata.as_ref(), returning, self.input.codebase)
+                });
                 self.method = Some(Method {
                     name: Some(name.to_vec()),
                     returning,
+                    checks_return,
                     resolution,
                     parameters,
                     variadic,
@@ -710,20 +892,28 @@ impl Converter<'_, '_> {
                     storage: None,
                     captures: None,
                     returned: Vec::new(),
+                    static_fields: Vec::new(),
                 });
                 if is_constructor && let Some(parent) = metadata.direct_parent_class {
                     self.super_call(method, block, parent.as_bytes());
                 }
                 self.block(block);
                 self.declare_locals();
+                self.static_fields(method.span());
                 if gives_null {
                     self.returns_null(block);
                 }
                 let closed = class_is_final
-                    || has(&method.modifiers, |modifier| matches!(modifier, Modifier::Final(_) | Modifier::Private(_)))
-                        .is_some();
-                if closed && !declared.flags.has_yield() {
-                    self.unused_null(method, block);
+                    || is_private
+                    || has(&method.modifiers, |modifier| matches!(modifier, Modifier::Final(_))).is_some();
+                // A return narrowed past what PHP declares holds for a closed method alone: a subclass may replace an
+                // open one with a method whose PHP return is the wider one, which PHP refuses to link (spec section 22).
+                if let Some(head) = head.as_mut() {
+                    if head.untyped {
+                        head.untyped = declared.flags.has_yield() || !closed || !self.returns_known(head, gives_null);
+                    } else if closed && !declared.flags.has_yield() {
+                        self.unused_null(method, block, head);
+                    }
                 }
                 self.method = None;
                 self.renamed.clear();
@@ -731,7 +921,62 @@ impl Converter<'_, '_> {
             MethodBody::Abstract(_) => {}
             MethodBody::Expression(_) => self.refuse(method.body.span(), "an expression body is PHP# only"),
         }
+        if let Some(head) = head {
+            if head.untyped && head.inferred {
+                self.refuse(
+                    method.name.span,
+                    format!("`{shown}` takes its return from its body, as an extension host says, and a PHP# signature names one, which the values its body returns give only for a method no subclass may replace, where each has a type PHP# names (spec section 22)"),
+                );
+            } else if head.untyped {
+                self.refuse(
+                    method.name.span,
+                    format!(
+                        "`{class_name}::{shown}` returns `{}`, and a public member of an application names its types",
+                        head.declared.get_id()
+                    ),
+                );
+            }
+            self.edits.replace(head.span, format!("{}{}", head.opening, head.written));
+        }
         self.docblock(method.span());
+    }
+
+    /// Writes the type `head`'s closed method returns, in place of the `Any?` or `Object` its declaration gives, as the join of
+    /// the values its body returns, where each is of a type PHP# names and the join names no `Any` or `Object`, and
+    /// gives whether it did. The declaration holds each such value, so PHP returns each as the narrower type does. A
+    /// body that `gives_null` runs on past its last statement and returns `null` there.
+    fn returns_known(&mut self, head: &mut Head, gives_null: bool) -> bool {
+        let Some(state) = self.method.as_ref() else {
+            return false;
+        };
+        let codebase = self.input.codebase;
+        let mut joined: Option<TUnion> = gives_null.then(get_null);
+        for returned in &state.returned {
+            let Some(returned) = returned
+                .as_ref()
+                .filter(|returned| !returned.has_mixed() && !returned.has_template_types() && !returned.is_never())
+            else {
+                return false;
+            };
+            joined = Some(match joined {
+                Some(joined) => combine_union_types(&joined, returned, codebase, CombinerOptions::default()),
+                None => returned.clone(),
+            });
+        }
+        // A literal returned, as `'store'`, is a value of its general type, which a signature names.
+        let Some(mut joined) = joined else {
+            return false;
+        };
+        joined.widen_literals();
+        let Ok(written) = type_text(&joined, codebase, &mut self.imports) else {
+            return false;
+        };
+        if names_any(&written) {
+            return false;
+        }
+        head.written = written;
+
+        true
     }
 
     /// Refuses a parameter of `declared`, the method `method` declares in the class `metadata`, that takes less once
@@ -800,10 +1045,10 @@ impl Converter<'_, '_> {
         self.edits.insert(block.right_brace.start.offset, format!("{opened}    return null;\n{outer}"));
     }
 
-    /// Refuses `method`, which no subclass replaces, when its declared return holds `null` and no `return` of its
-    /// `block` gives one. PHP# refuses such a `?` (spec section 14.4), where PHP keeps it, and writing the narrower type
-    /// would write what the analysis infers (decision 2), so the PHP declares it first.
-    fn unused_null(&mut self, method: &MethodDeclaration<'_>, block: &Block<'_>) {
+    /// Writes `head`'s return without `?` for `method`, which no subclass replaces, when its declared return holds
+    /// `null` and no `return` of its `block` gives one. PHP# refuses such a `?` (spec section 14.4), and every value
+    /// the method returns is of the narrower type, so PHP returns each as it does.
+    fn unused_null(&mut self, method: &MethodDeclaration<'_>, block: &Block<'_>, head: &mut Head) {
         let Some(state) = self.method.as_ref() else {
             return;
         };
@@ -841,15 +1086,8 @@ impl Converter<'_, '_> {
             return;
         }
         let bare = TUnion::from_vec(returning.types.iter().filter(|atomic| !atomic.is_null()).cloned().collect());
-        let (Some(written), Some(narrower)) =
-            (self.type_text(&returning, method.name.span), self.type_text(&bare, method.name.span))
-        else {
-            return;
-        };
-        let name = String::from_utf8_lossy(method.name.value);
-        self.refuse(
-            method.name.span,
-            format!("`{name}` declares `{written}` and never returns `null`, which PHP# refuses on a method no subclass replaces (spec section 14.4): declare `{narrower}`"),
-        );
+        if let Some(narrower) = self.type_text(&bare, method.name.span) {
+            head.written = narrower;
+        }
     }
 }

@@ -31,7 +31,7 @@ use mago_span::Span;
 use crate::ExternNamespace;
 use crate::Library;
 use crate::library::short;
-use mago_names::STANDARD_ROOT_CLASSES;
+use mago_names::default_root_classes;
 use mago_word::Word;
 
 /// The names a file reaches classes and library namespaces by: its namespace, its `import` lines, the imports the
@@ -122,7 +122,7 @@ impl<'input> Imports<'input> {
     /// `Builtins.sharp`, as `Throwable` and `Attribute` (spec section 23), or a class declared directly in `Sharp`.
     pub fn is_default(class: &str) -> bool {
         let class = class.trim_start_matches('\\');
-        STANDARD_ROOT_CLASSES.iter().any(|root| root.eq_ignore_ascii_case(class))
+        default_root_classes().any(|root| root.eq_ignore_ascii_case(class))
             || class.rsplit_once('\\').is_some_and(|(namespace, _)| namespace == "Sharp")
     }
 
@@ -261,6 +261,10 @@ pub fn type_text(union: &TUnion, codebase: &CodebaseMetadata, imports: &mut Impo
 }
 
 fn atomic_text(atomic: &TAtomic, codebase: &CodebaseMetadata, imports: &mut Imports) -> Result<String, String> {
+    // `never` is a whole type, which no value has, as a return, a type argument or a parameter (spec section 7).
+    if atomic.is_never() {
+        return Ok("never".to_owned());
+    }
     // `Order & Shareable` holds a value of each class (spec section 21).
     if let Some(intersected) = atomic.get_intersection_types().filter(|intersected| !intersected.is_empty()) {
         let TAtomic::Object(TObject::Named(named)) = atomic else {
@@ -397,8 +401,31 @@ fn atomic_text(atomic: &TAtomic, codebase: &CodebaseMetadata, imports: &mut Impo
         SharpType::ClassValue(TClassLikeString::Any { kind: TClassLikeStringKind::Class }) => {
             "Class<Object>".to_owned()
         }
-        SharpType::ClassValue(_) => return Err(format!("the type `{}` is not converted yet", atomic.get_id())),
+        // `class-string<T>` is a `Class<T>` (spec section 25).
+        SharpType::ClassValue(TClassLikeString::Generic { parameter_name, .. }) => format!("Class<{parameter_name}>"),
+        // An enum's class value is a `Class<UnitEnum>`, which PHP# names only in the standard library, and an
+        // interface or a trait shares no type with others, as every class does `Object`.
+        SharpType::ClassValue(TClassLikeString::Any { kind }) => {
+            let (kinds, reason) = match kind {
+                TClassLikeStringKind::Enum => (
+                    "enum",
+                    "`UnitEnum`, which each is, is a class of PHP's root namespace, which PHP# names only in the standard library (spec section 23)",
+                ),
+                TClassLikeStringKind::Interface => ("interface", "no type holds every interface (spec section 25)"),
+                _ => ("trait", "no type holds every trait (spec section 25)"),
+            };
+            return Err(format!("PHP# has no type `{}`, the class value of any {kinds}: {reason}", atomic.get_id()));
+        }
     })
+}
+
+/// Whether `written`, a type as [`type_text`] writes it, names `Any` or `Object` at any depth, as `Any?` for PHP's
+/// `mixed`, `Map<int|string, Any?>` for an `array` no PHPDoc types and `Object` for `object`.
+#[must_use]
+pub fn names_any(written: &str) -> bool {
+    written
+        .split(|character: char| !(character.is_ascii_alphanumeric() || character == '_' || character == '.'))
+        .any(|part| part == "Any" || part == "Object")
 }
 
 /// The first type `union` holds, as PHPDoc writes it, that narrows the PHP# type [`type_text`] writes for it, as

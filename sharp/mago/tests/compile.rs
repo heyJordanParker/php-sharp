@@ -10,7 +10,7 @@ use std::process::Stdio;
 use mago_database::process;
 use mago_sharp_bridge::unit::Library;
 use mago_sharp_bridge::unit::header;
-use mago_sharp_bridge::unit::is_stale;
+use mago_sharp_bridge::unit::inputs_changed;
 use mago_sharp_bridge::unit::source_hash;
 use mago_sharp_bridge::unit::stamp;
 use mago_sharp_lean::PACKAGE_FOLDER;
@@ -1710,7 +1710,7 @@ fn every_compiled_file_is_current_after_the_php_files_are_written() {
     assert!(root.join("app/Environment.php").exists() && root.join("app/Report.php").exists());
     for name in ["app/Environment.sharp", "app/Order.sharp", "app/Report.sharp", MONEY_PATH] {
         let bytes = std::fs::read(compiled(root, name)).unwrap();
-        assert!(!is_stale(&std::fs::canonicalize(root).unwrap(), &bytes).unwrap(), "{name}");
+        assert!(!inputs_changed(&std::fs::canonicalize(root).unwrap(), &bytes).unwrap(), "{name}");
     }
 }
 
@@ -1739,7 +1739,7 @@ fn a_compiled_file_goes_stale_only_when_a_file_it_reads_changes() {
         "namespace App;\n\nimport Lib.Pace;\n\npublic class Paced\n{\n    public int percent()\n    {\n        return Pace.percent();\n    }\n}\n",
     );
     let root = std::fs::canonicalize(root).unwrap();
-    let stale = |name: &str| is_stale(&root, &std::fs::read(compiled(&root, name)).unwrap()).unwrap();
+    let stale = |name: &str| inputs_changed(&root, &std::fs::read(compiled(&root, name)).unwrap()).unwrap();
 
     for alias_file in ["public/wp/aliases.php", "public/wp/rapid.php"] {
         compile_succeeds(&root);
@@ -2613,7 +2613,7 @@ fn listener_table(root: &Path, inputs: &[&str], rows: &str, dispatcher: &str) ->
     let inputs: String = inputs.iter().map(|path| input_row(root, path)).collect();
 
     format!(
-        "<?php\n\nreturn [\n    'inputs' => [\n{inputs}    ],\n    'listeners' => [\n{rows}    ],\n    'dispatcher' => {dispatcher},\n];\n"
+        "<?php\n\nreturn [\n    'inputs' => [\n{inputs}    ],\n    'listeners' => [\n{rows}    ],\n    'dispatcher' => {dispatcher},\n    'attributes' => [\n    ],\n];\n"
     )
 }
 
@@ -2746,19 +2746,50 @@ fn compile_names_the_app_module_that_binds_the_dispatcher() {
     compile_succeeds(root);
     assert!(
         read(root, ".sharp/listeners.php")
-            .ends_with("    'dispatcher' => ['app/Shop/Module.sharp', 'app\\\\shop'],\n];\n")
+            .contains("    'dispatcher' => ['app/Shop/Module.sharp', 'app\\\\shop'],\n    'attributes' => [\n")
     );
 
     write(root, "app/Module.sharp", &dispatcher_module("App"));
     let output = compile(root);
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     assert!(printed(&output).contains("Only `app/Module.sharp` binds `Dispatcher`"), "{}", printed(&output));
-    assert!(read(root, ".sharp/listeners.php").ends_with("    'dispatcher' => ['app/Module.sharp', 'app'],\n];\n"));
+    assert!(
+        read(root, ".sharp/listeners.php")
+            .contains("    'dispatcher' => ['app/Module.sharp', 'app'],\n    'attributes' => [\n")
+    );
 
     std::fs::remove_file(root.join("app/Shop/Module.sharp")).unwrap();
     std::fs::remove_file(root.join("app/Module.sharp")).unwrap();
     compile_succeeds(root);
-    assert!(read(root, ".sharp/listeners.php").ends_with("    'dispatcher' => null,\n];\n"));
+    assert!(read(root, ".sharp/listeners.php").contains("    'dispatcher' => null,\n    'attributes' => [\n"));
+}
+
+/// Spec section 29: the listener table names, for each plain PHP class, method and function an `extern` line gives
+/// attributes, the file of each such line, which the engine compiles when reflection reads its attributes. A class is
+/// keyed by its full name, a method as `class::method` and a function as `function()`, each in lowercase as PHP looks
+/// it up, and a function of a namespace by its full name. A line without attributes names nothing.
+#[test]
+fn compile_lists_the_files_whose_extern_lines_give_a_declaration_attributes() {
+    let group = "<?php\n\nnamespace Lib;\n\n#[\\Attribute(\\Attribute::TARGET_ALL | \\Attribute::IS_REPEATABLE)]\nfinal class Group\n{\n    public function __construct(public string $name) {}\n}\n";
+    let mailer = "<?php\n\nnamespace Lib;\n\nfinal class Mailer\n{\n    public function sendLater(): void {}\n}\n";
+    let functions = "<?php\n\nnamespace Lib;\n\nfunction sentAt(): int\n{\n    return 1;\n}\n";
+    let first = "namespace App.Stubs;\n\nimport Lib;\nimport Lib.Group;\nimport Lib.Mailer;\n\n[Group(\"mail\")]\nextern Mailer;\nextern Group;\n[Group(\"later\")]\nextern Mailer.sendLater;\n[Group(\"time\")]\nextern Lib.sentAt;\n\npublic class First\n{\n}\n";
+    let directory = lawful_project(&[
+        ("vendor/acme/lib/Group.php", group),
+        ("vendor/acme/lib/Mailer.php", mailer),
+        ("vendor/acme/lib/functions.php", functions),
+        ("app/Stubs/First.sharp", first),
+    ]);
+    let root = directory.path();
+
+    compile_succeeds(root);
+    assert!(
+        read(root, ".sharp/listeners.php").ends_with(
+            "    'attributes' => [\n        'lib\\\\mailer' => ['app/Stubs/First.sharp'],\n        'lib\\\\mailer::sendlater' => ['app/Stubs/First.sharp'],\n        'lib\\\\sentat()' => ['app/Stubs/First.sharp'],\n    ],\n];\n"
+        ),
+        "{}",
+        read(root, ".sharp/listeners.php")
+    );
 }
 
 /// A path the listener table quotes keeps a `'` and a `\` in its name. The PSR-4 folder that maps `App` carries both,
@@ -3809,8 +3840,9 @@ fn compile_refuses_an_import_outside_the_list_of_its_namespace_at_the_import() {
     let store_module = |listed: &str| format!("namespace App.Tenant.Store;\n\nmodule\n{{\n    imports {listed};\n}}\n");
     let listed = store_module("App.Shop.Loyalty, App.Shop.Records, Illuminate.Support");
     let misspelled = store_module("App.Shop.Loyalty, App.Shop.Records, Illuminate.Suport");
-    let cyclic = store_module("App.Shared, App.Shop");
-    let records_module = "namespace App.Shop.Records;\n\nmodule\n{\n    imports App.Tenant.Store;\n}\n";
+    // `App.Shop.Loyalty` imports `StoreService` back, and no list allows or refuses a cycle.
+    let points = "namespace App.Shop.Loyalty;\n\nimport App.Tenant.Store.StoreService;\n\npublic class Points\n{\n    public Points(private StoreService store) { }\n}\n";
+    let ways_out = "Move the code, or declare an interface in one namespace that the other implements.";
     let service = "namespace App.Tenant.Store;\n\nimport App.Shop.Loyalty.Member;\nimport Illuminate.Support.Facades.DB;\nimport App.Shared.Ledger.Entry;\n\npublic class StoreService\n{\n    public StoreService(private Member member, private DB db, private Entry entry) { }\n}\n";
     let refused = "app/Tenant/Store/StoreService.sharp:5:8:error - unlisted-import: `App.Tenant.Store` imports only `App.Shop.Loyalty`, `App.Shop.Records` and `Illuminate.Support`.";
     for (modules, expected) in [
@@ -3824,11 +3856,10 @@ fn compile_refuses_an_import_outside_the_list_of_its_namespace_at_the_import() {
             ],
         ),
         (
-            vec![("app/Tenant/Store/Module.sharp", cyclic.as_str()), ("app/Shop/Records/Module.sharp", records_module)],
+            vec![("app/Shop/Loyalty/Points.sharp", points)],
             vec![
-                "app/Shop/Records/Module.sharp:5:13:error - import-cycle: `App.Shop.Records` and `App.Tenant.Store` import from each other: `App.Shop.Records` lists `App.Tenant.Store`, and `App.Tenant.Store` lists `App.Shop`.".to_owned(),
-                "app/Tenant/Store/Module.sharp:5:25:error - import-cycle: `App.Tenant.Store` and `App.Shop.Records` import from each other: `App.Tenant.Store` lists `App.Shop`, and `App.Shop.Records` lists `App.Tenant.Store`.".to_owned(),
-                "app/Tenant/Store/StoreService.sharp:4:8:error - unlisted-import: `App.Tenant.Store` imports only `App.Shared` and `App.Shop`.".to_owned(),
+                format!("app/Shop/Loyalty/Points.sharp:3:8:error - import-cycle: `App.Shop.Loyalty` and `App.Tenant.Store` import each other (StoreService.sharp imports Member). {ways_out}"),
+                format!("app/Tenant/Store/StoreService.sharp:3:8:error - import-cycle: `App.Tenant.Store` and `App.Shop.Loyalty` import each other (Points.sharp imports StoreService). {ways_out}"),
             ],
         ),
     ] {

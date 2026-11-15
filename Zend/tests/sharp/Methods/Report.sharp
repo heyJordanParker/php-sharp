@@ -10,19 +10,17 @@ public static class Report
         List<string> lines = [];
         for (const method of typeof(Box<Order>).methods()) {
             const parameters = method.parameters().map(parameter => Report.parameter(parameter));
-            const nullable = method.isNullable ? "?" : "";
             const fields = method.attributes<Field>().count();
-            lines.add(`${method.name}(${parameters.join(", ")}): ${method.type.name()}${nullable} fields=${fields}`);
+            lines.add(`${method.name}(${parameters.join(", ")}): ${method.type.name()} fields=${fields}`);
         }
         return lines;
     }
 
     private static string parameter(Parameter parameter)
     {
-        const nullable = parameter.isNullable ? "?" : "";
         const optional = parameter.isOptional ? " optional" : "";
         const fields = parameter.attributes<Field>().count();
-        return `${parameter.name}: ${parameter.type.name()}${nullable}${optional} fields=${fields}`;
+        return `${parameter.name}: ${parameter.type.name()}${optional} fields=${fields}`;
     }
 
     public static List<bool> compare()
@@ -33,9 +31,9 @@ public static class Report
             methods[0].parameters()[0].type == typeof(List<Order>),
             methods[0].parameters()[0].type.typeArguments() == [typeof(Order)],
             methods[0].parameters()[1].type == typeof(int|string),
-            methods[1].type == typeof(List<Order>),
+            methods[1].type == typeof(List<Order>?),
             typeof(Box<Shipment>).methods()[0].type == typeof(Shipment),
-            typeof(Box<Shipment>).methods()[1].type == typeof(List<Shipment>),
+            typeof(Box<Shipment>).methods()[1].type == typeof(List<Shipment>?),
             methods[4].attributes<Object>().count() == 1,
             methods[4].parameters()[0].attributes<Object>().count() == 1,
         ];

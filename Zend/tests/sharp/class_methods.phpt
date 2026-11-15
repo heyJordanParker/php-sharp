@@ -1,5 +1,5 @@
 --TEST--
-Class<T>.methods() gives each instance and static method of a class, its own first and then those it inherits, with its result type and each parameter's type, nullable and optional, the type arguments of the class value substituted, a plain PHP method's PHP types as PHP# writes them, and the attributes of each method and parameter, every one of them for the root bound Object
+Class<T>.methods() gives each instance and static method of a class, its own first and then those it inherits, with its result type and each parameter's type whole, `?` included, and whether it is optional, the type arguments of the class value substituted, a plain PHP method's PHP types as PHP# writes them, and the attributes of each method and parameter, every one of them for the root bound Object
 --FILE--
 <?php
 require __DIR__ . '/harness/Attributes.inc';
@@ -13,13 +13,13 @@ foreach (App\Shop\Report::describe() as $line) {
 var_dump(App\Shop\Report::compare());
 ?>
 --EXPECT--
-first(items: List<App.Shop.Order> fields=0, key: int|string fields=0, note: int|string? optional fields=0): App.Shop.Order fields=0
+first(items: List<App.Shop.Order> fields=0, key: int|string fields=0, note: (int|string)? optional fields=0): App.Shop.Order fields=0
 all(): List<App.Shop.Order>? fields=0
 count(label: string fields=0): int fields=0
 index(): Map<string, App.Shop.Order> fields=0
 tag(label: string fields=1): void fields=1
 parse(value: Map<string, Any?>|Object fields=0): App.Shop.Box fields=0
-tryParse(value: Map<string, Any?>|Object fields=0): App.Shop.Box? fields=0
+tryParse(value: Map<string, Any?>|Object fields=0): App.Shop.Box<App.Shop.Order>? fields=0
 weigh(grams: int? fields=0, tags: Map<int|string, Any?> optional fields=0): float? fields=0
 array(9) {
   [0]=>

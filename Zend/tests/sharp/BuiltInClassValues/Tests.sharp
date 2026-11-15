@@ -1,0 +1,26 @@
+namespace BuiltInClassValues;
+
+// Story line 7: a class value of a built-in generic answers `is` as a user generic's does, spec section 25.
+public static class Tests
+{
+    public static List<bool> answers()
+    {
+        Any? list = typeof(List<string>);
+        Any? map = typeof(Map<string, int>);
+        Any? set = typeof(Set<string>);
+        Any? crate = typeof(Crate<int>);
+        return [
+            list is Class<List>,
+            list is Class<List<Any?>>,
+            list is Class<Iterable<Any?>>,
+            map is Class<Map>,
+            map is Class<Map<string, Any?>>,
+            map is Class<Iterable<Any?>>,
+            set is Class<Set>,
+            set is Class<Iterable<Any?>>,
+            crate is Class<Crate>,
+            list is Class<Set>,
+            list is Class<List<int>>,
+        ];
+    }
+}

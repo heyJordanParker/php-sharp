@@ -1,8 +1,10 @@
 //! Parameters, promoted ones as fields or properties (spec section 9), and the properties a constructor sets.
 
+use mago_codex::ttype::TType;
 use mago_codex::ttype::get_mixed;
 use mago_codex::ttype::union::TUnion;
 use mago_span::HasSpan;
+use mago_span::Span;
 use mago_syntax::cst::Access;
 use mago_syntax::cst::Block;
 use mago_syntax::cst::Call;
@@ -14,6 +16,7 @@ use mago_syntax::cst::Instantiation;
 use mago_syntax::cst::Method as MethodDeclaration;
 use mago_syntax::cst::MethodBody;
 use mago_syntax::cst::Modifier;
+use mago_syntax::cst::PropertyHookList;
 use mago_syntax::cst::Sequence;
 use mago_syntax::cst::Statement;
 use mago_syntax::cst::Variable;
@@ -24,23 +27,29 @@ use crate::Converter;
 use crate::types::raw_generic;
 
 use super::NameCase;
+use super::Setters;
 use super::accessors;
 use super::has;
+use super::members::Hooks;
 
 impl Converter<'_, '_> {
-    pub(super) fn parameter(&mut self, parameter: &FunctionLikeParameter<'_>, declared: Option<TUnion>) {
+    /// A parameter of `method`, `member` when the method is public, as `Store::checkout`, which names its type, as a
+    /// promoted public property does.
+    pub(super) fn parameter(
+        &mut self,
+        parameter: &FunctionLikeParameter<'_>,
+        declared: Option<TUnion>,
+        member: Option<&str>,
+        method: Span,
+    ) {
         let name = String::from_utf8_lossy(parameter.variable.name).into_owned();
         if parameter.ampersand.is_some() {
             self.refuse(
                 parameter.span(),
                 format!(
-                    "a PHP# parameter is never taken by reference, so `{name}` can't be: return the new value instead"
+                    "`{name}` is taken by reference, which has no PHP# form: PHP# passes every argument by value, so a write to `{name}` never reaches the caller (spec section 14.3)"
                 ),
             );
-            return;
-        }
-        if parameter.hooks.is_some() {
-            self.refuse(parameter.span(), "a parameter with property hooks is not converted yet");
             return;
         }
 
@@ -49,6 +58,10 @@ impl Converter<'_, '_> {
         if promoted && self.names_inherited_method(&parameter.variable) {
             return;
         }
+        let setters = if promoted { self.setters(&parameter.variable) } else { Some(Setters::Namespace) };
+        let Some(setters) = setters else {
+            return;
+        };
         let kind = if promoted { "property" } else { "parameter" };
         if self.misnamed(&parameter.variable.name[1..], parameter.variable.span, kind, NameCase::Camel) {
             return;
@@ -76,6 +89,28 @@ impl Converter<'_, '_> {
         let Some(written) = self.type_text(&union, parameter.variable.span) else {
             return;
         };
+        let visibility = parameter.modifiers.iter().find(|modifier| modifier.is_read_visibility());
+        // The access level of a promoted parameter's property that PHP makes public.
+        let access = (promoted && visibility.is_none_or(|modifier| matches!(modifier, Modifier::Public(_))))
+            .then(|| self.property_access(&parameter.variable));
+        // A property `internal` or wider has accessors, as a public one does, and a narrower one is storage.
+        let is_public = access.is_some_and(|access| !matches!(access, "private " | "protected "));
+        let shown = union.get_id();
+        let untyped = match member {
+            Some(member) => Some(format!("`{member}` takes `{shown}` as `{name}`")),
+            None if access == Some("public ") => {
+                let class = self.class.as_ref().map(|class| class.name.clone()).unwrap_or_default();
+                Some(format!("`{class}::{name}` is `{shown}`"))
+            }
+            None => None,
+        };
+        if let Some(untyped) = untyped.filter(|_| self.untyped_in_application(&written)) {
+            self.refuse(
+                parameter.variable.span,
+                format!("{untyped}, and a public member of an application names its types"),
+            );
+            return;
+        }
 
         match &parameter.hint {
             Some(hint) => self.edits.replace(hint.span(), written),
@@ -97,15 +132,15 @@ impl Converter<'_, '_> {
                 self.edits.delete(readonly.start.offset, self.skip_whitespace(readonly.end.offset));
             }
             // PHP makes a promoted parameter with no visibility public, and PHP# reads one as an ordinary parameter.
-            let visibility = parameter.modifiers.iter().find(|modifier| modifier.is_read_visibility());
-            if visibility.is_none()
-                && let Some(first) = parameter.modifiers.first()
-            {
-                self.edits.insert(first.span().start.offset, "public ");
+            if let Some(access) = access {
+                self.write_access(&parameter.modifiers, parameter.variable.span, access);
             }
-            let is_public = visibility.is_none_or(|modifier| matches!(modifier, Modifier::Public(_)));
+            if let Some(list) = &parameter.hooks {
+                return self.hooked_parameter(parameter, list, &union, is_public && setters == Setters::Class, method);
+            }
             let in_readonly_class = self.class.as_ref().is_some_and(|class| class.metadata.flags.is_readonly());
-            let accessors = accessors(is_public, readonly.is_some() || in_readonly_class, &parameter.modifiers);
+            let accessors =
+                accessors(is_public, readonly.is_some() || in_readonly_class, &parameter.modifiers, setters);
             if !accessors.is_empty() {
                 self.edits.insert(parameter.variable.span.end.offset, accessors);
             }
@@ -114,6 +149,36 @@ impl Converter<'_, '_> {
         if let Some(default) = &parameter.default_value {
             self.expression(default.value, Some(&union));
         }
+    }
+
+    /// A promoted parameter with hooks, `list`, as a property whose accessors are its hooks, as one declared in the class
+    /// body is (spec sections 6 and 9), of the type `union`. The constructor's argument and the default are writes
+    /// through the `set` hook in PHP, as a PHP# parameter's `set` runs on them, and PHP writes the default before the
+    /// hooks, where PHP# writes it after the accessors. A public property the class alone sets, `set_by_class`, has a
+    /// `private set`, and the static fields of a hook's `static` locals go before `constructor`.
+    fn hooked_parameter(
+        &mut self,
+        parameter: &FunctionLikeParameter<'_>,
+        list: &PropertyHookList<'_>,
+        union: &TUnion,
+        set_by_class: bool,
+        constructor: Span,
+    ) {
+        let declared =
+            self.class.as_ref().and_then(|class| class.metadata.properties.get(&word(parameter.variable.name)));
+        let Some(declared) = declared else {
+            return self.refuse(parameter.variable.span, "the analysis holds no property of this name");
+        };
+        let variable = &parameter.variable;
+        let hooks = Hooks { list, union, declared, variable, member: constructor };
+        self.hook_list(&hooks, &parameter.modifiers, !declared.flags.is_virtual_property(), set_by_class);
+        let Some(default) = &parameter.default_value else {
+            return;
+        };
+        self.expression(default.value, Some(union));
+        let value = self.render(default.value);
+        self.edits.delete(variable.span.end.offset, default.value.span().end.offset);
+        self.edits.insert(list.right_brace.end.offset, format!(" = {value}"));
     }
 }
 

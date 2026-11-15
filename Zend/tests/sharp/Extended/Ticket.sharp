@@ -1,0 +1,14 @@
+namespace Extended;
+
+public class Ticket
+{
+    internal int code { get; } = 7;
+
+    public static string run()
+    {
+        List<int> counts = [];
+        counts.bump();
+        counts.bump();
+        return `${typeof(Ticket).label()} ${typeof(Ticket).name()} ${counts.count()} ${counts[1]} ${new Ticket().codeOf()}`;
+    }
+}

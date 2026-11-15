@@ -1,0 +1,10 @@
+namespace SelfResults;
+
+public class Base
+{
+    public Self copy() => this;
+
+    public Self? maybe() => null;
+
+    public List<Self> all() => [this];
+}

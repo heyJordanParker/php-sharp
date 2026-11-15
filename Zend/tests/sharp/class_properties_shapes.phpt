@@ -11,11 +11,11 @@ foreach (App\Probe\Printer::describe(App\Probe\Shapes::class) as $line) {
 var_dump(App\Probe\Printer::compare());
 ?>
 --EXPECT--
-either: int|string nullable=false arguments=[]
-maybeEither: int|string nullable=true arguments=[]
-owner: App.Probe.Box|App.Probe.Shelf nullable=false arguments=[]
-withDefault: string nullable=false arguments=[]
-held: App.Probe.Holder nullable=false arguments=[App.Probe.Box]
+either: int|string arguments=[]
+maybeEither: (int|string)? arguments=[]
+owner: App.Probe.Box|App.Probe.Shelf arguments=[]
+withDefault: string arguments=[]
+held: App.Probe.Holder arguments=[App.Probe.Box]
 array(5) {
   [0]=>
   bool(true)

@@ -1,0 +1,10 @@
+namespace ReflectedTypes;
+
+import Lib.Field;
+
+public enum Tone : string
+{
+    [Field("warm")]
+    case Warm = "w";
+    case Cold = "c";
+}

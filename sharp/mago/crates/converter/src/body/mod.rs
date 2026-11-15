@@ -17,6 +17,8 @@ mod strings;
 pub(crate) use locals::Captures;
 pub(crate) use locals::Locals;
 
+use mago_codex::metadata::CodebaseMetadata;
+use mago_codex::metadata::ttype::TypeMetadata;
 use mago_codex::misc::GenericParent;
 use mago_codex::ttype::SharpType;
 use mago_codex::ttype::TType;
@@ -27,9 +29,11 @@ use mago_codex::ttype::atomic::object::TObject;
 use mago_codex::ttype::atomic::scalar::TScalar;
 use mago_codex::ttype::comparator::ComparisonResult;
 use mago_codex::ttype::comparator::union_comparator::is_contained_by;
+use mago_codex::ttype::get_int;
 use mago_codex::ttype::get_sharp_type;
 use mago_codex::ttype::union::TUnion;
 use mago_span::HasSpan;
+use mago_span::Span;
 use mago_syntax::cst::Access;
 use mago_syntax::cst::ArrayAccess;
 use mago_syntax::cst::Block;
@@ -42,6 +46,8 @@ use mago_syntax::cst::Literal;
 use mago_syntax::cst::Statement;
 use mago_syntax::cst::Try;
 use mago_syntax::cst::Variable;
+use mago_syntax::cst::Yield;
+use mago_syntax::cst::YieldValue;
 
 use crate::Converter;
 use crate::types::narrowing;
@@ -72,7 +78,17 @@ enum Kind {
 /// Why a read of a `Map` at a key it may lack refuses, by an index or by destructuring. A converted file never
 /// succeeds where PHP warned or failed, and a PHP# `Map` read gives `null` and goes on where PHP warns (spec section
 /// 12).
-const MISSING_KEY: &str = "a `Map` read at a key it may lack has no PHP# form: PHP warns on a missing key, and a PHP# `Map` read gives `null` and goes on, which succeeds where PHP warned, so it converts behind `??` or `isset` only (spec section 12)";
+const MISSING_KEY: &str = "a `Map` read at a key it may lack has no PHP# form: PHP warns on a missing key, and a PHP# `Map` read gives `null` and goes on, which succeeds where PHP warned (spec section 12)";
+
+/// Whether PHP checks `place`, the declared type of a parameter or a return, where a value lands in it: `native`, the
+/// type the code declares, without PHPDoc, holds the same values. PHP checks no type only PHPDoc gives.
+pub(crate) fn natively_checked(native: Option<&TypeMetadata>, place: &TUnion, codebase: &CodebaseMetadata) -> bool {
+    let holds = |inner: &TUnion, outer: &TUnion| {
+        is_contained_by(codebase, inner, outer, false, false, false, &mut ComparisonResult::new())
+    };
+
+    native.is_some_and(|native| holds(&native.type_union, place) && holds(place, &native.type_union))
+}
 
 /// Whether `expression` binds tighter than any operator, so text built around it, as `x.isEmpty()` or `x != 0`, needs
 /// no parentheses around it.
@@ -166,6 +182,14 @@ impl<'input> Converter<'input, '_> {
                     self.edits.delete(r#match.right_brace.end.offset, terminator.end.offset);
                     return self.match_expression(r#match, MatchPlace::Statement);
                 }
+                // A PHP# `yield` is a statement, which gives no value back (spec section 12).
+                if let Expression::Yield(r#yield) = expression.expression {
+                    return self.yielded(r#yield);
+                }
+                // A call's result the statement drops.
+                if let Expression::Call(call) = expression.expression {
+                    return self.call(expression.expression, call, false);
+                }
                 if !self.declaration(statement, expression.expression) {
                     self.expression(expression.expression, None);
                 }
@@ -183,9 +207,10 @@ impl<'input> Converter<'input, '_> {
                     }
                     // PHP checks a returned value its declared type may not hold, and throws a `TypeError` for one it
                     // doesn't, as PHP# does after `as`. PHP# refuses any other such value (spec section 7).
+                    let natively = self.method.as_ref().is_some_and(|method| method.checks_return);
                     if let (Some(returning), Some(returned)) = (&returning, self.type_of(value))
                         && self.wider(returned, returning)
-                        && !self.checked(value, returned, returning, "Return value")
+                        && !self.checked(value, returned, returning, "Return value", natively)
                     {
                         let (returned, returning) = (returned.get_id(), returning.get_id());
                         self.refuse(
@@ -199,29 +224,20 @@ impl<'input> Converter<'input, '_> {
             Statement::If(r#if) => self.if_statement(statement, r#if, false),
             Statement::Try(r#try) => self.try_statement(r#try),
             Statement::Noop(_) => {}
-            Statement::Foreach(foreach) => self.foreach(statement, foreach),
-            Statement::For(r#for) => self.for_loop(statement, r#for),
-            Statement::While(r#while) => self.while_loop(statement, r#while),
-            Statement::DoWhile(r#do) => self.do_while(r#do),
-            Statement::Break(r#break) => self.leave(r#break.level),
-            Statement::Continue(r#continue) => self.leave(r#continue.level),
-            Statement::Switch(switch) => self.switch_statement(statement, switch),
+            Statement::Foreach(foreach) => self.looped(statement, false, |this| this.foreach(statement, foreach)),
+            Statement::For(r#for) => self.looped(statement, false, |this| this.for_loop(statement, r#for)),
+            Statement::While(r#while) => self.looped(statement, false, |this| this.while_loop(statement, r#while)),
+            Statement::DoWhile(r#do) => self.looped(statement, false, |this| this.do_while(r#do)),
+            Statement::Break(r#break) => self.leave(r#break.r#break.span.end.offset, r#break.level),
+            Statement::Continue(r#continue) => self.leave(r#continue.r#continue.span.end.offset, r#continue.level),
+            Statement::Switch(switch) => self.looped(statement, true, |this| this.switch_statement(statement, switch)),
             Statement::Unset(unset) => self.unset(unset),
             Statement::Echo(_) | Statement::EchoTag(_) => self.refuse(
                 statement.span(),
                 "`echo` is removed: output goes through `Console`, which a class receives through its constructor (spec section 8)",
             ),
             Statement::Global(_) => self.refuse(statement.span(), "`global` is removed (spec section 2)"),
-            Statement::Static(r#static) => {
-                self.refuse(
-                    statement.span(),
-                    "a `static` local is not converted yet: its PHP# form is a private static field (spec section 6)",
-                );
-                // The refusal covers each later read of the local, which has no declaration to point at.
-                if let Some(method) = self.method.as_mut() {
-                    method.parameters.extend(r#static.items.iter().map(|item| item.variable().name.to_vec()));
-                }
-            }
+            Statement::Static(r#static) => self.static_locals(statement, r#static),
             Statement::Goto(_) => self.refuse(statement.span(), "`goto` has no PHP# form"),
             Statement::Label(_) => self.refuse(statement.span(), "a `goto` label has no PHP# form"),
             _ => self.refuse(statement.span(), "this statement has no PHP# form in a method"),
@@ -246,6 +262,54 @@ impl<'input> Converter<'input, '_> {
         }
     }
 
+    /// A `yield` statement: `yield value;` as it is, and `yield from items;` as `yield ...items;` (spec section 12). A
+    /// PHP# `Iterable` gives its values alone, so a `yield` with a key, and a bare `yield`, whose value PHP gives as
+    /// null, have none.
+    fn yielded(&mut self, r#yield: &Yield<'_>) {
+        match r#yield {
+            Yield::Value(YieldValue { value: Some(value), .. }) => self.expression(value, None),
+            Yield::From(from) => {
+                self.edits.replace_range(
+                    from.r#yield.span.start.offset,
+                    from.iterator.span().start.offset,
+                    "yield ...",
+                );
+                self.expression(from.iterator, None);
+            }
+            Yield::Value(_) => self.refuse(
+                r#yield.span(),
+                "a `yield` with no value has no PHP# form: PHP yields null there, and a PHP# `yield` names the value it gives (spec section 12)",
+            ),
+            Yield::Pair(_) => self.refuse(
+                r#yield.span(),
+                "a `yield` with a key has no PHP# form: a PHP# `Iterable` gives its values alone (spec section 12)",
+            ),
+            Yield::Spread(_) => self.refuse(r#yield.span(), "`yield ...` is PHP# only"),
+        }
+    }
+
+    /// A body PHP writes between `:` and an end keyword, as `foreach (…): … endforeach;`, in braces, as PHP# writes
+    /// every body: `colon` becomes ` {`, and `end`, the keyword and its `;`, becomes `}`. `scope` is the statement
+    /// whose locals the body declares.
+    fn colon_body(&mut self, scope: Span, colon: Span, statements: &[Statement<'_>], end: Span) {
+        self.edits.replace(colon, " {");
+        self.edits.replace(end, "}");
+        self.scoped(scope, statements);
+    }
+
+    /// `statements`, whose locals belong to `scope`.
+    fn scoped(&mut self, scope: Span, statements: &[Statement<'_>]) {
+        if let Some(locals) = self.locals() {
+            locals.blocks.push(scope);
+        }
+        for statement in statements {
+            self.statement(statement);
+        }
+        if let Some(locals) = self.locals() {
+            locals.blocks.pop();
+        }
+    }
+
     /// `if`, whose condition may assign the local it tests unless the `if` follows an `else`.
     fn if_statement(&mut self, statement: &Statement<'_>, r#if: &If<'_>, follows_else: bool) {
         if follows_else {
@@ -253,9 +317,30 @@ impl<'input> Converter<'input, '_> {
         } else if !self.assigned_condition(statement, r#if) && !self.compared_assignment(statement, r#if) {
             self.condition(r#if.condition, true);
         }
-        let IfBody::Statement(body) = &r#if.body else {
-            self.refuse(r#if.span(), "an `if` with `:` and `endif` has no PHP# form: write its body in braces");
-            return;
+        let body = match &r#if.body {
+            IfBody::Statement(body) => body,
+            // `if (…): … elseif (…): … else: … endif;` in braces, as PHP# writes every body.
+            IfBody::ColonDelimited(body) => {
+                // Each branch's locals belong to it, as to a block.
+                let branch = |colon: Span, statements: &[Statement<'_>]| {
+                    statements.last().map_or(colon, |last| colon.join(last.span()))
+                };
+                self.edits.replace(body.colon, " {");
+                self.scoped(branch(body.colon, body.statements.as_slice()), body.statements.as_slice());
+                for clause in &body.else_if_clauses {
+                    self.edits.replace(clause.elseif.span, "} else if");
+                    self.chained_condition(clause.condition);
+                    self.edits.replace(clause.colon, " {");
+                    self.scoped(branch(clause.colon, clause.statements.as_slice()), clause.statements.as_slice());
+                }
+                if let Some(clause) = &body.else_clause {
+                    self.edits.replace(clause.r#else.span, "} else");
+                    self.edits.replace(clause.colon, " {");
+                    self.scoped(branch(clause.colon, clause.statements.as_slice()), clause.statements.as_slice());
+                }
+                self.edits.replace(body.endif.span.join(body.terminator.span()), "}");
+                return;
+            }
         };
         self.braced(body.statement);
         for clause in &body.else_if_clauses {
@@ -451,7 +536,7 @@ impl<'input> Converter<'input, '_> {
             Expression::Static(keyword) => self.edits.replace(keyword.span, "Self"),
             Expression::Parent(keyword) => self.edits.replace(keyword.span, "super"),
             Expression::Access(access) => self.access(expression, access),
-            Expression::Call(call) => self.call(call),
+            Expression::Call(call) => self.call(expression, call, true),
             Expression::Instantiation(instantiation) => self.instantiation(expression, instantiation, expected),
             Expression::Binary(binary) => self.binary(expression, binary),
             Expression::UnaryPrefix(unary) => self.unary(expression, &unary.operator, unary.operand),
@@ -497,17 +582,20 @@ impl<'input> Converter<'input, '_> {
             }
             Expression::Throw(throw) => self.expression(throw.exception, None),
             Expression::Closure(_) | Expression::ArrowFunction(_) => self.lambda(expression, expected),
-            Expression::PartialApplication(application) => self.method_value(expression, application),
+            Expression::PartialApplication(application) => self.method_value(expression, application, expected),
             Expression::Match(r#match) => self.match_expression(r#match, MatchPlace::Operand),
             Expression::Clone(clone) => self.clone(expression, clone.object),
-            Expression::List(_) => self.refuse(expression.span(), "destructuring is not converted yet"),
+            Expression::List(list) => self.refuse(expression.span(), locals::unpacked(&list.elements)),
             Expression::CompositeString(string) => self.template(expression, string),
             Expression::MagicConstant(constant) => self.magic_constant(constant),
             Expression::AnonymousClass(_) => {
                 self.refuse(expression.span(), "an anonymous class has no PHP# form: no type nests in another");
             }
             Expression::Construct(_) => self.construct(expression),
-            Expression::Yield(_) => self.refuse(expression.span(), "a generator is not converted yet"),
+            Expression::Yield(_) => self.refuse(
+                expression.span(),
+                "a `yield` whose value the code reads has no PHP# form: a PHP# `yield` is a statement, which gives no value back, as PHP's `send()` does (spec section 12)",
+            ),
             _ => self.refuse(expression.span(), "this expression has no PHP# form"),
         }
     }
@@ -525,7 +613,7 @@ impl<'input> Converter<'input, '_> {
             let shown = self.shown(object);
             return self.refuse(
                 expression.span(),
-                format!("`clone` of `{shown}` is not converted yet: `with` copies a value of a known class"),
+                format!("`clone` of `{shown}` has no PHP# form: `with` copies a value of a known class, and no declaration gives this value one"),
             );
         }
         self.expression(object, None);
@@ -592,7 +680,7 @@ impl<'input> Converter<'input, '_> {
         self.refuse(
             value.span(),
             format!(
-                "`{shown}` reads as `{}` here, which PHP narrows it to, and PHP# reads a property by its declared type `{}`, since it may change between a test and a read (spec section 21): read it into a local first",
+                "`{shown}` reads as `{}` here, which PHP narrows it to, and PHP# reads a property by its declared type `{}`, since it may change between a test and a read (spec section 21)",
                 read.get_id(),
                 declared.get_id()
             ),
@@ -612,24 +700,28 @@ impl<'input> Converter<'input, '_> {
     /// parameters, or type parameter whose bound excludes null, which PHP# checks as PHPDoc gives it, `passed` may hold
     /// one, as a `Shape` may be the `Square` `place` takes, and `place` allows null only where `passed` never is, as
     /// `as` gives null for a value it refuses.
-    pub(super) fn checked(&mut self, value: &Expression<'_>, passed: &TUnion, place: &TUnion, subject: &str) -> bool {
+    ///
+    /// Where `place` is a union, or allows null where `passed` may be null, `as` can't tell a null from a value it
+    /// refuses, so [`Converter::matched`] writes the value through `match`, where `natively` says PHP checks `place`
+    /// itself. PHP never checks a type only PHPDoc gives, so there it lets through what the check would throw for.
+    pub(super) fn checked(
+        &mut self,
+        value: &Expression<'_>,
+        passed: &TUnion,
+        place: &TUnion,
+        subject: &str,
+        natively: bool,
+    ) -> bool {
         let codebase = self.input.codebase;
         let tested = TUnion::from_vec(place.get_non_nullable_types());
         let [atomic] = tested.types.as_ref() else {
-            return false;
+            return natively && self.matched(value, passed, place, subject);
         };
-        if place.has_null() && passed.can_be_null() {
-            return false;
+        // PHP passes an `int` where a `float` is declared as that number, which `as float` refuses.
+        if place.has_null() && passed.can_be_null() || matches!(get_sharp_type(atomic), Some(SharpType::Float)) {
+            return natively && self.matched(value, passed, place, subject);
         }
         let tests = match get_sharp_type(atomic) {
-            Some(SharpType::Int | SharpType::String | SharpType::Bool | SharpType::Object | SharpType::Enum(_)) => {
-                !matches!(atomic, TAtomic::Scalar(scalar) if scalar.is_literal_value())
-            }
-            Some(SharpType::Class(name, arguments)) => {
-                arguments.is_empty()
-                    && !matches!(atomic, TAtomic::Object(TObject::Named(object)) if object.is_static)
-                    && codebase.get_class_like(name.as_bytes()).is_some_and(|class| class.template_types.is_empty())
-            }
             // A callee's own type parameter stands for the type its call gives it, which `T` doesn't name here.
             Some(SharpType::Parameter(parameter)) if !self.declares(parameter) => false,
             // `as T` tests a type argument while the code runs, and gives null for a null `T` as for a value that is no
@@ -647,16 +739,9 @@ impl<'input> Converter<'input, '_> {
                 return true;
             }
             Some(SharpType::Parameter(_)) => true,
-            _ => false,
+            _ => self.tests(atomic),
         };
-        let holds = |inner: &TUnion, outer: &TUnion| {
-            is_contained_by(codebase, inner, outer, false, false, false, &mut ComparisonResult::new())
-        };
-        let may_hold = passed.types.iter().any(|passed| {
-            let passed = TUnion::from_atomic(passed.clone());
-            passed.is_mixed() || holds(&passed, &tested) || holds(&tested, &passed)
-        });
-        if !tests || !may_hold || narrowing(&tested).is_some() {
+        if !tests || !self.may_hold(passed, atomic) || narrowing(&tested).is_some() {
             return false;
         }
         // PHP names the declared type as PHP writes it, as `?App\Square`, and a type parameter by its name.
@@ -682,6 +767,111 @@ impl<'input> Converter<'input, '_> {
         true
     }
 
+    /// Writes `value`, converted already, as `match (value) { string value => value, null => null, default => throw
+    /// new TypeError("…") }`, where `place` is a union or a nullable type PHP checks itself, which `passed`, the
+    /// analysis's type of `value`, is wider than. The `match` reads the value once, so a call in it runs once, as in
+    /// PHP, and gives it back where `place` holds it, as PHP passes or returns it, and throws PHP's `TypeError` where it
+    /// doesn't (spec section 21). It has an arm for each type of `place` that `passed` may hold, as PHP# refuses an arm
+    /// that never matches, and gives whether it took the value: it takes none where a type of `place` has no test. A
+    /// `float` that `place` declares without `int` takes an `int` too, as `int value => (float) value`, since PHP passes
+    /// one as that number.
+    fn matched(&mut self, value: &Expression<'_>, passed: &TUnion, place: &TUnion, subject: &str) -> bool {
+        let is_float = |atomic: &TAtomic| matches!(get_sharp_type(atomic), Some(SharpType::Float));
+        let mut tested: Vec<&TAtomic> = place.types.iter().filter(|atomic| !atomic.is_null()).collect();
+        if !tested.iter().all(|atomic| {
+            (self.tests(atomic) || is_float(atomic)) && narrowing(&TUnion::from_atomic((*atomic).clone())).is_none()
+        }) {
+            return false;
+        }
+        // PHP passes an `int` where a `float` is declared, and no `int`, as that number.
+        let int = get_int();
+        let widened = tested.iter().any(|atomic| is_float(atomic))
+            && !tested.iter().any(|atomic| matches!(get_sharp_type(atomic), Some(SharpType::Int)))
+            && self.may_hold(passed, &int.types[0]);
+        // PHP names a union's classes first, then its other types in its own order, and null last, or as `?T` beside
+        // one other type.
+        let order = ["object", "array", "string", "int", "float", "bool", "false", "true"];
+        tested.sort_by_key(|atomic| {
+            let id = atomic.get_id();
+            order.iter().position(|name| name.as_bytes() == id.as_bytes()).map_or(0, |at| at + 1)
+        });
+        let names: Vec<String> = tested.iter().map(|atomic| atomic.get_id().to_string()).collect();
+        let php = match (place.has_null(), names.as_slice()) {
+            (true, [one]) => format!("?{one}"),
+            (true, _) => format!("{}|null", names.join("|")),
+            (false, _) => names.join("|"),
+        };
+
+        let name = self.unused_name("value", &[]);
+        let held: Vec<&TAtomic> = tested.into_iter().filter(|atomic| self.may_hold(passed, atomic)).collect();
+        let mut arms = Vec::new();
+        for atomic in held {
+            match type_text(&TUnion::from_atomic(atomic.clone()), self.input.codebase, &mut self.imports) {
+                Ok(text) => arms.push(format!("{text} {name} => {name}")),
+                Err(reason) => {
+                    self.refuse(value.span(), reason);
+                    return true;
+                }
+            }
+        }
+        if widened {
+            arms.push(format!("int {name} => (float) {name}"));
+        }
+        if arms.is_empty() {
+            return false;
+        }
+        if place.has_null() && passed.can_be_null() {
+            arms.push("null => null".to_owned());
+        }
+        let error = match self.imports.name_of("TypeError") {
+            Ok(error) => error,
+            Err(reason) => {
+                self.refuse(value.span(), reason);
+                return true;
+            }
+        };
+        let message = format!("{subject} must be of type {php}").replace('\\', "\\\\");
+        arms.push(format!("default => throw new {error}(\"{message}\")"));
+        let rendered = self.render(value);
+        self.edits.replace(value.span(), format!("match ({rendered}) {{ {} }}", arms.join(", ")));
+
+        true
+    }
+
+    /// Whether `atomic`, one type of a declared type, has a PHP# test that tests what PHP does: an `int`, a `string`, a
+    /// `bool`, an object, an enum, or a class with no type parameters. A `float` takes an `int` in PHP, which PHP#'s
+    /// test refuses, and a literal or a type parameter has another test.
+    fn tests(&self, atomic: &TAtomic) -> bool {
+        match get_sharp_type(atomic) {
+            Some(SharpType::Int | SharpType::String | SharpType::Bool | SharpType::Object | SharpType::Enum(_)) => {
+                !matches!(atomic, TAtomic::Scalar(scalar) if scalar.is_literal_value())
+            }
+            Some(SharpType::Class(name, arguments)) => {
+                arguments.is_empty()
+                    && !matches!(atomic, TAtomic::Object(TObject::Named(object)) if object.is_static)
+                    && self
+                        .input
+                        .codebase
+                        .get_class_like(name.as_bytes())
+                        .is_some_and(|class| class.template_types.is_empty())
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether a value of `passed` may be a `tested`, as `mixed` may be any, and a `Shape` the `Square` `tested` is.
+    fn may_hold(&self, passed: &TUnion, tested: &TAtomic) -> bool {
+        let codebase = self.input.codebase;
+        let tested = TUnion::from_atomic(tested.clone());
+        let holds = |inner: &TUnion, outer: &TUnion| {
+            is_contained_by(codebase, inner, outer, false, false, false, &mut ComparisonResult::new())
+        };
+        passed.types.iter().any(|passed| {
+            let passed = TUnion::from_atomic(passed.clone());
+            passed.is_mixed() || holds(&passed, &tested) || holds(&tested, &passed)
+        })
+    }
+
     /// Whether the analysis types `passed` wider than `place`, the declared type of the parameter or the return it
     /// lands in. The analysis takes a type parameter as holding each value its bound holds, as `T` holds `mixed`, where
     /// only a `T` is one, so where `place` is a type parameter of the converted class, only a `T` lands in it, and null
@@ -702,11 +892,20 @@ impl<'input> Converter<'input, '_> {
         !is_contained_by(self.input.codebase, passed, place, false, false, false, &mut ComparisonResult::new())
     }
 
-    /// Whether the converted class declares `parameter`, which then means the same type wherever its methods name it,
-    /// where a callee's own, as `new Box<Spec>(…)`'s `T`, stands for the type its call gives it.
+    /// Whether the converted class, or the converted method, whose lambdas share its type parameters, declares
+    /// `parameter`, which then means the same type wherever its code names it, where a callee's own, as
+    /// `new Box<Spec>(…)`'s `T`, stands for the type its call gives it.
     fn declares(&self, parameter: &TGenericParameter) -> bool {
-        matches!(parameter.defining_entity, GenericParent::ClassLike(name)
-            if self.class.as_ref().is_some_and(|class| class.metadata.name == name))
+        match parameter.defining_entity {
+            GenericParent::ClassLike(name) => self.class.as_ref().is_some_and(|class| class.metadata.name == name),
+            GenericParent::FunctionLike(_) => self
+                .method
+                .as_ref()
+                .and_then(|method| method.resolution.get_template_definition(parameter.parameter_name))
+                .is_some_and(|templates| {
+                    templates.iter().any(|template| template.defining_entity == parameter.defining_entity)
+                }),
+        }
     }
 
     /// Refuses `object`, whose member `operation` reaches, when the analysis gives it `mixed` or `object`, and gives
@@ -725,7 +924,7 @@ impl<'input> Converter<'input, '_> {
         let shown = self.shown(object);
         self.refuse(
             object.span(),
-            format!("`{shown}` reaches {operation}, which PHP# allows only from a known class: narrow it with `is`, or declare its type (spec section 24)"),
+            format!("`{shown}` reaches {operation}, which PHP# allows only from a known class, and no declaration gives this value one (spec section 24)"),
         );
 
         true
@@ -739,7 +938,7 @@ impl<'input> Converter<'input, '_> {
         let shown = self.shown(expression);
         self.refuse(
             expression.span(),
-            format!("`{shown}` reaches {operation}, which PHP# allows only from a known type: narrow it with `is`, or declare its type (spec section 24)"),
+            format!("`{shown}` reaches {operation}, which PHP# allows only from a known type, and no declaration gives this value one (spec section 24)"),
         );
 
         true

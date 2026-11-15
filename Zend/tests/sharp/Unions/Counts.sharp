@@ -1,0 +1,23 @@
+namespace Unions;
+
+public static class Counts
+{
+    public static string kind(List<int>|Map<string, int>|Set<int> items)
+    {
+        if (items is List<int>) {
+            return "list";
+        }
+        if (items is Map<string, int>) {
+            return "map";
+        }
+        return "set";
+    }
+
+    public static List<string> kinds()
+    {
+        List<int> list = [1, 2];
+        Map<string, int> map = ["a": 1];
+        Set<int> set = [1];
+        return [Counts.kind(list), Counts.kind(map), Counts.kind(set)];
+    }
+}

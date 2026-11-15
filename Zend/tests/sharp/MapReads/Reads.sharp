@@ -1,0 +1,9 @@
+namespace MapReads;
+
+// A Map's size and its values joined, as Kotlin's `count()` and `values.joinToString(separator)` read them.
+public static class Reads
+{
+    public static int count(Map<string, string> map) => map.count();
+
+    public static string joined(Map<string, string> map, string separator) => map.values().join(separator);
+}

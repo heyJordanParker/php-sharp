@@ -1,0 +1,10 @@
+namespace Shown;
+
+public static class Labels
+{
+    public static string of(int|string value) => `value ${value}`;
+
+    public static string flag(int|bool value) => `flag ${value}`;
+
+    public static string counted(float|int value) => `counted ${value}`;
+}

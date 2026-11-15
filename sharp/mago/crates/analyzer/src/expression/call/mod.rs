@@ -146,6 +146,7 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for Call<'arena> {
     {
         analyze_call(self, context, block_context, artifacts)?;
         report_void_result_used(context, block_context, artifacts, self);
+        crate::statement::module::report_bound_from_plain_php(context, artifacts, self, &[], self.span());
 
         Ok(())
     }
@@ -256,7 +257,6 @@ where
                 artifacts,
                 static_call,
                 call.type_arguments.as_ref(),
-                false,
             )
         }
         Call::Method(call) => {
@@ -669,18 +669,15 @@ where
             continue;
         };
         // A collection member orders by the keys the function in a parameter marked `ComparedByOrder` returns, as
-        // `sortedBy` does, so a key type `<` cannot order is refused.
+        // `sortedBy` does, so a key type `<` cannot order is refused, and the bridge passes the engine how to order it.
         if parameter.has_attribute(context.codebase, COMPARED_BY_ORDER)
             && !argument.is_unpacked()
             && let Some(TAtomic::Callable(TCallable::Signature(function))) =
                 artifacts.get_expression_type(value).filter(|function| function.is_single()).map(TUnion::get_single)
-            && let Some(key_type) = function.get_return_type()
+            && let Some(key_type) = function.get_return_type().cloned()
         {
-            comparisons.push(Comparison::Order {
-                method: metadata.original_name,
-                selector: value,
-                key_type: key_type.clone(),
-            });
+            artifacts.record_ordered_key_type(span, key_type.clone());
+            comparisons.push(Comparison::Order { method: metadata.original_name, selector: value, key_type });
         }
         // A spread, as `contains(...[cart])`, passes the elements of the list it spreads, so the search compares those.
         if parameter.has_attribute(context.codebase, COMPARED_BY_EQUALITY)

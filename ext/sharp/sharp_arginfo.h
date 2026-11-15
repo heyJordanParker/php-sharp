@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: e1f0dd3aa5a304fbfde4222385cd139c55de48c1 */
+ * Stub hash: 57be4651ba92e48a92fa81285767d3e247ffd8ad */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -30,6 +30,20 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_jsonEncode, 0, 3,
 	ZEND_ARG_TYPE_INFO(0, indent, IS_LONG, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_jsonDecode, 0, 1, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO(0, json, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accessors, 0, 2, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_createLazy, 0, 2, IS_OBJECT, 0)
+	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, initialize, IS_CALLABLE, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_arrayOf, 0, 1, IS_MIXED, 0)
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, receiver, IS_MIXED, 0, "null")
@@ -54,26 +68,72 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_Sharp_Internal_methods arginfo_Sharp_Internal_properties
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_constructor, 0, 1, IS_ARRAY, 1)
+	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
 #define arginfo_Sharp_Internal_typeArguments arginfo_Sharp_Internal_properties
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_invoke, 0, 4, IS_MIXED, 0)
-	ZEND_ARG_TYPE_INFO(0, receiver, IS_OBJECT, 0)
-	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
-	ZEND_ARG_TYPE_INFO(0, method, IS_STRING, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_typeKind, 0, 1, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_isNullable, 0, 1, _IS_BOOL, 0)
+	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+#define arginfo_Sharp_Internal_nonNullable arginfo_Sharp_Internal_typeKind
+
+#define arginfo_Sharp_Internal_typeParts arginfo_Sharp_Internal_properties
+
+#define arginfo_Sharp_Internal_tupleNames arginfo_Sharp_Internal_properties
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_genericDefinition, 0, 1, IS_STRING, 1)
+	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+#define arginfo_Sharp_Internal_typeParameters arginfo_Sharp_Internal_properties
+
+#define arginfo_Sharp_Internal_baseType arginfo_Sharp_Internal_genericDefinition
+
+#define arginfo_Sharp_Internal_interfaces arginfo_Sharp_Internal_properties
+
+#define arginfo_Sharp_Internal_classFacts arginfo_Sharp_Internal_properties
+
+#define arginfo_Sharp_Internal_enumBackingType arginfo_Sharp_Internal_genericDefinition
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_makeGenericType, 0, 2, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, arguments, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
 
+#define arginfo_Sharp_Internal_enumCases arginfo_Sharp_Internal_properties
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_createInstance, 0, 2, IS_OBJECT, 0)
+	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, arguments, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_invoke, 0, 5, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO(0, receiver, IS_OBJECT, 1)
+	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, method, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, arguments, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, readOn, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_read, 0, 3, IS_MIXED, 0)
-	ZEND_ARG_TYPE_INFO(0, receiver, IS_OBJECT, 0)
+	ZEND_ARG_TYPE_INFO(0, receiver, IS_OBJECT, 1)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, property, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_write, 0, 4, IS_VOID, 0)
-	ZEND_ARG_TYPE_INFO(0, receiver, IS_OBJECT, 0)
+	ZEND_ARG_TYPE_INFO(0, receiver, IS_OBJECT, 1)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, property, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, beforeLoad, _IS_BOOL, 0, "false")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_readModule, 0, 1, IS_VOID, 0)
@@ -185,6 +245,12 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_put, 0, 3, IS_VOI
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_getOrPut, 0, 3, IS_MIXED, 0)
+	ZEND_ARG_OBJ_INFO(1, map, Sharp\\Map, 0)
+	ZEND_ARG_TYPE_INFO(0, key, IS_MIXED, 0)
+	ZEND_ARG_OBJ_INFO(0, defaultValue, Closure, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_keys, 0, 1, IS_ARRAY, 0)
 	ZEND_ARG_OBJ_TYPE_MASK(0, table, Sharp\\Map|Sharp\\Set, 0, NULL)
 ZEND_END_ARG_INFO()
@@ -267,11 +333,28 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_Sharp_Internal_associateBy arginfo_Sharp_Internal_groupBy
 
+#define arginfo_Sharp_Internal_firstOrNull arginfo_Sharp_Internal_first
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_sortedBy, 0, 2, IS_ARRAY, 0)
 	ZEND_ARG_OBJ_TYPE_MASK(0, collection, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY, NULL)
 	ZEND_ARG_OBJ_INFO(0, selector, Closure, 0)
-	ZEND_ARG_OBJ_INFO_WITH_DEFAULT_VALUE(0, comparison, Closure, 1, "null")
+	ZEND_ARG_OBJ_TYPE_MASK(0, order, Closure, MAY_BE_ARRAY|MAY_BE_NULL, "null")
 ZEND_END_ARG_INFO()
+
+#define arginfo_Sharp_Internal_sortedByDescending arginfo_Sharp_Internal_sortedBy
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_sortedWith, 0, 2, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, list, IS_ARRAY, 0)
+	ZEND_ARG_OBJ_INFO(0, comparison, Closure, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_minBy, 0, 2, IS_MIXED, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, collection, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY, NULL)
+	ZEND_ARG_OBJ_INFO(0, selector, Closure, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, order, Closure, MAY_BE_ARRAY|MAY_BE_NULL, "null")
+ZEND_END_ARG_INFO()
+
+#define arginfo_Sharp_Internal_maxBy arginfo_Sharp_Internal_minBy
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Sharp_Position___construct, 0, 0, 4)
 	ZEND_ARG_TYPE_INFO(0, file, IS_STRING, 0)
@@ -326,12 +409,30 @@ ZEND_FUNCTION(Sharp_Internal_statics);
 ZEND_FUNCTION(Sharp_Internal_keep);
 ZEND_FUNCTION(Sharp_Internal_equals);
 ZEND_FUNCTION(Sharp_Internal_jsonEncode);
+ZEND_FUNCTION(Sharp_Internal_jsonDecode);
+ZEND_FUNCTION(Sharp_Internal_accessors);
+ZEND_FUNCTION(Sharp_Internal_createLazy);
 ZEND_FUNCTION(Sharp_Internal_arrayOf);
 ZEND_FUNCTION(Sharp_Internal_returned);
 ZEND_FUNCTION(Sharp_Internal_elements);
 ZEND_FUNCTION(Sharp_Internal_properties);
 ZEND_FUNCTION(Sharp_Internal_methods);
+ZEND_FUNCTION(Sharp_Internal_constructor);
 ZEND_FUNCTION(Sharp_Internal_typeArguments);
+ZEND_FUNCTION(Sharp_Internal_typeKind);
+ZEND_FUNCTION(Sharp_Internal_isNullable);
+ZEND_FUNCTION(Sharp_Internal_nonNullable);
+ZEND_FUNCTION(Sharp_Internal_typeParts);
+ZEND_FUNCTION(Sharp_Internal_tupleNames);
+ZEND_FUNCTION(Sharp_Internal_genericDefinition);
+ZEND_FUNCTION(Sharp_Internal_typeParameters);
+ZEND_FUNCTION(Sharp_Internal_baseType);
+ZEND_FUNCTION(Sharp_Internal_interfaces);
+ZEND_FUNCTION(Sharp_Internal_classFacts);
+ZEND_FUNCTION(Sharp_Internal_enumBackingType);
+ZEND_FUNCTION(Sharp_Internal_makeGenericType);
+ZEND_FUNCTION(Sharp_Internal_enumCases);
+ZEND_FUNCTION(Sharp_Internal_createInstance);
 ZEND_FUNCTION(Sharp_Internal_invoke);
 ZEND_FUNCTION(Sharp_Internal_read);
 ZEND_FUNCTION(Sharp_Internal_write);
@@ -358,6 +459,7 @@ ZEND_FUNCTION(Sharp_Internal_containsKey);
 ZEND_FUNCTION(Sharp_Internal_removeKey);
 ZEND_FUNCTION(Sharp_Internal_addKey);
 ZEND_FUNCTION(Sharp_Internal_put);
+ZEND_FUNCTION(Sharp_Internal_getOrPut);
 ZEND_FUNCTION(Sharp_Internal_keys);
 ZEND_FUNCTION(Sharp_Internal_values);
 ZEND_FUNCTION(Sharp_Internal_pairs);
@@ -376,7 +478,12 @@ ZEND_FUNCTION(Sharp_Internal_first);
 ZEND_FUNCTION(Sharp_Internal_any);
 ZEND_FUNCTION(Sharp_Internal_groupBy);
 ZEND_FUNCTION(Sharp_Internal_associateBy);
+ZEND_FUNCTION(Sharp_Internal_firstOrNull);
 ZEND_FUNCTION(Sharp_Internal_sortedBy);
+ZEND_FUNCTION(Sharp_Internal_sortedByDescending);
+ZEND_FUNCTION(Sharp_Internal_sortedWith);
+ZEND_FUNCTION(Sharp_Internal_minBy);
+ZEND_FUNCTION(Sharp_Internal_maxBy);
 ZEND_METHOD(Sharp_Position, __construct);
 ZEND_METHOD(Sharp_Container, get);
 ZEND_METHOD(Sharp_Container, has);
@@ -397,12 +504,30 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "keep"), zif_Sharp_Internal_keep, arginfo_Sharp_Internal_keep, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "equals"), zif_Sharp_Internal_equals, arginfo_Sharp_Internal_equals, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "jsonEncode"), zif_Sharp_Internal_jsonEncode, arginfo_Sharp_Internal_jsonEncode, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "jsonDecode"), zif_Sharp_Internal_jsonDecode, arginfo_Sharp_Internal_jsonDecode, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "accessors"), zif_Sharp_Internal_accessors, arginfo_Sharp_Internal_accessors, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "createLazy"), zif_Sharp_Internal_createLazy, arginfo_Sharp_Internal_createLazy, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "arrayOf"), zif_Sharp_Internal_arrayOf, arginfo_Sharp_Internal_arrayOf, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "returned"), zif_Sharp_Internal_returned, arginfo_Sharp_Internal_returned, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "elements"), zif_Sharp_Internal_elements, arginfo_Sharp_Internal_elements, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "properties"), zif_Sharp_Internal_properties, arginfo_Sharp_Internal_properties, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "methods"), zif_Sharp_Internal_methods, arginfo_Sharp_Internal_methods, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "constructor"), zif_Sharp_Internal_constructor, arginfo_Sharp_Internal_constructor, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "typeArguments"), zif_Sharp_Internal_typeArguments, arginfo_Sharp_Internal_typeArguments, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "typeKind"), zif_Sharp_Internal_typeKind, arginfo_Sharp_Internal_typeKind, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "isNullable"), zif_Sharp_Internal_isNullable, arginfo_Sharp_Internal_isNullable, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "nonNullable"), zif_Sharp_Internal_nonNullable, arginfo_Sharp_Internal_nonNullable, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "typeParts"), zif_Sharp_Internal_typeParts, arginfo_Sharp_Internal_typeParts, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "tupleNames"), zif_Sharp_Internal_tupleNames, arginfo_Sharp_Internal_tupleNames, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "genericDefinition"), zif_Sharp_Internal_genericDefinition, arginfo_Sharp_Internal_genericDefinition, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "typeParameters"), zif_Sharp_Internal_typeParameters, arginfo_Sharp_Internal_typeParameters, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "baseType"), zif_Sharp_Internal_baseType, arginfo_Sharp_Internal_baseType, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "interfaces"), zif_Sharp_Internal_interfaces, arginfo_Sharp_Internal_interfaces, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "classFacts"), zif_Sharp_Internal_classFacts, arginfo_Sharp_Internal_classFacts, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "enumBackingType"), zif_Sharp_Internal_enumBackingType, arginfo_Sharp_Internal_enumBackingType, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "makeGenericType"), zif_Sharp_Internal_makeGenericType, arginfo_Sharp_Internal_makeGenericType, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "enumCases"), zif_Sharp_Internal_enumCases, arginfo_Sharp_Internal_enumCases, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "createInstance"), zif_Sharp_Internal_createInstance, arginfo_Sharp_Internal_createInstance, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "invoke"), zif_Sharp_Internal_invoke, arginfo_Sharp_Internal_invoke, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "read"), zif_Sharp_Internal_read, arginfo_Sharp_Internal_read, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "write"), zif_Sharp_Internal_write, arginfo_Sharp_Internal_write, 0, NULL, NULL)
@@ -429,6 +554,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "removeKey"), zif_Sharp_Internal_removeKey, arginfo_Sharp_Internal_removeKey, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "addKey"), zif_Sharp_Internal_addKey, arginfo_Sharp_Internal_addKey, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "put"), zif_Sharp_Internal_put, arginfo_Sharp_Internal_put, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "getOrPut"), zif_Sharp_Internal_getOrPut, arginfo_Sharp_Internal_getOrPut, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "keys"), zif_Sharp_Internal_keys, arginfo_Sharp_Internal_keys, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "values"), zif_Sharp_Internal_values, arginfo_Sharp_Internal_values, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "pairs"), zif_Sharp_Internal_pairs, arginfo_Sharp_Internal_pairs, 0, NULL, NULL)
@@ -447,7 +573,12 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "any"), zif_Sharp_Internal_any, arginfo_Sharp_Internal_any, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "groupBy"), zif_Sharp_Internal_groupBy, arginfo_Sharp_Internal_groupBy, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "associateBy"), zif_Sharp_Internal_associateBy, arginfo_Sharp_Internal_associateBy, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "firstOrNull"), zif_Sharp_Internal_firstOrNull, arginfo_Sharp_Internal_firstOrNull, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "sortedBy"), zif_Sharp_Internal_sortedBy, arginfo_Sharp_Internal_sortedBy, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "sortedByDescending"), zif_Sharp_Internal_sortedByDescending, arginfo_Sharp_Internal_sortedByDescending, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "sortedWith"), zif_Sharp_Internal_sortedWith, arginfo_Sharp_Internal_sortedWith, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "minBy"), zif_Sharp_Internal_minBy, arginfo_Sharp_Internal_minBy, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "maxBy"), zif_Sharp_Internal_maxBy, arginfo_Sharp_Internal_maxBy, 0, NULL, NULL)
 	ZEND_FE_END
 };
 

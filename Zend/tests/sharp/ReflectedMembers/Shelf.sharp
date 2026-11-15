@@ -1,0 +1,9 @@
+namespace ReflectedMembers;
+
+// A generic class, whose statics each type argument keeps, and whose initial value only its type arguments spell.
+public class Shelf<TItem>
+{
+    public static int made { get; set => field = value; } = 2;
+
+    public Map<string, TItem> index { get; set; } = [:];
+}

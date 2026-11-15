@@ -50,8 +50,8 @@ report="$CARGO_TARGET_DIR/llvm-cov-target"
 # Then the root crate's tests that analyze through a PHP SDK worker, the only tests of the analyzer's external
 # providers: PluginRegistry takes an external analyzer only over a WorkerPool, a real worker process. The report
 # names the three packages, because without them it reports only the root crate's own files. The clean removes only
-# the last run's profiles, so cargo rebuilds only what changed, and the report is the one a clean of the instrumented
-# build gives, which rebuilds every workspace crate.
+# the last run's profiles, so cargo rebuilds only what changed, and the report, which reads only what these runs built,
+# is the one a clean of the instrumented build gives, which rebuilds every workspace crate.
 cd "$root/sharp/mago"
 cargo llvm-cov clean --profraw-only
 cargo llvm-cov --no-report --locked -p mago-analyzer -p mago-semantics -p mago-sharp-bridge
@@ -62,6 +62,26 @@ cargo llvm-cov --no-report --locked -p mago --test main -- \
   external_analyzer_refinement:: \
   external_analyzer_scan:: \
   server_engine::
+
+# The report reads every executable of a workspace target in the build, so a test binary an older source built under
+# another hash, as a version bump gives, adds its own mappings, which no profile of this run counts: each line it maps
+# reads zero, a line that is now a comment too. So the report reads only the executables of the two runs above: cargo
+# lists them under the environment cargo-llvm-cov builds with, and from the sources the runs built, so one it builds
+# again maps the same lines. Every other executable of the build goes, but the build scripts, which no report reads.
+# The rest of the build stays, so the next run still rebuilds only what changed.
+built="$(
+  eval "$(cargo llvm-cov show-env --sh 2>/dev/null)"
+  export CARGO_TARGET_DIR="$report"
+  {
+    cargo test --no-run --locked --message-format=json -p mago-analyzer -p mago-semantics -p mago-sharp-bridge
+    cargo test --no-run --locked --message-format=json -p mago --test main
+  } | sed -n 's/.*"executable":"\([^"]*\)".*/\1/p'
+)"
+find "$report/debug" -type f -perm -u+x ! -name '*.*' ! -name 'build[-_]script[-_]*' | while read -r binary; do
+  if ! grep -qxF "$binary" <<<"$built"; then
+    rm -- "$binary"
+  fi
+done
 cargo llvm-cov report -p mago-analyzer -p mago-semantics -p mago-sharp-bridge --lcov --output-path "$report/lcov.info"
 
 # As coverage.py's exclude_lines leaves out `raise NotImplementedError`: an impossible arm is an unreachable!(…)

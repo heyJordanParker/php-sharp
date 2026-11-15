@@ -5877,16 +5877,21 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 /* }}} */
 
 /* A ZEND_AST_SHARP_CLASS_METADATA in the member list of a PHP# class-like holds its metadata: the type arguments its
- * header gives each generic parent and interface, the bounds of its type parameters, and their variance. A generic
- * class also declares from it the slot its objects keep their type arguments in, null until the object has some. */
+ * header gives each generic parent and interface, the bounds of its type parameters, their variance, and the
+ * declarations reflection reads. A generic class also declares from it the slot its objects keep their type arguments
+ * in, null until the object has some. */
 static void zend_compile_sharp_class_metadata(zend_ast *ast)
 {
 	zend_class_entry *ce = CG(active_class_entry);
 	zend_ast *header_ast = ast->child[0];
 	zend_ast *bounds_ast = ast->child[1];
 	zend_ast *variance_ast = ast->child[2];
+	zend_ast *declared_ast = ast->child[3];
 
 	ZEND_ASSERT(ce && ce->type == ZEND_USER_CLASS);
+	if (declared_ast) {
+		ce->info.user.sharp_declared = zend_string_copy(zend_ast_get_str(declared_ast));
+	}
 	if (variance_ast) {
 		ce->info.user.sharp_variance = zend_string_copy(zend_ast_get_str(variance_ast));
 	}
@@ -6440,13 +6445,18 @@ void zend_resolve_goto_label(zend_op_array *op_array, zend_op *opline) /* {{{ */
 }
 /* }}} */
 
-static void zend_compile_goto(zend_ast *ast) /* {{{ */
+/* A `leave` is PHP#'s `a ?? return` in `willSet`, whose `return` jumps past the observer, as in zend_compile_return. */
+static void zend_compile_goto(zend_ast *ast, bool leave) /* {{{ */
 {
 	zend_ast *label_ast = ast->child[0];
 	znode label_node;
 	zend_op *opline;
 
 	zend_compile_expr(&label_node, label_ast);
+
+	if (leave) {
+		zend_emit_op(NULL, ZEND_SHARP_LEAVE, NULL, NULL);
+	}
 
 	/* Label resolution and unwinding adjustments happen in pass two. */
 	uint32_t opnum_start = get_next_op_number();
@@ -9944,6 +9954,7 @@ static void zend_compile_class_decl(znode *result, zend_ast *ast, bool toplevel)
 	ce->info.user.sharp_bounds = NULL;
 	ce->info.user.sharp_header = NULL;
 	ce->info.user.sharp_variance = NULL;
+	ce->info.user.sharp_declared = NULL;
 
 	if (decl->doc_comment) {
 		ce->doc_comment = zend_string_copy(decl->doc_comment);
@@ -12421,7 +12432,7 @@ static void zend_compile_stmt(zend_ast *ast) /* {{{ */
 			zend_compile_break_continue(ast, false);
 			break;
 		case ZEND_AST_GOTO:
-			zend_compile_goto(ast);
+			zend_compile_goto(ast, false);
 			break;
 		case ZEND_AST_LABEL:
 			zend_compile_label(ast);
@@ -12462,6 +12473,8 @@ static void zend_compile_stmt(zend_ast *ast) /* {{{ */
 			break;
 		case ZEND_AST_SHARP_CLASS_METADATA:
 			zend_compile_sharp_class_metadata(ast);
+			break;
+		case ZEND_AST_SHARP_EXTERN:
 			break;
 		case ZEND_AST_CLASS_CONST_GROUP:
 			zend_compile_class_const_group(ast);
@@ -12649,10 +12662,15 @@ static void zend_compile_expr_inner(znode *result, zend_ast *ast) /* {{{ */
 		case ZEND_AST_THROW:
 			zend_compile_throw(result, ast);
 			return;
-		/* PHP#: the right side of `a ?? return`, `a ?? continue` or `a ?? break`. PHP's parser never puts a
-		 * statement in an expression. */
+		/* PHP#: the right side of `a ?? return`, `a ?? continue` or `a ?? break`, and the `goto` past `willSet` its
+		 * `a ?? return` is. PHP's parser never puts a statement in an expression. */
 		case ZEND_AST_RETURN:
 			zend_compile_return(ast, true);
+			result->op_type = IS_CONST;
+			ZVAL_TRUE(&result->u.constant);
+			return;
+		case ZEND_AST_GOTO:
+			zend_compile_goto(ast, true);
 			result->op_type = IS_CONST;
 			ZVAL_TRUE(&result->u.constant);
 			return;

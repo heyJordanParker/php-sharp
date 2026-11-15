@@ -1,0 +1,8 @@
+namespace ReflectedMembers;
+
+public class Draft
+{
+    public late string title { get; set; }
+
+    public required Draft() { }
+}

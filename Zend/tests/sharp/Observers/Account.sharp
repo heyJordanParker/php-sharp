@@ -9,6 +9,8 @@ public class Account
     public string name { get; set { Witness.say(`set [${value}]\n`); field = value.trim(); } didSet => Witness.say(`named ${field}\n`); } = "  start  ";
     public string note { get; set { Witness.say("set note\n"); field = value; } } = Words.repeated(" ", 2);
     public static int opened { get; set; didSet => Witness.say(`opened ${field}\n`); } = Words.distance("ab", "");
+    public int limit { get; set; willSet { for (const step of [1, 2]) { if (step == value) { Witness.say(`step ${step}\n`); return; } } Witness.say(`limit ${value}\n`); } didSet => Witness.say(`limit is ${field}\n`); } = 0;
+    public static string? label { get; set; willSet { const shown = value ?? return; Witness.say(`label ${shown}\n`); } } = null;
 
     public Account(string name)
     {
@@ -39,5 +41,11 @@ public class Account
     {
         Account.opened = Account.opened + 1;
         return Account.opened;
+    }
+
+    public static string? relabel(string? text)
+    {
+        Account.label = text;
+        return Account.label;
     }
 }

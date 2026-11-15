@@ -1,0 +1,25 @@
+namespace ReflectedMembers;
+
+public class Account
+{
+    public static int opened { get; set; } = 0;
+
+    public late string owner { get; set; }
+
+    public int balance { get; set; } = 10;
+
+    public int doubled => this.balance * 2;
+
+    public int pin { get; private set; } = 0;
+
+    public string note { get; set; didSet => Account.opened += 1; } = "";
+
+    public required Account(string owner)
+    {
+        this.owner = owner;
+    }
+
+    public static string kind() => "account";
+
+    public int deposit(int amount, string memo = "") => this.balance + amount;
+}

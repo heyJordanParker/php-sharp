@@ -1,5 +1,5 @@
 --TEST--
-PHP# behaviors run set in the order they are written and get the other way, the initial value's write included, which a behavior trims, with one instance of each per object
+PHP# behaviors run set in the order they are written and get the other way, the initial value's write included, which a behavior trims, with one instance of each per object, and one per class for a static
 --FILE--
 <?php
 
@@ -31,6 +31,10 @@ echo $cloned->name, ' ', $first->name, "\n";
 // A generic behavior is created with its type argument, and runs as any behavior does.
 $first->level = 4;
 echo $first->level, "\n";
+
+// A static's behaviors belong to its class, one instance of each, so each write counts on. Its initial value filled
+// the storage without `set`, so `Counted` counted no write before them.
+echo Behaviors\Profile::tagged(), ' ', Behaviors\Profile::retag('  ann  '), ' ', Behaviors\Profile::retag(' bo '), "\n";
 ?>
 --EXPECT--
 start#1|X#1
@@ -39,3 +43,4 @@ cy#2 ada#2
 dee#1 ada#2
 eve#1 ada#2
 4
+base#0 ann#1 bo#2

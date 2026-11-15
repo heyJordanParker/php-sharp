@@ -8,9 +8,14 @@
 //! A file converts whole or not at all. Each construct with no PHP# form yet, or none at all, is a [`Refusal`] that
 //! names its place and the construct, and the file then stays plain PHP.
 
+use std::collections::BTreeSet;
+use std::collections::HashMap;
+
 use mago_analyzer::artifacts::AnalysisArtifacts;
 use mago_codex::metadata::CodebaseMetadata;
 use mago_codex::metadata::class_like::ClassLikeMetadata;
+use mago_codex::metadata::class_like::TemplateTypes;
+use mago_codex::reference::SymbolReferences;
 use mago_codex::ttype::resolution::TypeResolutionContext;
 use mago_codex::ttype::template::variance::Variance;
 use mago_codex::ttype::union::TUnion;
@@ -26,10 +31,12 @@ use mago_syntax::cst::Statement;
 use mago_syntax::cst::UseItem;
 use mago_syntax::cst::UseItems;
 use mago_syntax::token::is_sharp_keyword;
+use mago_word::Word;
 
 use crate::body::Captures;
 use crate::body::Locals;
 use crate::declaration::NameCase;
+use crate::declaration::Uses;
 use crate::edits::Edits;
 use crate::types::Imports;
 use crate::types::type_text;
@@ -49,6 +56,8 @@ pub struct Input<'input, 'arena> {
     pub names: &'input ResolvedNames<'arena>,
     pub codebase: &'input CodebaseMetadata,
     pub artifacts: &'input AnalysisArtifacts,
+    /// The project's references between symbols, which name every member and file that sets a property.
+    pub references: &'input SymbolReferences,
     /// The standard library's members that run a PHP function, which a bare call of a built-in becomes.
     pub library: &'input Library,
 }
@@ -108,6 +117,7 @@ pub fn convert(input: &Input<'_, '_>) -> Result<Converted, Vec<Refusal>> {
         class: None,
         method: None,
         renamed: Vec::new(),
+        loops: Vec::new(),
     };
     converter.program();
     if !converter.refusals.is_empty() {
@@ -154,6 +164,12 @@ struct Class<'input> {
     set_by_constructor: Vec<Vec<u8>>,
     /// Whether the class's own constructor is `required`, since the class writes `new static(…)` and isn't `final`.
     required: bool,
+    /// The code outside the class that sets each of its properties, by the property's name with `$`.
+    writers: HashMap<Word, BTreeSet<String>>,
+    /// Who uses each of its members, by its name in the project's references.
+    uses: HashMap<Word, Uses>,
+    /// The name of each static field the `static` locals of its methods became so far, which no later one takes.
+    static_fields: Vec<String>,
 }
 
 /// The method or the property accessor whose body is converted.
@@ -163,6 +179,8 @@ struct Method {
     name: Option<Vec<u8>>,
     /// The declared return, which a returned value lands in, or `None` in a constructor and a `set` accessor.
     returning: Option<TUnion>,
+    /// Whether PHP checks `returning` itself, as the code declares it without PHPDoc.
+    checks_return: bool,
     /// The type parameters a `@var` tag in the body reads, the class's and the method's.
     resolution: TypeResolutionContext,
     /// The method's parameters, by their PHP names, which are never locals.
@@ -181,6 +199,9 @@ struct Method {
     captures: Option<Captures>,
     /// The analysis's type of each value the body returns, `None` for a `return` with no value or of no known type.
     returned: Vec<Option<TUnion>>,
+    /// The declaration of each private static field the body's `static` locals become, as `private static int count =
+    /// 0;`, which goes before the member whose body this is (spec section 6).
+    static_fields: Vec<String>,
 }
 
 struct Converter<'input, 'arena> {
@@ -199,11 +220,33 @@ struct Converter<'input, 'arena> {
     /// Each local and `catch` variable of the method being converted, by its PHP name, with the camel case name PHP#
     /// gives it (spec section 24). Its lambdas share it, since their captures are its variables.
     renamed: Vec<(Vec<u8>, String)>,
+    /// The loops and `switch` statements around the code being converted, the innermost last, which PHP's `break 2`
+    /// counts.
+    loops: Vec<Loop>,
+}
+
+/// A loop or a `switch` statement around the code being converted.
+struct Loop {
+    is_switch: bool,
+    /// The name a `break` or `continue` of an inner loop gave it, which goes before the statement, as `outer: for (…)`
+    /// (spec section 17).
+    name: Option<String>,
 }
 
 impl<'input> Converter<'input, '_> {
     fn refuse(&mut self, span: Span, reason: impl Into<String>) {
         self.refusals.push(Refusal { span, reason: reason.into() });
+    }
+
+    /// Whether the file is an application's, a project's, whose `composer.json` says `"type": "project"`.
+    fn in_project(&self) -> bool {
+        self.input.codebase.folder(self.input.file.id).is_some_and(|folder| self.input.library.is_project(folder))
+    }
+
+    /// Whether `written`, a type a public member's signature names, holds `Any`, `Any?` or `Object` in an application,
+    /// whose public members name their types.
+    fn untyped_in_application(&self, written: &str) -> bool {
+        types::names_any(written) && self.in_project()
     }
 
     fn text(&self, span: Span) -> &'input [u8] {
@@ -428,14 +471,15 @@ impl<'input> Converter<'input, '_> {
         self.imports_at = ImportsAt::AfterImport(span.end.offset);
     }
 
-    /// The type parameter list of a class whose analysis gives it type parameters, from PHPDoc or a refinement.
-    fn type_parameters(&mut self, class: &ClassLikeMetadata, span: Span) -> Option<String> {
-        if class.template_types.is_empty() {
+    /// The type parameter list of a class or a method whose analysis gives it type parameters, `templates`, from PHPDoc
+    /// or a refinement, each with its `variance`, which only a class declares (spec section 11.1).
+    fn type_parameters(&mut self, templates: &TemplateTypes, variance: &[Variance], span: Span) -> Option<String> {
+        if templates.is_empty() {
             return Some(String::new());
         }
 
         let mut written = Vec::new();
-        for (index, (name, template)) in class.template_types.iter().enumerate() {
+        for (index, (name, template)) in templates.iter().enumerate() {
             // Spec section 11: `T`, or `T` and a capital letter. Another name would need each use renamed, those a
             // refinement reads from the class's own attributes among them.
             let named = name.as_bytes();
@@ -448,7 +492,7 @@ impl<'input> Converter<'input, '_> {
                 );
                 return None;
             }
-            let variance = match class.template_variance.get(index) {
+            let variance = match variance.get(index) {
                 Some(Variance::Covariant) => "out ",
                 Some(Variance::Contravariant) => "in ",
                 _ => "",

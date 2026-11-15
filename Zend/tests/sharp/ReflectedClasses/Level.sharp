@@ -1,0 +1,10 @@
+namespace ReflectedClasses;
+
+import Lib.Field;
+
+public enum Level : int
+{
+    [Field("low")]
+    case Low = 1;
+    case High = 2;
+}

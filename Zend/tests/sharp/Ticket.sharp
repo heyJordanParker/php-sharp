@@ -2,7 +2,7 @@ namespace Demo;
 
 class Ticket
 {
-    public Ticket(private int price, public string code { get; }, public int seats { get; protected set; }, int discount)
+    public Ticket(private int price, public string code { get; }, public int seats { get; private set; }, int discount)
     {
         this.price -= discount;
     }

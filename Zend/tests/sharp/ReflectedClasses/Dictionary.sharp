@@ -1,0 +1,17 @@
+namespace ReflectedClasses;
+
+import Lib.Field;
+
+public class Dictionary : ValueList<Level>
+{
+    int balance = 0;
+    public string name { get; set; } = "";
+    public string code { get; private set; } = "";
+    public string key { get; init; } = "";
+
+    public Dictionary(public int id { get; }, [Field] string? note = null) { }
+
+    public void touch() { }
+
+    public never fail() => throw new ValueError("failed");
+}

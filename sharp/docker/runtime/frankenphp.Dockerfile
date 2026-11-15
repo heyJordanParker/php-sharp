@@ -106,6 +106,7 @@ RUN set -eux; \
 		git \
 		libargon2-dev \
 		libcurl4-openssl-dev \
+		libicu-dev \
 		libonig-dev \
 		libreadline-dev \
 		libsodium-dev \
@@ -283,6 +284,7 @@ RUN apt-get update && \
 	libargon2-dev \
 	libbrotli-dev \
 	libcurl4-openssl-dev \
+	libicu-dev \
 	libonig-dev \
 	libreadline-dev \
 	libsodium-dev \

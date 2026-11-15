@@ -23,8 +23,10 @@ use mago_syntax::cst::Sequence;
 use mago_syntax::walker::MutWalker;
 
 use super::Locals;
+use super::access::HELD_CLASS;
 use super::locals::Capture;
 use super::locals::Captures;
+use super::natively_checked;
 use crate::Converter;
 use crate::Method;
 use crate::declaration::NameCase;
@@ -117,11 +119,19 @@ impl Converter<'_, '_> {
             .filter(|declared| declared.return_from_body.is_none())
             .and_then(|declared| declared.return_type_metadata.as_ref())
             .map(|metadata| metadata.type_union.clone());
+        let checks_return = returning.as_ref().is_some_and(|returning| {
+            natively_checked(
+                declared.and_then(|declared| declared.return_type_declaration_metadata.as_ref()),
+                returning,
+                self.input.codebase,
+            )
+        });
         let resolution = self.method.as_ref().map(|method| method.resolution.clone()).unwrap_or_default();
         let around = self.method.take();
         self.method = Some(Method {
             name: None,
             returning: returning.clone(),
+            checks_return,
             resolution,
             parameters: parameters.parameters.iter().map(|parameter| parameter.variable.name.to_vec()).collect(),
             variadic: parameters
@@ -134,6 +144,7 @@ impl Converter<'_, '_> {
             storage: None,
             captures: Some(captures),
             returned: Vec::new(),
+            static_fields: Vec::new(),
         });
         match body {
             Body::Block(block) => self.block(block),
@@ -207,7 +218,7 @@ impl Converter<'_, '_> {
 
     /// `name`, or `name2`, `name3` and on, the first that names no variable of the file and none of `chosen`. The
     /// file names fewer variables than it has bytes, so one of the first that many numbers is free.
-    fn unused_name(&self, name: &str, chosen: &[String]) -> String {
+    pub(super) fn unused_name(&self, name: &str, chosen: &[String]) -> String {
         let taken = |candidate: &str| {
             let variable = format!("${candidate}");
             chosen.iter().any(|chosen| chosen == candidate)
@@ -246,7 +257,7 @@ impl Converter<'_, '_> {
             if parameter.ampersand.is_some() {
                 self.refuse(
                     parameter.span(),
-                    format!("a PHP# parameter is never taken by reference, so `{name}` can't be: return the new value instead"),
+                    format!("`{name}` is taken by reference, which has no PHP# form: PHP# passes every argument by value, so a write to `{name}` never reaches the caller (spec section 14.3)"),
                 );
                 continue;
             }
@@ -282,12 +293,18 @@ impl Converter<'_, '_> {
     }
 
     /// `$object->name(...)`, `Class::name(...)` and `name(...)` as the method value PHP# names without parentheses,
-    /// `object.name` (spec section 14.3).
-    pub(super) fn method_value(&mut self, expression: &Expression<'_>, application: &PartialApplication<'_>) {
+    /// `object.name` (spec section 14.3), and a built-in's `name(...)` as the lambda that calls the library member that
+    /// runs it, with the parameters of `expected`, the function type the value lands in.
+    pub(super) fn method_value(
+        &mut self,
+        expression: &Expression<'_>,
+        application: &PartialApplication<'_>,
+        expected: Option<&TUnion>,
+    ) {
         if !application.is_first_class_callable() {
             return self.refuse(
                 expression.span(),
-                "a partial application with placeholders has no PHP# form: write a lambda that calls it",
+                "a partial application with placeholders has no PHP# form: a PHP# method value names a whole method, with no argument fixed (spec section 14.3)",
             );
         }
         let arguments = application.get_argument_list().span();
@@ -305,7 +322,13 @@ impl Converter<'_, '_> {
                 if self.forwards_called_class(expression.span(), value.class, &value.method) {
                     return;
                 }
-                self.expression(value.class, None);
+                if !self.static_class(value.class) {
+                    let shown = String::from_utf8_lossy(self.text(expression.span())).into_owned();
+                    return self.refuse(
+                        expression.span(),
+                        format!("`{shown}` names a static method of a class held at run time as a value, which has no PHP# form: {HELD_CLASS}, which gives no method value"),
+                    );
+                }
                 self.edits.replace(value.double_colon, ".");
                 self.member(&value.method);
             }
@@ -320,10 +343,7 @@ impl Converter<'_, '_> {
                 };
                 let name = function.original_name.as_str_lossy().into_owned();
                 if function.flags.is_built_in() {
-                    return self.refuse(
-                        expression.span(),
-                        format!("`{name}` is PHP's own function, which PHP# reaches through the standard library member that runs it, and the converter writes that member for a call only"),
-                    );
+                    return self.built_in_value(expression.span(), function, &name, expected);
                 }
                 let Some(text) = self.through_namespace(expression.span(), &name, function.span) else {
                     return;

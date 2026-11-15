@@ -1,0 +1,24 @@
+namespace IterableKinds;
+
+import Lib.Cursor;
+
+public static class Reads
+{
+    public static int fed(Feed<int> feed)
+    {
+        let total = 0;
+        for (const n of feed) {
+            total += n;
+        }
+        return total + feed.filter(n => n > 1).toList().count();
+    }
+
+    public static List<int> counted(Countdown countdown) => countdown.map(n => n * 10).toList();
+
+    public static List<int> cursor(Cursor cursor) => cursor.filter(n => n > 4).take(1).toList();
+
+    // `[]` is an empty `List`, which an `Iterable` holds.
+    public static Iterable<Object> none() => [];
+
+    public static int named(Iterable<string> names = []) => names.toList().count();
+}

@@ -21,6 +21,7 @@ use Proof\Spec;
 use Proof\Special;
 use Proof\Zoo\Bird;
 use Proof\Zoo\Cat;
+use Proof\Zoo\Keeper;
 
 require __DIR__ . '/vendor/autoload.php';
 
@@ -66,7 +67,7 @@ $special = new Special('beta');
 echo $spec->label(), "\n";
 echo $special->label(), "\n";
 echo $spec->name, "\n";
-echo json_encode([$spec->sameKind($special), $special->sameKind($spec), $spec->sameKind(new \stdClass())]), "\n";
+echo json_encode([$spec->sameKind($special), $special->sameKind($spec), $spec->sameKind(new \ArrayObject())]), "\n";
 
 /** @var Box<Special> $box */
 $box = new Box($special);
@@ -164,6 +165,5 @@ $bird = new Bird('tweety');
 echo $cat->describe(), "\n", $bird->describe(), "\n";
 echo Cat::counted(1), ' ', Bird::counted(3), "\n";
 echo $cat->summary(), ' ', $bird->summary(), ' ', json_encode($cat->traits()), "\n";
-$bird->sound = 'chirp';
-$bird->name = 'polly';
+(new Keeper())->rename($bird, 'chirp', 'polly');
 echo $bird->describe(), "\n";

@@ -1,10 +1,21 @@
 namespace Demo;
 
 import Lib.Copies;
+import Lib.Document;
 
 public static class Seeder
 {
     public static bool owns(Any value) => value is Copies;
+
+    // A value of an open class may be of the trait, through a subclass that uses it.
+    public static bool held(Document document) => document is Copies copies && copies.copy() != "";
+
+    public static string? cast(Document document) => (document as Copies)?.copy();
+
+    public static string kind(Document document) => match (document) {
+        Copies => "copies",
+        default => "plain",
+    };
 
     public static string seed(Copies owner) => owner.copy();
 

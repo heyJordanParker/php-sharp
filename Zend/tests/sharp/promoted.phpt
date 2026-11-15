@@ -29,6 +29,6 @@ try {
 --EXPECT--
 private int price promoted field
 public readonly string code promoted
-public protected(set) int seats promoted
+public private(set) int seats promoted
 A1 3 24
 Cannot modify readonly property Demo\Ticket::$code

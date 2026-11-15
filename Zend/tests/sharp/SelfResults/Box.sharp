@@ -1,0 +1,6 @@
+namespace SelfResults;
+
+public class Box<T>
+{
+    public Self copy() => this;
+}

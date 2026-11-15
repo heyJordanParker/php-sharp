@@ -21,6 +21,7 @@ use super::Kind;
 use super::is_primary;
 use super::kinds;
 use crate::Converter;
+use crate::types::type_text;
 
 /// The assignment PHP runs first in `condition`, when a comparison reads its value: the left side, in parentheses, of
 /// a comparison, as `($at = strpos($url, '#')) !== false`, which is itself the condition or the left side of one.
@@ -177,14 +178,11 @@ impl Converter<'_, '_> {
     }
 
     /// PHP's `$value ?: $other` as `test ? value : other`, where `test` is the truthiness of `value`, which reads it
-    /// again, so `value` is one [`Converter::rereads`] gives again (spec section 21).
+    /// again, so `value` is one [`Converter::rereads`] gives again (spec section 21). Any other value is read once, by
+    /// [`Converter::elvis_once`].
     pub(super) fn elvis(&mut self, expression: &Expression<'_>, value: &Expression<'_>, other: &Expression<'_>) {
         if !self.rereads(value) {
-            let shown = String::from_utf8_lossy(self.text(value.span())).into_owned();
-            return self.refuse(
-                expression.span(),
-                format!("`?:` of `{shown}` has no PHP# form: `??` covers null, and PHP's truthiness test reads the value a second time, which the converter writes only for a variable or a property (spec section 21)"),
-            );
+            return self.elvis_once(expression, value, other);
         }
         // A `bool` tests itself, as a condition of it does.
         let (test, value) = if self.is(value, &[Kind::Bool]) {
@@ -200,6 +198,53 @@ impl Converter<'_, '_> {
         self.expression(other, None);
         let other = self.render(other);
         self.edits.replace(expression.span(), format!("{test} ? {value} : {other}"));
+    }
+
+    /// PHP's `$value ?: $other` with one read of `value`, as a call, which runs once, as in PHP (spec section 21). An
+    /// object that may be null is truthy where it is one, so it is `value ?? other`. Any other value is bound once, as
+    /// `match (value) { string value2 when value2 != "" && value2 != "0" => value2, default => other }`, whose `when`
+    /// is PHP's truthiness of the value. A value that is never null is its arm's type already, which the checker warns
+    /// on as a test that always holds, so a never-null scalar refuses.
+    fn elvis_once(&mut self, expression: &Expression<'_>, value: &Expression<'_>, other: &Expression<'_>) {
+        let Some(union) = self.type_of(value).cloned() else {
+            return self.refuse(value.span(), "the analysis gives this condition no type");
+        };
+        if is_scalar(&union) && !self.proven(value) {
+            return;
+        }
+        let kinds = kinds(&union);
+        let nullable = kinds.contains(&Kind::Null);
+        let bare: Vec<Kind> = kinds.into_iter().filter(|kind| *kind != Kind::Null).collect();
+        let shown = String::from_utf8_lossy(self.text(value.span())).into_owned();
+        if !nullable && is_scalar(&union) {
+            return self.refuse(
+                expression.span(),
+                format!("`?:` of `{shown}` has no PHP# form: PHP's truthiness test reads the value a second time, which gives the first read only for a variable or a property, and one read through `match` binds it as `{}`, which a value that is never null already is, so the checker warns on the test (spec section 21)", union.get_id()),
+            );
+        }
+        if nullable && matches!(bare.as_slice(), [Kind::Object] | [Kind::Enum] | [Kind::Class]) {
+            self.expression(value, None);
+            self.expression(other, None);
+            let (value, other) = (self.render(value), self.render(other));
+            return self.edits.replace(expression.span(), format!("{value} ?? {other}"));
+        }
+
+        let bound = TUnion::from_vec(union.get_non_nullable_types());
+        let name = self.unused_name("value", &[]);
+        let Some((test, _)) = self.test_of(&bound, value.span(), |_| name.clone(), true, false, true) else {
+            return;
+        };
+        let written = match type_text(&bound, self.input.codebase, &mut self.imports) {
+            Ok(written) => written,
+            Err(reason) => return self.refuse(value.span(), reason),
+        };
+        self.expression(value, None);
+        self.expression(other, None);
+        let (value, other) = (self.render(value), self.render(other));
+        self.edits.replace(
+            expression.span(),
+            format!("match ({value}) {{ {written} {name} when {test} => {name}, default => {other} }}"),
+        );
     }
 
     /// Whether reading `expression` a second time gives what the first read gave: a variable, or a property of one that
@@ -407,7 +452,7 @@ impl Converter<'_, '_> {
                     let indexed = self.shown(access.array);
                     self.refuse(
                         place.span(),
-                        format!("`{construct}` at an index of `{indexed}` reads past a `List`'s end, which PHP gives as unset and PHP# refuses: it converts for a `Map` key"),
+                        format!("`{construct}` at an index of `{indexed}` reads past a `List`'s end, which PHP gives as unset and PHP# refuses"),
                     );
                     return true;
                 }
@@ -450,7 +495,7 @@ impl Converter<'_, '_> {
                     || metadata.type_declaration_metadata.is_none()
             });
             if !valued {
-                return Some("reads a property that may hold no value, which PHP gives as unset and PHP# reads: it converts for a property with a default or a promoted one".to_owned());
+                return Some("reads a property that may hold no value, which PHP gives as unset without an error, and PHP# reads the property itself, which has no default and is not promoted".to_owned());
             }
             let descendants = codebase.get_all_descendants(class);
             let magic = std::iter::once(class).chain(descendants.iter().map(|descendant| descendant.as_bytes())).find(
