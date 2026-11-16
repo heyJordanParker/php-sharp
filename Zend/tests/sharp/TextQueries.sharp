@@ -22,6 +22,8 @@ class TextQueries
             text.endsWith(other, true),
         ];
 
+    public static List<bool> emptiness(string text) => [text.isEmpty(), text.isNotEmpty()];
+
     public static string titled(string text) => text.titlecase();
 
     public static string replaced(string text, string old, string @new, int? limit) => text.replace(old, @new, limit);

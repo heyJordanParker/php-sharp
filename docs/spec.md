@@ -723,13 +723,17 @@ public int count { get; didSet => this.touch(); } = 0;            // compile err
 
 `nameof(Order.total)` names a property, a field or a method that `Order` declares or inherits, instance or static, readable where `nameof` is written, and gives its name as a string, as C#'s `nameof` names a method. The reference is typed, and the checker rejects a misspelled or removed member wherever it is used. It sits beside `typeof(Order)` (section 25).
 
+**`nameof(Order.total)` has the type `keyof Order`,** the names of `Order`'s readable members (section 11). A `keyof Order` is a `string`, so it goes wherever a string goes: a `string` parameter, a template, a `Map` key and `==`. A `keyof Order` parameter takes only a member name, so a raw string is refused, and a typo fails the build where the name is written:
+
 <!-- example property-references: statements
 Query<Order> query = new Query<Order>();
 -->
 ```csharp
-query.orderBy(nameof(Order.total));   // compiles: a typed reference to Order's total property
+query.orderBy(nameof(Order.total));   // compiles: nameof(Order.total) has type keyof Order
+query.orderBy("total");               // compile error: a string isn't a keyof Order
 query.orderBy(nameof(Order.totl));    // compile error: Order has no property totl
 query.orderBy(Order.total);           // compile error: Order.total reads a static value, and total is an instance property
+string message = `${nameof(Order.total)} is invalid`;   // compiles: a keyof Order is a string
 ```
 
 A bare `Order.total` is never a property reference, so `Class.y` always reads a static value (section 4).
@@ -1734,6 +1738,28 @@ TItem is only returned by PaginatedList, so declare it `out TItem`.
 
 There is no variance at the point of use, such as Java's `? extends T`.
 
+### 11.2 Member names
+
+**`keyof T` is the type of the names of `T`'s readable members:** its properties, fields and methods, and the extern properties its plain PHP parent's `__get` gives (section 6.1). `T` is a class or a type parameter. Only `nameof` gives one: `nameof(Order.total)` has the type `keyof Order` (section 6.3). A `keyof Order` is a `string`, so it passes to a `string` parameter, joins a template, compares with `==` and keys a `Map`. A `keyof Order` parameter takes no other string, so a raw string is a compile error, and a member renamed later breaks the build where its name is passed:
+
+<!-- example member-names: statements alone
+namespace App.MemberNames;
+import App.Order;
+-->
+```csharp
+public class Sorter<T>
+{
+    public string by(keyof T column) => column;
+}
+
+Sorter<Order> sorter = new Sorter<Order>();
+sorter.by(nameof(Order.total));        // compiles: nameof(Order.total) has type keyof Order
+sorter.by("total");                    // compile error: a string isn't a keyof Order
+string column = nameof(Order.total);   // compiles: a keyof Order is a string
+```
+
+A class inherits its parent's members, so a name of `DatabaseEntity`'s member is a name of `Order`'s: a `keyof DatabaseEntity` passes where a `keyof Order` is expected, and a `keyof Order` never passes where a `keyof DatabaseEntity` is. A `keyof T` compiles to PHP's `string`, and plain PHP receives the member's name. A member's name is one of the class's own names, so it reaches a plain PHP `literal-string` parameter, as a backed case's `value` does (section 24). A plain PHP method takes one through its `extern` line (section 23), as `Builder<TModel>.where(keyof TModel column, Any? value)` does.
+
 ## 12. Collections
 
 PHP# has three collection types: `List<T>`, `Map<TKey, TValue>` and `Set<T>`.
@@ -1837,6 +1863,15 @@ Map<int, Line> byKey = Shelf.kept();        // compiles: the Map keeps plain PHP
 List<int> pair = Shelf.pair();              // compiles: an int-keyed shape is a List
 const sum = match (Shelf.pair()) { [int a, int b] => a + b, default => 0 };   // compiles: sum is 11
 List<int> attached = Shelf.changes().get("attached") ?? [];   // compiles: attached[0] is 7
+```
+
+**A `Map` literal passed to a plain PHP array shape is checked against the shape, key by key.** In an application, a `Map` literal whose keys are fixed at compile time, passed where a plain PHP parameter declares a shape, as `array{code: string, raw: bool}`, gives each key the shape declares a value of the key's type. A key the shape doesn't declare, unless the shape is open, a key it requires that the literal doesn't give, and a value of another type are each a compile error that names the shape and the key:
+
+```text
+template.compose(["code": part.code, "raw": part.raw]);   compiles
+template.compose(["cod": part.code, "raw": part.raw]);    error: `array{'code': string, 'raw': bool}` has no key `'cod'`
+template.compose(["code": part.code]);                    error: the shape requires the key `'raw'`
+template.compose(["code": part.code, "raw": part.code]);  error: the shape holds `bool` under the key `'raw'`
 ```
 
 **A `List` is not a `Map`, so a `List` value where only a `Map` is declared is a compile error,** as a `List` literal is: its keys are only its positions. A plain PHP value is the exception, since it holds the keys plain PHP gave it.
@@ -3517,11 +3552,13 @@ email.toString();                      // "ada@example.com"
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
-**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so `length` counts characters and a case change reaches every letter. `substring`, `indexOf` and `lastIndexOf` count in characters, a search that finds nothing gives `null`, and a range or a start outside the text throws `OutOfRangeException`. `trim`, `trimStart` and `trimEnd` remove whitespace, or each character of the text they are given, and `removePrefix` and `removeSuffix` remove their text once when the text starts or ends with it. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. `lines` splits at `"\r\n"`, `"\n"` and `"\r"`. Empty text to replace and an empty delimiter give Kotlin's results: they match before each character and after the last. A negative limit, empty padding and a negative count each throw `ValueError`, as in Kotlin:
+**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so `length` counts characters and a case change reaches every letter. `substring`, `indexOf` and `lastIndexOf` count in characters, a search that finds nothing gives `null`, and a range or a start outside the text throws `OutOfRangeException`. `trim`, `trimStart` and `trimEnd` remove whitespace, or each character of the text they are given, and `removePrefix` and `removeSuffix` remove their text once when the text starts or ends with it. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. `lines` splits at `"\r\n"`, `"\n"` and `"\r"`. Empty text to replace and an empty delimiter give Kotlin's results: they match before each character and after the last. A negative limit, empty padding and a negative count each throw `ValueError`, as in Kotlin. `isEmpty()` and `isNotEmpty()` tell whether the text holds a character, as they tell whether a collection holds an element (section 12), so `"0"` is not empty:
 
 <!-- example text-methods: statements -->
 ```csharp
 "école".length();                         // 5
+"".isEmpty();                             // true
+"0".isNotEmpty();                         // true
 "école".substring(1, 3);                  // "co"
 "banana".indexOf("a", 2);                 // 3
 "banana".indexOf("x");                    // null
@@ -4317,6 +4354,8 @@ doubled is Function<string(string)>;         // false: the parameter and result 
 Legacy.doubler() is Function<int(int)>;      // compile error: the type of Legacy.doubler()'s function is unknown
 ```
 
+**A plain PHP parameter whose native type is `callable` or `Closure` and states no signature takes any function value,** whatever its parameters and its result, so `Template.each(visit)` compiles for a `visit` of none, two or three parameters, a method such as `this.visit` and a lambda.
+
 **A call of a function whose type is unknown compiles,** as a call to plain PHP with no declaration does: its arguments are not checked, its result is `Any?`, and it has an unknown effect (section 29), so `Legacy.doubler()(2)` compiles and a law that reaches it is a compile error. Only a type test of such a function is a compile error.
 
 **A plain PHP closure's type is its declared PHP signature,** as a plain PHP property's type is its declared one (section 25). A parameter it declares no type for takes anything, and a result it declares no type for is `Any?`, so `fn () => new Order()` is a `Function<Any?()>`, never a `Function<Order?()>`. Its type lists no effects, so it fits every `uses`, as the checker takes a plain PHP callable:
@@ -5022,6 +5061,69 @@ public class Feed
 }
 ```
 
+**An `extern` line states a plain PHP method's or function's signature,** as C#'s `extern` method and TypeScript's `declare function` type code another language wrote. The line is written in PHP# method order: the return type, the class and its type parameters, as in `Builder<TModel>`, the method, and the parameters. A PHP# call is checked against the signature the line states, never against the library's docblock, and `uses` follows it as on any `extern` line (section 29):
+
+<!-- example typed-extern -->
+```php
+namespace Vendor\Routing;
+
+function route(string $name, array $parameters = []): string { return '/' . $name; }
+
+/** @template TModel */
+final class Builder
+{
+    /** @return static */
+    public function where($column, $value = null): static { return $this; }
+}
+```
+
+<!-- example typed-extern -->
+```csharp
+// app/Http/RouteName.sharp
+namespace App.Http;
+
+public enum RouteName : string
+{
+    case Checkout = "checkout";
+}
+```
+
+<!-- example typed-extern -->
+```csharp
+// app/Stubs/Routing.sharp
+namespace App.Stubs;
+
+import App.Http.RouteName;
+import Vendor.Routing;
+import Vendor.Routing.Builder;
+
+extern string Routing.route(RouteName name);
+extern Builder<TModel> Builder<TModel>.where(keyof TModel column, Any? value) uses Database;
+```
+
+<!-- example typed-extern -->
+```csharp
+// app/Http/Links.sharp
+namespace App.Http;
+
+import App.Order;
+import Vendor.Routing;
+import Vendor.Routing.Builder;
+
+public class Links
+{
+    public string checkout() => Routing.route(RouteName.Checkout);   // compiles: plain PHP receives "checkout"
+    public string bare() => Routing.route("checkout");               // compile error: route takes a RouteName
+    public Builder<Order> paid(Builder<Order> query) => query.where(nameof(Order.status), "paid");   // compiles
+    public Builder<Order> typo(Builder<Order> query) => query.where("stauts", "paid");               // compile error: a string isn't a keyof Order
+}
+```
+
+- **The signature fits the library's native types, never its docblock.** Each stated parameter crosses to the native one, the stated return type takes the native one, and each native parameter after the stated ones has a default. A misfit is a compile error at the `extern` line, as `extern int Routing.route(RouteName name);` is: `route` returns a `string`. A native parameter without a type takes any stated type, so a line corrects a docblock that says `array` where the method reads an object.
+- **A backed case crosses as its value** where the native parameter declares only scalars, as `string $name` does, so plain PHP receives `"checkout"`. A `keyof T` crosses as the member's name (section 11.2).
+- **The line states types alone.** A default is a compile error, since the library's own fills each parameter after the stated ones. A call names an argument by the line's name only when the library's parameter at its place has that name, since PHP reads a named argument by the library's name.
+- **A generic class writes its type parameters as it declares them,** as `Builder<TModel>` for Eloquent's `@template TModel`, and other names are a compile error.
+
 **PHP itself is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation (section 8). A built-in the standard library has no member for is declared with `[Import]`, as C#'s `[DllImport]` declares a native function: `import Sharp.Interop.Import;`, then the attribute on a static method without a body makes each call run the PHP function it names. The signature is written in PHP# types, so each argument and the result cross as any plain PHP value does and are checked there, a `Map` argument passing as a PHP array and an array result arriving as the declared `List` or `Map`. The declaration states its effects with `uses`, as any body-less declaration does. A function PHP doesn't declare throws PHP's `Error` that names it at the first call. `[Import]` on an instance method or a method with a body is a compile error, and so is a second `[Import]` of one function in the project, since PHP ignores the case of a function's name:
 
 <!-- example built-in-through-import -->
@@ -5703,6 +5805,19 @@ query.selectRaw(Weights.LINEAR);                         // compiles
 query.selectRaw(`1.0 / ${Weights.COUNT} as weight`);     // compiles
 query.selectRaw(`max(${column})`);                       // compile error: column is composed while the code runs
 ```
+
+**In an application, a string fixed at compile time never selects.** `==`, `!=` and a `match` arm that compare a string with a `literal-string` pick one of a closed set of values, and a closed set of values is a backed enum, which `parse` reads where the data enters (section 20). So each is a compile error in a project, a package whose `composer.json` declares `"type": "project"`, as section 5's rules are, and the error names both sides: "`==` compares `order.status` with `"paid"`, a string fixed at compile time, so it selects one of a closed set of values." Comparing with `""` tests for empty text, and its error names `isEmpty()` or `isNotEmpty()` (section 18). Two strings from data still compare as text, as `password == confirmation` does, and a text operation such as `line.startsWith("#")` or `text.split(",")` selects nothing. A library is exempt, and the check reads only declared types, never a string's contents:
+
+```text
+if (order.status == "paid") { }           error: a compile-time string in ==, != or a match arm
+if (order.status == OrderStatus.Paid) { } compiles: the value is a backed enum
+if (name == "") { }                       error: call name.isEmpty()
+if (password == confirmation) { }         compiles: two strings from data
+```
+
+**In an application, a `Map` key is data.** A `literal-string` used as a `Map` key, read or written, as in `row["plan"]`, `row["plan"] = "pro"`, `row.get("plan")` or `row.set("plan", "pro")`, names a field of a fixed shape, which a struct declares (section 10), so it is a compile error in a project: "`"plan"` is a string fixed at compile time, so it names a field of a fixed shape, not a key of a `Map`." `Settings.parse(row).plan` reads the field. A key from data, as in `counts[tag]`, is a `Map`'s own.
+
+**A member's name is not a string fixed at compile time.** `nameof(Order.total)` has the type `keyof Order` (section 11.2), which names a member, so `column == nameof(Order.total)` and `row[nameof(Order.total)]` compile in a project.
 
 **`Object` holds any object, and nothing else.** It compiles to PHP's `object`, and `Object?` adds null. Like `Any`, it has no members until `is` narrows it. An `Object` passes where `Any` is expected, and a plain PHP value typed `object` arrives as `Object`.
 
@@ -6576,12 +6691,12 @@ Log.info("charged", ["class": typeof(Order)]);                   // compiles: re
 - A call through a function value gives the position of the parameter's declaration, because C++ and Swift fill the default only at a direct call too.
 - The parameter takes the whole position, or one field of it, as `int line = Position.current().line`, as C#'s `[CallerLineNumber]` and Swift's `#line` take the line alone. A default that computes from it, as `int next = Position.current().line + 1`, is a compile error.
 
-**A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A pragma, `mago.toml`'s `ignore` or the baseline can hide a warning, never one of the language's errors. They can hide an error of an extension host's rule, whose code names its host, as `acme/no-raw-sql`, as C#'s `#pragma warning disable` hides an analyzer's error and ESLint's `eslint-disable-next-line` hides a plugin's rule.
+**A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A comment is text in every file Mago reads, `.sharp` and `.php` alike, so no comment hides an issue. A project turns a rule off in its `mago.toml`. `mago.toml`'s `ignore` or the baseline can hide a warning, never one of the language's errors. They can hide an error of an extension host's rule, whose code names its host, as `acme/no-raw-sql`.
 
-<!-- example pragma-never-hides-a-language-error: members -->
+<!-- example a-comment-hides-no-error: members -->
 ```csharp
 // @mago-expect analysis:invalid-return-statement
-public int total() => "one";                                    // compile error: the pragma hides no error of the language
+public int total() => "one";                                    // compile error: a comment hides no error
 ```
 
 **`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included, and proves every law they state (section 28).
@@ -6943,6 +7058,7 @@ extern StripeClient uses Http;
 - **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
 - **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern Foundation.now uses Clock;` for a function a library declares outside any namespace, after `import Illuminate.Foundation;` and the `extern namespace` line that gives its folder that namespace (section 23). `extern namespace WordPress for WP_Post;` declares no effect: it gives a library's folder of root names the namespace its functions are declared through, as `extern WordPress.get_post uses Database;` (section 23).
 - **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
+- **An `extern` of a method or a function may state its signature,** as `extern string Routing.route(RouteName name) uses Http;` does, and its `uses` follows the signature (section 23).
 
 <!-- example extern-functions -->
 ```php
@@ -7493,7 +7609,7 @@ const [money, items] = order.totals();                              // unpack an
 
 - **A tuple can have any number of elements.** The checker suggests a struct past four.
 - **Names are optional in a tuple type,** as in TypeScript, C# and Swift. `[Money, int]` compiles.
-- **A list literal becomes a tuple** when the declared type is a tuple.
+- **A list literal becomes a tuple** when the declared type is a tuple, whatever its elements are: an element a lambda gives, as `[data, media.values().map((Media r) => Reference.copy(r))]`, and a literal a lambda returns through a generic method into a declared tuple. A tuple a `Map` holds stays one through `get(k) ?? throw`, so `const [tag, named, value] = tags.get(k) ?? throw …` unpacks it.
 - **Map entries are tuples:** `for (const [key, plan] of plans)`.
 
 ## 31. Expected failures as values

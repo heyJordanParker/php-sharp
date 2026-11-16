@@ -4,6 +4,19 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.20
+
+- A comment is text in every file Mago reads, so `// @mago-ignore …` and `// @mago-expect …` hide no issue, in a `.php` file or a `.sharp` file, spec section 27. An issue one hid is reported again, and `unfulfilled-expect` and `unused-pragma` are gone. Turn the rule off for the project in `mago.toml`, as `no-eval = { exclude = ["src/Templating/Compiler.php"] }` under `[linter.rules]` or `{ code = "unknown-class-instantiation", in = ["src/Hydrator.php"] }` in the analyzer's `ignore` list, and delete the comment.
+- In an application, `==`, `!=` and a `match` arm that compare a string with a string fixed at compile time, a literal, a constant or a backed case's `.value`, are a compile error, spec section 24, as "`==` compares `order.status` with `"paid"`, a string fixed at compile time, so it selects one of a closed set of values.". Declare the values as a backed enum, read them into it where the data enters, and compare with a case, as `order.status == OrderStatus.Paid`. Replace `name == ""` with `name.isEmpty()` and `name != ""` with `name.isNotEmpty()`. Two strings from data, as `password == confirmation`, still compare, and a library is exempt.
+- In an application, a string fixed at compile time used as a `Map` key, read or written, as `row["plan"]`, `row["plan"] = "pro"` or `row.get("plan")`, is a compile error, spec section 24: parse the `Map` into a struct and read its property, as `Settings.parse(row).plan`. A key from data, as `counts[tag]`, still compiles.
+- In an application, a `Map` literal passed where a plain PHP parameter declares an array shape is checked key by key, spec section 12, so a key the shape doesn't declare, a key it requires that the literal leaves out and a value of another type are each a compile error that names the key, as "`array{'code': string, 'raw': bool}` has no key `'cod'`.", where 0.6.20 gave one "possibly received" warning for the whole literal.
+
+### Added
+
+- A `string` has `isEmpty()` and `isNotEmpty()`, spec section 18, as a `List`, a `Map` and a `Set` have, so `"0".isNotEmpty()` is `true`.
+- `keyof T` is the type of the names of `T`'s readable members, extern properties included, spec section 11.2, and `nameof(Order.total)` has the type `keyof Order`, spec section 6.3. A `keyof Order` is a `string`, so it passes to a `string` parameter and a plain PHP `literal-string` one, joins a template, and compares and keys a `Map` in an application, as `column == nameof(Order.total)` and `row[nameof(Order.total)]`, which a string fixed at compile time can't. A `keyof Order` parameter, as `public Query<T> orderBy(keyof T column)`, takes only a member name, so `query.orderBy("total")` is a compile error. A `keyof T` compiles to PHP's `string`.
+- An `extern` line states a plain PHP method's or function's signature in PHP# method order, spec section 23, as `extern string Foundation.route(RouteName name);` and `extern Builder<TModel> Builder<TModel>.where(keyof TModel column, Any? value);`, and a PHP# call is checked against it instead of the library's docblock, so `Foundation.route("checkout")` is a compile error. The signature must fit the library's native types: a stated parameter that doesn't cross to the native one, a stated return type that doesn't take the native one and a native parameter without a default the line leaves out are compile errors at the line. A backed case passed where the native parameter declares only scalars crosses as its value, so `Foundation.route(RouteName.Checkout)` gives plain PHP `"checkout"`. `uses` follows the signature as on any `extern` line.
+
 ## [0.6.20] - 2026-11-16
 
 ### Upgrading from 0.6.19

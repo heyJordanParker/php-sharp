@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls the text members of Kotlin, Rust and .NET that PHP# lacked: compareTo, equals, indexOf, lastIndexOf, contains, startsWith and endsWith ignoring case, titlecase, replace of the first n, a code point's character, a list of bytes as text, the character classes and Unicode normalization, with each edge case. normalized runs on intl, which every engine builds, so sharp/bin/test --installed runs it on each runtime image
+A PHP# class calls the text members of Kotlin, Rust and .NET that PHP# lacked: isEmpty and isNotEmpty, compareTo, equals, indexOf, lastIndexOf, contains, startsWith and endsWith ignoring case, titlecase, replace of the first n, a code point's character, a list of bytes as text, the character classes and Unicode normalization, with each edge case. normalized runs on intl, which every engine builds, so sharp/bin/test --installed runs it on each runtime image
 --FILE--
 <?php
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
@@ -23,6 +23,7 @@ echo json_encode(TextQueries::compared('apple', 'Apple')), ' ', json_encode(Text
 echo json_encode(TextQueries::equal('ÉCOLE', 'école')), ' ', json_encode(TextQueries::equal('Straße', 'STRASSE')), "\n";
 echo json_encode(TextQueries::found('Hello hello', 'HELLO')), ' ', json_encode(TextQueries::found('ÉtÉ été', 'été')), "\n";
 echo json_encode(TextQueries::held('Hello World', 'hello')), ' ', json_encode(TextQueries::held('Hello World', 'WORLD')), "\n";
+echo json_encode(TextQueries::emptiness('')), ' ', json_encode(TextQueries::emptiness('0')), ' ', json_encode(TextQueries::emptiness(' ')), "\n";
 echo TextQueries::titled("hello wORLD o'neil"), "\n";
 echo TextQueries::replaced('banana', 'a', 'o', 1), ' ', TextQueries::replaced('banana', 'a', 'o', 0), ' ';
 echo TextQueries::replaced('banana', 'a', 'o', 5), ' ', TextQueries::replaced('banana', 'a', 'o', null), ' ', TextQueries::replacedAll('banana', 'an', '_'), "\n";
@@ -47,6 +48,7 @@ refused(fn () => TextQueries::composed("\xff"));
 [false,true] [false,false]
 [null,0,null,6] [4,0,4,4]
 [false,true,false,true,false,false] [false,true,false,false,false,true]
+[true,false] [false,true] [false,true]
 Hello World O'neil
 bonana banana bonono bonono b__a
 ValueError: `replace` takes a limit of 0 or more, and it is negative.
