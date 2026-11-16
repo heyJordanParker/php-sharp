@@ -4,6 +4,11 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- Each error on the left side of a `??` whose right side never returns prints once, spec section 11, so `app.make("migrator") as Migrator ?? throw new RuntimeException("migrator")` reports an error in `app.make("migrator")` one time. 0.6.17 printed each such error twice.
+- A plain PHP function whose name differs from a class's only by case is what its namespace calls, spec section 23: beside the class `Lib\Request`, `Lib.request()` and `Lib.Request()` call the function `Lib\request`, and `Lib.request` is its function value. `Lib.Request` without a call still names the class. 0.6.17 refused the call with "Full names appear only in `import` lines: add `import Lib.request;` and write `request`."
+
 ## [0.6.17] - 2026-11-16
 
 ### Upgrading from 0.6.16
