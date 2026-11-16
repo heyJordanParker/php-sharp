@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.17] - 2026-11-16
+
 ### Upgrading from 0.6.16
 
 - `heyjordanparker/php-sharp-composer` requires `ext-zip`, and the runtime image builds `zip`, since `Sharp.IO.ZipArchive` runs on it. A source build configures `--with-zip` and installs `libzip-dev`, as `sharp/docker/runtime/configure-options` and the README's Linux packages list them. An app's image no longer needs `install-php-extensions zip`.
@@ -1103,7 +1105,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.16...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.17...HEAD
+[0.6.17]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.16...v0.6.17
 [0.6.16]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.15...v0.6.16
 [0.6.15]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.14...v0.6.15
 [0.6.14]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.13...v0.6.14
