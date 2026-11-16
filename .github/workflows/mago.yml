@@ -195,12 +195,19 @@ jobs:
           path: ${{ env.CARGO_TARGET_DIR }}/test-run/mago
           if-no-files-found: error
 
-  # The workspace's tests on Linux, in 5 jobs, in the sharp/docker image on the target sharp/bin/build-mago builds there,
+  # The workspace's tests on Linux, in 4 jobs, in the sharp/docker image on the target sharp/bin/build-mago builds there,
   # which sharp.yml's HOSTS saves on master and its suites restore, so Linux keeps one dev build of Mago and one cache.
-  # Each job runs every fifth test of every test binary, by exact name, with sharp/bin/test --mago --shard, so a set of
-  # slow tests spreads over the 5 jobs, and the last also runs the doc tests and the property tests.
+  # Each job runs every fourth test of every test binary, by exact name, with sharp/bin/test --mago --shard, so a set of
+  # slow tests spreads over the 4 jobs, and the last also runs the doc tests and the property tests. Each job first pulls
+  # the image and builds the test binaries, which took 2.5 to 2.9 minutes of release pull request #343's run, where five
+  # jobs then tested for 149 to 249 seconds.
+  #
+  # A crate whose build script compiles C, such as ring or tree-sitter, rebuilds with every crate above it when CC or
+  # CXX differs from the build the target holds, so the job sets the ccache compilers sharp.yml's jobs build the target
+  # with. Without them, each job of pull request #344 rebuilt every Mago crate for up to 2.3 minutes, with no file
+  # changed.
   tests:
-    name: tests (${{ matrix.shard }}/5)
+    name: tests (${{ matrix.shard }}/4)
     needs: CHANGES
     if: needs.CHANGES.outputs.mago == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
     runs-on: ubuntu-24.04
@@ -213,7 +220,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4]
 
     defaults:
       run:
@@ -224,6 +231,8 @@ jobs:
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+      CC: ccache gcc
+      CXX: ccache g++
 
     steps:
       - name: checkout
@@ -243,8 +252,8 @@ jobs:
             sharp/build/cargo
             sharp/build/rustup
 
-      - name: Test every fifth test of the workspace
-        run: sharp/bin/test --linux --mago --shard ${{ matrix.shard }}/5
+      - name: Test every fourth test of the workspace
+        run: sharp/bin/test --linux --mago --shard ${{ matrix.shard }}/4
 
   # The workspace's tests on macOS arm64, which covers the few lines of Mago that differ there, such as the watch mode's
   # FSEvents, on the self-hosted Mac runners, on the push to master.
