@@ -4,6 +4,22 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.19] - 2026-11-16
+
+### Upgrading from 0.6.18
+
+- `Class<T>.properties()` lists properties and no field, spec section 25, and `Class<T>.fields()` lists what an object stores. Code that read fields through `properties()` reads them through `fields()`, whose `Field` has the `name`, `type`, `declaringClass`, `visibility`, `isStatic`, `hasDefaultValue`, `defaultValue()`, `attributes<T>()`, `isInitialized`, `get` and `set` a `Property` has.
+- A PHP# attribute class whose constructor, its own or one it inherits, or whose initial values have an effect is a compile error that names the effect, spec section 1, a plain PHP call no `extern` declares included. Move the work into the code that reads the attribute, and give the attribute constants.
+
+### Added
+
+- `Class<T>.fields()` gives a `List<Field>` of every value a class's objects and the class store, spec section 25, as .NET's `GetFields()` reaches an auto-property's backing field: each field, at every visibility, statics included, and the storage of each auto-property that is neither `virtual` nor `abstract`, its own first and then those it inherits, in the order they are declared. `Field.get`, `Field.set` and `Field.isInitialized` run no code a project wrote, so they are pure, and a storage layer held to `uses Database` reads and writes a row through them. They reach the storage as a direct use would, an `init` property's storage takes a write only while it holds no value, and on a lazy object that has not loaded they throw `Error` rather than load it. `Field.defaultValue()` still may have every effect.
+
+### Fixed
+
+- `attributes<T>()` of a PHP# attribute class `T` is pure on a `Class<T>`, a `Property`, a `Field`, a `Method`, a `Parameter`, a `Constructor`, a `Constant` and an `EnumCase`, spec section 29, so a method held to `uses Database` reads a PHP# class's attributes. With a plain PHP `T` or `Object` it still may have every effect. 0.6.18 refused `typeof(Entry).attributes<Column>()` there with "`Entry.columns` reaches `ClassMembers.attributes`, which may have every effect, so `uses Database` on `Ledger.columns` cannot accept it."
+- An interface member declared `uses Database` accepts an implementation that reads and writes a row's fields through `fields()`, spec section 25. 0.6.18 listed fields in `properties()` alone and refused the read with "`RowStore.toStored` reaches `Property.get`, which may have every effect, so `uses Database` on `Stored.toStored` cannot accept it."
+
 ## [0.6.18] - 2026-11-16
 
 ### Fixed
@@ -1112,7 +1128,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.18...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.19...HEAD
+[0.6.19]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.18...v0.6.19
 [0.6.18]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.17...v0.6.18
 [0.6.17]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.16...v0.6.17
 [0.6.16]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.15...v0.6.16

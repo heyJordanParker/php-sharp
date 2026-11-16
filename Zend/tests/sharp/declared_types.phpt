@@ -1,5 +1,5 @@
 --TEST--
-Class<T>.properties() gives each instance property and field of a class, its own first and then those it inherits, with its name, the class value of its whole declared type, `?` included, and its attributes, every one of them for the root bound Object, and Class<T>.typeArguments() gives a type's type arguments as class values
+Class<T>.fields() gives each field and auto-property's storage of a class, its own first and then those it inherits, with its name, the class value of its whole declared type, `?` included, and its attributes, every one of them for the root bound Object, Class<T>.properties() gives the properties and no field, and Class<T>.typeArguments() gives a type's type arguments as class values
 --FILE--
 <?php
 require __DIR__ . '/harness/Attributes.inc';
@@ -17,6 +17,7 @@ tags: List<string> arguments=[string] attributes=[Field()]
 stock: int? arguments=[] attributes=[Field(units)]
 related: Map<string, Declared.Product> arguments=[string, Declared.Product] attributes=[]
 id: int arguments=[] attributes=[]
+properties: related, id
 array(7) {
   [0]=>
   bool(true)

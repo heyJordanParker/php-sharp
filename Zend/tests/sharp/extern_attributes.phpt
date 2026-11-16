@@ -112,7 +112,7 @@ $files = [
         SHARP,
 ];
 // typeof(X).attributes<T>() is a member of a class value, which the library declares with the types it gives.
-$members = ['ClassMembers', 'Visibility', 'Property', 'Method', 'Parameter', 'Constructor', 'Constant', 'EnumCase', 'TupleElement', 'TypeKind'];
+$members = ['ClassMembers', 'Visibility', 'Property', 'Field', 'Method', 'Parameter', 'Constructor', 'Constant', 'EnumCase', 'TupleElement', 'TypeKind'];
 foreach ([...$members, 'ListMembers', 'Int', 'ByteOrder'] as $class) {
     $files["$library/library/Sharp/$class.sharp"] = file_get_contents(__DIR__ . "/../../../sharp/composer/library/Sharp/$class.sharp");
 }

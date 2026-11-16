@@ -1,5 +1,5 @@
 --TEST--
-Method.invoke, Property.get and Property.set reach a member as a direct use from the calling code would, check each argument and value against its PHP# type in strict mode, run an override and a computed property's get, and refuse a receiver of another class
+Method.invoke, Property.get, Property.set and Field.get reach a member as a direct use from the calling code would, check each argument and value against its PHP# type in strict mode, run an override and a computed property's get, and refuse a receiver of another class
 --FILE--
 <?php
 require __DIR__ . '/harness/fixture.inc';
@@ -48,7 +48,7 @@ attempt('set label', fn () => Calls::property('label')->set($till, 'other'));
 attempt('set amounts ["a"]', fn () => Calls::property('amounts')->set($till, ['a']));
 attempt('set amounts [1, 2]', fn () => Calls::property('amounts')->set($till, [1, 2]));
 attempt('get amounts', fn () => Calls::property('amounts')->get($till));
-attempt('get count from plain PHP', fn () => Calls::property('count')->get($till));
+attempt('get count from plain PHP', fn () => Calls::field('count')->get($till));
 attempt('get total on another class', fn () => Calls::property('total')->get(new stdClass()));
 attempt('stock from plain PHP', fn () => Calls::property('stock')->get($till));
 attempt('stock from App.Calls', fn () => Calls::stockFromInside($till));

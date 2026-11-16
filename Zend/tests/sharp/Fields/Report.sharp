@@ -1,0 +1,100 @@
+namespace Fields;
+
+// Reads and writes what a class's objects store through `fields()`, spec section 25.
+public static class Report
+{
+    private static Field field(string name) => typeof(Row).fields().first(field => field.name == name);
+
+    // The storage `fields()` lists, and the properties `properties()` lists.
+    public static List<List<string>> listed()
+        => [
+            typeof(Row).fields().map(field => field.name),
+            typeof(Row).properties().map(property => property.name),
+        ];
+
+    // What a Field reads of its declaration.
+    public static List<Any?> facts()
+    {
+        const total = Report.field("total");
+        return [
+            total.declaringClass == typeof(Row),
+            total.visibility == Visibility.Private,
+            total.type == typeof(int),
+            total.isStatic,
+            Report.field("made").isStatic,
+            Report.field("depth").declaringClass == typeof(Entry),
+            Report.field("depth").visibility == Visibility.Protected,
+            total.hasDefaultValue,
+            total.defaultValue(),
+            total == Report.field("total"),
+            total.hash() == Report.field("total").hash(),
+        ];
+    }
+
+    // A private field read and written from the class that declares it.
+    public static List<Any?> own()
+    {
+        const row = new Row();
+        Row.writeTotal(row, 8);
+        return [Row.readTotal(row), row.sum];
+    }
+
+    // An auto-property's storage read and written through its Field, as the property's `get` and `set` reach it.
+    public static List<Any?> autoProperty()
+    {
+        const row = new Row();
+        const name = Report.field("name");
+        name.set(row, "ada");
+        const loads = Report.field("loads");
+        loads.set(null, 4);
+        return [name.get(row), row.name, loads.get(null), Row.loads, Report.field("code").get(row)];
+    }
+
+    // The uses the calling code can't make as a direct use, and the `init` storage that holds a value.
+    public static List<string> refused()
+    {
+        List<string> refusals = [];
+        try {
+            Report.field("total").get(new Row());
+        } catch (Throwable failure) {
+            refusals.add(Class.of(failure).name() + ": " + failure.getMessage());
+        }
+        try {
+            Report.field("code").set(new Row(), "other");
+        } catch (Throwable failure) {
+            refusals.add(Class.of(failure).name() + ": " + failure.getMessage());
+        }
+        try {
+            Report.field("name").set(new Row(), 7);
+        } catch (Throwable failure) {
+            refusals.add(Class.of(failure).name() + ": " + failure.getMessage());
+        }
+        return refusals;
+    }
+
+    // A lazy object that has not loaded refuses a Field's read and write, and stays unloaded.
+    public static List<Any?> lazy()
+    {
+        Row.loads = 0;
+        const row = typeof(Row).createLazy(loaded => { Row.loads += 1; });
+        const name = Report.field("name");
+        List<Any?> facts = [];
+        try {
+            name.get(row);
+        } catch (Throwable failure) {
+            facts.add(Class.of(failure).name() + ": " + failure.getMessage());
+        }
+        try {
+            name.set(row, "ada");
+        } catch (Throwable failure) {
+            facts.add(Class.of(failure).name() + ": " + failure.getMessage());
+        }
+        facts.add(Row.loads);
+        facts.add(name.isInitialized(row));
+        facts.add(Row.loads);
+        facts.add(row.name);
+        facts.add(Row.loads);
+        facts.add(name.get(row));
+        return facts;
+    }
+}

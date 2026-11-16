@@ -2,7 +2,8 @@ namespace App.Facts;
 
 import Lib.PlainJournal;
 
-// Reads each fact `methods()` and `properties()` give about a class's members, inherited ones included, spec section 25.
+// Reads each fact `methods()`, `properties()` and `fields()` give about a class's members, inherited ones included, spec
+// section 25.
 public static class Facts
 {
     public static List<string> journal() => Facts.members(typeof(Journal));
@@ -16,6 +17,9 @@ public static class Facts
         List<string> lines = [];
         for (const property of type.properties()) {
             lines.add(`property ${property.declaringClass.name()}.${property.name} ${property.visibility.name}`);
+        }
+        for (const stored of type.fields()) {
+            lines.add(`field ${stored.declaringClass.name()}.${stored.name} ${stored.visibility.name}`);
         }
         for (const method of type.methods()) {
             if (method.name == "parse" || method.name == "tryParse") {

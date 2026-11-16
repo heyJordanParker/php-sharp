@@ -23,6 +23,7 @@ Attributes use square brackets and follow C#'s rules:
 - no parentheses when there are no arguments: `[Searchable]`
 - explicit targets, which name the part of the declaration a bracket goes on, as in C#: `type:` on a type, `type:` or `event:` on an event, `method:` on a method, an operator, a named constructor, a lambda, an accessor or an observer, `param:` on a parameter and on the value `set` or `init` takes, `field:` on a field, a constant or an enum case, `property:` and `field:` on a property, and `param:`, `property:` and `field:` on a parameter that declares a property, a constructor's, an event's or a data case's, where an untargeted bracket goes on both the parameter and the property
 - an attribute always describes a declaration, so a return value takes none, and `[return: NotNull]` is a parse error
+- an attribute is data, as .NET's takes only constants, so the constructor a PHP# attribute class runs, its own or one it inherits, and the initial values of the class and of each class it extends have no effect, a plain PHP call no `extern` declares included, and one that has an effect is a compile error that names it; so reading the attributes of a PHP# class with `attributes<T>()` is pure (section 25)
 - on every declaration C# takes one on: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, an operator, a named constructor, a parameter, a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`, and an accessor, as in `[Searchable] get;`, a static or get-only auto-property's included
 - on an `extern` line, whose attributes the plain PHP class, method or function it declares carries as its own, `type:` the one target of a class's line and `method:` of a method's or a function's (section 29)
 - on `willSet` and `didSet`, whose attributes go on the `set` they run inside, after its own
@@ -118,6 +119,30 @@ public class OrdersController
     public void limited() { }
 
     private int limit() => 60;
+}
+```
+
+<!-- example attribute-data -->
+```csharp
+// app/Shop/Sampled.sharp
+namespace App.Shop;
+
+[Attribute]
+public class Sampled
+{
+    public Sampled(public int rate { get; } = 1) { }              // compiles: the constructor has no effects
+}
+```
+
+<!-- example attribute-data -->
+```csharp
+// app/Shop/Shuffled.sharp
+namespace App.Shop;
+
+[Attribute]
+public class Shuffled
+{
+    public Shuffled(Random random) { random.nextInt(1, 6); }      // compile error: an attribute has no effects, and nextInt has the effect Random
 }
 ```
 
@@ -5630,7 +5655,7 @@ Class.of(row).name();              // "App.Orders.Counted"
 typeof(Counted).name();            // "App.Orders.Counted"
 ```
 
-**`properties()` reads the properties a class declares, and `typeArguments()` a type's type arguments,** as .NET's `Type.GetProperties()` and `GetGenericArguments()` do, so an ORM, a serializer or a form builder reads a class's declared types without plain PHP reflection. `properties()` gives a `List<Property>` of every property and field, at every visibility, its statics included, a computed one and one with accessors too, whose `get` and `set` run its accessors, the class's own first and then those it inherits, in the order they are declared. The class value of a type that is no class, as `typeof(Object)`, `typeof(int)` or `typeof(List<int>)`, has no properties, methods or attributes, as .NET's `typeof(object).GetProperties()` gives none. A `Property` has its `name`, its `type`, the declared type whole as a `Class<Any?>`, the `declaringClass` that declares it, its `visibility`, its `setVisibility`, the access modifier that reaches its `set` or `init`, or null for a get-only one, as .NET's `SetMethod` gives it, `isInitOnly`, which holds for one with an `init`, `isStatic`, `isVirtual`, which holds when a subclass may replace it, `isAbstract`, `isOverride`, `hasDefaultValue`, which holds for a declared initial value, constant or not, and `defaultValue()`, which evaluates it on each read, as `Parameter.defaultValue()` does, so `= new Draft()` gives a new `Draft` each time, and throws `OutOfRangeException` for a property without one, and `attributes<TAttribute : Object>()`, as `Class<T>`'s own. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member (section 5), as Kotlin's `KVisibility` gives it, so an `internal` member reads `Internal` though plain PHP reaches it as a public one:
+**`properties()` reads the properties a class declares, `fields()` what its objects store, and `typeArguments()` a type's type arguments,** as .NET's `Type.GetProperties()`, `GetFields()` and `GetGenericArguments()` do, so an ORM, a serializer or a form builder reads a class's declared types without plain PHP reflection. A property is the class's API and a field is storage, so a form builder reads `properties()` and a storage layer reads `fields()`. `properties()` gives a `List<Property>` of every property, at every visibility, its statics included, an auto-property, a computed one and one with accessors, whose `get` and `set` run its accessors, and no field, the class's own first and then those it inherits, in the order they are declared. `fields()` gives a `List<Field>` of every value the class's objects and the class store, in the same order: each field, and the storage of each auto-property that is neither `virtual` nor `abstract` (section 6.1), which has no accessor body, as `{ get; set; }`, `{ get; private set; }`, `{ get; init; }` and a constructor-promoted one, as .NET's `GetFields()` reaches an auto-property's backing field. A computed property, one with an accessor body and a `virtual` or `abstract` one store nothing a `Field` reads, so they have none. The class value of a type that is no class, as `typeof(Object)`, `typeof(int)` or `typeof(List<int>)`, has no properties, methods or attributes, as .NET's `typeof(object).GetProperties()` gives none. A `Property` has its `name`, its `type`, the declared type whole as a `Class<Any?>`, the `declaringClass` that declares it, its `visibility`, its `setVisibility`, the access modifier that reaches its `set` or `init`, or null for a get-only one, as .NET's `SetMethod` gives it, `isInitOnly`, which holds for one with an `init`, `isStatic`, `isVirtual`, which holds when a subclass may replace it, `isAbstract`, `isOverride`, `hasDefaultValue`, which holds for a declared initial value, constant or not, and `defaultValue()`, which evaluates it on each read, as `Parameter.defaultValue()` does, so `= new Draft()` gives a new `Draft` each time, and throws `OutOfRangeException` for a property without one, and `attributes<TAttribute : Object>()`, as `Class<T>`'s own. A `Field` has its `name`, `type`, `declaringClass`, `visibility`, `isStatic`, `hasDefaultValue`, `defaultValue()` and `attributes<TAttribute : Object>()`, as a `Property` has them, an auto-property's those of the property, and `isInitialized(receiver)`, `get(receiver)` and `set(receiver, value)`, which read and write the storage. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member (section 5), as Kotlin's `KVisibility` gives it, so an `internal` member reads `Internal` though plain PHP reaches it as a public one:
 
 <!-- example declared-types -->
 ```csharp
@@ -5644,6 +5669,7 @@ public class Product
     [Field] List<string> tags = [];
     [Field] int? stock = null;
     public string name { get; } = "tea";
+    public string label => this.name.uppercase();
 }
 ```
 
@@ -5654,15 +5680,17 @@ import App.Shelf.Product;
 -->
 ```csharp
 const properties = typeof(Product).properties();
-properties.map(property => property.name);                  // ["tags", "stock", "name"]
-properties[0].type == typeof(List<string>);                  // true
-properties[0].type.typeArguments() == [typeof(string)];     // true
-properties[1].type == typeof(int?);                         // true
-properties[1].attributes<Field>().count();                  // 1
-properties[1].declaringClass == typeof(Product);            // true
-properties[1].visibility == Visibility.Private;             // true
-properties[2].visibility == Visibility.Public;              // true
-properties[2].setVisibility;                                // null: name is get-only
+properties.map(property => property.name);                  // ["name", "label"]: a field is no property
+properties[0].visibility == Visibility.Public;              // true
+properties[0].setVisibility;                                // null: name is get-only
+const fields = typeof(Product).fields();
+fields.map(stored => stored.name);                          // ["tags", "stock", "name"]: label stores nothing
+fields[0].type == typeof(List<string>);                     // true
+fields[0].type.typeArguments() == [typeof(string)];         // true
+fields[1].type == typeof(int?);                             // true
+fields[1].attributes<Field>().count();                      // 1
+fields[1].declaringClass == typeof(Product);                // true
+fields[1].visibility == Visibility.Private;                 // true
 typeof(Map<string, int>).typeArguments() == [typeof(string), typeof(int)];   // true
 ```
 
@@ -5823,7 +5851,7 @@ properties[1].isInitialized(ghost);                           // false
 ghost.owner;                                                  // "grace"
 ```
 
-**Each reflection value keys a `Map` and joins a `Set` as the member it reflects,** however often reflection read it, as C#'s `MethodInfo`, `PropertyInfo` and `ParameterInfo` compare. Two `Method`s, two `Property`s, two `Constant`s and two `Constructor`s are equal when one class declares them under one name, two `Parameter`s when they are one position of one method, two `EnumCase`s when they are one case of one enum, and two `TupleElement`s when they have one name, or none, and one type. Equal values share their `hash()`, so `Map<Method, List<Relation>>` compiles:
+**Each reflection value keys a `Map` and joins a `Set` as the member it reflects,** however often reflection read it, as C#'s `MethodInfo`, `PropertyInfo` and `ParameterInfo` compare. Two `Method`s, two `Property`s, two `Field`s, two `Constant`s and two `Constructor`s are equal when one class declares them under one name, two `Parameter`s when they are one position of one method, two `EnumCase`s when they are one case of one enum, and two `TupleElement`s when they have one name, or none, and one type. Equal values share their `hash()`, so `Map<Method, List<Relation>>` compiles:
 
 <!-- example reflection-keys: statements
 public class Ledger { public int total { get; set; } = 0; public int add(int amount) => this.total + amount; }
@@ -5838,7 +5866,7 @@ reads[typeof(Ledger).properties()[0]] ?? 0;                   // 1
 
 **A class value of a built-in generic type answers `is` as a user generic's does,** so `typeof(List<string>)` is a `Class<List>`, a `Class<List<Any?>>` and a `Class<Iterable<Any?>>`, and a `Map`'s and a `Set`'s class values are a `Class<Map>`, a `Class<Set>` and a `Class<Iterable<Any?>>`, as `typeof(Crate<Mark>)` is a `Class<Crate>`.
 
-**`invoke`, `get` and `set` use a member through its reflection,** as .NET's `MethodInfo.Invoke`, `PropertyInfo.GetValue` and `PropertyInfo.SetValue` and Kotlin's `KCallable.call`, `KProperty1.get` and `KMutableProperty1.set` do. They are the one way PHP# names a member by a value (decision 94). `method.invoke(receiver, arguments)` calls the method on `receiver` with the `List<Any?>` of arguments and gives its result as `Any?`, and a method that isn't private runs the receiver's override. A static method takes a null receiver and runs on the class value `methods()` read it from, as a call through that class does, and an instance method given null throws `InvalidArgumentException`, as C#'s `MethodInfo.Invoke(null, arguments)` does. `property.get(receiver)` gives the property's value as `Any?`, running a computed property's `get`, and `property.set(receiver, value)` writes it. Each reaches the member as a direct use from the calling code would: a private member only from its class, a protected one from the class and its subclasses, and an `internal` one from its namespace and those below it, which plain PHP reaches as a public one. A use the calling code can't make throws `Error`, as do a write of a get-only property and a call of a missing method. Each argument and value is checked against its type as a direct PHP# use's is, so a wrong one throws `TypeError`. More arguments than the method takes throw `ArgumentCountError`, and a receiver that isn't of the member's class throws `TypeError`. `property.isInitialized(receiver)` and `property.hasDefaultValue` only read the declaration and the object, so each is pure. `invoke`, `get` and `set` each run code its caller can't see, a method's body, a `get` or a `set`, so each may have every effect (section 29), and code that must keep to its `uses`, as an implementation of a pure interface method, can't call it:
+**`invoke`, `get` and `set` use a member through its reflection,** as .NET's `MethodInfo.Invoke`, `PropertyInfo.GetValue` and `PropertyInfo.SetValue` and Kotlin's `KCallable.call`, `KProperty1.get` and `KMutableProperty1.set` do. They are the one way PHP# names a member by a value (decision 94). `method.invoke(receiver, arguments)` calls the method on `receiver` with the `List<Any?>` of arguments and gives its result as `Any?`, and a method that isn't private runs the receiver's override. A static method takes a null receiver and runs on the class value `methods()` read it from, as a call through that class does, and an instance method given null throws `InvalidArgumentException`, as C#'s `MethodInfo.Invoke(null, arguments)` does. `property.get(receiver)` gives the property's value as `Any?`, running a computed property's `get`, and `property.set(receiver, value)` writes it. Each reaches the member as a direct use from the calling code would: a private member only from its class, a protected one from the class and its subclasses, and an `internal` one from its namespace and those below it, which plain PHP reaches as a public one. A use the calling code can't make throws `Error`, as do a write of a get-only property and a call of a missing method. Each argument and value is checked against its type as a direct PHP# use's is, so a wrong one throws `TypeError`. More arguments than the method takes throw `ArgumentCountError`, and a receiver that isn't of the member's class throws `TypeError`. `property.isInitialized(receiver)` and `property.hasDefaultValue` only read the declaration and the object, so each is pure. `invoke`, `get` and `set` each run code its caller can't see, a method's body, a `get` or a `set`, so each may have every effect (section 29), and code that must keep to its `uses`, as an implementation of a pure interface method, can't call it. A `Field` is how that code reads and writes what an object stores:
 
 <!-- example reflection-calls -->
 ```csharp
@@ -5870,6 +5898,8 @@ properties[1].get(counter);                                   // 10
 properties[1].set(counter, 4);                                // throws Error
 ```
 
+**A `Field` reads and writes storage, so it runs no code a project wrote,** as .NET's `FieldInfo.GetValue` and `SetValue` run none. `field.get(receiver)` and `field.set(receiver, value)` reach the storage as a direct use from the calling code would, with the access and type checks of `Property.get` and `set`, an auto-property's storage as its `get`, and its `set` or `init`, do. An `init` property's storage takes a write only while it holds no value, as only the object's creation writes it, and a write after that throws `Error`. They run no accessor, not even one a subclass gives the property, so `field.get`, `field.set` and `field.isInitialized` are pure, and a storage layer held to `uses Database` reads and writes a row through `fields()`. A lazy object that has not loaded runs its initializer at its first read, so `get` and `set` on one throw `Error` rather than load it, as do a static's before its class has run its initial values. `field.defaultValue()` runs an initial value that is not constant, so it may have every effect, as `property.defaultValue()` may. Reading the storage never makes a `Property` pure: `property.get` still runs whatever accessor the property has:
+
 <!-- example reflection-effects -->
 ```csharp
 // app/Shelf/Audit.sharp
@@ -5888,9 +5918,22 @@ namespace App.Shelf;
 
 public class FieldAudit : Audit
 {
+    private int count = 1;
+
+    public Any? read(Object target) => typeof(FieldAudit).fields()[0].get(target);   // compiles: a field's read runs no code
+}
+```
+
+<!-- example reflection-effects -->
+```csharp
+// app/Shelf/PropertyAudit.sharp
+namespace App.Shelf;
+
+public class PropertyAudit : Audit
+{
     public int count { get; } = 1;
 
-    public Any? read(Object target) => typeof(FieldAudit).properties()[0].get(target);   // compile error: read must be pure, and get may have every effect
+    public Any? read(Object target) => typeof(PropertyAudit).properties()[0].get(target);   // compile error: read must be pure, and get may have every effect
 }
 ```
 
@@ -6732,6 +6775,7 @@ extern now uses Clock;               // compile error: no function now exists
 - **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
 - **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
+- **Reflection has the effects of the code it runs** (section 25). `Method.invoke`, `Property.get`, `Property.set` and every `defaultValue()` run a body, an accessor or an initial value no `uses` can name, so each may have every effect. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
 - **An `extern` line takes any attribute, which the class, method or function it declares carries as its own,** as every declaration takes one (section 1). The checker reads it as the declaration's, so a `[DynamicallyAccessed]` written on a class's line marks a library's attribute class whose source carries no mark (section 5). At run time PHP#'s `typeof(X).attributes<T>()` and `Method.attributes<T>()`, and plain PHP's `ReflectionClass`, `ReflectionMethod` and `ReflectionFunction` `getAttributes()`, give the declaration's own attributes and then the line's, though no code loads the file that holds the line. A method takes them on the line of the class that declares it, so an attributed line of a method the class only inherits is a compile error that names that class. An `extern namespace` line (section 23) declares nothing, so an attribute on it is a compile error. `import` and `extern` stay separate lines.
 

@@ -28,9 +28,8 @@ jobs:
   # A pull request's run has no macOS job, so a merge never waits for the Mac, and the push to master runs them after
   # the merge. So a defect only macOS finds, such as one in the watch mode's FSEvents code, lands on master first, and
   # its red push opens an issue, as ci-passed does, for a pull request that fixes it forward. The push skips the Linux
-  # tests when a pull request's run passed them on its tree, as sharp.yml's CHANGES explains, and a release's bump skips
-  # the macOS jobs when its tree is the last passed push run's with the bump alone. It runs checks and patch-coverage
-  # again, which save the targets every pull request's run restores.
+  # tests when a pull request's run passed them on its tree, as sharp.yml's CHANGES explains. It runs checks and
+  # patch-coverage again, which save the targets every pull request's run restores.
   CHANGES:
     runs-on: ubuntu-latest
     permissions:
@@ -44,7 +43,6 @@ jobs:
     outputs:
       base: ${{ steps.base.outputs.sha }}
       linux-passed: ${{ steps.linux.outputs.run && 'true' || '' }}
-      mac-passed: ${{ steps.mac.outputs.only == 'true' && 'true' || '' }}
       mago: ${{ steps.diff.outputs.mago }}
       rust: ${{ steps.rust.outputs.version }}
     steps:
@@ -67,20 +65,16 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       # A push's changes start at the commit of master's newest push run that GitHub didn't cancel, as sharp.yml's
-      # CHANGES explains. When that run passed, its URL is the passed output.
+      # CHANGES explains.
       - name: Find the commit of master's last push run that ran
         id: base
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mago.yml/runs?branch=master&event=push&status=completed&per_page=100" \
-            --jq '[.workflow_runs[] | select(.conclusion != "cancelled" and .id < (env.GITHUB_RUN_ID | tonumber))][0] // empty | "\(.head_sha) \(.conclusion) \(.html_url)"')
-          read -r sha conclusion url <<< "$run"
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mago.yml/runs?branch=master&event=push&status=completed&per_page=100" \
+            --jq '[.workflow_runs[] | select(.conclusion != "cancelled" and .id < (env.GITHUB_RUN_ID | tonumber))][0].head_sha // empty')
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          if [[ $conclusion == success ]]; then
-            echo "passed=$url" >> "$GITHUB_OUTPUT"
-          fi
           echo "This push's changes start at ${sha:-no commit, so every job runs}."
 
       - name: Find changes to Mago
@@ -112,20 +106,6 @@ jobs:
         env:
           RUN: ${{ steps.linux.outputs.run }}
         run: echo "::notice::This tree ran and passed every Linux Mago test job in $RUN, so only the macOS tests run."
-
-      # A release's bump runs the macOS jobs once, as sharp.yml's CHANGES skips the Mac suites.
-      - name: Make the bump again on the last push run's tree
-        id: mac
-        if: steps.base.outputs.passed
-        uses: ./.github/actions/release-bump
-        with:
-          base: ${{ steps.base.outputs.sha }}
-
-      - name: The macOS jobs don't run again
-        if: steps.mac.outputs.only == 'true'
-        env:
-          RUN: ${{ steps.base.outputs.passed }}
-        run: echo "::notice::This tree is the one $RUN passed, with the release's bump, so tests (macOS), release-build and plain-php's macOS leg don't run."
 
   # The gates on Linux with CHANGES's rust toolchain, the one sharp/mago/Cargo.toml's rust-version names and
   # release.yml builds the binaries with, and the Linux binary plain-php runs. On the push to master it saves its
@@ -260,7 +240,7 @@ jobs:
   tests-macos:
     name: tests (macOS)
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true' && github.event_name == 'push' && needs.CHANGES.outputs.mac-passed != 'true'
+    if: needs.CHANGES.outputs.mago == 'true' && github.event_name == 'push'
     runs-on: macos-arm64-local
     timeout-minutes: 90
 
@@ -309,7 +289,7 @@ jobs:
   # The push to master runs it.
   release-build:
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true' && github.event_name == 'push' && needs.CHANGES.outputs.mac-passed != 'true'
+    if: needs.CHANGES.outputs.mago == 'true' && github.event_name == 'push'
     runs-on: macos-arm64-local
     timeout-minutes: 60
 
@@ -361,19 +341,14 @@ jobs:
   # upstream's carthage-software/mago at the release this checker left from, as an extension host does,
   # installs no second checker, and one that requires a later release installs nothing. Then runs mago on
   # a one-class .sharp project with the binary the job before built, and sharp/phpunit's tests, which stop.
-  # A pull request's run has no macOS leg, and neither has a bump's push that skips the macOS jobs, so it needs only
-  # checks' binary.
+  # A pull request's run has no macOS leg, so it needs only checks' binary.
   plain-php:
     needs: [CHANGES, checks, release-build]
-    if: >-
-      ${{ !cancelled() && needs.checks.result == 'success' && (github.event_name == 'pull_request'
-      || needs.CHANGES.outputs.mac-passed == 'true' || needs.release-build.result == 'success') }}
+    if: ${{ !cancelled() && needs.checks.result == 'success' && (github.event_name == 'pull_request' || needs.release-build.result == 'success') }}
     strategy:
       fail-fast: false
       matrix:
-        os: >-
-          ${{ fromJSON(github.event_name == 'push' && needs.CHANGES.outputs.mac-passed != 'true'
-          && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
+        os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
 
     # The macOS leg runs where release-build's does.
     runs-on: ${{ matrix.os == 'macos-latest' && 'macos-arm64-local' || matrix.os }}

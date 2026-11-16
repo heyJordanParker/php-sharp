@@ -124,7 +124,6 @@ array(6) {
   [5]=>
   NULL
 }
-balance: private init=no
 name: internal init=no
 code: private init=no
 key: public init=yes
