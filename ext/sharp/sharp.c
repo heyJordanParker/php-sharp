@@ -5909,11 +5909,11 @@ ZEND_FUNCTION(Sharp_Internal_constructor)
 	}
 }
 
-/* Spec section 25: what `Property.defaultValue()` and `Field.defaultValue()` run, the function that evaluates the
- * initial value the declaration of the member `name` of `class` gives it, its hidden `name#initial`, or null for a
- * member whose initial value PHP takes as its default, or that has none. PHP's reflection finds no method whose name
- * holds `#`, so the standard library reaches it here. Each call evaluates it anew. */
-ZEND_FUNCTION(Sharp_Internal_initial)
+/* Spec section 25: the method `name` of `class` that the compile made, whose name holds `#`, as a closure, or null for
+ * a class without it. PHP's reflection finds no such method, so the standard library reaches one here: `name#initial`,
+ * which `Property.defaultValue()` runs, and a static accessor's `name#get` and `name#set`, whose attributes
+ * `Method.attributes<T>()` reads. A name without `#` is a ValueError, since PHP's reflection reaches that method. */
+ZEND_FUNCTION(Sharp_Internal_hiddenMethod)
 {
 	zend_string *class_name;
 	zend_string *name;
@@ -5923,6 +5923,11 @@ ZEND_FUNCTION(Sharp_Internal_initial)
 		Z_PARAM_STR(name)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!memchr(ZSTR_VAL(name), '#', ZSTR_LEN(name))) {
+		zend_argument_value_error(2, "must name a method the compile made, whose name holds \"#\", \"%s\" given",
+			ZSTR_VAL(name));
+		RETURN_THROWS();
+	}
 	zend_class_entry *ce = zend_lookup_class(class_name);
 	if (!ce) {
 		if (!EG(exception)) {
@@ -5930,13 +5935,11 @@ ZEND_FUNCTION(Sharp_Internal_initial)
 		}
 		RETURN_THROWS();
 	}
-	zend_string *method = zend_strpprintf(0, "%s#initial", ZSTR_VAL(name));
-	zend_function *initial = sharp_method_named(ce, method);
-	zend_string_release_ex(method, false);
-	if (!initial) {
+	zend_function *method = sharp_method_named(ce, name);
+	if (!method) {
 		RETURN_NULL();
 	}
-	zend_create_fake_closure(return_value, initial, initial->common.scope, ce, NULL);
+	zend_create_fake_closure(return_value, method, method->common.scope, ce, NULL);
 }
 
 /* The frame of the code that called the standard library member whose body called this function, as

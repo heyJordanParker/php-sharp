@@ -122,7 +122,7 @@ function methods(string $type): array {}
 
 function constructor(string $type): ?array {}
 
-function initial(string $class, string $name): ?\Closure {}
+function hiddenMethod(string $class, string $name): ?\Closure {}
 
 function typeArguments(string $type): array {}
 

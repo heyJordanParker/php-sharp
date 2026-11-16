@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 2ceef4fd7b8c37ed52167da06a336a0ec90c093f */
+ * Stub hash: 990f896c2a7e1c2f5453240d2c087f38ab8e7f85 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
@@ -109,7 +109,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_constructor, 0, 1
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_Sharp_Internal_initial, 0, 2, Closure, 1)
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_Sharp_Internal_hiddenMethod, 0, 2, Closure, 1)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
 ZEND_END_ARG_INFO()
@@ -486,7 +486,7 @@ ZEND_FUNCTION(Sharp_Internal_elements);
 ZEND_FUNCTION(Sharp_Internal_properties);
 ZEND_FUNCTION(Sharp_Internal_methods);
 ZEND_FUNCTION(Sharp_Internal_constructor);
-ZEND_FUNCTION(Sharp_Internal_initial);
+ZEND_FUNCTION(Sharp_Internal_hiddenMethod);
 ZEND_FUNCTION(Sharp_Internal_typeArguments);
 ZEND_FUNCTION(Sharp_Internal_typeKind);
 ZEND_FUNCTION(Sharp_Internal_isNullable);
@@ -594,7 +594,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "properties"), zif_Sharp_Internal_properties, arginfo_Sharp_Internal_properties, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "methods"), zif_Sharp_Internal_methods, arginfo_Sharp_Internal_methods, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "constructor"), zif_Sharp_Internal_constructor, arginfo_Sharp_Internal_constructor, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "initial"), zif_Sharp_Internal_initial, arginfo_Sharp_Internal_initial, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "hiddenMethod"), zif_Sharp_Internal_hiddenMethod, arginfo_Sharp_Internal_hiddenMethod, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "typeArguments"), zif_Sharp_Internal_typeArguments, arginfo_Sharp_Internal_typeArguments, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "typeKind"), zif_Sharp_Internal_typeKind, arginfo_Sharp_Internal_typeKind, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "isNullable"), zif_Sharp_Internal_isNullable, arginfo_Sharp_Internal_isNullable, 0, NULL, NULL)

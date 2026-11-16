@@ -1,5 +1,5 @@
 --TEST--
-A PHP# attribute target puts its list on the part of a declaration it names, and an accessor's attributes go on its hook, on every accessor form and on an event's and a data case's parameters
+A PHP# attribute target puts its list on the part of a declaration it names, and an accessor's attributes go on its hook, on every accessor form and on an event's and a data case's parameters, and PHP# reflection reads a static's accessors' attributes, which plain PHP can't reach
 --FILE--
 <?php
 require __DIR__ . '/harness/Attributes.inc';
@@ -20,7 +20,6 @@ var_dump($labels($total));
 var_dump($labels($total->getHook(PropertyHookType::Get)));
 var_dump($labels($set), $labels($set->getParameters()[0]), (string) $set->getParameters()[0]->getType());
 var_dump($labels((new ReflectionProperty($class, 'name'))->getHook(PropertyHookType::Get)));
-var_dump($labels(new ReflectionMethod($class, 'opened#get')));
 var_dump($labels(new ReflectionProperty($class, 'id')), $labels($constructor->getParameters()[0]));
 var_dump($labels((new ReflectionProperty($class, 'stock'))->getHook(PropertyHookType::Get)));
 var_dump($labels(new ReflectionMethod($class, 'run')), $labels((new ReflectionMethod($class, 'run'))->getParameters()[0]));
@@ -31,8 +30,7 @@ $ledger = new AttributeTargets\Ledger(7, 2);
 $ledger->total = 5;
 $ledger->name = 'cash';
 var_dump($ledger->total, $ledger->name, $ledger->id, $ledger->stock);
-// A static auto-property's accessors with attributes are its hidden methods, and a get-only one's `get;` is its hook.
-var_dump($labels(new ReflectionMethod($class, 'counter#get')), $labels((new ReflectionMethod($class, 'counter#set'))->getParameters()[0]));
+// A get-only auto-property's `get;` is its hook.
 $code = new ReflectionProperty($class, 'code');
 var_dump($labels($code->getHook(PropertyHookType::Get)), $code->isReadOnly(), $code->isProtectedSet(), $ledger->code);
 try {
@@ -40,9 +38,8 @@ try {
 } catch (Error $error) {
     echo $error->getMessage(), "\n";
 }
-// An observer's attributes go on the `set` it runs inside, a static's on its hidden method, and the observers run.
+// An observer's attributes go on the `set` it runs inside, and the observers run.
 var_dump($labels((new ReflectionProperty($class, 'balance'))->getHook(PropertyHookType::Set)));
-var_dump($labels(new ReflectionMethod($class, 'days#set')));
 $ledger->balance = 3;
 var_dump($ledger->balance, $ledger->writes, AttributeTargets\Ledger::date(4), AttributeTargets\Ledger::ticked());
 // A Map's index writes and `remove` reach the storage through a hook an attribute makes.
@@ -56,6 +53,9 @@ foreach (['orderId', 'amount', 'currency'] as $i => $name) {
 $paid = new ReflectionClass(AttributeTargets\Payment\Paid::class);
 var_dump($labels($paid->getProperty('transactionId')), $labels($paid->getConstructor()->getParameters()[0]));
 var_dump((new AttributeTargets\Payment\Paid('t1'))->transactionId);
+// PHP has no hooks on a static, so PHP# reflection reads a static's accessors, as it reads a hook: each `getter()`,
+// `setter()` and the `value` its `set` takes.
+var_dump(AttributeTargets\Report::accessors());
 ?>
 --EXPECT--
 string(6) "ledger"
@@ -66,7 +66,6 @@ string(5) "write"
 string(6) "amount"
 string(3) "int"
 string(5) "named"
-string(6) "opened"
 string(4) "kept"
 string(5) "given"
 string(7) "stocked"
@@ -77,15 +76,12 @@ int(5)
 string(4) "cash"
 int(7)
 int(2)
-string(7) "counted"
-string(4) "next"
 string(5) "coded"
 bool(false)
 bool(true)
 string(2) "L7"
 Cannot modify protected(set) property AttributeTargets\Ledger::$code from global scope
 string(23) "balanced,checked,logged"
-string(5) "dated"
 int(3)
 int(2)
 int(4)
@@ -103,3 +99,19 @@ string(3) "EUR"
 string(4) "kept"
 string(5) "given"
 string(2) "t1"
+array(7) {
+  [0]=>
+  string(6) "opened"
+  [1]=>
+  string(7) "counted"
+  [2]=>
+  string(4) "next"
+  [3]=>
+  string(5) "dated"
+  [4]=>
+  string(4) "read"
+  [5]=>
+  string(5) "write"
+  [6]=>
+  string(6) "amount"
+}
