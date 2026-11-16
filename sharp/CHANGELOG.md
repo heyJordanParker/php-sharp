@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.20] - 2026-11-16
+
 ### Upgrading from 0.6.19
 
 - A `match` on a project's enum or sealed interface lists its cases and takes no `default`, spec section 21, so a case added later is a compile error at every `match` that misses it. A `default` there is a compile error that names the cases it stands for, as "A `match` on `TransactionStatus` lists its cases; missing: `TransactionStatus.Failed` and `TransactionStatus.Canceled`.". Replace the `default` with arms for those cases, and join the cases that share an arm with `or`, as in `TransactionStatus.Failed or TransactionStatus.Canceled => "closed"`. A `match` on a plain PHP enum, an installed package's enum, an `int` or a `string` keeps its `default`, and `mago convert` writes the cases a plain PHP `default` over a project's enum stands for.
@@ -1157,7 +1159,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.19...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.20...HEAD
+[0.6.20]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.19...v0.6.20
 [0.6.19]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.18...v0.6.19
 [0.6.18]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.17...v0.6.18
 [0.6.17]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.16...v0.6.17
