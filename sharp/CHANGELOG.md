@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.18] - 2026-11-16
+
 ### Fixed
 
 - Each error on the left side of a `??` whose right side never returns prints once, spec section 11, so `app.make("migrator") as Migrator ?? throw new RuntimeException("migrator")` reports an error in `app.make("migrator")` one time. 0.6.17 printed each such error twice.
@@ -1110,7 +1112,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.17...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.18...HEAD
+[0.6.18]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.17...v0.6.18
 [0.6.17]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.16...v0.6.17
 [0.6.16]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.15...v0.6.16
 [0.6.15]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.14...v0.6.15
