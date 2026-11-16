@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.21] - 2026-11-16
+
 ### Upgrading from 0.6.20
 
 - A comment is text in every file Mago reads, so `// @mago-ignore …` and `// @mago-expect …` hide no issue, in a `.php` file or a `.sharp` file, spec section 27. An issue one hid is reported again, and `unfulfilled-expect` and `unused-pragma` are gone. Turn the rule off for the project in `mago.toml`, as `no-eval = { exclude = ["src/Templating/Compiler.php"] }` under `[linter.rules]` or `{ code = "unknown-class-instantiation", in = ["src/Hydrator.php"] }` in the analyzer's `ignore` list, and delete the comment.
@@ -1173,7 +1175,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.20...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.21...HEAD
+[0.6.21]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.20...v0.6.21
 [0.6.20]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.19...v0.6.20
 [0.6.19]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.18...v0.6.19
 [0.6.18]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.17...v0.6.18
