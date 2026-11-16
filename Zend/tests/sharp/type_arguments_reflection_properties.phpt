@@ -1,5 +1,5 @@
 --TEST--
-Reflection, get_class_vars, property_exists and property access never reach a PHP# object's type arguments or a generic class's static fields, and refuse to name them
+Reflection, get_class_vars, property_exists and property access never reach a PHP# object's type arguments or a generic class's static fields, and refuse to name them, and reflection, get_class_methods and method_exists never reach a method the compile makes, whose name holds `#`, as a struct's `#fields` and `#json`, a static accessor body's `name#get`, a class's `#statics` and an indexer's `#get` and `#set`, which the engine still runs
 --FILE--
 <?php
 require __DIR__ . '/type_arguments_calls.inc';
@@ -61,6 +61,44 @@ foreach (['count', $statics] as $name) {
         echo str_replace("\0", '\0', $e->getMessage()), "\n";
     }
 }
+
+echo "The methods the compile makes\n";
+fixture('ReflectedClasses');
+fixture('ReflectedMembers');
+fixture('Indexers');
+$made = [
+    [new ReflectedClasses\Point(1), ['#fields', '#json']],
+    [new ReflectedMembers\Counter(), ['hidden#get', '#statics']],
+    [new Indexers\Cart(), ['#get', '#set']],
+];
+foreach ($made as [$object, $names]) {
+    $class = new ReflectionObject($object);
+    echo get_class($object), ': ', implode(', ', array_map(static fn (ReflectionMethod $method): string => $method->name, $class->getMethods())), "\n";
+    echo implode(', ', get_class_methods($object)), "\n";
+    foreach ($names as $name) {
+        $found = [
+            $name,
+            var_export($class->hasMethod($name), true),
+            var_export(str_contains((string) $class, "method $name ]"), true),
+            var_export(method_exists($object, $name), true),
+            var_export(method_exists(get_class($object), $name), true),
+        ];
+        foreach ([
+            static fn () => $class->getMethod($name),
+            static fn () => new ReflectionMethod($object, $name),
+            static fn () => new ReflectionParameter([$object, $name], 0),
+        ] as $reach) {
+            try {
+                $reach();
+                $found[] = 'found';
+            } catch (ReflectionException $e) {
+                $found[] = $e->getMessage();
+            }
+        }
+        echo implode(' | ', $found), "\n";
+    }
+}
+echo json_encode(new ReflectedClasses\Point(2)), ' ', (new Indexers\Cart())[1], "\n";
 ?>
 --EXPECT--
 Reflection
@@ -105,3 +143,17 @@ bool(false)
 Property Calls\Counter::$\0<sharp>\0statics does not exist
 Access to undeclared static property Calls\Counter::$count
 Access to undeclared static property Calls\Counter::$
+The methods the compile makes
+ReflectedClasses\Point: __construct, op_Equality, parse, tryParse
+__construct, op_Equality, parse, tryParse
+#fields | false | false | false | false | Method ReflectedClasses\Point::#fields() does not exist | Method ReflectedClasses\Point::#fields() does not exist | Method ReflectedClasses\Point::#fields() does not exist
+#json | false | false | false | false | Method ReflectedClasses\Point::#json() does not exist | Method ReflectedClasses\Point::#json() does not exist | Method ReflectedClasses\Point::#json() does not exist
+ReflectedMembers\Counter: next, __construct, parse, tryParse
+next, __construct, parse, tryParse
+hidden#get | false | false | false | false | Method ReflectedMembers\Counter::hidden#get() does not exist | Method ReflectedMembers\Counter::hidden#get() does not exist | Method ReflectedMembers\Counter::hidden#get() does not exist
+#statics | false | false | false | false | Method ReflectedMembers\Counter::#statics() does not exist | Method ReflectedMembers\Counter::#statics() does not exist | Method ReflectedMembers\Counter::#statics() does not exist
+Indexers\Cart: offsetGet, offsetSet, offsetExists, offsetUnset, run, first, parse, tryParse
+offsetGet, offsetSet, offsetExists, offsetUnset, run, first, parse, tryParse
+#get | false | false | false | false | Method Indexers\Cart::#get() does not exist | Method Indexers\Cart::#get() does not exist | Method Indexers\Cart::#get() does not exist
+#set | false | false | false | false | Method Indexers\Cart::#set() does not exist | Method Indexers\Cart::#set() does not exist | Method Indexers\Cart::#set() does not exist
+{"x":2} jam

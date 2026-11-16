@@ -1,8 +1,11 @@
 namespace Sharp;
 
 import BackedEnum;
+import PropertyHookType;
 import ReflectionAttribute;
 import ReflectionClass;
+import ReflectionFunction;
+import ReflectionFunctionAbstract;
 import ReflectionMethod;
 import ReflectionProperty;
 import Sharp.Internal;
@@ -11,6 +14,7 @@ import Sharp.Internal.CreatesAttributes;
 extern Internal.methods;
 extern Internal.properties;
 extern Internal.constructor;
+extern Internal.hiddenMethod;
 extern Internal.createInstance;
 extern Internal.createLazy;
 extern Internal.typeArguments;
@@ -28,6 +32,7 @@ extern Internal.enumBackingType;
 extern Internal.enumCases;
 extern Internal.constants;
 extern Internal.makeGenericType;
+extern Internal.withTag;
 
 public static class ClassMembers
 {
@@ -160,7 +165,7 @@ public static class ClassMembers
     // Whether the declaration of the property or field `name` that `declaring` declares gives it an initial value,
     // constant or not, as C#'s and Kotlin's reflection read a declared initializer.
     internal static bool hasDefaultValue(Class<Object> declaring, string name)
-        => new ReflectionClass(declaring).hasMethod(name + "#initial")
+        => Internal.hiddenMethod(declaring, name + "#initial") != null
             || (ClassMembers.stored(declaring, name) is ReflectionProperty property && property.hasDefaultValue());
 
     // The initial value the declaration of the property or field `name` that `declaring` declares gives it, as
@@ -169,9 +174,9 @@ public static class ClassMembers
     // `OutOfRangeException`, as `Parameter.defaultValue()` does.
     internal static Any? defaultValue(Class<Object> declaring, string name)
     {
-        const initial = name + "#initial";
-        if (new ReflectionClass(declaring).hasMethod(initial)) {
-            return new ReflectionMethod(declaring, initial).invoke(null);
+        const initial = Internal.hiddenMethod(declaring, name + "#initial");
+        if (initial != null) {
+            return initial();
         }
         if (ClassMembers.stored(declaring, name) is ReflectionProperty property && property.hasDefaultValue()) {
             return property.getDefaultValue();
@@ -187,6 +192,25 @@ public static class ClassMembers
             ?.getAttributes(ClassMembers.declared(typeof(TAttribute)), ReflectionAttribute.IS_INSTANCEOF)
             .map(attribute => attribute.newInstance())
             ?? [];
+
+    // PHP's reflection of the method `name` that `declaring` declares, and of a property's accessor, named `$name::get` or
+    // `$name::set` as PHP 8.4 names a property hook: an instance property's through its property, which alone reaches the
+    // hook, and a static's through its hidden `name#get` or `name#set`, since PHP has no hooks on a static.
+    internal static ReflectionFunctionAbstract reflectedMethod(Class<Object> declaring, string name)
+    {
+        if (!global.str_starts_with(name, "$")) {
+            return new ReflectionMethod(declaring, name);
+        }
+        const parts = global.explode("::", global.substr(name, 1));
+        const accessor = Internal.hiddenMethod(declaring, parts[0] + "#" + parts[1]);
+        if (accessor != null) {
+            return new ReflectionFunction(accessor);
+        }
+        const kind = parts[1] == "get" ? PropertyHookType.Get : PropertyHookType.Set;
+
+        return new ReflectionProperty(declaring, parts[0]).getHook(kind)
+            ?? throw new ValueError("The engine gave an accessor its property does not run.");
+    }
 
     // PHP's reflection of the storage of the property or field `name` that `declaring` declares, or null for a static
     // whose class keeps none, as a computed one, see `properties()`.
@@ -345,6 +369,11 @@ public static class ClassMembers
         // InvalidArgumentException for an abstract class, an interface or an enum, and for a class that extends one of
         // PHP's own.
         public T createLazy(Function<void(T)> initialize) => Internal.createLazy(type, initialize);
+
+        // The variant of the family the class is whose `[Key]` is `tag`, spec section 10, or null for a name it has no
+        // variant of, and for a class that is no family. It is pure, so a single-table-inheritance base builds the row's
+        // class with `new (typeof(Self).withTag(row.type) ?? throw …)(…)`.
+        public Class<T>? withTag(string tag) => Internal.withTag(type, tag) is string variant ? variant as Class<T> : null;
 
         // The class the class extends, with the type arguments it gives it, as C#'s `Type.BaseType`, or null.
         public Class<Any?>? baseType()

@@ -1,0 +1,9 @@
+namespace DataInOut;
+
+import Sharp.Key;
+
+[Key("bank")]
+public struct Bank : PaymentMethod
+{
+    public Bank(public string iban { get; }) { }
+}

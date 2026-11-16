@@ -19,13 +19,14 @@ function compiled(string $file, string $prelude): string
         . ' if ((new ReflectionClass($class))->getFileName() === ' . var_export($file, true) . ') echo new ReflectionClass($class);'
     ) . ' 2>&1');
 
-    // A PHP# class that writes no parse or tryParse gets them on the line that declares it, where no twin can write a
-    // method. The parse tests run them, so the comparison leaves out each parse and tryParse on such a line.
+    // A PHP# class that writes no parse or tryParse gets them, its #fields and its #json on the line that declares it,
+    // where no twin can write a method. The parse and JSON tests run them, so the comparison leaves out each on such a
+    // line.
     $source = file($file);
     $generated = static fn (string $first, string $last): bool
         => $first === $last && preg_match('~\b(?:class|struct)\b~', $source[$first - 1]) === 1;
     $left_out = [];
-    $listing = preg_replace_callback('~\n^(\S+)::(parse|tryParse):\n((?:[ \dLE].*\n)*)~m', static function (array $match) use ($generated, &$left_out): string {
+    $listing = preg_replace_callback('~\n^(\S+)::(#fields|#json|parse|tryParse):\n((?:[ \dLE].*\n)*)~m', static function (array $match) use ($generated, &$left_out): string {
         preg_match('~:(\d+)-(\d+)$~m', $match[3], $lines);
         if (!$generated($lines[1], $lines[2])) {
             return $match[0];
@@ -40,9 +41,9 @@ function compiled(string $file, string $prelude): string
 
         return "user class: $match[1]\n" . count($methods) . ' methods: ' . ($methods ? implode(', ', $methods) : '-');
     }, $listing);
-    $classes = preg_replace_callback('~^ {4}Method \[ <user[^\]]*> static public method (?:parse|tryParse) \] \{\n {6}@@ \S+ (\d+) - (\d+)\n.*?^ {4}\}\n~ms', static fn (array $match): string
+    $classes = preg_replace_callback('~^ {4}Method \[ <user[^\]]*> (?:static )?public method (?:#fields|#json|parse|tryParse) \] \{\n {6}@@ \S+ (\d+) - (\d+)\n.*?^ {4}\}\n~ms', static fn (array $match): string
         => $generated($match[1], $match[2]) ? '' : $match[0], $classes);
-    $classes = preg_replace(['~(- Static methods )\[\d+\]~', '~\n\n+~'], ['$1[]', "\n"], $classes);
+    $classes = preg_replace(['~(- (?:Static m|M)ethods )\[\d+\]~', '~\n\n+~'], ['$1[]', "\n"], $classes);
 
     // A method a class inherits prints with its parent's file, a .sharp file beside the fixture's or its twin.
     return preg_replace('~' . preg_quote(dirname($file), '~') . '/(\w+)\.(?:sharp|inc)\b~', '<folder>/$1', str_replace($file, '<file>', $listing . $classes));

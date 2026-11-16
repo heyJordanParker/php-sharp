@@ -2,7 +2,9 @@
 
 ## Decision
 
-Every struct has a static `parse`, which reads a `Map<string, Any?>` or an object's public properties (decision 39) and throws one error that lists every bad field, and a static `tryParse`, which gives null. Classes do not get them. The keys are the main constructor's parameter names, and `[Key("…")]` renames one.
+Every struct has a static `parse`, which reads a `Map<string, Any?>` or an object's public properties (decision 39) and throws one error that lists every bad field, and a static `tryParse`, which gives null. Every PHP# class gets them the same way, by its main constructor's parameters and then every property an object initializer may set. The keys are the main constructor's parameter names, and `[Key("…")]` renames one.
+
+The same declaration governs writing: `Json.encode` writes a struct or a class by the fields its `parse` reads, each under its key, so `Json.decode` reads back what `Json.encode` wrote. One engine reader builds every value, for a type's `parse`, `Json.decode<T>`, `Query.decode<T>` and a family's `parse` (spec section 10).
 
 ## Options
 

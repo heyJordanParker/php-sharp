@@ -199,6 +199,12 @@ static inline bool is_closure_invoke(const zend_class_entry *ce, const zend_stri
 		&& zend_string_equals_literal(lcname, ZEND_INVOKE_FUNC_NAME);
 }
 
+/* PHP#: no PHP source declares a name that holds `#`, so a method named so is one the compile made for the engine,
+ * as `#fields`, `#json` or `name#get`, and reflection lists and finds none, as it hides ZEND_ACC_SHARP_HIDDEN slots. */
+static inline bool is_sharp_hidden_method(const zend_function *mptr) {
+	return memchr(ZSTR_VAL(mptr->common.function_name), '#', ZSTR_LEN(mptr->common.function_name)) != NULL;
+}
+
 static zend_function *_copy_function(zend_function *fptr) /* {{{ */
 {
 	if (fptr
@@ -476,7 +482,7 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, const
 		zend_function *mptr;
 
 		ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, mptr) {
-			if ((mptr->common.fn_flags & ZEND_ACC_STATIC)
+			if ((mptr->common.fn_flags & ZEND_ACC_STATIC) && !is_sharp_hidden_method(mptr)
 				&& ((mptr->common.fn_flags & ZEND_ACC_PRIVATE) == 0 || mptr->common.scope == ce))
 			{
 				count_static_funcs++;
@@ -490,7 +496,7 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, const
 		zend_function *mptr;
 
 		ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, mptr) {
-			if ((mptr->common.fn_flags & ZEND_ACC_STATIC)
+			if ((mptr->common.fn_flags & ZEND_ACC_STATIC) && !is_sharp_hidden_method(mptr)
 				&& ((mptr->common.fn_flags & ZEND_ACC_PRIVATE) == 0 || mptr->common.scope == ce))
 			{
 				smart_str_appendc(str, '\n');
@@ -548,7 +554,7 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, const
 
 		count = 0;
 		ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, mptr) {
-			if ((mptr->common.fn_flags & ZEND_ACC_STATIC) == 0
+			if ((mptr->common.fn_flags & ZEND_ACC_STATIC) == 0 && !is_sharp_hidden_method(mptr)
 				&& ((mptr->common.fn_flags & ZEND_ACC_PRIVATE) == 0 || mptr->common.scope == ce))
 			{
 				zend_function *closure;
@@ -2689,7 +2695,8 @@ ZEND_METHOD(ReflectionParameter, __construct)
 					/* nothing to do. don't set is_closure since is the invoke handler,
 					   not the closure itself */
 				} else if ((fptr = zend_hash_find_ptr(&ce->function_table,
-						(ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? name : lcname)) == NULL) {
+						(ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? name : lcname)) == NULL
+					|| is_sharp_hidden_method(fptr)) {
 					// %S is used for zend_string pointers by smart str printing, but normally
 					// is for wide character strings and so compilers complain if this is inline
 					const char *format = "Method %S::%S() does not exist";
@@ -3490,7 +3497,8 @@ static void instantiate_reflection_method(INTERNAL_FUNCTION_PARAMETERS, bool is_
 	{
 		/* do nothing, mptr already set */
 	} else if ((mptr = zend_hash_str_find_ptr(&ce->function_table,
-			(ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? method_name : lcname, method_name_len)) == NULL) {
+			(ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? method_name : lcname, method_name_len)) == NULL
+		|| is_sharp_hidden_method(mptr)) {
 		efree(lcname);
 		// %S is used for zend_string pointers by smart str printing, but normally
 		// is for wide character strings and so compilers complain if this is inline
@@ -4668,6 +4676,7 @@ ZEND_METHOD(ReflectionClass, hasMethod)
 {
 	reflection_object *intern;
 	zend_class_entry *ce;
+	zend_function *mptr;
 	zend_string *name, *lc_name;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS(), "S", &name) == FAILURE) {
@@ -4676,8 +4685,8 @@ ZEND_METHOD(ReflectionClass, hasMethod)
 
 	GET_REFLECTION_OBJECT_PTR(ce);
 	lc_name = zend_string_tolower(name);
-	RETVAL_BOOL(zend_hash_exists(&ce->function_table, (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? name : lc_name)
-		|| is_closure_invoke(ce, lc_name));
+	mptr = zend_hash_find_ptr(&ce->function_table, (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? name : lc_name);
+	RETVAL_BOOL((mptr && !is_sharp_hidden_method(mptr)) || is_closure_invoke(ce, lc_name));
 	zend_string_release(lc_name);
 }
 /* }}} */
@@ -4710,7 +4719,8 @@ ZEND_METHOD(ReflectionClass, getMethod)
 		reflection_method_factory(ce, mptr, NULL, return_value);
 		zval_ptr_dtor(&obj_tmp);
 	} else if ((mptr = zend_hash_find_ptr(&ce->function_table,
-			(ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? name : lc_name)) != NULL) {
+			(ce->sharp_flags & SHARP_CLASS_EXACT_NAMES) ? name : lc_name)) != NULL
+		&& !is_sharp_hidden_method(mptr)) {
 		reflection_method_factory(ce, mptr, NULL, return_value);
 	} else {
 		// %S is used for zend_string pointers by smart str printing, but normally
@@ -4726,7 +4736,7 @@ ZEND_METHOD(ReflectionClass, getMethod)
 /* {{{ _addmethod */
 static bool _addmethod(zend_function *mptr, zend_class_entry *ce, HashTable *ht, zend_long filter)
 {
-	if ((mptr->common.fn_flags & ZEND_ACC_PRIVATE) && mptr->common.scope != ce) {
+	if (((mptr->common.fn_flags & ZEND_ACC_PRIVATE) && mptr->common.scope != ce) || is_sharp_hidden_method(mptr)) {
 		return false;
 	}
 

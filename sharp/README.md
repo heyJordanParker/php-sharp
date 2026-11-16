@@ -104,10 +104,10 @@ PHP# ships its engine only as one runtime image: FrankenPHP on the thread-safe e
 `php --ri sharp` shows that a `php` is the PHP# engine. It prints the engine's version, and plain PHP prints `Extension 'sharp' not present.` and exits with status 1:
 
 ```text
-$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.19 php --ri sharp
+$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.20 php --ri sharp
 sharp
 
-Version => 0.6.19
+Version => 0.6.20
 
 Directive => Local Value => Master Value
 sharp.compile_command => no value => no value
@@ -115,7 +115,7 @@ sharp.compile_command => no value => no value
 
 `sharp.compile_command` is the engine's one setting. It stays empty in production, and [Development](#development) says what it does in a dev container.
 
-`sharp/docker/runtime/frankenphp.Dockerfile` builds the engine with docker-library's `8.5/trixie/zts` recipe, from this repository's source instead of the php.net tarball, with `ext/sharp` built in, then runs FrankenPHP v1.13.5's own Dockerfile stages on it, as FrankenPHP's images build on `php:8.5-zts-trixie`. It keeps docker-library's layout, so `docker-php-ext-*` and `install-php-extensions` work unchanged and an app on FrankenPHP's image switches to PHP# by changing only its `FROM` line. The `docker-php-*` scripts are verbatim copies, and `zts/docker-php-entrypoint` is docker-library's `zts` variant's. `sharp/bin/hosts` builds the same FrankenPHP release for `HOSTS`. Go 1.27, `e-dant/watcher` 0.14.5 and `install-php-extensions` 2.12.0 are pinned where FrankenPHP takes the latest. FrankenPHP's source is fetched by its release's commit, and the `e-dant/watcher` archive and the `install-php-extensions` script are checked against their SHA-256s. Compare the Dockerfile, the shared scripts and `zts/docker-php-entrypoint` with docker-library's `8.5/trixie/zts`, and the Dockerfile with FrankenPHP's `Dockerfile`, on every merge from either. FrankenPHP's stage rewrites `php` in the `zts` entrypoint to `frankenphp run`, so the image starts FrankenPHP on its default command.
+`sharp/docker/runtime/frankenphp.Dockerfile` builds the engine with docker-library's `8.5/trixie/zts` recipe, from this repository's source instead of the php.net tarball, with `ext/sharp` built in, then runs FrankenPHP v1.13.5's own Dockerfile stages on it, as FrankenPHP's images build on `php:8.5-zts-trixie`. It keeps docker-library's layout, so `docker-php-ext-*` and `install-php-extensions` work unchanged and an app on FrankenPHP's image switches to PHP# by changing only its `FROM` line. The `docker-php-*` scripts are verbatim copies, and `zts/docker-php-entrypoint` is docker-library's `zts` variant's. `sharp/bin/hosts` builds the same FrankenPHP release for `HOSTS`. Go 1.27, `e-dant/watcher` 0.14.5 and `install-php-extensions` 2.13.2 are pinned where FrankenPHP takes the latest. FrankenPHP's source is fetched by its release's commit, and the `e-dant/watcher` archive and the `install-php-extensions` script are checked against their SHA-256s. Compare the Dockerfile, the shared scripts and `zts/docker-php-entrypoint` with docker-library's `8.5/trixie/zts`, and the Dockerfile with FrankenPHP's `Dockerfile`, on every merge from either. FrankenPHP's stage rewrites `php` in the `zts` entrypoint to `frankenphp run`, so the image starts FrankenPHP on its default command.
 
 The build context is the git tree, the same one CI builds from:
 
@@ -127,10 +127,10 @@ A server whose PHP comes from its distribution, such as Ubuntu's packages, can't
 
 ### Extensions
 
-The image ships the extensions its release's `php -m` lists. For 0.6.19:
+The image ships the extensions its release's `php -m` lists. For 0.6.20:
 
 ```text
-$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.19 php -m
+$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.20 php -m
 [PHP Modules]
 bcmath
 Core
@@ -177,14 +177,14 @@ zlib
 Zend OPcache
 ```
 
-The list has no `pcntl`, which Laravel's queue worker needs to stop between jobs when `docker restart` signals it, and no driver for a database but SQLite. The app's image builds every other extension it needs with [`install-php-extensions`](https://github.com/mlocati/docker-php-extension-installer), which the image ships, as `pgsql`, `redis`, `imagick`, `gd`, `exif` and `pcntl` build on 0.6.19.
+The list has no `pcntl`, which Laravel's queue worker needs to stop between jobs when `docker restart` signals it, and no driver for a database but SQLite. The app's image builds every other extension it needs with [`install-php-extensions`](https://github.com/mlocati/docker-php-extension-installer), which the image ships, as `pgsql`, `redis`, `imagick`, `gd`, `exif` and `pcntl` build on 0.6.20.
 
 ### The app's image
 
 The app builds its own image on the release, with its extensions, the production `php.ini` and its own ini settings:
 
 ```dockerfile
-FROM ghcr.io/heyjordanparker/php-sharp:0.6.19
+FROM ghcr.io/heyjordanparker/php-sharp:0.6.20
 RUN install-php-extensions pcntl redis
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 COPY app.ini "$PHP_INI_DIR/conf.d/"

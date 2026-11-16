@@ -1,0 +1,34 @@
+namespace AttributeTargets;
+
+import Lib.Entity;
+
+// The attributes PHP# reflection reads of `Ledger`'s accessors, spec section 25: a static's, which run as hidden methods
+// plain PHP can't reach, and an instance property's hooks, each `getter()`, `setter()` and the `value` its `set` takes.
+public static class Report
+{
+    private static string labels(List<Entity> found)
+    {
+        string text = "";
+        for (const entity of found) {
+            text = text == "" ? entity.label ?? "" : `${text},${entity.label ?? ""}`;
+        }
+
+        return text;
+    }
+
+    private static Property property(string name) => typeof(Ledger).properties().first(property => property.name == name);
+
+    private static Method getter(string name) => Report.property(name).getter() ?? throw new ValueError("no get");
+
+    private static Method setter(string name) => Report.property(name).setter() ?? throw new ValueError("no set");
+
+    public static List<string> accessors() => [
+        Report.labels(Report.getter("opened").attributes<Entity>()),
+        Report.labels(Report.getter("counter").attributes<Entity>()),
+        Report.labels(Report.setter("counter").parameters()[0].attributes<Entity>()),
+        Report.labels(Report.setter("days").attributes<Entity>()),
+        Report.labels(Report.getter("total").attributes<Entity>()),
+        Report.labels(Report.setter("total").attributes<Entity>()),
+        Report.labels(Report.setter("total").parameters()[0].attributes<Entity>()),
+    ];
+}

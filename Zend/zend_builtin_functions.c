@@ -974,7 +974,9 @@ ZEND_FUNCTION(get_class_methods)
 	scope = zend_get_executed_scope();
 
 	ZEND_HASH_MAP_FOREACH_PTR(&ce->function_table, mptr) {
-		if (zend_check_method_accessible(mptr, scope)) {
+		/* PHP#: a method whose name holds `#` is one the compile made for the engine, as reflection hides it. */
+		if (zend_check_method_accessible(mptr, scope)
+			&& !memchr(ZSTR_VAL(mptr->common.function_name), '#', ZSTR_LEN(mptr->common.function_name))) {
 			ZVAL_STR_COPY(&method_name, mptr->common.function_name);
 			zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &method_name);
 		}
@@ -1010,6 +1012,10 @@ ZEND_FUNCTION(method_exists)
 	func = zend_class_find_method(ce, method_name);
 
 	if (func) {
+		/* PHP#: a method whose name holds `#` is one the compile made for the engine, as reflection hides it. */
+		if (memchr(ZSTR_VAL(func->common.function_name), '#', ZSTR_LEN(func->common.function_name))) {
+			RETURN_FALSE;
+		}
 		/* Exclude shadow properties when checking a method on a specific class. Include
 		 * them when checking an object, as method_exists() generally ignores visibility.
 		 * TODO: Should we use EG(scope) for the object case instead? */

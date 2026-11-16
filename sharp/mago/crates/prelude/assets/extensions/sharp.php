@@ -287,6 +287,35 @@ function jsonEncode(mixed $value, int $flags, int $indent): string {}
 function jsonDecode(string $json): mixed {}
 
 /**
+ * The value of the type the class value `$type` holds that `$value` builds, as a struct's `parse` reads a field of that
+ * type, each number and bool read from its text with `$text`. A struct's and a class's `parse`, and the standard
+ * library's `Json.decode` and `Query.decode`, read by it.
+ *
+ * @template T
+ *
+ * @param class-string<T> $type
+ *
+ * @return T
+ *
+ * @throws \Sharp\InvalidFields
+ */
+function parseAs(string $type, mixed $value, bool $text): mixed {}
+
+/**
+ * The variant of the family `$family` that `$value` names under the family's key, read as `parseAs` reads it. With
+ * `$throws` false, null wherever that throws a ValueError, as `tryParse` gives.
+ *
+ * @throws \Sharp\InvalidFields
+ */
+function parseVariant(string $family, mixed $value, bool $throws = true): ?object {}
+
+/**
+ * The class name of the variant of the family `$family` whose `[Key]` is `$tag`, or null. The standard library's
+ * `Class<T>.withTag` reads by it.
+ */
+function withTag(string $family, string $tag): ?string {}
+
+/**
  * Each address the system resolver gives for `$host`, as text and once, in the order getaddrinfo gives them, the hosts
  * file included, and throws when the resolver cannot find the host. The standard library's `Dns.addresses` resolves
  * by it.
@@ -425,18 +454,6 @@ final class DispatchesEmits {}
 final class ParsesTypeArgument {}
 
 /**
- * The class a type parameter with no class bound stands for in a method marked `ParsesTypeArgument`, as `Json.decode<T>`
- * is: each struct and PHP# class, whose `parse` and `tryParse` it declares, so `T.parse($value)` gives a `T`. Each call
- * of the method gets the struct parse check for its type argument.
- */
-abstract class Parsed
-{
-    public static function parse(mixed $value): static {}
-
-    public static function tryParse(mixed $value): ?static {}
-}
-
-/**
  * Marks a standard library method that a law's proof reads as the Lean function `$function` folded over its
  * arguments, as `Math.max` is Lean's `max`, so a law reasons about it as it does about `<`.
  */
@@ -555,6 +572,18 @@ function methods(string $type): array {}
  * @return list<list<string>>|null
  */
 function constructor(string $type): ?array {}
+
+/**
+ * The method `$name` of the class `$class` that the compile made, whose name holds `#`, as a function, or null for a
+ * class without it. PHP's reflection finds no such method. The standard library's `Property.defaultValue()` and
+ * `Field.defaultValue()` run a member's `name#initial`, and `Method.attributes<T>()` reads a static accessor's
+ * `name#get` and `name#set`.
+ *
+ * @return (\Closure(): mixed)|null
+ *
+ * @throws \ValueError
+ */
+function hiddenMethod(string $class, string $name): ?\Closure {}
 
 /**
  * The class values of the type arguments of the type the class value `$type` holds without its `?`, in order, each

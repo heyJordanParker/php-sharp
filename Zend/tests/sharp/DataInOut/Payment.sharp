@@ -1,0 +1,16 @@
+namespace DataInOut;
+
+import Sharp.Decimal;
+import Sharp.Key;
+import Sharp.Time.Instant;
+
+public struct Payment
+{
+    public Payment(
+        [Key("return_url")] public string returnUrl { get; },
+        public Decimal amount { get; },
+        public Instant paidAt { get; },
+        [Key(omitNull: true)] public string? coupon { get; },
+        public PaymentMethod method { get; },
+    ) { }
+}

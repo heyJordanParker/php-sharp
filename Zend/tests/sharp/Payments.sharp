@@ -16,7 +16,7 @@ public class Payments
         PaymentResult.Paid(string transactionId) => `Paid ${transactionId}`,
         PaymentResult.Declined { reason: "card expired" } => "Expired",
         PaymentResult.Declined declined => `Declined: ${declined.reason}`,
-        default => "Redirect",
+        PaymentResult.RequiresAction => "Redirect",
     };
 
     public bool waiting(CheckoutState state) => state is CheckoutState.Open;

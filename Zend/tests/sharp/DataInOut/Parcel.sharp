@@ -1,0 +1,8 @@
+namespace DataInOut;
+
+import Sharp.Key;
+
+[Key("parcel")]
+public class Parcel : Shipment
+{
+}

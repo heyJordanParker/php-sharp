@@ -498,7 +498,7 @@ fn impure(
     let issue = Issue::error(message).with_code(code.as_str()).with_annotation(Annotation::primary(span));
 
     match impurity.effect {
-        Some(Effect::Unknown(Some(_))) if impurity.every_effect => {
+        Some(Effect::Unknown(_)) if impurity.every_effect => {
             issue.with_help("It runs code no `uses` can name, so call it where no `uses` limits the effects.")
         }
         Some(Effect::Unknown(Some((class, member)))) => {
@@ -530,6 +530,10 @@ fn impure(
                 code_class_name(class)
             ))
         }
+        Some(Effect::Unknown(None)) if impurity.cause.0.is_empty() => issue.with_help(format!(
+            "`{}` is a function plain PHP wrote, which no `extern` can declare. Call it outside the {body}.",
+            impurity.cause.1
+        )),
         Some(Effect::Unknown(None)) => {
             let (class, property) = impurity.cause;
             let class = class_name(class);
