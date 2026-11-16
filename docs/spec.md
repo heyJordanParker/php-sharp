@@ -5115,7 +5115,7 @@ public class Links
     public string checkout() => Routing.route(RouteName.Checkout);   // compiles: plain PHP receives "checkout"
     public string bare() => Routing.route("checkout");               // compile error: route takes a RouteName
     public Builder<Order> paid(Builder<Order> query) => query.where(nameof(Order.status), "paid");   // compiles
-    public Builder<Order> typo(Builder<Order> query) => query.where("stauts", "paid");               // compile error: a string isn't a keyof Order
+    public Builder<Order> bareColumn(Builder<Order> query) => query.where("status", "paid");         // compile error: a string isn't a keyof Order, even one that names a member
 }
 ```
 
@@ -5806,13 +5806,15 @@ query.selectRaw(`1.0 / ${Weights.COUNT} as weight`);     // compiles
 query.selectRaw(`max(${column})`);                       // compile error: column is composed while the code runs
 ```
 
-**In an application, a string fixed at compile time never selects.** `==`, `!=` and a `match` arm that compare a string with a `literal-string` pick one of a closed set of values, and a closed set of values is a backed enum, which `parse` reads where the data enters (section 20). So each is a compile error in a project, a package whose `composer.json` declares `"type": "project"`, as section 5's rules are, and the error names both sides: "`==` compares `order.status` with `"paid"`, a string fixed at compile time, so it selects one of a closed set of values." Comparing with `""` tests for empty text, and its error names `isEmpty()` or `isNotEmpty()` (section 18). Two strings from data still compare as text, as `password == confirmation` does, and a text operation such as `line.startsWith("#")` or `text.split(",")` selects nothing. A library is exempt, and the check reads only declared types, never a string's contents:
+**In an application, a string fixed at compile time never selects.** `==`, `!=` and a `match` arm that compare a string with a `literal-string` pick one of a closed set of values, and a closed set of values is a backed enum, which `parse` reads where the data enters (section 20). So each is a compile error in a project, a package whose `composer.json` declares `"type": "project"`, as section 5's rules are, and the error names both sides: "`==` compares `order.status` with `"paid"`, a string fixed at compile time, so it selects one of a closed set of values." Comparing with `""` tests for empty text, and its error names `isEmpty()` or `isNotEmpty()` (section 18). `equals` compares as `==` does, so `status.equals("paid")` and `"paid".equals(status, true)` are compile errors too. A search of a `List` or a `Set` compares each element by `==` (section 12), so `contains`, `indexOf` and `remove` select where the value is a `literal-string`, as `statuses.contains("paid")`, or where the collection is a literal of them, as `["paid", "due"].contains(order.status)`, and each is a compile error, while `tags.contains(tag)` compiles. `add` searches nothing, so `tags.add("new")` compiles. Two strings from data still compare as text, as `password == confirmation` does, and a text operation such as `line.startsWith("#")` or `text.split(",")` selects nothing. A library is exempt, and the check reads only declared types, never a string's contents:
 
 ```text
 if (order.status == "paid") { }           error: a compile-time string in ==, != or a match arm
 if (order.status == OrderStatus.Paid) { } compiles: the value is a backed enum
 if (name == "") { }                       error: call name.isEmpty()
 if (password == confirmation) { }         compiles: two strings from data
+if (["paid", "due"].contains(order.status)) { }   error: a search for a compile-time string
+if (tags.contains(tag)) { }               compiles: a search for a string from data
 ```
 
 **In an application, a `Map` key is data.** A `literal-string` used as a `Map` key, read or written, as in `row["plan"]`, `row["plan"] = "pro"`, `row.get("plan")` or `row.set("plan", "pro")`, names a field of a fixed shape, which a struct declares (section 10), so it is a compile error in a project: "`"plan"` is a string fixed at compile time, so it names a field of a fixed shape, not a key of a `Map`." `Settings.parse(row).plan` reads the field. A key from data, as in `counts[tag]`, is a `Map`'s own.
