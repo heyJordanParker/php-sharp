@@ -5909,6 +5909,36 @@ ZEND_FUNCTION(Sharp_Internal_constructor)
 	}
 }
 
+/* Spec section 25: what `Property.defaultValue()` and `Field.defaultValue()` run, the function that evaluates the
+ * initial value the declaration of the member `name` of `class` gives it, its hidden `name#initial`, or null for a
+ * member whose initial value PHP takes as its default, or that has none. PHP's reflection finds no method whose name
+ * holds `#`, so the standard library reaches it here. Each call evaluates it anew. */
+ZEND_FUNCTION(Sharp_Internal_initial)
+{
+	zend_string *class_name;
+	zend_string *name;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_STR(class_name)
+		Z_PARAM_STR(name)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_class_entry *ce = zend_lookup_class(class_name);
+	if (!ce) {
+		if (!EG(exception)) {
+			zend_throw_error(NULL, "Class \"%s\" not found", ZSTR_VAL(class_name));
+		}
+		RETURN_THROWS();
+	}
+	zend_string *method = zend_strpprintf(0, "%s#initial", ZSTR_VAL(name));
+	zend_function *initial = sharp_method_named(ce, method);
+	zend_string_release_ex(method, false);
+	if (!initial) {
+		RETURN_NULL();
+	}
+	zend_create_fake_closure(return_value, initial, initial->common.scope, ce, NULL);
+}
+
 /* The frame of the code that called the standard library member whose body called this function, as
  * zend_get_executed_scope finds the code that runs: the first frame below that member's that runs user code or a
  * method. */

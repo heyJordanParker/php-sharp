@@ -122,6 +122,8 @@ function methods(string $type): array {}
 
 function constructor(string $type): ?array {}
 
+function initial(string $class, string $name): ?\Closure {}
+
 function typeArguments(string $type): array {}
 
 function typeKind(string $type): string {}
