@@ -31,6 +31,7 @@ use mago_reporting::Issue;
 use mago_span::HasSpan;
 use mago_span::Span;
 use mago_syntax::cst::ArgumentList;
+use mago_syntax::cst::ArrayElement;
 use mago_syntax::cst::Call;
 use mago_syntax::cst::ClassLikeMemberSelector;
 use mago_syntax::cst::Expression;
@@ -52,9 +53,12 @@ use crate::context::scope::control_action::ControlAction;
 use crate::error::AnalysisError;
 use crate::expression::access::report_full_name;
 use crate::expression::access::report_member_of_mixed_kinds;
+use crate::expression::array_access::report_fixed_map_key;
 use crate::expression::binary::comparison::Searched;
 use crate::expression::binary::comparison::check_element_equality;
 use crate::expression::binary::comparison::check_ordered_key;
+use crate::expression::binary::comparison::is_empty_text;
+use crate::expression::binary::comparison::report_selection;
 use crate::expression::binary::comparison::search_refusal;
 use crate::invocation::Invocation;
 use crate::invocation::InvocationArgumentsSource;
@@ -71,7 +75,11 @@ use crate::invocation::template_result::seed_extension_type_arguments;
 use crate::plugin::hook::NamedCall;
 use crate::plugin::hook::StaticCall;
 use crate::reconciler::assertion_reconciler;
+use crate::resolver::extension::CollectionKind;
+use crate::resolver::extension::collection_member_kind;
 use crate::resolver::extension::is_collection_member;
+use crate::resolver::extension::is_text_member;
+use crate::utils::is_compile_time_string;
 use crate::utils::names::collection_type_parameters;
 use crate::utils::names::display_function_like_identifier;
 use crate::utils::quoted_source;
@@ -365,6 +373,7 @@ where
 
     let mut resulting_type = None;
     for target in invocation_targets {
+        let target = with_extern_signature(context, target);
         if let InvocationTarget::FunctionLike { metadata, .. } = &target {
             let name = metadata.name;
             match true {
@@ -669,6 +678,25 @@ where
         else {
             continue;
         };
+        // A `Map` member's `key`, as in `get("plan")` and the `set` an index write runs, is a key as an index is, so a
+        // string fixed at compile time is refused there too, spec section 12.
+        if parameter.get_name().0.as_bytes() == b"$key"
+            && collection_member_kind(class, metadata) == Some(CollectionKind::Map)
+            && artifacts.get_expression_type(value).is_some_and(is_compile_time_string)
+        {
+            report_fixed_map_key(context, value);
+        }
+        let method = metadata.original_name.as_str_lossy();
+        if matches!(method.as_ref(), "contains" | "indexOf" | "remove")
+            && parameter.has_attribute(context.codebase, COMPARED_BY_EQUALITY)
+            && collection_member_kind(class, metadata).is_some_and(|kind| kind != CollectionKind::Map)
+            && !argument.is_unpacked()
+        {
+            report_collection_selection(context, artifacts, &method, receiver, value, span);
+        }
+        if method == "equals" && is_text_member(class, metadata) && parameter.get_name().0.as_bytes() == b"$other" {
+            report_text_selection(context, artifacts, receiver, value, span);
+        }
         // A collection member orders by the keys the function in a parameter marked `ComparedByOrder` returns, as
         // `sortedBy` does, so a key type `<` cannot order is refused, and the bridge passes the engine how to order it.
         if parameter.has_attribute(context.codebase, COMPARED_BY_ORDER)
@@ -715,6 +743,57 @@ where
     }
 
     Ok(comparisons)
+}
+
+/// Spec section 24: a `List`'s or a `Set`'s `method` that searches `receiver` for `value` by `==`, as `contains`, selects
+/// one of a closed set of values where `value` is a string fixed at compile time, as `statuses.contains("paid")`, or
+/// where `receiver` is a literal of such strings, as `["paid", "due"].contains(order.status)`.
+fn report_collection_selection<A>(
+    context: &mut Context<'_, '_, A>,
+    artifacts: &AnalysisArtifacts,
+    method: &str,
+    receiver: &Expression<'_>,
+    value: &Expression<'_>,
+    span: Span,
+) where
+    A: Arena,
+{
+    let value_type = artifacts.get_expression_type(value);
+    let selection = format!("`{method}`");
+    if value_type.is_some_and(is_compile_time_string) {
+        report_selection(context, &selection, receiver, value, None, span);
+    } else if value_type.is_some_and(TUnion::has_string)
+        && let Expression::Array(literal) = receiver.unparenthesized()
+        && !literal.elements.is_empty()
+        && literal.elements.iter().all(|element| {
+            matches!(element, ArrayElement::Value(element)
+                if artifacts.get_expression_type(element.value).is_some_and(is_compile_time_string))
+        })
+    {
+        report_selection(context, &selection, value, receiver, None, span);
+    }
+}
+
+/// Spec section 24: `equals` of two strings, one fixed at compile time, selects one of a closed set of values as `==`
+/// does, whichever of `receiver` and `other` is fixed.
+fn report_text_selection<A>(
+    context: &mut Context<'_, '_, A>,
+    artifacts: &AnalysisArtifacts,
+    receiver: &Expression<'_>,
+    other: &Expression<'_>,
+    span: Span,
+) where
+    A: Arena,
+{
+    let is_fixed = |side: &Expression<'_>| artifacts.get_expression_type(side).is_some_and(is_compile_time_string);
+    let (compared, fixed) = match (is_fixed(receiver), is_fixed(other)) {
+        (_, true) => (receiver, other),
+        (true, false) => (other, receiver),
+        (false, false) => return,
+    };
+    let empty_test = artifacts.get_expression_type(fixed).is_some_and(is_empty_text).then_some("isEmpty");
+
+    report_selection(context, "`equals`", compared, fixed, empty_test, span);
 }
 
 /// `receiver_type` as the collection member `metadata` reads its receiver, spec section 12: a member whose receiver is
@@ -991,6 +1070,35 @@ pub(crate) fn report_missing_function<A>(
             .with_note(format!("This often means the {kind_str} is misspelled, or not defined or autoloaded."))
             .with_help(format!("Check the spelling of `{name_str}`{place}.")),
     );
+}
+
+/// Spec section 23: a PHP# call of a plain PHP method or function whose `extern` line states its signature takes the
+/// line's parameters and gives its return type. Plain PHP's own calls keep the declaration's.
+fn with_extern_signature<'ctx, A>(
+    context: &Context<'ctx, '_, A>,
+    target: InvocationTarget<'ctx>,
+) -> InvocationTarget<'ctx>
+where
+    A: Arena,
+{
+    match target {
+        InvocationTarget::FunctionLike {
+            identifier,
+            metadata,
+            inferred_return_type,
+            effective_signature,
+            method_context,
+            span,
+        } if context.dialect.is_sharp() && !metadata.flags.is_sharp() => InvocationTarget::FunctionLike {
+            identifier,
+            metadata: context.codebase.get_extern_signature(&identifier).unwrap_or(metadata),
+            inferred_return_type,
+            effective_signature,
+            method_context,
+            span,
+        },
+        target => target,
+    }
 }
 
 fn get_function_like_target_inner<'ctx, A>(

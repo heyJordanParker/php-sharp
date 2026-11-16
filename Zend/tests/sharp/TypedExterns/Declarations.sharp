@@ -1,0 +1,7 @@
+namespace TypedExterns;
+
+import Lib.Routing;
+
+extern string Routing.route(RouteName name);
+extern string Routing.label(RouteName? name);
+extern string Routing.orderBy(keyof Order column);
