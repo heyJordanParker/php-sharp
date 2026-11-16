@@ -251,8 +251,8 @@ COPY --link --from=frankenphp-source /package/content/index.php /app/public/inde
 RUN ln /etc/caddy/Caddyfile /etc/frankenphp/Caddyfile && \
 	curl -sSLf \
 		-o /usr/local/bin/install-php-extensions \
-		https://github.com/mlocati/docker-php-extension-installer/releases/download/2.12.0/install-php-extensions && \
-	echo '3f49c71fa66c79b8b2b96bc0ce92885dafd7946f3b5a46f545b390d6f1617e2c  /usr/local/bin/install-php-extensions' | sha256sum -c && \
+		https://github.com/mlocati/docker-php-extension-installer/releases/download/2.13.2/install-php-extensions && \
+	echo '27fa8d80bd4e22feb9ddcadff1ca40c8f3e8ea942eb2dd8f446ed1afd2f2f0ab  /usr/local/bin/install-php-extensions' | sha256sum -c && \
 	chmod +x /usr/local/bin/install-php-extensions
 
 CMD ["--config", "/etc/frankenphp/Caddyfile", "--adapter", "caddyfile"]
