@@ -139,17 +139,24 @@ jobs:
           fi
           git fetch --depth=1 origin "$BASE"
           sharp/bin/check --changes "$BASE" >> "$GITHUB_OUTPUT"
-      # A push whose sharp/mago/Cargo.toml version differs from the last push run's is a release's bump: RELEASE_ASSETS
-      # builds its assets, and the tag on its commit publishes them.
+      # A push whose sharp/mago/Cargo.toml version differs from the last green push run's is a release's bump:
+      # RELEASE_ASSETS builds its assets, and the tag on its commit publishes them. A release whose push run failed gets
+      # its assets from the next push that passes, so its fix needs no second bump.
       - name: Find a release's bump
         id: bump
         if: github.event_name == 'push' && github.ref_type == 'branch'
         env:
-          BASE: ${{ steps.base.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           version() { git show "$1:sharp/mago/Cargo.toml" | sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q}'; }
-          base=${BASE:-HEAD^1}
-          git fetch --depth=2 origin "${BASE:-$GITHUB_SHA}"
+          base=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sharp.yml/runs?branch=master&event=push&status=success&per_page=100" \
+            --jq '[.workflow_runs[] | select(.id < (env.GITHUB_RUN_ID | tonumber))][0].head_sha // empty')
+          if [[ -n $base ]]; then
+            git fetch --depth=1 origin "$base"
+          else
+            base=HEAD^1
+            git fetch --depth=2 origin "$GITHUB_SHA"
+          fi
           old=$(version "$base")
           new=$(version HEAD)
           if [[ $old != "$new" ]]; then

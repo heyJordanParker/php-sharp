@@ -158,7 +158,11 @@ RUN set -eux; \
 	; \
 	make -j "$(nproc)"; \
 	find -type f -name '*.a' -delete; \
-	make install; \
+# PHP#: the PEAR installer comes from the PEAR project's own repository at a fixed commit, so an outage of pear.php.net,
+# which make install downloads it from by default, can't stop a release.
+	make install \
+		PEAR_INSTALLER_URL=https://raw.githubusercontent.com/pear/pearweb_phars/72aa5f771f56aaf826641b21159453f993e44450/install-pear-nozlib.phar \
+	; \
 	find \
 		/usr/local \
 		-type f \
