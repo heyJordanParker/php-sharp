@@ -104,10 +104,10 @@ PHP# ships its engine only as one runtime image: FrankenPHP on the thread-safe e
 `php --ri sharp` shows that a `php` is the PHP# engine. It prints the engine's version, and plain PHP prints `Extension 'sharp' not present.` and exits with status 1:
 
 ```text
-$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.16 php --ri sharp
+$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.17 php --ri sharp
 sharp
 
-Version => 0.6.16
+Version => 0.6.17
 
 Directive => Local Value => Master Value
 sharp.compile_command => no value => no value
@@ -127,10 +127,10 @@ A server whose PHP comes from its distribution, such as Ubuntu's packages, can't
 
 ### Extensions
 
-The image ships the extensions its release's `php -m` lists. For 0.6.16:
+The image ships the extensions its release's `php -m` lists. For 0.6.17:
 
 ```text
-$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.16 php -m
+$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.17 php -m
 [PHP Modules]
 bcmath
 Core
@@ -177,14 +177,14 @@ zlib
 Zend OPcache
 ```
 
-The list has no `pcntl`, which Laravel's queue worker needs to stop between jobs when `docker restart` signals it, and no driver for a database but SQLite. The app's image builds every other extension it needs with [`install-php-extensions`](https://github.com/mlocati/docker-php-extension-installer), which the image ships, as `pgsql`, `redis`, `imagick`, `gd`, `exif` and `pcntl` build on 0.6.16.
+The list has no `pcntl`, which Laravel's queue worker needs to stop between jobs when `docker restart` signals it, and no driver for a database but SQLite. The app's image builds every other extension it needs with [`install-php-extensions`](https://github.com/mlocati/docker-php-extension-installer), which the image ships, as `pgsql`, `redis`, `imagick`, `gd`, `exif` and `pcntl` build on 0.6.17.
 
 ### The app's image
 
 The app builds its own image on the release, with its extensions, the production `php.ini` and its own ini settings:
 
 ```dockerfile
-FROM ghcr.io/heyjordanparker/php-sharp:0.6.16
+FROM ghcr.io/heyjordanparker/php-sharp:0.6.17
 RUN install-php-extensions pcntl redis
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 COPY app.ini "$PHP_INI_DIR/conf.d/"
