@@ -5351,7 +5351,8 @@ static void sharp_add_modifiers(
 /* The type the property `info` declares, read on a class value of `ce` whose type arguments are `arguments`, as
  * sharp_declared_types reads it, with what writes it and its modifiers in `words`, as a line of sharp_declared spells
  * them and sharp_add_modifiers adds them: its PHP# declaration as its class writes it, or its PHP declaration, whose
- * `readonly` has no writer, and whose write takes its set visibility. */
+ * `readonly` has no writer, and whose write takes its set visibility. A PHP# field's words end with `field`, by which
+ * `Class<T>.fields()` and `properties()` tell it from a property, spec section 25. */
 static const sharp_type *sharp_property_declared_type(
 	const zend_property_info *info, const zend_class_entry *ce, const sharp_type *arguments, smart_str *words)
 {
@@ -5383,6 +5384,9 @@ static const sharp_type *sharp_property_declared_type(
 		replaces = parent && !(parent->flags & ZEND_ACC_PRIVATE);
 	}
 	sharp_add_modifiers(words, info->flags, info->ce, plain, replaces);
+	if (info->flags & ZEND_ACC_FIELD) {
+		sharp_add_word(words, "field");
+	}
 	const sharp_type *types = sharp_declared_types(line.type, line.type_length, info->ce, ce, arguments);
 	smart_str_free(&written);
 	smart_str_free(&key);
@@ -6153,6 +6157,36 @@ static void sharp_static_accessor_call(const zend_execute_data *caller, zend_fun
 	zend_call_known_function(accessor, NULL, ce, return_value, value ? 1 : 0, value, NULL);
 }
 
+/* The static `name` of `ce` as code in `scope` reads it directly, or NULL with an exception. */
+static zval *sharp_static_read(zend_class_entry *scope, zend_class_entry *ce, zend_string *name)
+{
+	const zend_class_entry *outer = EG(fake_scope);
+	EG(fake_scope) = scope;
+	zval *read = zend_read_static_property_ex(ce, name, false);
+	EG(fake_scope) = outer;
+
+	return EG(exception) ? NULL : read;
+}
+
+/* The write of `value` into the storage of the static `name` of `ce` by code in `scope`, as a direct write reaches it,
+ * with the value checked against its type in strict mode, or an exception. zend_update_static_property_ex writes in the
+ * scope of the class it writes, and checks the value loosely. */
+static void sharp_static_write(zend_class_entry *scope, zend_class_entry *ce, zend_string *name, zval *value)
+{
+	zend_property_info *info;
+	const zend_class_entry *outer = EG(fake_scope);
+	EG(fake_scope) = scope;
+	zval *slot = zend_std_get_static_property_with_info(ce, name, BP_VAR_W, &info);
+	EG(fake_scope) = outer;
+	zval written;
+	ZVAL_COPY(&written, value);
+	if (!slot || (ZEND_TYPE_IS_SET(info->type) && !zend_verify_property_type(info, &written, true))) {
+		zval_ptr_dtor(&written);
+		return;
+	}
+	zend_assign_to_variable(slot, &written, IS_TMP_VAR, true);
+}
+
 /* The read of the property `name` that `class_name` declares on `receiver`, or of the static `name`, into
  * `return_value`, by the code that called the standard library member whose body made the internal call
  * `execute_data`, see Sharp_Internal_read. A static whose accessors run as hidden static methods runs its `get`. */
@@ -6172,15 +6206,8 @@ static void sharp_reflected_read(zend_execute_data *execute_data, zend_object *r
 	}
 	zend_class_entry *scope = caller ? caller->func->common.scope : NULL;
 	zval value;
-	zval *read;
-	if (is_static) {
-		const zend_class_entry *outer = EG(fake_scope);
-		EG(fake_scope) = scope;
-		read = zend_read_static_property_ex(ce, name, false);
-		EG(fake_scope) = outer;
-	} else {
-		read = zend_read_property_ex(scope, receiver, name, false, &value);
-	}
+	zval *read = is_static ? sharp_static_read(scope, ce, name)
+		: zend_read_property_ex(scope, receiver, name, false, &value);
 	if (EG(exception) || !read) {
 		RETURN_THROWS();
 	}
@@ -6269,19 +6296,7 @@ static void sharp_reflected_write(zend_execute_data *execute_data, zend_object *
 		zend_throw_error(NULL, "Property %s::$%s is read-only", ZSTR_VAL(ce->name), ZSTR_VAL(name));
 		RETURN_THROWS();
 	}
-	/* zend_update_static_property_ex writes in the scope of the class it writes, and checks the value loosely. */
-	zend_property_info *info;
-	const zend_class_entry *outer = EG(fake_scope);
-	EG(fake_scope) = scope;
-	zval *slot = zend_std_get_static_property_with_info(ce, name, BP_VAR_W, &info);
-	EG(fake_scope) = outer;
-	zval written;
-	ZVAL_COPY(&written, value);
-	if (!slot || (ZEND_TYPE_IS_SET(info->type) && !zend_verify_property_type(info, &written, true))) {
-		zval_ptr_dtor(&written);
-		RETURN_THROWS();
-	}
-	zend_assign_to_variable(slot, &written, IS_TMP_VAR, true);
+	sharp_static_write(scope, ce, name, value);
 }
 
 /* Spec section 25: `Property.set(receiver, value)`, the write of `value` into the property `name` that `class` declares
@@ -6308,6 +6323,178 @@ ZEND_FUNCTION(Sharp_Internal_write)
 	ZEND_PARSE_PARAMETERS_END();
 
 	sharp_reflected_write(execute_data, receiver, class_name, name, value, before_load, return_value);
+}
+
+/* Whether the next use of the statics of `ce` runs code a project wrote, spec section 6: the `#statics` of `ce` or of a
+ * class above it, which sets their initial values that aren't constant when the request builds them, or a static
+ * constructor that has not run yet, see zend_sharp_static_constructors. */
+static bool sharp_statics_run_code(zend_class_entry *ce)
+{
+	for (zend_class_entry *declaring = ce; declaring; declaring = declaring->parent) {
+		const zend_function *initializer = zend_hash_str_find_ptr(&declaring->function_table, ZEND_STRL("#statics"));
+		if (!initializer || initializer->common.scope != declaring) {
+			continue;
+		}
+		const zval *state = sharp_static_constructor_state(declaring);
+		if (!CE_STATIC_MEMBERS(declaring) || (state && Z_TYPE_P(state) == IS_TRUE)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/* Whether code in `scope` reaches the write of the property `info` by its set visibility, which PHP checks in its
+ * handler and a hook trampoline passes, as zend_asymmetric_property_has_set_access decides, with PHP's Error for a
+ * write it can't make. */
+static bool sharp_reaches_set(const zend_property_info *info, const zend_class_entry *scope, zend_string *name)
+{
+	if (!(info->flags & ZEND_ACC_PPP_SET_MASK)
+		|| ((info->flags & ZEND_ACC_PRIVATE_SET) ? scope == info->ce
+			: zend_check_protected(info->prototype->ce, scope))) {
+		return true;
+	}
+	zend_throw_error(NULL, "Cannot modify %s(set) property %s::$%s from %s%s",
+		(info->flags & ZEND_ACC_PRIVATE_SET) ? "private" : "protected", ZSTR_VAL(info->ce->name), ZSTR_VAL(name),
+		scope ? "scope " : "global scope", scope ? ZSTR_VAL(scope->name) : "");
+
+	return false;
+}
+
+/* Whether the PHP# line of the property `info`, named `name`, gives it `init`, spec section 6.1, by which its words
+ * open, as `init protected`. */
+static bool sharp_is_init(const zend_property_info *info, zend_string *name)
+{
+	smart_str key = {0};
+	smart_str_appendc(&key, '$');
+	smart_str_append(&key, name);
+	smart_str_0(&key);
+	sharp_declared_member line;
+	bool found = sharp_declared_line(info->ce, ZSTR_VAL(key.s), ZSTR_LEN(key.s), &line);
+	smart_str_free(&key);
+
+	return found && line.words_length >= strlen("init") && memcmp(line.words, "init", strlen("init")) == 0
+		&& (line.words_length == strlen("init") || line.words[strlen("init")] == ' ');
+}
+
+/* Spec section 25: `Field.get(receiver)`, or with `value` `Field.set(receiver, value)`, the read or the write of the
+ * storage of the field or auto-property `name` that `class_name` declares, on `receiver`, or of the static `name`, by
+ * the code that called the standard library member whose body made the internal call `execute_data`, as .NET's
+ * FieldInfo.GetValue and SetValue reach a field. The code reaches the storage as a direct use from it would, and a
+ * written value is checked against its type as `Property.set` checks it, since `writeField` runs in strict mode
+ * (PHP_MINIT_FUNCTION). The storage of an `init` property takes a write only while it holds no value, as only the
+ * object's creation writes it. No code a project wrote runs: an accessor a subclass gives the storage runs no body, as
+ * ReflectionProperty::getRawValue reads through PHP's hook trampoline, and a lazy object that has not loaded or statics
+ * whose initial values have not run throw Error rather than running them. */
+static void sharp_storage_use(zend_execute_data *execute_data, zend_object *receiver, zend_string *class_name,
+	zend_string *name, zval *value, zval *return_value)
+{
+	const char *member = value ? "set" : "get";
+	const char *use = value ? "writes" : "reads";
+	bool is_static;
+	zend_class_entry *ce = sharp_property_class(receiver, class_name, name, member, &is_static);
+	const zend_execute_data *caller = sharp_reflection_caller(execute_data);
+	if (!ce || !sharp_reaches_property(caller, ce, name)) {
+		RETURN_THROWS();
+	}
+	zend_class_entry *scope = caller ? caller->func->common.scope : NULL;
+	if (is_static) {
+		if (sharp_statics_run_code(ce)) {
+			zend_throw_error(NULL, "`%s` %s the storage of %s::$%s, and the statics of %s have not run their initial "
+				"values yet, which `%s` never runs", member, use, ZSTR_VAL(ce->name), ZSTR_VAL(name), ZSTR_VAL(ce->name),
+				member);
+			RETURN_THROWS();
+		}
+		if (value) {
+			sharp_static_write(scope, ce, name, value);
+			return;
+		}
+		zval *read = sharp_static_read(scope, ce, name);
+		if (!read) {
+			RETURN_THROWS();
+		}
+		RETURN_COPY_DEREF(read);
+	}
+	if (zend_object_is_lazy(receiver) && !zend_lazy_object_initialized(receiver)) {
+		zend_throw_error(NULL, "`%s` %s the storage of %s::$%s, and the lazy object has not loaded, which `%s` never "
+			"loads", member, use, ZSTR_VAL(ce->name), ZSTR_VAL(name), member);
+		RETURN_THROWS();
+	}
+	const zend_class_entry *outer = EG(fake_scope);
+	EG(fake_scope) = scope;
+	zend_property_info *info = zend_get_property_info(receiver->ce, name, false);
+	EG(fake_scope) = outer;
+	if (info == ZEND_WRONG_PROPERTY_INFO) {
+		RETURN_THROWS();
+	}
+	if (value && info && IS_VALID_PROPERTY_OFFSET(info->offset) && !Z_ISUNDEF_P(OBJ_PROP(receiver, info->offset))
+			&& sharp_is_init(info, name)) {
+		zend_throw_error(NULL, "`set` writes the storage of %s::$%s, which `init` lets the object's creation write "
+			"once, and it holds a value", ZSTR_VAL(info->ce->name), ZSTR_VAL(name));
+		RETURN_THROWS();
+	}
+	int kind = value ? ZEND_PROPERTY_HOOK_SET : ZEND_PROPERTY_HOOK_GET;
+	if (!info || !info->hooks || !info->hooks[kind]) {
+		if (value) {
+			zend_update_property_ex(scope, receiver, name, value);
+			return;
+		}
+		zval read;
+		zval *found = zend_read_property_ex(scope, receiver, name, false, &read);
+		if (EG(exception)) {
+			RETURN_THROWS();
+		}
+		if (found != &read) {
+			RETURN_COPY_DEREF(found);
+		}
+		if (Z_ISREF(read)) {
+			zend_unwrap_reference(&read);
+		}
+		RETURN_COPY_VALUE(&read);
+	}
+	if (value && !sharp_reaches_set(info, scope, name)) {
+		RETURN_THROWS();
+	}
+	zend_function *raw = zend_get_property_hook_trampoline(info, kind, name);
+	if (value) {
+		zend_call_known_instance_method_with_1_params(raw, receiver, NULL, value);
+	} else {
+		zend_call_known_instance_method_with_0_params(raw, receiver, return_value);
+	}
+}
+
+/* Spec section 25: `Field.get(receiver)`, see sharp_storage_use. */
+ZEND_FUNCTION(Sharp_Internal_readField)
+{
+	zend_object *receiver;
+	zend_string *class_name;
+	zend_string *name;
+
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_OBJ_OR_NULL(receiver)
+		Z_PARAM_STR(class_name)
+		Z_PARAM_STR(name)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_storage_use(execute_data, receiver, class_name, name, NULL, return_value);
+}
+
+/* Spec section 25: `Field.set(receiver, value)`, see sharp_storage_use. */
+ZEND_FUNCTION(Sharp_Internal_writeField)
+{
+	zend_object *receiver;
+	zend_string *class_name;
+	zend_string *name;
+	zval *value;
+
+	ZEND_PARSE_PARAMETERS_START(4, 4)
+		Z_PARAM_OBJ_OR_NULL(receiver)
+		Z_PARAM_STR(class_name)
+		Z_PARAM_STR(name)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_storage_use(execute_data, receiver, class_name, name, value, return_value);
 }
 
 /* The interned type `node`, a whole type read into `reader`'s arena, spells, for the request. */
@@ -13195,7 +13382,7 @@ static PHP_MINIT_FUNCTION(sharp)
 	/* PHP checks a call's arguments and a property's write in the mode of the code that makes them, and an internal
 	 * function's is coercive. Reflection's call and write run in strict mode, as a .sharp file's direct ones do, so
 	 * `invoke` refuses "3" for an `int` as the direct call does. */
-	static const char *const strict[] = {"sharp\\internal\\invoke", "sharp\\internal\\write"};
+	static const char *const strict[] = {"sharp\\internal\\invoke", "sharp\\internal\\write", "sharp\\internal\\writefield"};
 	for (size_t i = 0; i < sizeof(strict) / sizeof(strict[0]); i++) {
 		zend_function *func = zend_hash_str_find_ptr(CG(function_table), strict[i], strlen(strict[i]));
 		func->common.fn_flags |= ZEND_ACC_STRICT_TYPES;

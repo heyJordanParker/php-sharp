@@ -7,25 +7,27 @@ public class Report
     public List<string> describe()
     {
         List<string> lines = [];
-        for (const property of typeof(Product).properties()) {
-            const arguments = property.type.typeArguments().map(type => type.name());
-            const fields = property.attributes<Field>().map(field => `Field(${field.label ?? ""})`);
-            lines.add(`${property.name}: ${property.type.name()} arguments=[${arguments.join(", ")}] attributes=[${fields.join(", ")}]`);
+        for (const stored of typeof(Product).fields()) {
+            const arguments = stored.type.typeArguments().map(type => type.name());
+            const marks = stored.attributes<Field>().map(mark => `Field(${mark.label ?? ""})`);
+            lines.add(`${stored.name}: ${stored.type.name()} arguments=[${arguments.join(", ")}] attributes=[${marks.join(", ")}]`);
         }
+        const properties = typeof(Product).properties().map(property => property.name);
+        lines.add(`properties: ${properties.join(", ")}`);
         return lines;
     }
 
     public List<bool> compare()
     {
-        const properties = typeof(Product).properties();
+        const fields = typeof(Product).fields();
         return [
-            properties[0].type == typeof(List<string>),
-            properties[1].type == typeof(int?),
-            properties[0].type.typeArguments() == [typeof(string)],
-            properties[1].type.typeArguments() == [],
+            fields[0].type == typeof(List<string>),
+            fields[1].type == typeof(int?),
+            fields[0].type.typeArguments() == [typeof(string)],
+            fields[1].type.typeArguments() == [],
             typeof(Map<string, int>).typeArguments() == [typeof(string), typeof(int)],
             typeof(Product).typeArguments() == [],
-            properties[1].attributes<Object>().count() == 1,
+            fields[1].attributes<Object>().count() == 1,
         ];
     }
 }

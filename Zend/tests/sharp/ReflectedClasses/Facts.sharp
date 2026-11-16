@@ -58,7 +58,8 @@ public static class Facts
         ];
     }
 
-    // What writes each property: its set visibility, null for a get-only one, and whether it has an `init`.
+    // What writes each property: its set visibility, null for a get-only one, and whether it has an `init`. A field is
+    // no property.
     public static List<string> writers()
         => typeof(Dictionary).properties().map(
             property => `${property.name}: ${Facts.reach(property.setVisibility)} init=${property.isInitOnly ? "yes" : "no"}`

@@ -7,6 +7,8 @@ public static class Calls
 
     public static Property property(string name) => typeof(Till).properties().first(property => property.name == name);
 
+    public static Field field(string name) => typeof(Till).fields().first(stored => stored.name == name);
+
     public static Any? nearFromInside(Till till) => Calls.method("near").invoke(till, []);
 
     public static Any? stockFromInside(Till till) => Calls.property("stock").get(till);

@@ -1,0 +1,28 @@
+namespace Fields;
+
+// Each kind of member a class declares, beside the storage `fields()` gives of it.
+public class Row : Entry
+{
+    private int total = 3;
+
+    private static int made = 0;
+
+    public static int loads { get; set; } = 0;
+
+    public string name { get; set; } = "row";
+
+    public string code { get; init; } = "plain";
+
+    public virtual int level { get; set; } = 1;
+
+    public string note { get; set => field = value.trim(); } = "";
+
+    public int doubled => this.total * 2;
+
+    public int sum => this.total;
+
+    public static Any? readTotal(Row row) => typeof(Row).fields().first(field => field.name == "total").get(row);
+
+    public static void writeTotal(Row row, int value)
+        => typeof(Row).fields().first(field => field.name == "total").set(row, value);
+}

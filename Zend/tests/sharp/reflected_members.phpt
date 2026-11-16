@@ -119,7 +119,7 @@ array(10) {
 }
 array(16) {
   [0]=>
-  array(6) {
+  array(5) {
     [0]=>
     string(5) "count"
     [1]=>
@@ -127,10 +127,8 @@ array(16) {
     [2]=>
     string(6) "hidden"
     [3]=>
-    string(6) "issued"
-    [4]=>
     string(6) "serial"
-    [5]=>
+    [4]=>
     string(5) "label"
   }
   [1]=>
