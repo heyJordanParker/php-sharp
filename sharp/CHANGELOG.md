@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.19] - 2026-11-16
+
 ### Upgrading from 0.6.18
 
 - `Class<T>.properties()` lists properties and no field, spec section 25, and `Class<T>.fields()` lists what an object stores. Code that read fields through `properties()` reads them through `fields()`, whose `Field` has the `name`, `type`, `declaringClass`, `visibility`, `isStatic`, `hasDefaultValue`, `defaultValue()`, `attributes<T>()`, `isInitialized`, `get` and `set` a `Property` has.
@@ -1126,7 +1128,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.18...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.19...HEAD
+[0.6.19]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.18...v0.6.19
 [0.6.18]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.17...v0.6.18
 [0.6.17]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.16...v0.6.17
 [0.6.16]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.15...v0.6.16
