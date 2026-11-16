@@ -230,7 +230,7 @@ gate_mago_checks() {
 
 # The PHP# suite on the thread-safe engine, in the sharp/docker image, in the three modes, with the census, the
 # differential, PHPUnit, the whole-project proof of mago convert, and every rule and example of sharp/bin/spec, which
-# CI's LINUX, UPSTREAM and SPEC jobs share.
+# CI's LINUX and SPEC jobs share.
 gate_linux() {
   step sharp/bin/build --linux
   step sharp/bin/test --linux --census --differential --phpunit --spec
@@ -293,7 +293,7 @@ gate_generated() {
   step sharp_unit_header
 }
 
-# sharp/mago's workspace tests, in the sharp/docker image, as mago.yml's tests jobs run them in five slices.
+# sharp/mago's workspace tests, in the sharp/docker image, as mago.yml's tests jobs run them in four slices.
 gate_mago_tests() {
   step sharp/bin/test --linux --mago
 }

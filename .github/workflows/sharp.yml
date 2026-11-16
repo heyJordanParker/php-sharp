@@ -28,10 +28,11 @@ jobs:
   # A pull request runs the Linux suites, each job on 4 cores. The push to master runs what needs the Mac, the arm64
   # Linux suite, the runtime image and, for a release's bump, the release assets, and saves the caches every pull
   # request's run restores. A defect only those find lands on master first, and a red push opens an issue, as CI_PASSED
-  # does, for a pull request that fixes it forward. GitHub runs 20 of the account's hosted jobs at once, and a job past
-  # them waits: a pull request's runs hold 17 at most, and a push run whose tree passed on its pull request holds 3, and
-  # a fourth while mago.yml's checks run, which on a pull request run beside patch-coverage, since one after the other
-  # they took 13.4 minutes on pull request #337.
+  # does, for a pull request that fixes it forward. GitHub runs 20 of the account's hosted jobs at once, across all its
+  # repositories, and a job past them waits: a pull request's runs hold 14 at most, and a push run whose tree passed on
+  # its pull request holds 3, and a fourth while mago.yml's checks run, which on a pull request run beside
+  # patch-coverage, since one after the other they took 13.4 minutes on pull request #337. With 17, release pull
+  # request #343's SPEC (2/5) waited 5 minutes for a runner.
   #
   # A tree runs the Linux suites once, as bors's "not rocket science" rule tests the exact tree that lands once. A push
   # to master skips them when a pull request's run passed them all on its tree, as .github/actions/passed-tree explains,
@@ -185,13 +186,14 @@ jobs:
   # Each of those jobs compiles through ccache in the image, which sharp/docker/run passes CC and CXX into, with its
   # folder at sharp/build/cache/ccache, under the XDG_CACHE_HOME sharp/docker/run sets.
   #
-  # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in three slices, each without opcache, in shared
+  # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in two slices, each without opcache, in shared
   # memory twice per process, and under the tracing JIT production runs with the opcache. The slices balance by the
   # seconds sharp/baseline/seconds lists, and the one that weighs least runs mago convert's whole-project proof, as
-  # sharp/bin/test explains. The second slice also runs the census, the differential and PHPUnit, and the third the
-  # checks of generated files.
+  # sharp/bin/test explains. The first slice also runs sharp/bin/spec's self-test, and the second the census, the
+  # differential, PHPUnit and the checks of generated files. Each slice first builds the engine and mago, which took
+  # 3.7 to 3.9 minutes of release pull request #343's run, where three slices then tested for 101, 145 and 144 seconds.
   LINUX:
-    name: LINUX (${{ matrix.shard }}/3)
+    name: LINUX (${{ matrix.shard }}/2)
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
     runs-on: ubuntu-24.04
@@ -202,7 +204,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2]
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
@@ -217,13 +219,21 @@ jobs:
         uses: ./.github/actions/linux-build
       - name: Test PHP#
         run: >-
-          sharp/bin/test --linux --shard ${{ matrix.shard }}/3
+          sharp/bin/test --linux --shard ${{ matrix.shard }}/2
           ${{ matrix.shard == 2 && '--census --differential --phpunit' || '' }}
+      # sharp/bin/test --spec runs the self-test with every example, which SPEC checks in slices, so this runs the
+      # self-test alone, with the mago sharp/bin/test built, as sharp/bin/test passes it.
+      - name: Check sharp/bin/spec's rules on sharp/spec-self-test.md
+        if: matrix.shard == 1
+        run: |
+          build="sharp/build/linux-$(uname -m)"
+          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --self-test
       - name: Verify the generated files, and that no Cargo.lock names a local source
-        if: matrix.shard == 3
+        if: matrix.shard == 2
         run: sharp/bin/check generated
-  # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before, and
-  # sharp/bin/spec's rules on the examples of sharp/spec-self-test.md, on the same build.
+  # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before. On
+  # release pull request #343 its build and tests took 8.8 minutes, and sharp/bin/spec's self-test 77 seconds more, which
+  # alone held the run past 10 minutes, so the self-test runs in LINUX (1/2).
   UPSTREAM:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
@@ -244,17 +254,12 @@ jobs:
         uses: ./.github/actions/linux-build
       - name: Test upstream
         run: sharp/bin/test --linux --upstream
-      # sharp/bin/test --spec runs the self-test with every example, which SPEC checks in slices, so this runs the
-      # self-test alone, with the mago sharp/bin/test built, as sharp/bin/test passes it.
-      - name: Check sharp/bin/spec's rules on sharp/spec-self-test.md
-        run: |
-          build="sharp/build/linux-$(uname -m)"
-          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --self-test
-  # Every code example in docs/spec.md and README.md, compared with sharp/baseline/spec, in five slices of the examples.
+  # Every code example in docs/spec.md and README.md, compared with sharp/baseline/spec, in four slices of the examples.
   # Each slice runs sharp/bin/spec on the engine with the mago sharp/bin/build-mago builds, as sharp/bin/test --spec does.
-  # In three slices they took 188, 240 and 335 seconds of pull request #332's run, the longest tests of any suite job.
+  # Each slice first builds the engine and mago, which took 3.7 to 4.7 minutes of release pull request #343's run, where
+  # five slices then checked their examples in 123 to 161 seconds.
   SPEC:
-    name: SPEC (${{ matrix.shard }}/5)
+    name: SPEC (${{ matrix.shard }}/4)
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
     runs-on: ubuntu-24.04
@@ -265,7 +270,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4]
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
@@ -281,7 +286,7 @@ jobs:
       - name: Check the examples of docs/spec.md and README.md
         run: |
           build="sharp/build/linux-$(uname -m)"
-          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/5
+          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/4
   # The fixture in sharp/hosts, served from FrankenPHP's worker mode. HOSTS builds the engine FrankenPHP is built against
   # with Go, and mago itself, beside the suites, so it never waits for their tests. It runs on every push to master, even
   # one whose tree a pull request's run passed, because that push's HOSTS saves what every pull request's run restores:
