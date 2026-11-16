@@ -7,7 +7,8 @@ FROM ${BASE_IMAGE}
 
 # procps gives sharp/bin/build-mago's prune pgrep and ps, which find a process running from the build folder. ccache
 # compiles the engine in CI, which sets CC and CXX to it, and a build without them compiles as before. Composer runs on
-# Debian's php-cli, so php-bcmath gives it the ext-bcmath heyjordanparker/php-sharp-composer requires.
+# Debian's php-cli, so php-bcmath and php-zip give it the ext-bcmath and ext-zip heyjordanparker/php-sharp-composer
+# requires.
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       autoconf \
@@ -22,6 +23,7 @@ RUN apt-get update \
       php-bcmath \
       php-cli \
       php-xml \
+      php-zip \
       pkg-config \
       procps \
       re2c \

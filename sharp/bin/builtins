@@ -573,6 +573,32 @@ foreach (['__construct', 'createFromFormat', 'modify'] as $member) {
 // Decimal and BigInteger, which are structs and so pure, run on it.
 $imports[] = 'import BcMath.Number;';
 $externs[] = 'extern Number;';
+// A ZIP archive reads and writes the file it opened, so each member has `Files`, and so does each member of the
+// standard library's Sharp.IO.ZipArchive, which runs on it.
+$imports[] = 'import ZipArchive;';
+$externs[] = 'extern ZipArchive uses Files;';
+// The reflection members the standard library calls that only read a declaration or an object's state run no code a
+// project wrote, so `Property.isInitialized` and `Property.hasDefaultValue`, which call only these, are pure. A line
+// names the class that declares the member, and covers each subclass that inherits it, as `ReflectionMethod` inherits
+// `getAttributes`. `ReflectionProperty::isInitialized` and `ReflectionClass::hasProperty` load a lazy object they are
+// given, and the standard library asks them only of a loaded object or of a class. The members that run a project's
+// code, `ReflectionAttribute::newInstance`, `ReflectionMethod::invoke` and `ReflectionParameter::getDefaultValue`,
+// take no line, so each keeps every effect. So does `ReflectionProperty::getHook`: an object a declared call returns
+// carries that call's effects, so a pure line on it would make `ReflectionMethod::invoke` pure.
+$reflection = [
+    'ReflectionClass' => ['__construct', 'getAttributes', 'hasMethod', 'hasProperty', 'isUninitializedLazyObject'],
+    'ReflectionClassConstant' => ['__construct', 'getAttributes'],
+    'ReflectionFunctionAbstract' => ['getAttributes'],
+    'ReflectionMethod' => ['__construct'],
+    'ReflectionParameter' => ['__construct', 'getAttributes', 'isDefaultValueAvailable'],
+    'ReflectionProperty' => ['__construct', 'getAttributes', 'getDefaultValue', 'hasDefaultValue', 'isInitialized', 'isLazy'],
+];
+foreach ($reflection as $class => $members) {
+    $imports[] = "import $class;";
+    foreach ($members as $member) {
+        $externs[] = "extern $class.$member;";
+    }
+}
 
 $license = file_get_contents("$stubs/LICENSE");
 $notice = implode("\n", array_map(static fn (string $line): string => rtrim("// $line"), explode("\n", trim($license))));

@@ -1,5 +1,5 @@
 --TEST--
-An [Import] method runs the PHP function it names: each Map argument passes as a PHP array, at every depth and whatever type holds it, the result crosses into the declared type, renumbered or made a Map, a result of another type throws a TypeError naming the function, and a function PHP doesn't declare throws at the call. A plain PHP function takes each Map as a PHP array too, held as Any?, in a List, in a union or as a generic member's type parameter, and a result whose conditional type resolves to array_slice's int-keyed branch arrives as a List renumbered from 0
+An [Import] method runs the PHP function it names: each Map argument passes as a PHP array, at every depth and whatever type holds it, the result crosses into the declared type, renumbered or made a Map, a result of another type throws a TypeError naming the function, and a function PHP doesn't declare throws at the call. A plain PHP function takes each Map as a PHP array too, held as Any?, in a List, in a union or as a generic member's type parameter, and a result whose conditional type resolves to array_slice's int-keyed branch arrives as a List renumbered from 0. A nullable result reads the false file_get_contents and stream_get_contents return for a failure as null, without PHP's warning
 --FILE--
 <?php
 require __DIR__ . '/harness/fixture.inc';
@@ -7,6 +7,7 @@ require __DIR__ . '/harness/Arrays.inc';
 fixture('Imports');
 
 use Imports\Report;
+use Imports\Words;
 
 var_dump(Report::distance());
 var_dump(Report::unique());
@@ -15,6 +16,13 @@ var_dump(Report::keys());
 var_dump(Report::heldMaps());
 var_dump(Report::passedMaps());
 var_dump(Report::sliced());
+$path = sys_get_temp_dir() . '/sharp-imported-read-' . getmypid() . '.txt';
+file_put_contents($path, 'imported');
+var_dump(Words::read($path), Words::read("$path.missing"));
+unlink($path);
+$memory = fopen('php://memory', 'w+');
+fwrite($memory, 'streamed');
+var_dump(Words::contents($memory, null, 0), Words::contents(fopen('php://output', 'w'), null, 1));
 foreach (['repeated', 'missing'] as $method) {
     try {
         Report::$method();
@@ -77,5 +85,9 @@ array(4) {
   [3]=>
   int(2)
 }
+string(8) "imported"
+NULL
+string(8) "streamed"
+NULL
 TypeError: str_repeat(): Return value must be of type int, string returned
 Error: Call to undefined function no_such_function()

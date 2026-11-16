@@ -693,10 +693,10 @@ jobs:
         platform: [linux/amd64, linux/arm64]
     env:
       EXTENSIONS: bcmath exif gd imagick intl pcntl pdo_pgsql pgsql redis zip
-      # The same extensions but bcmath and intl, which the image builds, so sharp/bin/php-extensions checks the image's
-      # own. imagick and redis build from the release tags the image adds from GitHub, because pecl.php.net outages
-      # failed this job.
-      INSTALL: exif gd /usr/src/imagick pcntl pdo_pgsql pgsql /usr/src/phpredis zip
+      # The same extensions but bcmath, intl and zip, which the image builds, so sharp/bin/php-extensions checks the
+      # image's own. imagick and redis build from the release tags the image adds from GitHub, because pecl.php.net
+      # outages failed this job.
+      INSTALL: exif gd /usr/src/imagick pcntl pdo_pgsql pgsql /usr/src/phpredis
     steps:
       # For .github/actions/boot-image and sharp/bin/php-extensions. The build fetches its own context.
       - name: git checkout

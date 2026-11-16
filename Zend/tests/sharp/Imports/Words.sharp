@@ -28,6 +28,12 @@ public static class Words
     [Import("array_column")]
     public static List<string> column(List<Map<string, string>>|Map<string, string> rows, string key);
 
+    [Import("file_get_contents")]
+    public static string? read(string path) uses Files;
+
+    [Import("stream_get_contents")]
+    public static string? contents(Any stream, int? length, int offset) uses Files;
+
     [Import("no_such_function")]
     public static void missing();
 }

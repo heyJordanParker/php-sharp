@@ -30,6 +30,8 @@ echo --enable-mbstring
 echo --enable-intl
 # PHP#: the standard library's Decimal and BigInteger run on bcmath's BcMath\Number, so every engine builds it
 echo --enable-bcmath
+# PHP#: the standard library's Sharp.IO.ZipArchive runs on zip's ZipArchive, so every engine builds it
+echo --with-zip
 # --enable-mysqlnd is included here because it's harder to compile after the fact than extensions are (since it's a plugin for several extensions, not an extension in itself)
 echo --enable-mysqlnd
 # https://wiki.php.net/rfc/argon2_password_hash
