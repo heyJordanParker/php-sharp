@@ -201,6 +201,11 @@ jobs:
   # slow tests spreads over the 4 jobs, and the last also runs the doc tests and the property tests. Each job first pulls
   # the image and builds the test binaries, which took 2.5 to 2.9 minutes of release pull request #343's run, where five
   # jobs then tested for 149 to 249 seconds.
+  #
+  # A crate whose build script compiles C, such as ring or tree-sitter, rebuilds with every crate above it when CC or
+  # CXX differs from the build the target holds, so the job sets the ccache compilers sharp.yml's jobs build the target
+  # with. Without them, each job of pull request #344 rebuilt every Mago crate for up to 2.3 minutes, with no file
+  # changed.
   tests:
     name: tests (${{ matrix.shard }}/4)
     needs: CHANGES
@@ -226,6 +231,8 @@ jobs:
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+      CC: ccache gcc
+      CXX: ccache g++
 
     steps:
       - name: checkout
