@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls Sharp.Encoding.Json: parse gives objects as maps and throws JsonException on invalid JSON, decode<T> reads a struct and a nested struct through T's parse and throws its InvalidFields for a bad field and a ValueError for JSON that holds no object, and encode writes a Map as an object and a List as an array, a struct key through its toString(), floats with their fraction, and slashes and Unicode as they are, and the checker's mark on encode's parameter never reaches the code that runs
+A PHP# class calls Sharp.Encoding.Json: parse gives objects as maps and throws JsonException on invalid JSON, decode<T> reads a struct and a nested struct through T's parse and throws its InvalidFields for a bad field and for JSON that holds no object, and encode writes a Map as an object and a List as an array, a struct key through its toString(), floats with their fraction, and slashes and Unicode as they are, and the checker's mark on encode's parameter never reaches the code that runs
 --FILE--
 <?php
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Json.sharp';
@@ -74,7 +74,7 @@ object(Demo\JsonPoint)#%d (1) {
 Demo\JsonOrder 7 new,vip Demo\JsonPoint 2
 Sharp\InvalidFields: x: expected int, got string 'four'
 Sharp\InvalidFields: x: missing
-ValueError: Json.decode: the JSON text holds no object, and a struct or a class is read from one
+Sharp\InvalidFields: expected Demo.JsonPoint, got int 3
 JsonException: Syntax error
 {}
 []

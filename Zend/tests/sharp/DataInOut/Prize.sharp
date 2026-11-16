@@ -1,0 +1,6 @@
+namespace DataInOut;
+
+public struct Prize
+{
+    public Prize(public Voucher|Coupon first { get; }, public List<Coupon|Voucher> rest { get; }) { }
+}

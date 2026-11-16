@@ -269,7 +269,7 @@ public class Billing {
     public const Function<int(int)> DOUBLE = (int x) => x * 2;             // compiles: a lambda that captures nothing
     public const string PLAN_LABEL = match (Billing.DEFAULT_PLAN) {        // compiles: a match on constants
         Plan.Free => "free plan",
-        default => "paid plan",
+        Plan.Pro => "paid plan",
     };
     public const int RATE = Rates.current();                               // compile error: a constant's value is known before the code runs, and Rates.current() runs code
     public const Money PRICE = new Money(999);                             // compile error: a constant's value is known before the code runs, and new Money(999) runs code
@@ -386,6 +386,7 @@ Checkout.maximum;
   - Too narrow is a compile error at the caller.
   - Too wide is a compile error in an application, for example a `public` member that nothing outside its namespace uses: "`Cart.recount` is public, and nothing outside `App.Shop` uses it." It runs in a project, a package whose `composer.json` says `"type": "project"`. A library's members are used by the projects that install it, which the checker never sees, so it never runs there. A constructor is exempt: `new` calls it, so it reaches as far as its class.
   - A use from plain PHP counts as one from PHP#, a callable array such as `[Carts::class, 'show']` included. A member counts as used when it carries an attribute whose class is marked `[DynamicallyAccessed]`, and every public member of a class counts as used when the class carries one: the framework that reads the attribute reaches the member through reflection, as a router reaches a `[Route]` method, which the checker never sees. The mark says what .NET's `[DynamicallyAccessedMembers]` says. It goes on an attribute class, in its declaration, as `#[\Sharp\DynamicallyAccessed]` in a plain PHP library's source, or on an `extern` line (section 29), and on a member it is a compile error. An `[Export]` method is exempt too, since plain PHP calls it through the global function it declares (section 23). Any other attribute, as PHP's `[Deprecated]`, `[Import]` or `[Key]`, says nothing about who uses the member, so the member is checked as one without it is. A public member only a view template uses is `internal`, since the checker never reads a template.
+- **A class of an application that nothing uses is a compile error,** as a plugin nothing wires in never runs: "Nothing uses `Ghost`, so it never runs." A class is used when code outside it creates it, binds it in a module, names it as a type, extends or implements it, or names it in `typeof` or an attribute, and a use from plain PHP counts. It runs in a project, as the too-wide error does, so a library's classes are exempt. A class that carries an attribute whose class is marked `[DynamicallyAccessed]`, or has a member that carries one, counts as used, as does a class with a listener, a method written with `on` (section 15), which runs when its event is emitted with nothing wired by hand. A class in a test folder counts as used, since its test runner creates it, as PHPUnit creates a test class. A class a framework finds by scanning folders does not: the application binds it or names it. A module and an enum's case are exempt.
 - **A public member of an application names its types.** In a project, the types of a `public` member's property, parameters and result hold no `Any`, `Any?` or `Object` at any depth, as TypeScript's `noImplicitAny` keeps `any` out of an app's API: `public Map<string, Any> checkoutPayload()` is a compile error, "`Store.checkoutPayload` is public, and a public member of an application names its types: `Any` in `Map<string, Any>`." A type parameter is a named type, so `public T first<T>(List<T> items)` compiles. An interface's members count. An `internal` or private member, an `internal` class's members and a library's are exempt, and an override keeps its parent's types, so an override of a plain PHP method that takes `mixed` takes `Any?`. A value of an unknown shape is named by a struct that parses it (section 10).
 - **There is no named reach,** such as `internal(App\Tenant)`. A helper shared by sibling namespaces moves to their parent namespace.
 
@@ -1253,6 +1254,8 @@ RenewRequest? maybe = RenewRequest.tryParse(payload);   // null on any bad field
 - A `List` checks each element.
 - An enum parses from its value.
 - A missing key for a `T?` parameter reads as null.
+- A value as text, a class with a static `parse(string)` and a `toString()`, as `Decimal` and `Instant` (section 24), reads through its own `parse`, so `"1.50"` is a `Decimal`. Its error message is the field's problem.
+- A field of a union of classes, as `Voucher|Coupon`, reads as the first member, in the order the field writes them, that reads the value with no problem.
 
 An object's public properties parse the same way as a `Map`'s keys, so a row object from plain PHP becomes a checked struct:
 
@@ -1274,6 +1277,66 @@ public class OrderRecord
 
 OrderRecord record = OrderRecord.parse(row);   // a class parses the same way, by its main constructor's parameters, then every property an initializer may set; throws: "id: expected int, got string 'abc'"
 ```
+
+**`Json.encode` writes a struct or a class by the fields its `parse` reads,** so one declaration governs reading and writing. Each field is written under its key, a value as text as its `toString()`, and a field marked `[Key(omitNull: true)]` is left out when it is null. A missing key of such a field reads as null. A main constructor parameter that holds no property can't be written, so `Json.encode` of a type whose `parse` reads one is a compile error that names the parameter: "`Json.encode` writes `Price` from the properties its `parse` reads, and the main constructor parameter `cents` holds no property."
+
+**A family is a sealed interface, an abstract class or an enum whose cases carry data, marked `[Tag("type")]`.** Each variant below it, a class, a struct or an enum case, names itself with `[Key("card")]`. The family's `parse` reads the variant whose name the input holds under the tag's key, and `Json.encode` writes a variant with its name under that key, so renaming a class never changes stored data. An interface holds no static method body, so an interface family's `parse` is called from PHP# code. `typeof(Self).withTag(name)` gives the variant's class (section 25).
+
+<!-- example data-in-out -->
+```csharp
+// app/Payments/PaymentMethod.sharp
+namespace App.Payments;
+
+import Sharp.Tag;
+
+[Tag("type")]
+public sealed interface PaymentMethod { }
+```
+
+<!-- example data-in-out -->
+```csharp
+// app/Payments/Card.sharp
+namespace App.Payments;
+
+import Sharp.Key;
+
+[Key("card")]
+public struct Card : PaymentMethod
+{
+    public Card(public string last4 { get; }) { }
+}
+```
+
+<!-- example data-in-out -->
+```csharp
+// app/Payments/Payment.sharp
+namespace App.Payments;
+
+import Sharp.Decimal;
+import Sharp.Key;
+
+public struct Payment
+{
+    public Payment(
+        [Key("return_url")] public string returnUrl { get; },
+        public Decimal amount { get; },
+        [Key(omitNull: true)] public string? coupon { get; },
+        public PaymentMethod method { get; },
+    ) { }
+}
+```
+<!-- run data-in-out
+import App.Payments.Card;
+import App.Payments.Payment;
+import Sharp.Decimal;
+import Sharp.Encoding.Json;
+Json.encode(new Payment("https://shop.test/done", Decimal.parse("1.50"), null, new Card("4242")));   // "{\"return_url\":\"https://shop.test/done\",\"amount\":\"1.50\",\"method\":{\"type\":\"card\",\"last4\":\"4242\"}}"
+-->
+
+- A variant without `[Key]` is a compile error: "`Cash` is a variant of `PaymentMethod` and gives no name for it."
+- Two variants of one family with one name are a compile error: "`Debit` and `Card` are both named `card` in `PaymentMethod`."
+- A field of a variant read by the tag's key is a compile error: "`type` is read twice: by the tag of `PaymentMethod` and the main constructor parameter `type`."
+- A name the family has no variant of is the problem of the tag's key: "type: expected bank or card, got string 'cash'". The names are listed in their order.
 
 ## 11. Generics
 
@@ -2718,7 +2781,66 @@ public class Booking : Model
 new Booking().guestName();    // "guest"
 -->
 
-**A field or property holding a `Function` is called like a method** when the class has no method with that name. A `.sharp` class cannot declare a method and a field or property with the same name, or inherit one from a `.sharp` class and declare the other, so `this.discount(…)` always has one meaning. A plain PHP class may declare both, as Eloquent's `Model` declares the field `$casts` and the method `casts()`. PHP runs a call of the name as the method and a read as the field, PHP# code does too, and a `.sharp` class below it overrides either one.
+**A `.sharp` class states the type of a property its plain PHP parent's `__get` gives with an `extern` property,** as in `public extern Collection<int, Product> products { get; }` on an Eloquent model. It reads only, holds no value, and takes no modifier but its access. PHP declares no property for it, so a read reaches `__get`. The read has the declared type, and the value `__get` gives is checked against it where it enters PHP#, so a value of another class throws `TypeError` there. It may share its name with a method, as a model's relation `products()` and the relation `products` its `__get` loads do, the one exception to the rule that one name declares one member. A class that inherits no `__get` has no such property, so an `extern` property there is a compile error.
+
+<!-- example extern-properties -->
+```php
+abstract class Catalogue
+{
+    public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
+}
+```
+
+<!-- example extern-properties -->
+```csharp
+// app/Listing.sharp
+namespace App;
+
+public class Listing : Catalogue
+{
+    public extern Contact seller { get; }
+
+    public Contact seller() => new Contact();
+
+    public string sellerName() => this.seller.name;      // compiles: the extern property types the read __get gives
+}
+```
+<!-- run extern-properties
+new Listing().sellerName();    // "seller"
+new Listing().seller().name;   // "Ada"
+-->
+
+<!-- example extern-property-errors -->
+```csharp
+// app/Banner.sharp
+namespace App;
+
+public class Banner
+{
+    public extern Contact seller { get; }               // compile error: `Banner.seller` is `extern`, the property a plain PHP `__get` gives, and `Banner` inherits no `__get`.
+}
+```
+
+<!-- example extern-property-shapes -->
+```php
+abstract class Catalogue
+{
+    public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
+}
+```
+
+<!-- example extern-property-shapes -->
+```csharp
+// app/Auction.sharp
+namespace App;
+
+public class Auction : Catalogue
+{
+    public extern Contact buyer { get; set; }           // compile error: An `extern` property is the one plain PHP's `__get` gives, so it is get-only
+}
+```
+
+**A field or property holding a `Function` is called like a method** when the class has no method with that name. A `.sharp` class cannot declare a method and a field or property with the same name, or inherit one from a `.sharp` class and declare the other, so `this.discount(…)` always has one meaning. An `extern` property is the exception, since PHP reads it through `__get` and never calls it. A plain PHP class may declare both, as Eloquent's `Model` declares the field `$casts` and the method `casts()`. PHP runs a call of the name as the method and a read as the field, PHP# code does too, and a `.sharp` class below it overrides either one.
 
 <!-- example function-fields: statements
 int price = 900;
@@ -3872,7 +3994,7 @@ public class PopupInteraction : Interaction { … }      // same namespace: allo
 ```
 
 - **Outside the namespace,** implementing it is a compile error.
-- **A `match` over it** needs no `default`, as long as it handles every implementer.
+- **A `match` over it** lists its implementers and takes no `default` (section 21).
 - **Adding an implementer** makes every `match` that does not handle it a compile error.
 
 Use an enum when the cases are small data. Use a sealed interface when each case is a full class with its own methods.
@@ -3900,7 +4022,7 @@ match (result) {
         this.deliver(order);
         Log.info(transactionId);
     },
-    default => {},
+    PaymentResult.Declined or PaymentResult.RequiresAction => {},
 }
 ```
 
@@ -3914,6 +4036,40 @@ match (result) {
 - **On a nullable enum, sealed interface or List,** such as a `Status?` or a `List<Money>?`, the arms handle `null` too.
 - **On any other value,** `match` must have a `default` arm.
 - **An arm with `when`** does not count toward covering a case.
+- **A `match` on a project's enum or sealed interface lists its cases,** nullable or not, so a case added later is a compile error at each `match` that misses it. Cases that share an arm are joined with `or`, as in `Status.Pending or Status.Failed => {}`, and `default` there is a compile error that names the cases it stands for: "A `match` on `TransactionStatus` lists its cases; missing: `TransactionStatus.Failed` and `TransactionStatus.Canceled`." A `match` on a plain PHP enum, or on an enum of an installed package, keeps `default`, because its library can add cases in an upgrade, as one on an `int` or a `string` does.
+
+<!-- example listed-cases -->
+```csharp
+// app/TransactionStatus.sharp
+namespace App;
+
+public enum TransactionStatus
+{
+    case Paid;
+    case Pending;
+    case Failed;
+    case Canceled;
+}
+```
+
+<!-- example listed-cases -->
+```csharp
+// app/Ledger.sharp
+namespace App;
+
+public class Ledger
+{
+    public static string state(TransactionStatus status) => match (status) {
+        TransactionStatus.Paid => "paid",
+        TransactionStatus.Pending or TransactionStatus.Failed or TransactionStatus.Canceled => "open",
+    };
+
+    public static string label(TransactionStatus status) => match (status) {
+        TransactionStatus.Paid or TransactionStatus.Pending => "open",
+        default => "closed",              // compile error: A `match` on `TransactionStatus` lists its cases; missing: `TransactionStatus.Failed` and `TransactionStatus.Canceled`.
+    };
+}
+```
 
 <!-- example match-coverage: statements
 Status status = Status.Active;
@@ -4160,6 +4316,8 @@ doubled is Function<int(int)>;               // true
 doubled is Function<string(string)>;         // false: the parameter and result types differ
 Legacy.doubler() is Function<int(int)>;      // compile error: the type of Legacy.doubler()'s function is unknown
 ```
+
+**A call of a function whose type is unknown compiles,** as a call to plain PHP with no declaration does: its arguments are not checked, its result is `Any?`, and it has an unknown effect (section 29), so `Legacy.doubler()(2)` compiles and a law that reaches it is a compile error. Only a type test of such a function is a compile error.
 
 **A plain PHP closure's type is its declared PHP signature,** as a plain PHP property's type is its declared one (section 25). A parameter it declares no type for takes anything, and a result it declares no type for is `Any?`, so `fn () => new Order()` is a `Function<Any?()>`, never a `Function<Order?()>`. Its type lists no effects, so it fits every `uses`, as the checker takes a plain PHP callable:
 
@@ -5428,6 +5586,7 @@ const point = (object)["x": 1];                   // parse error
 
 - **A JSON object** is a `Map` literal for a one-off payload, and a declared struct for a shape that repeats.
 - **`Json.encode` encodes by the value's PHP# type,** so a `Map` is a JSON object and a `List` is a JSON array wherever it is, below an `Any` too, even when empty, and even when a `Map`'s keys run from 0 to n. A `Map` is an object the engine tells apart from a `List` (section 12).
+- **A struct or a class is written by the fields its `parse` reads,** each under its key, a value as text such as `Decimal` as its `toString()`, `"1.50"`, and a family's variant with its name under the tag's key (section 10), so `Json.decode` reads back what `Json.encode` wrote.
 
 <!-- example json-encoding: statements
 import Sharp.Encoding.Json;
@@ -5478,7 +5637,7 @@ bool d = raw == other;             // compile error: other is an unchecked Any? 
 string a = `plan: ${raw}`;         // compile error: check raw with is, as or match first
 ```
 
-PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path: it reads a struct or a PHP# class through its `parse` (section 10), so a bad field throws the one error that lists every bad field, and a type `parse` can't read is a compile error. `Json.parse(body)` gives any JSON value as a `JsonValue`, whose `value` is the `Any?` it holds, and two `JsonValue`s are `==` when their values are, at every depth, as kotlinx's `JsonElement` and Rust's `serde_json::Value` compare:
+PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path: it reads any type a field `parse` reads can hold, as `List<Payment>`, the way a struct's `parse` reads that field (section 10), so a bad part throws the one error that lists every bad part, and a type `parse` can't read is a compile error. A number or a bool must be one in the JSON, so `"2"` is no `int`. `Query.decode<Search>("q=shoes&page=2")` reads a query string the same way, and since a query holds only text, it reads a number or a bool from its text, so `page` is `2` and `page=x` is the one problem "page: expected int, got string 'x'". `Json.parse(body)` gives any JSON value as a `JsonValue`, whose `value` is the `Any?` it holds, and two `JsonValue`s are `==` when their values are, at every depth, as kotlinx's `JsonElement` and Rust's `serde_json::Value` compare:
 
 <!-- example json-values: statements
 import Sharp.Encoding.Json;
@@ -5850,6 +6009,41 @@ ghost.id;                                                     // 7
 properties[1].isInitialized(ghost);                           // false
 ghost.owner;                                                  // "grace"
 ```
+
+**`withTag(name)` gives the variant of a family whose `[Key]` is `name`** (section 10), as a class value of the family, or null for a name the family has no variant of and for a class that is no family. It is pure, so a single-table-inheritance base builds the class a row stores with `new (typeof(Self).withTag(row.kind) ?? throw new ValueError(…))(…)`, which needs the base's constructor to be `required` (section 9).
+
+<!-- example with-tag -->
+```csharp
+// app/Shipping/Shipment.sharp
+namespace App.Shipping;
+
+import Sharp.Tag;
+
+[Tag("kind")]
+public abstract class Shipment
+{
+    public required Shipment(public string label { get; }) { }
+
+    public static Self fromRow(string kind, string label)
+        => new (typeof(Self).withTag(kind) ?? throw new ValueError(`No shipment is of the kind ${kind}.`))(label);
+}
+```
+
+<!-- example with-tag -->
+```csharp
+// app/Shipping/Letter.sharp
+namespace App.Shipping;
+
+import Sharp.Key;
+
+[Key("letter")]
+public class Letter : Shipment { }
+```
+<!-- run with-tag
+import App.Shipping.Shipment;
+Shipment.fromRow("letter", "to Bo").label;   // "to Bo"
+Shipment.fromRow("crate", "none");           // throws: "No shipment is of the kind crate."
+-->
 
 **Each reflection value keys a `Map` and joins a `Set` as the member it reflects,** however often reflection read it, as C#'s `MethodInfo`, `PropertyInfo` and `ParameterInfo` compare. Two `Method`s, two `Property`s, two `Field`s, two `Constant`s and two `Constructor`s are equal when one class declares them under one name, two `Parameter`s when they are one position of one method, two `EnumCase`s when they are one case of one enum, and two `TupleElement`s when they have one name, or none, and one type. Equal values share their `hash()`, so `Map<Method, List<Relation>>` compiles:
 
@@ -6479,7 +6673,7 @@ public class Money
 
 **A law's body is ordinary PHP#.** It holds `if` and `else`, `match` statements whose arms are blocks, locals, `return;`, and calls of laws as statements, and nothing else. It has no effects.
 
-- **Each `if` and each `match` arm is a case** that knows its condition, or its pattern and its `when` guard. A `match` in a body takes every arm a `match` takes, of a parameter of the law, a value a pattern of the body names, or a property of one.
+- **Each `if` and each `match` arm is a case** that knows its condition, or its pattern and its `when` guard. An arm that joins patterns with `or` is a case for each of them. A `match` in a body takes every arm a `match` takes, of a parameter of the law, a value a pattern of the body names, or a property of one.
 - **`return;` closes the case it ends.** The checker proves the claim there with what the case knows. So does the end of the body.
 - **A call of a law is a fact the case knows from then on:** the claim of that law for the call's arguments. Its arguments are any pure expressions.
 - **A law is reached through its class's name,** as a static method is, as `Money.addKeepsCurrency(m, x)`. A module's law is reached as `Module.name(…)` (section 32).
@@ -7363,7 +7557,10 @@ public enum PaymentError : Error
 {
     case Declined(string reason);
     case Expired;
-    public string message => match (this) { … };
+    public string message => match (this) {
+        PaymentError.Declined(string reason) => reason,
+        PaymentError.Expired => "card expired",
+    };
 }
 ```
 

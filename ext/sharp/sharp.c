@@ -7991,43 +7991,6 @@ static bool sharp_table_made_with(zend_execute_data *execute_data, zend_object *
 	return true;
 }
 
-/* Spec section 10: a struct's generated parse checks each parameter with the walk, as `\Sharp\Internal\accepts($type,
- * $value, $path, $problems)`. The type text is spelled for the user code that calls it, as sharp_caller_type_list
- * spells it, so a generic struct's parse can pass `List<$0>` or `List<#0>`. */
-ZEND_FUNCTION(Sharp_Internal_accepts)
-{
-	zend_string *type;
-	zval *value, *problems;
-	zend_string *path;
-
-	ZEND_PARSE_PARAMETERS_START(4, 4)
-		Z_PARAM_STR(type)
-		Z_PARAM_ZVAL(value)
-		Z_PARAM_STR(path)
-		Z_PARAM_ARRAY_EX(problems, 0, 1)
-	ZEND_PARSE_PARAMETERS_END();
-
-	const sharp_type *list = sharp_caller_type_list(execute_data, type, 1, 1);
-	if (!list) {
-		RETURN_THROWS();
-	}
-
-	sharp_type_problems found = {problems, {0}};
-	smart_str_append(&found.path, path);
-	bool accepts = sharp_type_accepts(list->members[0], value, &found);
-	smart_str_free(&found.path);
-	if (UNEXPECTED(EG(exception))) {
-		RETURN_THROWS();
-	}
-	const sharp_type *iterable = accepts ? sharp_type_lazily_checked(list->members[0], value) : NULL;
-	if (iterable) {
-		/* A bad element is named at its own path, as `rows[3] expected int, got string 'x'`. */
-		sharp_sequence_check(value, iterable, zend_string_copy(path));
-	}
-
-	RETURN_BOOL(accepts);
-}
-
 zval *sharp_static_constructor_state(zend_class_entry *ce)
 {
 	zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, sharp_static_constructor_key);
@@ -10678,21 +10641,34 @@ static bool sharp_listener_input_fits(const zval *input)
 /* Whether table is a table mago compile wrote: ['inputs' => [input, ...], 'listeners' => [row, ...], 'dispatcher' =>
  * null or [the workspace-relative path of the app's module that binds the dispatcher, its namespace in lowercase],
  * 'attributes' => [the lowercase name of a plain PHP class an `extern` line gives attributes => [the workspace-relative
- * path of each .sharp file whose line does, ...], ...]]. */
+ * path of each .sharp file whose line does, ...], ...], 'tags' => [a family's full name => [the key its `[Tag]` names,
+ * [a variant's name => its class's full name, ...]], ...]]. */
 static bool sharp_listener_table_fits(const zval *table)
 {
 	const zval *inputs = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "inputs", sizeof("inputs") - 1) : NULL;
 	const zval *listeners = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "listeners", sizeof("listeners") - 1) : NULL;
 	const zval *dispatcher = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "dispatcher", sizeof("dispatcher") - 1) : NULL;
 	const zval *attributes = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "attributes", sizeof("attributes") - 1) : NULL;
+	const zval *tags = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "tags", sizeof("tags") - 1) : NULL;
 	const zval *element, *file;
 	zend_string *class;
 
 	if (!inputs || Z_TYPE_P(inputs) != IS_ARRAY || !listeners || Z_TYPE_P(listeners) != IS_ARRAY || !dispatcher
 			|| (Z_TYPE_P(dispatcher) != IS_NULL && (!sharp_element(dispatcher, 0, IS_STRING) || !sharp_element(dispatcher, 1, IS_STRING)))
-			|| !attributes || Z_TYPE_P(attributes) != IS_ARRAY) {
+			|| !attributes || Z_TYPE_P(attributes) != IS_ARRAY || !tags || Z_TYPE_P(tags) != IS_ARRAY) {
 		return false;
 	}
+	ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(tags), class, element) {
+		const zval *variants = sharp_element(element, 1, IS_ARRAY);
+		if (!class || !sharp_element(element, 0, IS_STRING) || !variants) {
+			return false;
+		}
+		ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(variants), class, file) {
+			if (!class || Z_TYPE_P(file) != IS_STRING) {
+				return false;
+			}
+		} ZEND_HASH_FOREACH_END();
+	} ZEND_HASH_FOREACH_END();
 	ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(attributes), class, element) {
 		if (!class || Z_TYPE_P(element) != IS_ARRAY) {
 			return false;
@@ -11271,6 +11247,702 @@ static void sharp_listener_table_out_of_date(const zend_string *name)
 		SHARP_LISTENER_TABLE " is out of date: it lists %s, which no longer exists. Run vendor/bin/mago compile.",
 		ZSTR_VAL(written));
 	zend_string_release(written);
+}
+
+/* Spec section 10: the variants of the family `family`, each one's class name under its name, as mago compile writes
+ * them into the listener table, with the key the family's `[Tag]` names in `key`. NULL for a class that is no family
+ * the table lists, or after an exception reading the table threw. */
+static HashTable *sharp_family_variants(const zend_class_entry *family, zend_string **key)
+{
+	size_t root_length;
+
+	if (family->type != ZEND_USER_CLASS || !sharp_find_root(family->info.user.filename, &root_length)) {
+		return NULL;
+	}
+	HashTable *table = sharp_listener_table(ZSTR_VAL(family->info.user.filename), root_length);
+	if (!table) {
+		return NULL;
+	}
+	zval *row = zend_hash_find(Z_ARRVAL_P(zend_hash_str_find(table, "tags", sizeof("tags") - 1)), family->name);
+	if (!row) {
+		return NULL;
+	}
+	*key = Z_STR_P(sharp_element(row, 0, IS_STRING));
+
+	return Z_ARRVAL_P(sharp_element(row, 1, IS_ARRAY));
+}
+
+/* Throws that the listener table lists no variants of the family `family`, which a compile before its `[Tag]` wrote. */
+static ZEND_COLD void sharp_family_out_of_date(const zend_string *family)
+{
+	zend_throw_exception_ex(zend_ce_compile_error, 0,
+		SHARP_LISTENER_TABLE " is out of date: it lists no variants of the family %s. Run vendor/bin/mago compile.",
+		ZSTR_VAL(family));
+}
+
+/* Throws one Sharp\InvalidFields of `problems`, each problem under its path, as a struct's parse throws it. */
+static ZEND_COLD void sharp_throw_invalid_fields(zval *problems)
+{
+	zend_string *name = zend_string_init_interned("Sharp\\InvalidFields", sizeof("Sharp\\InvalidFields") - 1, false);
+	zend_class_entry *ce = zend_lookup_class(name);
+	zval exception;
+
+	if (!ce || object_init_with_constructor(&exception, ce, 1, problems, NULL) == FAILURE) {
+		return;
+	}
+	zend_throw_exception_object(&exception);
+}
+
+/* The value `value`, a struct's input, holds under `key`: an array's element, a Map's value or an object's public
+ * property, as a struct's parse reads a field. NULL where it holds none. */
+static zval *sharp_input_field(zval *value, zend_string *key, zval *read)
+{
+	ZVAL_DEREF(value);
+	if (Z_TYPE_P(value) == IS_ARRAY) {
+		return zend_symtable_find(Z_ARRVAL_P(value), key);
+	}
+	if (Z_TYPE_P(value) != IS_OBJECT) {
+		return NULL;
+	}
+	if (Z_OBJCE_P(value) == sharp_ce_map) {
+		zval lookup;
+		ZVAL_STR(&lookup, key);
+		sharp_table_bucket *bucket = sharp_table_find(sharp_table_of(Z_OBJ_P(value)), &lookup);
+
+		return bucket ? &bucket->value : NULL;
+	}
+	if (!zend_hash_exists(zend_get_properties_for(value, ZEND_PROP_PURPOSE_ARRAY_CAST), key)) {
+		return NULL;
+	}
+
+	return zend_read_property_ex(NULL, Z_OBJ_P(value), key, true, read);
+}
+
+/* Spec section 10: one read of a value into a type, the one place a value is read into a type, for a struct's or a
+ * class's `parse`, a family's, `Json.decode` and `Query.decode`. It holds the problems it found, each under its path,
+ * the paths of the structs that reported their own problems, where the walk's problem goes, and the problems a value
+ * as text's own `parse` gave, which take the walk's place at their path. With `text`, a number or a bool is read from
+ * its text, as Query.decode reads it, at every depth. `order` names the classes the declaration of the field being
+ * read writes, in its order, `App.Card, App.Bank`, which a union tries in that order, or is NULL. */
+typedef struct {
+	sharp_type_problems found;
+	zval failed;
+	zval texts;
+	bool text;
+	const zend_string *order;
+} sharp_read;
+
+static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *read);
+
+static void sharp_read_start(sharp_read *read, zval *problems, bool text, const zend_string *order)
+{
+	read->found = (sharp_type_problems) {problems, {0}};
+	array_init(&read->failed);
+	array_init(&read->texts);
+	read->text = text;
+	read->order = order;
+}
+
+static void sharp_read_end(sharp_read *read)
+{
+	smart_str_free(&read->found.path);
+	zval_ptr_dtor(&read->failed);
+	zval_ptr_dtor(&read->texts);
+}
+
+/* Records `value` under the path the read is at in the array `table`, which takes it. */
+static void sharp_read_note(zval *table, const sharp_read *read, zval *value)
+{
+	const zend_string *path = read->found.path.s ? read->found.path.s : ZSTR_EMPTY_ALLOC();
+
+	zend_symtable_str_update(Z_ARRVAL_P(table), ZSTR_VAL(path), ZSTR_LEN(path), value);
+}
+
+/* Records that the struct at the path the read is at reported its own problems, so the walk's goes. */
+static void sharp_read_fail(sharp_read *read)
+{
+	zval failed;
+	ZVAL_TRUE(&failed);
+	sharp_read_note(&read->failed, read, &failed);
+}
+
+/* Reads `value` into `type`, then checks it with the walk, each problem under its path. The walk's problem at a
+ * struct that reported its own goes, and a value as text's own takes the walk's place. Only the structs and values as
+ * text this read reaches count, so a struct's field drops only the problems its own read made. */
+static void sharp_read_whole(const sharp_type *type, zval *value, sharp_read *read)
+{
+	zval outer_failed, outer_texts;
+	ZVAL_COPY_VALUE(&outer_failed, &read->failed);
+	ZVAL_COPY_VALUE(&outer_texts, &read->texts);
+	array_init(&read->failed);
+	array_init(&read->texts);
+
+	sharp_read_value(type, value, read);
+	if (!EG(exception)) {
+		sharp_type_accepts(type, value, &read->found);
+	}
+	HashTable *problems = Z_ARRVAL_P(read->found.problems);
+	zend_ulong index;
+	zend_string *path;
+	zval *problem;
+	ZEND_HASH_FOREACH_KEY(Z_ARRVAL(read->failed), index, path) {
+		if (path) {
+			zend_hash_del(problems, path);
+		} else {
+			zend_hash_index_del(problems, index);
+		}
+	} ZEND_HASH_FOREACH_END();
+	ZEND_HASH_FOREACH_KEY_VAL(Z_ARRVAL(read->texts), index, path, problem) {
+		Z_TRY_ADDREF_P(problem);
+		if (path) {
+			zend_hash_update(problems, path, problem);
+		} else {
+			zend_hash_index_update(problems, index, problem);
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	zval_ptr_dtor(&read->failed);
+	zval_ptr_dtor(&read->texts);
+	ZVAL_COPY_VALUE(&read->failed, &outer_failed);
+	ZVAL_COPY_VALUE(&read->texts, &outer_texts);
+}
+
+/* Spec section 10: builds in `built` the struct or class `ce`, of the type arguments `arguments` or none, from `value`,
+ * a Map, a PHP array or an object, as its `parse` reads it: each field a row of its `#fields` gives, read under its key
+ * as a value of its type, then its main constructor called with its parameters by name, so a missing one takes its
+ * default, then each property written. A missing field with no default is null when its type takes null, and a
+ * problem otherwise. With any problem `built` stays undefined, and `value`'s path is among the read's failed paths. */
+static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments, zval *value, sharp_read *read, zval *built)
+{
+	zend_function *fields = zend_hash_str_find_ptr(&ce->function_table, "#fields", sizeof("#fields") - 1);
+	zval rows, parameters, properties;
+	zend_call_known_function(fields, NULL, ce, &rows, 0, NULL, NULL);
+	array_init(&parameters);
+	array_init(&properties);
+	HashTable *problems = Z_ARRVAL_P(read->found.problems);
+	uint32_t found = zend_hash_num_elements(problems);
+	size_t length = read->found.path.s ? ZSTR_LEN(read->found.path.s) : 0;
+	const zend_string *order = read->order;
+
+	zval *row;
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL(rows), row) {
+		HashTable *parts = Z_ARRVAL_P(row);
+		zend_string *name = Z_STR_P(zend_hash_index_find(parts, 0));
+		zend_string *key = Z_STR_P(zend_hash_index_find(parts, 1));
+		zend_string *written = Z_STR_P(zend_hash_index_find(parts, 2));
+		zval *into = Z_TYPE_P(zend_hash_index_find(parts, 3)) == IS_TRUE ? &parameters : &properties;
+		bool optional = Z_TYPE_P(zend_hash_index_find(parts, 4)) == IS_TRUE;
+		zval *written_order = zend_hash_index_find(parts, 5);
+		const sharp_type *types = sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), ce, ce, arguments);
+		ZEND_ASSERT(types != NULL && "the compile writes each field's type as one PHP# type");
+		const sharp_type *type = types->members[0];
+		if (length) {
+			smart_str_appendc(&read->found.path, '.');
+		}
+		smart_str_append(&read->found.path, key);
+
+		zval held;
+		ZVAL_UNDEF(&held);
+		zval *field = sharp_input_field(value, key, &held);
+		if (field) {
+			zval field_value;
+			ZVAL_COPY_DEREF(&field_value, field);
+			read->order = written_order ? Z_STR_P(written_order) : NULL;
+			sharp_read_whole(type, &field_value, read);
+			zend_hash_update(Z_ARRVAL_P(into), name, &field_value);
+		} else if (!optional) {
+			zval missing;
+			if (type->kind == SHARP_TYPE_NULLABLE || zend_string_equals_literal(type->text, "Any?")) {
+				ZVAL_NULL(&missing);
+				zend_hash_update(Z_ARRVAL_P(into), name, &missing);
+			} else {
+				ZVAL_STRINGL(&missing, "missing", sizeof("missing") - 1);
+				sharp_read_note(read->found.problems, read, &missing);
+			}
+		}
+		zval_ptr_dtor(&held);
+		ZSTR_LEN(read->found.path.s) = length;
+		if (EG(exception)) {
+			break;
+		}
+	} ZEND_HASH_FOREACH_END();
+	read->order = order;
+	zval_ptr_dtor(&rows);
+
+	if (!EG(exception) && zend_hash_num_elements(problems) > found) {
+		sharp_read_fail(read);
+	} else if (!EG(exception)) {
+		object_init_ex(built, ce);
+		if (arguments) {
+			sharp_type_arguments_store(Z_OBJ_P(built), arguments);
+		}
+		if (ce->constructor) {
+			zval constructed;
+			zend_call_known_function(ce->constructor, Z_OBJ_P(built), ce, &constructed, 0, NULL, Z_ARRVAL(parameters));
+			zval_ptr_dtor(&constructed);
+		}
+		zend_string *property;
+		zval *property_value;
+		ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL(properties), property, property_value) {
+			if (EG(exception)) {
+				break;
+			}
+			zend_update_property_ex(ce, Z_OBJ_P(built), property, property_value);
+		} ZEND_HASH_FOREACH_END();
+		if (EG(exception)) {
+			zval_ptr_dtor(built);
+			ZVAL_UNDEF(built);
+		}
+	}
+	zval_ptr_dtor(&parameters);
+	zval_ptr_dtor(&properties);
+}
+
+/* Spec section 10: builds in `built` the variant of the family `family` that `value` names under the family's key, as
+ * sharp_read_struct builds a struct, or the one object of an enum case that carries no data. A missing key, or a name
+ * the family has no variant of, is a problem under the key, as `type: expected card or bank, got string 'cash'`, and
+ * leaves `built` undefined with `value`'s path among the read's failed paths. */
+static void sharp_read_variant(zend_class_entry *family, zval *value, sharp_read *read, zval *built)
+{
+	zend_string *key = NULL;
+	HashTable *variants = sharp_family_variants(family, &key);
+	if (!variants) {
+		if (!EG(exception)) {
+			sharp_family_out_of_date(family->name);
+		}
+		return;
+	}
+
+	zval held;
+	ZVAL_UNDEF(&held);
+	zval *name = sharp_input_field(value, key, &held);
+	zval *variant_name = name && Z_TYPE_P(name) == IS_STRING ? zend_hash_find(variants, Z_STR_P(name)) : NULL;
+	if (!variant_name) {
+		smart_str problem = {0};
+		if (name) {
+			smart_str_appends(&problem, "expected ");
+			zend_string *known;
+			uint32_t index = 0, count = zend_hash_num_elements(variants);
+			ZEND_HASH_FOREACH_STR_KEY(variants, known) {
+				if (index > 0) {
+					smart_str_appends(&problem, index + 1 == count ? " or " : ", ");
+				}
+				smart_str_append(&problem, known);
+				index++;
+			} ZEND_HASH_FOREACH_END();
+			smart_str_appends(&problem, ", got ");
+			sharp_value_text(&problem, name);
+		} else {
+			smart_str_appends(&problem, "missing");
+		}
+		smart_str_0(&problem);
+		zval_ptr_dtor(&held);
+		sharp_read_fail(read);
+		size_t length = read->found.path.s ? ZSTR_LEN(read->found.path.s) : 0;
+		if (length) {
+			smart_str_appendc(&read->found.path, '.');
+		}
+		smart_str_append(&read->found.path, key);
+		zval text;
+		ZVAL_STR(&text, problem.s);
+		sharp_read_note(read->found.problems, read, &text);
+		ZSTR_LEN(read->found.path.s) = length;
+
+		return;
+	}
+	zval_ptr_dtor(&held);
+
+	zend_class_entry *variant = zend_lookup_class(Z_STR_P(variant_name));
+	if (!variant) {
+		if (!EG(exception)) {
+			sharp_listener_table_out_of_date(Z_STR_P(variant_name));
+		}
+		return;
+	}
+	if (zend_hash_str_exists(&variant->function_table, "#fields", sizeof("#fields") - 1)) {
+		sharp_read_struct(variant, NULL, value, read, built);
+		return;
+	}
+	zend_function *instance = zend_hash_str_find_ptr(&variant->function_table, "instance", sizeof("instance") - 1);
+	ZEND_ASSERT(instance != NULL && "a variant with no fields is a case that carries no data");
+	zend_call_known_function(instance, NULL, variant, built, 0, NULL, NULL);
+}
+
+/* Spec section 25: `Class<T>.withTag(tag)`, the class name of the variant of the family `family` whose `[Key]` is
+ * `tag`, or null for a name it has no variant of. The checker gives it only a family. */
+ZEND_FUNCTION(Sharp_Internal_withTag)
+{
+	zend_string *family_name, *tag;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_STR(family_name)
+		Z_PARAM_STR(tag)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_class_entry *family = zend_lookup_class(family_name);
+	zend_string *key;
+	HashTable *variants = family ? sharp_family_variants(family, &key) : NULL;
+	if (!variants) {
+		if (EG(exception)) {
+			RETURN_THROWS();
+		}
+		if (family && zend_get_attribute_str(family->attributes, "sharp\\tag", sizeof("sharp\\tag") - 1)) {
+			sharp_family_out_of_date(family_name);
+			RETURN_THROWS();
+		}
+		RETURN_NULL();
+	}
+	zval *variant = zend_hash_find(variants, tag);
+	if (!variant) {
+		RETURN_NULL();
+	}
+
+	RETURN_STR_COPY(Z_STR_P(variant));
+}
+
+/* Appends to `path` the part an element at `index` or `key` adds, as a struct's parse names an element: `["eu"]` in a
+ * Map, whose `keyed` key is text, and `[3]` in a List, a Set or a tuple. */
+static void sharp_path_element(smart_str *path, zend_ulong index, zend_string *key, bool keyed)
+{
+	smart_str_appends(path, keyed ? "[\"" : "[");
+	if (key) {
+		smart_str_append(path, key);
+	} else {
+		smart_str_append_long(path, (zend_long) index);
+	}
+	smart_str_appends(path, keyed ? "\"]" : "]");
+}
+
+/* Records what the own `parse` of a class the read reached threw at the read's path, and clears the exception: the
+ * problems of a Sharp\InvalidFields, each under that path, which then counts as failed, or the message of any other
+ * ValueError, which takes the walk's place there. Leaves any other exception. */
+static void sharp_read_failed(sharp_read *read)
+{
+	zend_object *thrown = EG(exception);
+	if (!thrown || !instanceof_function(thrown->ce, zend_ce_value_error)) {
+		return;
+	}
+	const zend_string *path = read->found.path.s ? read->found.path.s : ZSTR_EMPTY_ALLOC();
+	zval held, *fields = NULL;
+	ZVAL_UNDEF(&held);
+	if (zend_string_equals_literal(thrown->ce->name, "Sharp\\InvalidFields")) {
+		fields = zend_read_property(thrown->ce, thrown, "fields", sizeof("fields") - 1, true, &held);
+	}
+	if (fields && Z_TYPE_P(fields) == IS_OBJECT && Z_OBJCE_P(fields) == sharp_ce_map) {
+		SHARP_TABLE_FOREACH(sharp_table_of(Z_OBJ_P(fields)), bucket) {
+			zend_string *inner = zval_get_string(&bucket->key);
+			zend_string *at = ZSTR_LEN(path)
+				? zend_string_concat3(ZSTR_VAL(path), ZSTR_LEN(path), ".", 1, ZSTR_VAL(inner), ZSTR_LEN(inner))
+				: zend_string_copy(inner);
+			Z_TRY_ADDREF(bucket->value);
+			zend_symtable_update(Z_ARRVAL_P(read->found.problems), at, &bucket->value);
+			zend_string_release(at);
+			zend_string_release(inner);
+		} SHARP_TABLE_FOREACH_END();
+		sharp_read_fail(read);
+	} else {
+		zval message;
+		zval *thrown_message = zend_read_property_ex(zend_get_exception_base(thrown), thrown, ZSTR_KNOWN(ZEND_STR_MESSAGE), true, &held);
+		ZVAL_STR(&message, zval_get_string(thrown_message));
+		sharp_read_note(&read->texts, read, &message);
+	}
+	zval_ptr_dtor(&held);
+	zend_clear_exception();
+}
+
+/* `text`, a number or a bool as query text holds it, read as `built_in` reads it, in place: an int as Int.parse, a
+ * float as Float.parse and a bool as `true` or `false`. Text that holds none stays text, which the walk refuses. */
+static void sharp_read_scalar_text(sharp_built_in built_in, zval *text)
+{
+	zend_long number;
+	double fraction;
+	uint8_t read = is_numeric_string(Z_STRVAL_P(text), Z_STRLEN_P(text), &number, &fraction, false);
+
+	if (built_in == SHARP_BUILT_IN_INT && read == IS_LONG) {
+		zval_ptr_dtor(text);
+		ZVAL_LONG(text, number);
+	} else if (built_in == SHARP_BUILT_IN_FLOAT && read) {
+		double value = read == IS_LONG ? (double) number : fraction;
+		zval_ptr_dtor(text);
+		ZVAL_DOUBLE(text, value);
+	} else if (built_in == SHARP_BUILT_IN_BOOL && (zend_string_equals_literal(Z_STR_P(text), "true") || zend_string_equals_literal(Z_STR_P(text), "false"))) {
+		bool value = Z_STRVAL_P(text)[0] == 't';
+		zval_ptr_dtor(text);
+		ZVAL_BOOL(text, value);
+	}
+}
+
+/* Builds each element of the array `value` as `element` reads it, each at its path, a Map's `keyed` by its text. */
+static void sharp_read_elements(const sharp_type *element, zval *value, sharp_read *read, bool keyed)
+{
+	size_t length = read->found.path.s ? ZSTR_LEN(read->found.path.s) : 0;
+	zend_ulong index;
+	zend_string *key;
+	zval *each;
+
+	SEPARATE_ARRAY(value);
+	ZEND_HASH_FOREACH_KEY_VAL(Z_ARRVAL_P(value), index, key, each) {
+		sharp_path_element(&read->found.path, index, key, keyed);
+		sharp_read_value(element, each, read);
+		ZSTR_LEN(read->found.path.s) = length;
+		if (EG(exception)) {
+			return;
+		}
+	} ZEND_HASH_FOREACH_END();
+}
+
+/* The collection class `ce` makes of the array `value`, through its static `from`, as a struct's parse crosses a PHP
+ * array into a Map or a Set. */
+static void sharp_read_collection(zend_class_entry *ce, zval *value)
+{
+	zend_function *from = zend_hash_str_find_ptr(&ce->function_table, "from", sizeof("from") - 1);
+	zval made;
+
+	zend_call_known_function(from, NULL, ce, &made, 1, value, NULL);
+	if (!EG(exception)) {
+		zval_ptr_dtor(value);
+		ZVAL_COPY_VALUE(value, &made);
+	}
+}
+
+/* The place of the union member `member`, at `index` in the union's own order, in `order`, the classes a field's
+ * declaration writes in its order, `App.Card, App.Bank`. A member `order` doesn't name comes after every one it names,
+ * in the union's own order. */
+static uint32_t sharp_read_rank(const sharp_type *member, uint32_t index, const zend_string *order)
+{
+	if (order && member->class_name) {
+		size_t length = strcspn(ZSTR_VAL(member->text), "<");
+		uint32_t place = 0;
+		for (const char *at = ZSTR_VAL(order), *end = at + ZSTR_LEN(order); at < end; place++) {
+			const char *comma = memchr(at, ',', end - at);
+			const char *stop = comma ? comma : end;
+			if ((size_t) (stop - at) == length && memcmp(at, ZSTR_VAL(member->text), length) == 0) {
+				return place;
+			}
+			at = comma ? comma + strlen(", ") : end;
+		}
+	}
+
+	return UINT16_MAX + index;
+}
+
+/* Spec section 10: builds, in `value`, each struct, class, family's variant, value as text and enum case `type` holds,
+ * as a field `parse` reads builds them, each problem under its path in the read. With the read's `text`, a number or
+ * a bool is read from its text, as `Query.decode` reads it. sharp_read_whole checks the whole value after. */
+static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *read)
+{
+	ZVAL_DEREF(value);
+	switch (type->kind) {
+		case SHARP_TYPE_NULLABLE:
+			if (Z_TYPE_P(value) != IS_NULL) {
+				sharp_read_value(type->members[0], value, read);
+			}
+			return;
+		case SHARP_TYPE_UNION: {
+			/* The first member, in the order the field's declaration writes them, that builds the value with no
+			 * problem takes it. */
+			uint32_t last = 0;
+			for (uint32_t round = 0; round < type->count; round++) {
+				uint32_t at = 0, best = UINT32_MAX;
+				for (uint32_t i = 0; i < type->count; i++) {
+					uint32_t rank = sharp_read_rank(type->members[i], i, read->order);
+					if ((round == 0 || rank > last) && rank < best) {
+						best = rank;
+						at = i;
+					}
+				}
+				last = best;
+				zval tried, found;
+				array_init(&found);
+				sharp_read trying;
+				sharp_read_start(&trying, &found, read->text, read->order);
+				ZVAL_COPY(&tried, value);
+				sharp_read_whole(type->members[at], &tried, &trying);
+				bool built = !EG(exception) && zend_hash_num_elements(Z_ARRVAL(found)) == 0;
+				sharp_read_end(&trying);
+				zval_ptr_dtor(&found);
+				if (built) {
+					zval_ptr_dtor(value);
+					ZVAL_COPY_VALUE(value, &tried);
+					return;
+				}
+				zval_ptr_dtor(&tried);
+				if (EG(exception)) {
+					return;
+				}
+			}
+			return;
+		}
+		case SHARP_TYPE_TUPLE:
+			if (Z_TYPE_P(value) == IS_ARRAY) {
+				size_t length = read->found.path.s ? ZSTR_LEN(read->found.path.s) : 0;
+				SEPARATE_ARRAY(value);
+				for (uint32_t i = 0; i < type->count; i++) {
+					zval *element = zend_hash_index_find(Z_ARRVAL_P(value), i);
+					if (!element) {
+						continue;
+					}
+					sharp_path_element(&read->found.path, i, NULL, false);
+					sharp_read_value(type->members[i], element, read);
+					ZSTR_LEN(read->found.path.s) = length;
+					if (EG(exception)) {
+						return;
+					}
+				}
+			}
+			return;
+		case SHARP_TYPE_NAMED:
+			break;
+		default:
+			return;
+	}
+
+	switch (type->built_in) {
+		case SHARP_BUILT_IN_INT:
+		case SHARP_BUILT_IN_FLOAT:
+		case SHARP_BUILT_IN_BOOL:
+			if (read->text && Z_TYPE_P(value) == IS_STRING) {
+				sharp_read_scalar_text(type->built_in, value);
+			}
+			return;
+		case SHARP_BUILT_IN_LIST:
+			if (Z_TYPE_P(value) == IS_ARRAY) {
+				sharp_read_elements(type->members[0], value, read, false);
+			}
+			return;
+		case SHARP_BUILT_IN_SET:
+		case SHARP_BUILT_IN_MAP:
+			if (Z_TYPE_P(value) == IS_ARRAY) {
+				bool keyed = type->built_in == SHARP_BUILT_IN_MAP;
+				sharp_read_elements(type->members[keyed ? 1 : 0], value, read, keyed);
+				if (!EG(exception)) {
+					sharp_read_collection(type->built_in == SHARP_BUILT_IN_MAP ? sharp_ce_map : sharp_ce_set, value);
+				}
+			}
+			return;
+		case SHARP_BUILT_IN_NONE:
+			break;
+		default:
+			return;
+	}
+
+	zend_class_entry *ce = zend_lookup_class(type->class_name);
+	if (!ce || (Z_TYPE_P(value) == IS_OBJECT && instanceof_function(Z_OBJCE_P(value), ce))) {
+		return;
+	}
+	zval built;
+	ZVAL_UNDEF(&built);
+	bool readable = Z_TYPE_P(value) == IS_ARRAY || Z_TYPE_P(value) == IS_OBJECT;
+	if (ce->ce_flags & ZEND_ACC_ENUM) {
+		if (ce->enum_backing_type == IS_LONG && read->text && Z_TYPE_P(value) == IS_STRING) {
+			sharp_read_scalar_text(SHARP_BUILT_IN_INT, value);
+		}
+		zend_object *found;
+		if (ce->enum_backing_type != IS_UNDEF && Z_TYPE_P(value) == ce->enum_backing_type
+				&& zend_enum_get_case_by_value(&found, ce, Z_TYPE_P(value) == IS_LONG ? Z_LVAL_P(value) : 0,
+					Z_TYPE_P(value) == IS_STRING ? Z_STR_P(value) : NULL, true) == SUCCESS && found) {
+			ZVAL_OBJ_COPY(&built, found);
+		}
+	} else if (ce->attributes && zend_get_attribute_str(ce->attributes, "sharp\\tag", sizeof("sharp\\tag") - 1)) {
+		if (readable) {
+			sharp_read_variant(ce, value, read, &built);
+		}
+	} else if (zend_hash_str_exists(&ce->function_table, "#fields", sizeof("#fields") - 1)) {
+		if (readable) {
+			const char *open = memchr(ZSTR_VAL(type->text), '<', ZSTR_LEN(type->text));
+			const sharp_type *arguments =
+				open ? sharp_type_list(open + 1, ZSTR_VAL(type->text) + ZSTR_LEN(type->text) - open - 2) : NULL;
+			sharp_read_struct(ce, arguments, value, read, &built);
+		}
+	} else {
+		/* A class that declares its own `parse` of the value, as a value as text's of a string and JsonValue's of any
+		 * value, builds through it. */
+		zend_function *parse = zend_hash_str_find_ptr(&ce->function_table, "parse", sizeof("parse") - 1);
+		if (parse && (parse->common.fn_flags & ZEND_ACC_STATIC) && parse->common.num_args >= 1
+				&& (!ZEND_TYPE_IS_SET(parse->common.arg_info[0].type)
+					|| ZEND_TYPE_CONTAINS_CODE(parse->common.arg_info[0].type, Z_TYPE_P(value)))) {
+			zend_call_known_function(parse, NULL, ce, &built, 1, value, NULL);
+			if (EG(exception)) {
+				zval_ptr_dtor(&built);
+				ZVAL_UNDEF(&built);
+				sharp_read_failed(read);
+			}
+		}
+	}
+	if (!Z_ISUNDEF(built)) {
+		zval_ptr_dtor(value);
+		ZVAL_COPY_VALUE(value, &built);
+	}
+}
+
+/* Spec section 10: the value of `type` that `value` builds in `return_value`, as a field of that type a struct's
+ * `parse` reads reads it, read from text with `text`, as `Query.decode` reads it. Throws one Sharp\InvalidFields that
+ * lists every bad part, under its path. */
+static void sharp_parse_as(const sharp_type *type, zval *value, bool text, zval *return_value)
+{
+	zval problems;
+	array_init(&problems);
+	sharp_read read;
+	sharp_read_start(&read, &problems, text, NULL);
+	ZVAL_COPY(return_value, value);
+	sharp_read_whole(type, return_value, &read);
+	sharp_read_end(&read);
+	if (!EG(exception) && zend_hash_num_elements(Z_ARRVAL(problems)) > 0) {
+		sharp_throw_invalid_fields(&problems);
+	}
+	zval_ptr_dtor(&problems);
+	if (EG(exception)) {
+		zval_ptr_dtor(return_value);
+		ZVAL_NULL(return_value);
+	}
+}
+
+/* Spec section 10: a family's `parse`, `\Sharp\Internal\parseVariant($family, $value)`, which an abstract class's or an
+ * enum's calls, and which a call of an interface's runs, since an interface holds no static method's body: the variant
+ * `$value` names under the family's key, read as sharp_parse_as reads a value of the family. With `throws` false it is
+ * `tryParse`, null wherever `parse` throws a ValueError. */
+ZEND_FUNCTION(Sharp_Internal_parseVariant)
+{
+	zend_string *family;
+	zval *value;
+	bool throws = true;
+
+	ZEND_PARSE_PARAMETERS_START(2, 3)
+		Z_PARAM_STR(family)
+		Z_PARAM_ZVAL(value)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_BOOL(throws)
+	ZEND_PARSE_PARAMETERS_END();
+
+	const sharp_type *type = sharp_class_value_of(family);
+	if (!type) {
+		RETURN_THROWS();
+	}
+	sharp_parse_as(type, value, false, return_value);
+	if (!throws && EG(exception) && instanceof_function(EG(exception)->ce, zend_ce_value_error)) {
+		zend_clear_exception();
+	}
+}
+
+/* Spec sections 10 and 24: a struct's or a class's `parse`, `Json.decode<T>` and `Query.decode<T>`, the value of the
+ * type the class value `type` holds that `value` builds, as sharp_parse_as reads it. */
+ZEND_FUNCTION(Sharp_Internal_parseAs)
+{
+	zend_string *class_value;
+	zval *value;
+	bool text;
+
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_STR(class_value)
+		Z_PARAM_ZVAL(value)
+		Z_PARAM_BOOL(text)
+	ZEND_PARSE_PARAMETERS_END();
+
+	const sharp_type *type = sharp_class_value_read_whole(class_value);
+	if (!type) {
+		RETURN_THROWS();
+	}
+	sharp_parse_as(type, value, text, return_value);
 }
 
 /* Runs a listener on event. A table listener runs on a new object of its class, which the container builds with the

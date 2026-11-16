@@ -1,0 +1,6 @@
+namespace DataInOut;
+
+public struct Coupon
+{
+    public Coupon(public string code { get; }) { }
+}

@@ -78,8 +78,6 @@ final class Listener
     private function hear(object $event): void {}
 }
 
-function accepts(string $type, mixed &$value, string $path, array &$problems): bool {}
-
 function &statics(string $class, string $key, ?string $field = null): array {}
 
 function keep(string $key, ?\Closure $compute = null): mixed {}
@@ -89,6 +87,12 @@ function equals(mixed $value, mixed $other): bool {}
 function jsonEncode(mixed $value, int $flags, int $indent): string {}
 
 function jsonDecode(string $json): mixed {}
+
+function parseAs(string $type, mixed $value, bool $text): mixed {}
+
+function parseVariant(string $family, mixed $value, bool $throws = true): ?object {}
+
+function withTag(string $family, string $tag): ?string {}
 
 function resolve(string $host): array {}
 

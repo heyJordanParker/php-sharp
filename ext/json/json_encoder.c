@@ -629,6 +629,25 @@ static zend_result php_json_encode_serializable_object(smart_str *buf, zend_obje
 	return return_code;
 }
 
+/* PHP#: encodes what the `#json` method `shape` gives for obj, as a JsonSerializable's result is encoded. */
+static zend_result php_json_encode_shaped(smart_str *buf, zend_object *obj, zend_function *shape, int options, php_json_encoder *encoder)
+{
+	zval retval;
+	zend_result return_code;
+
+	zend_call_known_function(shape, obj, obj->ce, &retval, 0, NULL, NULL);
+	if (Z_TYPE(retval) == IS_UNDEF) {
+		if (options & PHP_JSON_PARTIAL_OUTPUT_ON_ERROR) {
+			smart_str_appendl(buf, "null", 4);
+		}
+		return FAILURE;
+	}
+	return_code = php_json_encode_zval(buf, &retval, options, encoder);
+	zval_ptr_dtor(&retval);
+
+	return return_code;
+}
+
 static zend_result php_json_encode_serializable_enum(smart_str *buf, zval *val, int options, php_json_encoder *encoder)
 {
 	const zend_class_entry *ce = Z_OBJCE_P(val);
@@ -683,6 +702,14 @@ again:
 			}
 			if (Z_OBJCE_P(val)->ce_flags & ZEND_ACC_ENUM) {
 				return php_json_encode_serializable_enum(buf, val, options, encoder);
+			}
+			/* PHP#: an object whose class the compile gives `#json` is what that gives, spec section 10: the fields its
+			 * `parse` reads, each under its key, or its text. No code can name the method. */
+			{
+				zend_function *shape = zend_hash_str_find_ptr(&Z_OBJCE_P(val)->function_table, "#json", sizeof("#json") - 1);
+				if (shape) {
+					return php_json_encode_shaped(buf, Z_OBJ_P(val), shape, options, encoder);
+				}
 			}
 			/* fallthrough -- Non-serializable object */
 			ZEND_FALLTHROUGH;

@@ -90,13 +90,17 @@ array(2) {
 }
 string(6) "Ledger"
 string(11) "sharp shelf"
-array(3) {
+array(5) {
   [0]=>
   string(10) "stockLabel"
   [1]=>
-  string(5) "parse"
+  string(7) "#fields"
   [2]=>
+  string(5) "parse"
+  [3]=>
   string(8) "tryParse"
+  [4]=>
+  string(5) "#json"
 }
 array(1) {
   [0]=>
