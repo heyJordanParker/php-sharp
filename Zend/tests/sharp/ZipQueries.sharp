@@ -1,0 +1,52 @@
+namespace Demo;
+
+import Sharp.IO.ZipArchive;
+
+public static class ZipQueries
+{
+    // Creates `folder`/notes.zip with an entry from text and one from `folder`/report.csv, then reopens it, lists and
+    // reads it, adds an entry, and extracts every entry to `folder`/out. Opening runs through a function whose type
+    // lists `Files`, which holds ZipArchive's effect.
+    public static List<string?> roundTrip(string folder)
+    {
+        Function<ZipArchive(string) uses Files> open = ZipArchive.open;
+        const path = `${folder}/notes.zip`;
+        const created = ZipArchive.create(path);
+        created.write("readme.txt", "Read me");
+        created.addFile(`${folder}/report.csv`, "data/report.csv");
+        created.close();
+
+        const opened = open(path);
+        List<string?> seen = [...opened.list(), opened.read("readme.txt"), opened.read("missing.txt")];
+        opened.write("later.txt", "Later");
+        opened.extractTo(`${folder}/out`);
+        opened.close();
+
+        return seen;
+    }
+
+    // How many entries an archive created and closed with none holds once reopened.
+    public static int emptyCount(string path)
+    {
+        ZipArchive.create(path).close();
+
+        return ZipArchive.open(path).list().count();
+    }
+
+    public static void openArchive(string path)
+    {
+        ZipArchive.open(path);
+    }
+
+    public static void closeUnwritable(string path)
+    {
+        const archive = ZipArchive.create(path);
+        archive.write("readme.txt", "Read me");
+        archive.close();
+    }
+
+    public static void addMissing(string path, string file)
+    {
+        ZipArchive.create(path).addFile(file, "missing.txt");
+    }
+}

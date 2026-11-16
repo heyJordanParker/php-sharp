@@ -113,6 +113,7 @@ RUN set -eux; \
 		libsqlite3-dev \
 		libssl-dev \
 		libxml2-dev \
+		libzip-dev \
 		rustup \
 		zlib1g-dev \
 	; \
@@ -291,6 +292,7 @@ RUN apt-get update && \
 	libsqlite3-dev \
 	libssl-dev \
 	libxml2-dev \
+	libzip-dev \
 	zlib1g-dev \
 	&& \
 	apt-get clean

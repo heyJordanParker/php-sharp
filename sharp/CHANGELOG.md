@@ -4,6 +4,20 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.16
+
+- `heyjordanparker/php-sharp-composer` requires `ext-zip`, and the runtime image builds `zip`, since `Sharp.IO.ZipArchive` runs on it. A source build configures `--with-zip` and installs `libzip-dev`, as `sharp/docker/runtime/configure-options` and the README's Linux packages list them. An app's image no longer needs `install-php-extensions zip`.
+
+### Added
+
+- `Sharp.IO.ZipArchive` reads and writes a ZIP archive, as .NET's `ZipArchive` and `ZipFile` do, spec section 29: `ZipArchive.open(path)` and `ZipArchive.create(path)`, then `list()`, `read(name)`, `write(name, text)`, `addFile(file, name)`, `extractTo(directory)` and `close()`, which writes the changes. Each member has the effect `Files`, and a failure throws `RuntimeException` with the path and libzip's reason, and prints no PHP warning: the standard library's call of a built-in method whose declared return holds its failure runs without PHP's warning, as its call of a built-in function already did. It runs on PHP's `zip` extension.
+
+### Fixed
+
+- An `[Import]` method whose result type holds `null` and no `bool` reads the `false` its built-in returns for a failure as `null`, without PHP's warning, spec section 24, so decision 93's `[Import("file_get_contents")] public static string? read(string path) uses Files;` gives `null` for a missing file. 0.6.16 printed PHP's warning and threw `TypeError: file_get_contents(): Return value must be of type string?, false returned`.
+- A module binds a framework's own object from a plain PHP call in its binding's expression, spec section 32: `scoped Request = Foundation.request();` compiles when `Request` is a plain PHP class, and so does an `as` on such a call. The same call outside the binding, a call there that gives another bound class, and a binding of a PHP# class from plain PHP stay `invalid-binding`. 0.6.16 refused the binding with "`Request` is bound in `App`'s module, so it reaches code through a constructor or a parameter."
+- `Property.isInitialized(receiver)` and `Property.hasDefaultValue` are pure, spec section 25, so a method held to `uses Database` calls them: `Builtins.sharp` declares pure each PHP reflection member the standard library calls that runs no code a project wrote. `invoke`, `get`, `set`, `setBeforeLoad`, `defaultValue()` and `attributes()` still may have every effect. 0.6.16 refused the call with "`SiteLiveState.variables` reaches `Sharp.Property.isInitialized`, which may have every effect, so `uses Database` on `LiveState.variables` cannot accept it."
+
 ## [0.6.16] - 2026-11-16
 
 ### Upgrading from 0.6.15

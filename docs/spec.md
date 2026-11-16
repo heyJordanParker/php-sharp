@@ -4,6 +4,8 @@ PHP# is a language that runs on PHP's engine and calls plain PHP freely, as Kotl
 
 **No PHP# rule makes code write around how PHP# runs on PHP's engine.** A PHP# developer never needs to know what a PHP# construct compiles to. Plain PHP libraries are called as libraries, as Kotlin calls Java libraries.
 
+**The correct architecture is the only way to write a PHP# program.** Agents write most code, and they repeat whatever the language allows. So PHP# leaves no shortcut to a worse codebase, such as a service locator, a dependency cycle or a check the compiler can't see. A feature exists only where PHP# has no correct way to do the job already. Plain PHP libraries and frameworks stay usable through one correct way at their boundary.
+
 [decisions/](decisions/) records why each rule was chosen.
 
 - Every rule here traces to the Architect's ruling or to mainstream precedent.
@@ -4922,7 +4924,7 @@ public class Layout
 
 - `Sharp.Text` holds the members of `string`, `Regex` and `Html`.
 - `Sharp.Time` holds `Clock`, `Instant`, `Duration`, `Date`, `DateTime`, `TimeZone`, `Weekday` and `Month`, and the members of a plain PHP date in `DateTimeInterfaceMembers`.
-- `Sharp.IO` holds `Files`, `Path` and `Console`.
+- `Sharp.IO` holds `Files`, `Path`, `Console` and `ZipArchive`.
 - `Sharp.System` holds `Process`, `ProcessResult`, `ChildProcess` and `Environment`.
 - `Sharp.Net` holds `Http`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `Url`, `Ip`, `IpAddress`, `IpFamily`, `Dns`, `Mail`, `MailMessage` and `MailAddress`.
 - `Sharp.Collections` holds `SortedMap`, `SortedSet` and `PriorityQueue`.
@@ -5121,6 +5123,7 @@ public User find(int|string id)
 **A union that holds null is written `(int|string)?`,** with the same `?` as any other type. `int|string|null` is a compile error that names `(int|string)?`, and `int|null` one that names `int?`.
 
 - `null`, `true` and `false` are values, not types. `null` alone as a type is a compile error that says to write a type with `?` after it, as in `int?`. `true` or `false` alone, PHP's types, fails as a typo does.
+- A built-in's failure never reaches PHP# code as `false`. An `[Import]` method (section 23) whose result type holds `null` and no `bool` reads the `false` its built-in returns for a failure as `null`, without PHP's warning for that failure, so `[Import("file_get_contents")] public static string? read(string path) uses Files;` gives `null` for a missing file. A result type without `null` throws the `TypeError` that names the function, and one that holds a `bool` gives the `false`.
 
 <!-- example nullable-unions: members -->
 ```csharp
@@ -5835,7 +5838,7 @@ reads[typeof(Ledger).properties()[0]] ?? 0;                   // 1
 
 **A class value of a built-in generic type answers `is` as a user generic's does,** so `typeof(List<string>)` is a `Class<List>`, a `Class<List<Any?>>` and a `Class<Iterable<Any?>>`, and a `Map`'s and a `Set`'s class values are a `Class<Map>`, a `Class<Set>` and a `Class<Iterable<Any?>>`, as `typeof(Crate<Mark>)` is a `Class<Crate>`.
 
-**`invoke`, `get` and `set` use a member through its reflection,** as .NET's `MethodInfo.Invoke`, `PropertyInfo.GetValue` and `PropertyInfo.SetValue` and Kotlin's `KCallable.call`, `KProperty1.get` and `KMutableProperty1.set` do. They are the one way PHP# names a member by a value (decision 94). `method.invoke(receiver, arguments)` calls the method on `receiver` with the `List<Any?>` of arguments and gives its result as `Any?`, and a method that isn't private runs the receiver's override. A static method takes a null receiver and runs on the class value `methods()` read it from, as a call through that class does, and an instance method given null throws `InvalidArgumentException`, as C#'s `MethodInfo.Invoke(null, arguments)` does. `property.get(receiver)` gives the property's value as `Any?`, running a computed property's `get`, and `property.set(receiver, value)` writes it. Each reaches the member as a direct use from the calling code would: a private member only from its class, a protected one from the class and its subclasses, and an `internal` one from its namespace and those below it, which plain PHP reaches as a public one. A use the calling code can't make throws `Error`, as do a write of a get-only property and a call of a missing method. Each argument and value is checked against its type as a direct PHP# use's is, so a wrong one throws `TypeError`. More arguments than the method takes throw `ArgumentCountError`, and a receiver that isn't of the member's class throws `TypeError`. Each runs code its caller can't see, a method's body, a `get` or a `set`, so each may have every effect (section 29), and code that must keep to its `uses`, as an implementation of a pure interface method, can't call it:
+**`invoke`, `get` and `set` use a member through its reflection,** as .NET's `MethodInfo.Invoke`, `PropertyInfo.GetValue` and `PropertyInfo.SetValue` and Kotlin's `KCallable.call`, `KProperty1.get` and `KMutableProperty1.set` do. They are the one way PHP# names a member by a value (decision 94). `method.invoke(receiver, arguments)` calls the method on `receiver` with the `List<Any?>` of arguments and gives its result as `Any?`, and a method that isn't private runs the receiver's override. A static method takes a null receiver and runs on the class value `methods()` read it from, as a call through that class does, and an instance method given null throws `InvalidArgumentException`, as C#'s `MethodInfo.Invoke(null, arguments)` does. `property.get(receiver)` gives the property's value as `Any?`, running a computed property's `get`, and `property.set(receiver, value)` writes it. Each reaches the member as a direct use from the calling code would: a private member only from its class, a protected one from the class and its subclasses, and an `internal` one from its namespace and those below it, which plain PHP reaches as a public one. A use the calling code can't make throws `Error`, as do a write of a get-only property and a call of a missing method. Each argument and value is checked against its type as a direct PHP# use's is, so a wrong one throws `TypeError`. More arguments than the method takes throw `ArgumentCountError`, and a receiver that isn't of the member's class throws `TypeError`. `property.isInitialized(receiver)` and `property.hasDefaultValue` only read the declaration and the object, so each is pure. `invoke`, `get` and `set` each run code its caller can't see, a method's body, a `get` or a `set`, so each may have every effect (section 29), and code that must keep to its `uses`, as an implementation of a pure interface method, can't call it:
 
 <!-- example reflection-calls -->
 ```csharp
@@ -6849,6 +6852,29 @@ public ExampleRun(private Echo echo) { }
 this.echo.back("one line");   // "one line"
 -->
 
+**`ZipArchive`, in `Sharp.IO`, reads and writes a ZIP archive,** as .NET's `ZipArchive` and `ZipFile` do. `ZipArchive.open(path)` opens one to read and to add to, and `ZipArchive.create(path)` makes a new one in place of any file at `path`. `list()` gives each entry's name in the archive's order, and `read(name)` gives an entry's text, or null when the archive has none. `write(name, text)` adds an entry from text and `addFile(file, name)` one from a file, each in place of an entry of that name, and `extractTo(directory)` writes every entry into a folder. The changes reach the file when `close()` runs, as .NET's `Dispose` writes them, and an archive with no entries is written too. Each member reads or writes files, so code that calls one has the effect `Files`. A failure throws `RuntimeException` with the path and libzip's reason, as `ZipArchive.open: "report.csv" cannot be opened: Not a zip archive`:
+
+<!-- example zip-archive -->
+```csharp
+// app/Export.sharp
+namespace App;
+
+import Sharp.IO.ZipArchive;
+
+public class Export
+{
+    public void pack(string path, string report)
+    {
+        const archive = ZipArchive.create(path);
+        archive.write("readme.txt", "Totals by month");
+        archive.addFile(report, "data/report.csv");
+        archive.close();                                                  // compiles: Export has the effect Files
+    }
+
+    public string? readme(string path) => ZipArchive.open(path).read("readme.txt");
+}
+```
+
 <!-- example pure-interface -->
 ```csharp
 // app/Formatter.sharp
@@ -7335,7 +7361,7 @@ module
 - **A module stays declarative:** one expression per binding, and no statements, loops or methods.
 - **A `foreign` object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and the container passes it to classes through their constructors.
 - **A module also states the laws that span its classes** (section 28), **and lists the namespaces its code imports from** (below).
-- **A class a module binds reaches code only through injection,** a constructor or a method parameter, or a value PHP# code returns, as Dagger and Angular hand a bound class only to what they build. A plain PHP call, a function or a method of a plain PHP class, whose result is such a class, or whose result PHP# code narrows to one with `as` or `is`, is a compile error: "`StoreService` is bound in `App.Shop`'s module, so it reaches code through a constructor or a parameter." So a service locator, as Laravel's `app(StoreService::class)`, never hands PHP# code a bound class, and every one the code holds is the container's.
+- **A class a module binds reaches code only through injection,** a constructor or a method parameter, or a value PHP# code returns, as Dagger and Angular hand a bound class only to what they build. A plain PHP call, a function or a method of a plain PHP class, whose result is such a class, or whose result PHP# code narrows to one with `as` or `is`, is a compile error: "`StoreService` is bound in `App.Shop`'s module, so it reaches code through a constructor or a parameter." So a service locator, as Laravel's `app(StoreService::class)`, never hands PHP# code a bound class, and every one the code holds is the container's. The one exception is the expression of the binding that binds a plain PHP class, where a framework's object enters the container, as C#'s `services.AddScoped<T>(sp => …)` adapts one: `scoped Request = Foundation.request();` compiles, and the same call anywhere else stays an error.
 - **A namespace whose `Module.sharp` binds its children's classes is the app's composition root, so code its children share lives in a child namespace, never in the root,** as Go's `main` package imports every package and no package imports it. The root's module imports each class it binds, and no two namespaces import each other (section 23). So `Flags`, which `App.Mail.FlaggedMailer` takes and `App`'s module binds, is `App.Features.Flags`, never `App.Flags`:
 
 <!-- example composition-root -->
