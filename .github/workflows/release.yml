@@ -216,10 +216,10 @@ jobs:
           path: sharp/build/mago-pgo
           key: PGO_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-${{ github.sha }}
           restore-keys: PGO_MAGO-${{ runner.arch }}-
-          fail-on-cache-miss: true
+          fail-on-cache-miss: false
 
       - name: Build with the profile
-        if: matrix.job.pgo
+        if: matrix.job.pgo && hashFiles('sharp/build/mago-pgo/mago.profdata') != ''
         run: echo "RUSTFLAGS=-Cprofile-use=$GITHUB_WORKSPACE/sharp/build/mago-pgo/mago.profdata" >> "$GITHUB_ENV"
 
       - name: install cross
