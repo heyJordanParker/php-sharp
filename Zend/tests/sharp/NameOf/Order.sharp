@@ -8,4 +8,12 @@ public class Order : Line
 
     public string sortColumn() => this.column;
     public List<string> columns() => [nameof(Order.total), nameof(Order.quantity), nameof(Order.count)];
+
+    public int width()
+    {
+        Map<string, int> widths = [nameof(Order.total): 1];
+        Set<string> shown = [nameof(Order.total), nameof(Order.count)];
+
+        return shown.contains("total") ? (widths["total"] ?? 0) : 0;
+    }
 }

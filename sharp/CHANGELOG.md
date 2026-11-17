@@ -4,6 +4,18 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.25] - 2026-11-17
+
+### Fixed
+
+- The check that no two namespaces import each other, spec section 23, finds the project's import cycles once per analysis, so each `import` of a `.sharp` file costs the same however many imports the project has. 0.6.24 walked the namespaces an import leads to and, at each one, read every import of the project again, so a file cost time in proportion to its imports times the project's, and its workers waited on each other to look up the names they read: a 1,500-file application with 8 imports a file took 47 s to analyze, its `Module.sharp` of 100 imports 9 s alone.
+- An error of a `.sharp` file that names a class, as "`Order.total` …", counts the classes that share its short name from a count each analysis makes once. 0.6.24 counted the short names of every class of the project, its vendors and the standard library again in each file that reported such an error, a quarter of the CPU time of a 2,449-file analysis.
+- A module's check of its bindings, spec section 32, finds the binding that serves each service by an id each analysis gives every binding once. 0.6.24 worked out the id of every binding of a module again for each service it looked up, so a module's check grew with the cube of its bindings: a `Module.sharp` of 400 bindings took 7.2 s.
+- The check that a `public` member is used outside its namespace, spec section 5, looks each member's uses up by its class. 0.6.24 read every use of the member's name in the project for each member, so in a project whose classes share member names, as `size` or `handle`, it took nine tenths of the 1.6 s `mago analyze --watch` spent on a one-line edit in a 1,500-file application.
+- A `keyof` value, a member name `nameof` gives, keys a `Map` and fills a `Set`, spec section 6.3, as every `string` does: `Map<string, int> widths = [nameof(Order.total): 1];` compiles, and so do a `Map<keyof Order, int>` or `Set<keyof Order>` type and a `groupBy` whose function returns a member name. 0.6.24 refused each one with "A `Map`'s key is anything with `==` and `hash()`: an `int`, a `float`, a `string`, a `bool`, `null`, an enum, a struct, a class value, a `List`, `Set` or `Map` of them, or a class that declares `operator ==`, and `keyof Order` is none of them." A member name also backs a `string` enum case, compares with a string literal, as `column == "total"`, and is refused where a `string` is: by `==` with an `int`, and at a method a `string` lacks, with a `string`'s words. 0.6.24 refused the case with "Expected `string`, but got `keyof Order`", called `column == "total"` never true, let `nameof(Order.total) == 5` through as a redundant comparison, and called a member name a non-object.
+- `mago compile` and `mago analyze <paths>` find which files a path names among each file's own folders. 0.6.24 compared each file of the project with every path named, and `mago compile` names each `.sharp` file, so a project of 1,000 `.sharp` files and 16,000 vendor files spent 6.7 s of CPU time on it.
+- A local takes a `keyof` type, spec section 11.2, as a parameter does: `keyof Order column = nameof(Order.total);` compiles, with or without `const`, in parentheses as `(keyof Order)? column = null;`, and as a `for` counter's type, and `keyof Order column = "total";` is refused as a `keyof Order` parameter refuses `"total"`. 0.6.24 read `keyof` as an expression and stopped with "Expected `;`, found `Order`", or "Expected `=`, found `Order`" after `const`.
+
 ## [0.6.24] - 2026-11-17
 
 ### Upgrading from 0.6.23
@@ -1226,7 +1238,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.24...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.25...HEAD
+[0.6.25]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.24...v0.6.25
 [0.6.24]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.23...v0.6.24
 [0.6.23]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.22...v0.6.23
 [0.6.22]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.21...v0.6.22
