@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.26] - 2026-11-17
+
 ### Upgrading from 0.6.25
 
 - A vendor function or constant declared in a file outside Composer's `autoload_files.php` is unknown to `mago analyze`, `mago compile` and `mago convert`, as it is to PHP, which never loads that file: a call of it reports `non-existent-function`. 0.6.25 read every file of the vendor folder and knew it. Require the file that declares it, or list it under the package's `autoload.files`.
@@ -1249,7 +1251,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.25...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.26...HEAD
+[0.6.26]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.25...v0.6.26
 [0.6.25]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.24...v0.6.25
 [0.6.24]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.23...v0.6.24
 [0.6.23]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.22...v0.6.23
