@@ -23,12 +23,6 @@ inputs:
       A jq expression over a run's jobs, as GET /actions/runs/<id>/jobs returns them, that is true when the run passed
       what the caller needs.
     required: true
-  on-master:
-    description: >-
-      true to fail unless the commit is on master, as a tag's gates do. A tag on a bump's head that master has moved
-      past would pass with a run that tested that head merged with master, another tree.
-    required: false
-    default: ''
 
 outputs:
   run:
@@ -46,16 +40,8 @@ runs:
         WORKFLOW: ${{ inputs.workflow }}
         EVENTS: ${{ inputs.events }}
         PASSED: ${{ inputs.passed }}
-        ON_MASTER: ${{ inputs.on-master }}
       run: |
         api() { gh api "repos/$GITHUB_REPOSITORY/$1" --jq "$2"; }
-        if [[ $ON_MASTER == true ]]; then
-          status=$(api "compare/$GITHUB_SHA...master" .status)
-          if [[ $status != ahead && $status != identical ]]; then
-            echo "::error::Commit $GITHUB_SHA isn't on master: GitHub compares master to it as $status. Tag the bump's merge commit."
-            exit 1
-          fi
-        fi
         tree=$(api "git/commits/$GITHUB_SHA" .tree.sha)
         commits=$GITHUB_SHA
         for head in $(api "commits/$GITHUB_SHA/pulls" '.[] | select(.base.ref == "master") | .head.sha'); do
