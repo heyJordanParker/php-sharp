@@ -1259,7 +1259,7 @@ RenewRequest? maybe = RenewRequest.tryParse(payload);   // null on any bad field
 - An enum parses from its value.
 - A missing key for a `T?` parameter reads as null.
 - A value as text, a class with a static `parse(string)` and a `toString()`, as `Decimal` and `Instant` (section 24), reads through its own `parse`, so `"1.50"` is a `Decimal`. Its error message is the field's problem.
-- A field of a union of classes, as `Voucher|Coupon`, reads as the first member, in the order the field writes them, that reads the value with no problem.
+- A field of a union, of classes as `Voucher|Coupon` or of scalars as `(string|int|float|bool)?`, reads as the first member, in the order the field writes them, that reads the value with no problem. A scalar member reads JSON's value as it is and a query's from its text, so `int|string` reads `"3"` from JSON as `"3"` and from a query as `3`.
 
 An object's public properties parse the same way as a `Map`'s keys, so a row object from plain PHP becomes a checked struct:
 

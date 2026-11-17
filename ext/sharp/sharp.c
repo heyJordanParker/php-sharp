@@ -11355,8 +11355,8 @@ static zval *sharp_input_field(zval *value, zend_string *key, zval *read)
  * class's `parse`, a family's, `Json.decode` and `Query.decode`. It holds the problems it found, each under its path,
  * the paths of the structs that reported their own problems, where the walk's problem goes, and the problems a value
  * as text's own `parse` gave, which take the walk's place at their path. With `text`, a number or a bool is read from
- * its text, as Query.decode reads it, at every depth. `order` names the classes the declaration of the field being
- * read writes, in its order, `App.Card, App.Bank`, which a union tries in that order, or is NULL. */
+ * its text, as Query.decode reads it, at every depth. `order` names the classes and scalar types the declaration of
+ * the field being read writes, in its order, `App.Card, App.Bank`, which a union tries in that order, or is NULL. */
 typedef struct {
 	sharp_type_problems found;
 	zval failed;
@@ -11738,12 +11738,12 @@ static void sharp_read_collection(zend_class_entry *ce, zval *value)
 	}
 }
 
-/* The place of the union member `member`, at `index` in the union's own order, in `order`, the classes a field's
- * declaration writes in its order, `App.Card, App.Bank`. A member `order` doesn't name comes after every one it names,
- * in the union's own order. */
+/* The place of the union member `member`, at `index` in the union's own order, in `order`, the classes and scalar
+ * types a field's declaration writes in its order, `App.Card, App.Bank` or `string, int`. A member `order` doesn't
+ * name comes after every one it names, in the union's own order. */
 static uint32_t sharp_read_rank(const sharp_type *member, uint32_t index, const zend_string *order)
 {
-	if (order && member->class_name) {
+	if (order) {
 		size_t length = strcspn(ZSTR_VAL(member->text), "<");
 		uint32_t place = 0;
 		for (const char *at = ZSTR_VAL(order), *end = at + ZSTR_LEN(order); at < end; place++) {
