@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.25] - 2026-11-17
+
 ### Fixed
 
 - The check that no two namespaces import each other, spec section 23, finds the project's import cycles once per analysis, so each `import` of a `.sharp` file costs the same however many imports the project has. 0.6.24 walked the namespaces an import leads to and, at each one, read every import of the project again, so a file cost time in proportion to its imports times the project's, and its workers waited on each other to look up the names they read: a 1,500-file application with 8 imports a file took 47 s to analyze, its `Module.sharp` of 100 imports 9 s alone.
@@ -1236,7 +1238,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.24...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.25...HEAD
+[0.6.25]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.24...v0.6.25
 [0.6.24]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.23...v0.6.24
 [0.6.23]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.22...v0.6.23
 [0.6.22]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.21...v0.6.22
