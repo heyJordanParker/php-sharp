@@ -4,6 +4,24 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.23] - 2026-11-17
+
+### Upgrading from 0.6.22
+
+- A property never narrows, spec section 21, a stored one, another object's and a static one included, because each read may give another value. A read after `!= null`, `== null` with an early exit, `!`, a `&&` chain, `??=`, an assignment, a `match` arm or the rest of a `?.` chain keeps the property's declared type, as a read after `is` without a name already did. 0.6.22 narrowed the property after each of them, so `if (this.visits != null) { return this.visits; }` compiled where `visits` is an `int?`. It is a compile error at the read, and the error says "`this.visits` is `int?`: a property never narrows, because each read may give another value." and "Bind the tested value, as `this.visits is int visits`.". Bind the tested value, as `if (this.visits is int visits) { return visits; }`, or read the property into a local once and test the local. A local, a parameter and an accessor's `field` narrow as before.
+- An `Any?` property read as an operand after `is` gives the operand's own error, "Left operand in binary operation has type `Any?`.", with the binding as its help, where 0.6.22 said "`order.total` is `Any?` here: a property is not narrowed, because it could change between the test and the use."
+- `mago convert` writes the binding the rule needs. An `if` or a `while` that tests a property its body reads again, by truthiness, `!== null` or `instanceof`, binds it, as `if ($this->visits) { return $this->visits; }` becomes `if (this.visits is int visits && visits != 0) { return visits; }`. An `if` that always leaves where `=== null` or `!… instanceof` holds binds it with `is not` for the statements after it, as `if ($this->logger === null) { return; } return $this->logger->info($message);` becomes `if (this.logger is not Logger logger) { return; } return logger.info(message);`. The binding takes the property's name, or `visits2` where the method has a `$visits`. Code that calls a method or writes the property before it reads it keeps the read, since a binding would hold a value PHP no longer reads there, and a read that needs the tested type keeps the file plain PHP. `$this->points ?: 0` on an `int?` reads the property once, as `match (this.points) { int value when value != 0 => value, default => 0 }`. 0.6.22 tested and read the property again, `this.visits != null && this.visits != 0`, which relied on the narrowing.
+- A `TimeZone` takes a name of the time zone database only when PHP builds it with the database's rules, spec section 24. PHP reads `CET`, `EET`, `MET`, `WET`, `EST`, `HST`, `MST`, `GMT`, `GMT+0`, `GMT-0` and `UCT` as a fixed abbreviation without them, so 0.6.22's `new TimeZone("CET")` kept +01:00 all summer, where the database gives +02:00. `TimeZone.tryOf` gives null for each, `new TimeZone("CET")` throws `ValueError` with "PHP reads "CET" as a fixed abbreviation without them. Name the region instead, such as "Europe/Brussels".", and `TimeZone.names()` lists none of them. Name the region, as `Europe/Brussels` for `CET`, and `UTC` for `GMT` and `UCT`. A stored `"CET"` read back through `Json.decode<TimeZone>` throws that `ValueError` too, so rewrite stored names once to the region's name.
+
+### Added
+
+- A `TimeZone` has `fixedOffset`, spec section 24: the offset of a zone whose clocks never change, read from the zone's rules and never from its name. `"+03:00"`, `"UTC"` and `"Etc/GMT-3"` each have one, as `new TimeZone("Etc/GMT-3").fixedOffset` gives 3 hours, and a zone the time zone database gives any change of offset, as `"Europe/Sofia"` or `"Asia/Kolkata"`, has none. A home zone refuses any zone that never changes its clocks in its constructor, as `if (zone.fixedOffset is Duration) { throw new ValueError(…); }`, where 0.6.22 left a project testing the name's text. `TimeZone` still takes both kinds of name, and a zone still round-trips through `toString`, `DateTime.parse`, `Json.encode` and `Json.decode<TimeZone>`.
+- A `.sharp` file reads and writes an XML document through PHP 8.4's DOM, spec section 23 and decision 83: the standard library names `Dom.XMLDocument` beside `Dom.HTMLDocument`, so `import Dom.XMLDocument;` compiles, `XMLDocument.createFromString(xml)` and `XMLDocument.createFromFile(path)` read a document, its `saveXml()` writes it, and an element's `innerHTML` and `outerHTML` give its markup. 0.6.22 refused the import, and had no `outerHTML`.
+
+### Fixed
+
+- A class with an `[Export]` method counts as used, spec section 5, since plain PHP calls the method through the global function it declares, spec section 23, as a class with a listener counts. 0.6.22 refused a class whose only members are `[Export]` methods with "Nothing uses `WordPressOverrides`, so it never runs."
+
 ## [0.6.22] - 2026-11-17
 
 ### Fixed
@@ -1188,7 +1206,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.22...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.23...HEAD
+[0.6.23]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.22...v0.6.23
 [0.6.22]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.21...v0.6.22
 [0.6.21]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.20...v0.6.21
 [0.6.20]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.19...v0.6.20

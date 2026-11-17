@@ -386,7 +386,7 @@ Checkout.maximum;
   - Too narrow is a compile error at the caller.
   - Too wide is a compile error in an application, for example a `public` member that nothing outside its namespace uses: "`Cart.recount` is public, and nothing outside `App.Shop` uses it." It runs in a project, a package whose `composer.json` says `"type": "project"`. A library's members are used by the projects that install it, which the checker never sees, so it never runs there. A constructor is exempt: `new` calls it, so it reaches as far as its class.
   - A use from plain PHP counts as one from PHP#, a callable array such as `[Carts::class, 'show']` included. A member counts as used when it carries an attribute whose class is marked `[DynamicallyAccessed]`, and every public member of a class counts as used when the class carries one: the framework that reads the attribute reaches the member through reflection, as a router reaches a `[Route]` method, which the checker never sees. The mark says what .NET's `[DynamicallyAccessedMembers]` says. It goes on an attribute class, in its declaration, as `#[\Sharp\DynamicallyAccessed]` in a plain PHP library's source, or on an `extern` line (section 29), and on a member it is a compile error. An `[Export]` method is exempt too, since plain PHP calls it through the global function it declares (section 23). Any other attribute, as PHP's `[Deprecated]`, `[Import]` or `[Key]`, says nothing about who uses the member, so the member is checked as one without it is. A public member only a view template uses is `internal`, since the checker never reads a template.
-- **A class of an application that nothing uses is a compile error,** as a plugin nothing wires in never runs: "Nothing uses `Ghost`, so it never runs." A class is used when code outside it creates it, binds it in a module, names it as a type, extends or implements it, or names it in `typeof` or an attribute, and a use from plain PHP counts. It runs in a project, as the too-wide error does, so a library's classes are exempt. A class that carries an attribute whose class is marked `[DynamicallyAccessed]`, or has a member that carries one, counts as used, as does a class with a listener, a method written with `on` (section 15), which runs when its event is emitted with nothing wired by hand. A class in a test folder counts as used, since its test runner creates it, as PHPUnit creates a test class. A class a framework finds by scanning folders does not: the application binds it or names it. A module and an enum's case are exempt.
+- **A class of an application that nothing uses is a compile error,** as a plugin nothing wires in never runs: "Nothing uses `Ghost`, so it never runs." A class is used when code outside it creates it, binds it in a module, names it as a type, extends or implements it, or names it in `typeof` or an attribute, and a use from plain PHP counts. It runs in a project, as the too-wide error does, so a library's classes are exempt. A class that carries an attribute whose class is marked `[DynamicallyAccessed]`, or has a member that carries one, counts as used, as does a class with a listener, a method written with `on` (section 15), which runs when its event is emitted with nothing wired by hand, and a class with an `[Export]` method, which plain PHP calls through the global function it declares (section 23). A class in a test folder counts as used, since its test runner creates it, as PHPUnit creates a test class. A class a framework finds by scanning folders does not: the application binds it or names it. A module and an enum's case are exempt.
 - **A public member of an application names its types.** In a project, the types of a `public` member's property, parameters and result hold no `Any`, `Any?` or `Object` at any depth, as TypeScript's `noImplicitAny` keeps `any` out of an app's API: `public Map<string, Any> checkoutPayload()` is a compile error, "`Store.checkoutPayload` is public, and a public member of an application names its types: `Any` in `Map<string, Any>`." A type parameter is a named type, so `public T first<T>(List<T> items)` compiles. An interface's members count. An `internal` or private member, an `internal` class's members and a library's are exempt, and an override keeps its parent's types, so an override of a plain PHP method that takes `mixed` takes `Any?`. A value of an unknown shape is named by a struct that parses it (section 10).
 - **There is no named reach,** such as `internal(App\Tenant)`. A helper shared by sibling namespaces moves to their parent namespace.
 
@@ -2930,6 +2930,18 @@ string? titled = step?.route(step.title);           // compiles: nor when the ar
 string title = step.title;                          // compile error: after the chain, step may be null
 ```
 
+**A `?.` receiver that is a property is read again in the rest of the chain, at its declared type,** because a property never narrows (section 21). Read it into a local first, which the chain then reads as not null.
+
+<!-- example null-safe-property-receiver: statements
+public class Step { public string label() => "step"; public string route(string label) => label; }
+private Step? current = null;
+-->
+```csharp
+string? again = this.current?.route(this.current.label()); // compile error: this.current is read again, as Step?
+Step? step = this.current;                                 // one read, into a local
+string? routed = step?.route(step.label());                // compiles: step is not null in the arguments
+```
+
 **A write through `?.` happens only when every `?.` receiver on its left is not null,** as in C# 14, Kotlin and Swift. When one is null, nothing is written, and neither the right side nor a `set` body runs. Each receiver runs once, and the write goes to the object it tested, so `this.orders.find(id)?.note = "gift"` calls `find` once.
 
 **An index into a collection that may be null is an error,** read or written, as a member read on a value that may be null is. Test the collection first, as in `if (tags != null)`.
@@ -5273,7 +5285,7 @@ public class Stamp
 }
 ```
 
-**PHP 8.4's HTML DOM is the standard library's way to read an HTML page, so a `.sharp` file names its classes,** as .NET names a platform type through its namespace. The standard library names `Dom.HTMLDocument`, `Dom.Element`, `Dom.Node`, `Dom.NodeList`, `Dom.HTMLCollection`, `Dom.Text`, `Dom.Attr` and the rest of PHP's `Dom` namespace that reads a page, and a file imports each by its full name, as `import Dom.HTMLDocument;`. They run as PHP's own classes. PHP's older `DOMDocument` is one of PHP's other classes, so its import is still an import of no class:
+**PHP 8.4's DOM is the standard library's way to read and write markup, an HTML page or an XML document, so a `.sharp` file names its classes,** as .NET names a platform type through its namespace. The standard library names `Dom.HTMLDocument`, `Dom.XMLDocument`, `Dom.Element`, `Dom.Node`, `Dom.NodeList`, `Dom.HTMLCollection`, `Dom.Text`, `Dom.Attr` and the rest of PHP's `Dom` namespace that reads and writes markup, and a file imports each by its full name, as `import Dom.HTMLDocument;`. `createFromString` and `createFromFile` read a document, `saveHtml` and `saveXml` write one, and an element's `innerHTML` and `outerHTML` give its markup. They run as PHP's own classes. PHP's older `DOMDocument` is one of PHP's other classes, so its import is still an import of no class:
 
 <!-- example html-dom -->
 ```csharp
@@ -5281,10 +5293,13 @@ public class Stamp
 namespace App.Pages;
 
 import Dom.HTMLDocument;
+import Dom.XMLDocument;
 
 public static class Summary
 {
     public static string? first(string html) => HTMLDocument.createFromString(html).querySelector("p")?.textContent;   // compiles: Dom.HTMLDocument is the standard library's
+
+    public static string? entry(string xml) => XMLDocument.createFromString(xml).querySelector("entry")?.outerHTML;     // compiles: Dom.XMLDocument is the standard library's
 }
 ```
 
@@ -5651,7 +5666,32 @@ Instant.tryParse("yesterday");                            // null
 new Date(2026, 2, 29);                                    // throws ValueError
 ```
 
-Two `Date`s, `Instant`s, `Duration`s or `DateTime`s order with `<`, `<=`, `>` and `>=`. A `DateTime` orders by its instant and then by its zone's name, so its `<=>` is 0 exactly when `==` is true. A zone's name is spelled exactly as the time zone database spells it, so `EEST` and `europe/sofia` name no zone, and a fixed offset from `-18:00` to `+18:00`, written as `+03:00`, names a zone, as in Java and Kotlin. A test module binds `new Clock.fixed(instant)` in place of the real `Clock`, and its `now()` is always that instant. After `import Sharp.Time.DateTimeInterfaceMembers;`, a plain PHP date, such as a Carbon, becomes an `Instant` with `toInstant()` or a `DateTime` with `toDateTime()`. `toPhpDateTime()` turns an `Instant` or a `DateTime` back into a plain PHP date. None of these four reads the clock.
+Two `Date`s, `Instant`s, `Duration`s or `DateTime`s order with `<`, `<=`, `>` and `>=`. A `DateTime` orders by its instant and then by its zone's name, so its `<=>` is 0 exactly when `==` is true. A zone's name is spelled exactly as the time zone database spells it, so `EEST` and `europe/sofia` name no zone. A name of the database names a zone only when PHP runs it with the database's rules, so `CET`, `GMT` and `EST`, which PHP reads as a fixed abbreviation, name no zone, and `TimeZone.names()` leaves them out: name the region, as `Europe/Brussels`. A fixed offset from `-18:00` to `+18:00`, written as `+03:00`, names a zone, as in Java and Kotlin. A test module binds `new Clock.fixed(instant)` in place of the real `Clock`, and its `now()` is always that instant. After `import Sharp.Time.DateTimeInterfaceMembers;`, a plain PHP date, such as a Carbon, becomes an `Instant` with `toInstant()` or a `DateTime` with `toDateTime()`. `toPhpDateTime()` turns an `Instant` or a `DateTime` back into a plain PHP date. None of these four reads the clock.
+
+A zone's `fixedOffset` is the offset of a zone whose clocks never change, read from the zone's rules and never from its name: a fixed offset, as `+03:00`, `UTC` and `Etc/GMT-3` each have one. A zone the database gives any change of offset, as `Europe/Sofia`, has none. A type that takes only a zone whose clocks follow a region's daylight saving refuses any zone that never changes its clocks in its constructor:
+
+<!-- example time-zone-kinds: statements
+import Sharp.Time.Duration;
+import Sharp.Time.TimeZone;
+-->
+```csharp
+public struct HomeZone
+{
+    public HomeZone(public TimeZone zone { get; })
+    {
+        if (zone.fixedOffset is Duration) {
+            throw new ValueError(`A home zone follows a region's daylight saving, and the clocks of "${zone.name}" never change.`);
+        }
+    }
+}
+
+new TimeZone("+03:00").fixedOffset?.minutes;            // 180
+new TimeZone("Etc/GMT-3").fixedOffset?.minutes;         // 180
+TimeZone.utc.fixedOffset?.minutes;                       // 0
+new TimeZone("Europe/Sofia").fixedOffset;                // null
+new HomeZone(new TimeZone("Europe/Sofia")).zone.name;   // "Europe/Sofia"
+new HomeZone(TimeZone.utc);                              // throws ValueError
+```
 
 A format is named by the text it writes, never by PHP's format letters. A `DateTime`'s `toOffsetString()` writes ISO-8601 with the offset and no zone, its `toSqlString()` a SQL `DATETIME`, and an `Instant`'s `toHttpDate()` the HTTP date of RFC 9110. `DateTime.parseLocal(text, zone)` reads a date and a time of day on a zone's clocks, with a space or a `T` between them. A `Date` and a `DateTime` give their `weekday` and `monthOfYear` as the enums `Weekday` and `Month`, whose `toString()` is the English name. Any other text is a template of the fields:
 

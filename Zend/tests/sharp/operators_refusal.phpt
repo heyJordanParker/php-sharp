@@ -130,9 +130,10 @@ line 23: This `match` misses `Status.Closed`.
 line 32: A `match` needs a `default` arm.
   A `match` may leave out `default` only when its arms handle every case of an enum or a sealed interface, or every value of a `List`.
   help: Add `default => …` as the last arm.
-line 40: `order.total` is `Any?` here: a property is not narrowed, because it could change between the test and the use.
-  PHP# narrows a local or a parameter after `is`, never a property.
-  help: Copy the value into a local first: test it with a name, as in `if (order.total is int t)`, and use `t`.
+line 40: Left operand in binary operation has type `Any?`.
+  An `Any` may hold any value, so arithmetic on it is unsafe until it is checked.
+  `order.total` is `Any?`: a property never narrows, because each read may give another value.
+  help: Bind the tested value, as `order.total is int total`.
 line 50: `circle` exists only where `shape is Circle circle` is true.
   help: A pattern variable holds a value only where its pattern matches. Test the value again here, or declare a local for `circle` before the test.
 line 55: Write `entity is not HasDesign`: `!` applies to `entity` before `is` tests it.
