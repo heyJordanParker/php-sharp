@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.22] - 2026-11-17
+
 ### Fixed
 
 - A `match` arm that compares with a string fixed at compile time names the value the `match` tests in every arm, spec section 24, as "A pattern compares `method` with `"GET"`, a string fixed at compile time, so it selects one of a closed set of values.". 0.6.21 printed an empty subject, as "A pattern compares `` with `"GET"`", in every arm whose `match` tests a local, and in each arm after the first whose `match` tests a call, as `this.named()`.
@@ -1186,7 +1188,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.21...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.22...HEAD
+[0.6.22]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.21...v0.6.22
 [0.6.21]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.20...v0.6.21
 [0.6.20]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.19...v0.6.20
 [0.6.19]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.18...v0.6.19
