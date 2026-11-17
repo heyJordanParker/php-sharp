@@ -9315,7 +9315,9 @@ static void zend_compile_property_hooks(
 
 			hook->child[0] = zend_ast_create_list(0, ZEND_AST_PARAM_LIST);
 
-			return_type_ast_ptr = &hook->child[3];
+			/* A PHP# hook carries its whole type in a ZEND_AST_SHARP_TYPE_ARGS without a PHP type, see
+			 * zend_sharp_declared_type, which takes the property's here. */
+			return_type_ast_ptr = hook->child[3] ? &hook->child[3]->child[0] : &hook->child[3];
 			*return_type_ast_ptr = prop_type_ast;
 		} else if (hook_kind == ZEND_PROPERTY_HOOK_SET) {
 			if (hook->child[0]) {
@@ -9351,7 +9353,7 @@ static void zend_compile_property_hooks(
 			}
 			zend_ast *return_type = zend_ast_create_zval_from_str(ZSTR_KNOWN(ZEND_STR_VOID));
 			return_type->attr = ZEND_NAME_NOT_FQ;
-			hook->child[3] = return_type;
+			*(hook->child[3] ? &hook->child[3]->child[0] : &hook->child[3]) = return_type;
 		} else {
 			ZEND_UNREACHABLE();
 		}

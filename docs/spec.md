@@ -6249,6 +6249,69 @@ properties[1].get(counter);                                   // 10
 properties[1].set(counter, 4);                                // throws Error
 ```
 
+**`createDelegate<TFunction>()` makes a method a value of the function type `TFunction`, so a call through reflection keeps to a `uses`.** `method.createDelegate<Function<Relation(Order) uses Database>>()` gives a function that calls the method. An instance method takes its receiver as the type's first parameter, of the class value `methods()` read it from, of a class below it, or of a class it extends, `Object` included, so a base class walks a subclass's methods with its own type, and a call with a receiver of another class throws `TypeError`, as `invoke` does. A static method takes no receiver and runs on that class value. `property.getter()` and `property.setter()` give their accessor's value the same way, so `getter().createDelegate<Function<int(Order)>>()` reads a computed property. The method fits the type as a function assigned to it must (section 21): the type passes each parameter the method needs, each parameter type it passes is within the method's, the method's result is within the type's unless that is `void` or `Any?`, and the type's `uses` lists each effect the method's body has (section 29). A plain PHP method has the effects its `extern` lines declare, read as a call reads them, and may have every effect without one, so `Function<string(RuntimeException)>` holds `getMessage`, which the standard library declares pure. A method that doesn't fit throws `ValueError` that names it and the reason, as "`App.Shop.Order.notify` has the effect `App.Shop.Mailer`, and `Function<int(App.Shop.Order) uses Sharp.Data.Database>` allows only `Sharp.Data.Database`.", and so does a call on a receiver whose override has an effect the type doesn't list. So a call of the value has only the effects its type lists, the checker types the call by the type alone, and `createDelegate` itself is pure. The calling code reaches the method as a direct call would when it makes the value:
+
+<!-- example reflection-delegates -->
+```csharp
+// app/Shop/Related.sharp
+namespace App.Shop;
+
+[Attribute]
+public class Related
+{
+}
+```
+
+<!-- example reflection-delegates -->
+```csharp
+// app/Shop/Relation.sharp
+namespace App.Shop;
+
+public class Relation
+{
+    public Relation(public string name { get; }) { }
+}
+```
+
+<!-- example reflection-delegates -->
+```csharp
+// app/Shop/Relations.sharp
+namespace App.Shop;
+
+public interface Relations
+{
+    List<Relation> relations() uses Database;
+}
+```
+
+<!-- example reflection-delegates -->
+```csharp
+// app/Shop/Model.sharp
+namespace App.Shop;
+
+public abstract class Model : Relations
+{
+    public List<Relation> relations()
+        => typeof(Self).methods()
+            .filter(method => method.attributes<Related>().count() > 0)
+            .map(method => method.createDelegate<Function<Relation(Model) uses Database>>()(this));   // compiles: each call has only Database
+}
+```
+
+<!-- example reflection-delegates -->
+```csharp
+// app/Shop/Invoked.sharp
+namespace App.Shop;
+
+public abstract class Invoked : Relations
+{
+    public List<Relation> relations()
+        => typeof(Self).methods()
+            .filter(method => method.attributes<Related>().count() > 0)
+            .map(method => method.invoke(this, []) is Relation relation ? relation : new Relation(method.name));   // compile error: relations must keep to Database, and invoke may have every effect
+}
+```
+
 **A `Field` reads and writes storage, so it runs no code a project wrote.** `field.get(receiver)` and `field.set(receiver, value)` reach the storage as a direct use from the calling code would, with the access and type checks of `Property.get` and `set`, an auto-property's storage as its `get`, and its `set` or `init`, do. An `init` property's storage takes a write only while it holds no value, as only the object's creation writes it, and a write after that throws `Error`. They run no accessor, not even one a subclass gives the property, so `field.get`, `field.set` and `field.isInitialized` are pure, and a storage layer held to `uses Database` reads and writes a row through `fields()`. A lazy object that has not loaded runs its initializer at its first read, so `get` and `set` on one throw `Error` rather than load it, as do a static's before its class has run its initial values. `field.defaultValue()` runs an initial value that is not constant, so it may have every effect, as `property.defaultValue()` may. Reading the storage never makes a `Property` pure: `property.get` still runs whatever accessor the property has:
 
 <!-- example reflection-effects -->
@@ -7127,7 +7190,7 @@ extern now uses Clock;               // compile error: no function now exists
 - **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
 - **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
-- **Reflection has the effects of the code it runs** (section 25). `Method.invoke`, `Property.get`, `Property.set` and every `defaultValue()` run a body, an accessor or an initial value no `uses` can name, so each may have every effect. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`.
+- **Reflection has the effects of the code it runs** (section 25). `Method.invoke`, `Property.get`, `Property.set` and every `defaultValue()` run a body, an accessor or an initial value no `uses` can name, so each may have every effect. `Method.createDelegate` is pure, and a call of the value it gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
 - **An `extern` line takes any attribute, which the class, method or function it declares carries as its own,** as every declaration takes one (section 1). The checker reads it as the declaration's, so a `[DynamicallyAccessed]` written on a class's line marks a library's attribute class whose source carries no mark (section 5). At run time PHP#'s `typeof(X).attributes<T>()` and `Method.attributes<T>()`, and plain PHP's `ReflectionClass`, `ReflectionMethod` and `ReflectionFunction` `getAttributes()`, give the declaration's own attributes and then the line's, though no code loads the file that holds the line. A method takes them on the line of the class that declares it, so an attributed line of a method the class only inherits is a compile error that names that class. An `extern namespace` line (section 23) declares nothing, so an attribute on it is a compile error. `import` and `extern` stay separate lines.
 
@@ -7144,7 +7207,7 @@ extern AsEventListener;          // compiles: AsEventListener carries [Dynamical
 ```
 - **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package declares the effect of each built-in function the standard library calls, so `Files` has the effect `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
 
-**The standard library's twelve effect classes replace PHP's built-ins for their effects.** Each lives in the namespace of its domain (section 23), and a `uses` names it by its class name with no import, whatever the file imports:
+**The standard library's twelve effect classes replace PHP's built-ins for their effects.** Each lives in the namespace of its domain (section 23), and a `uses` names it by its class name with no import. A name in `uses` resolves as any class name does, so a class the file imports or declares under the name, or one in the file's own namespace, wins over the effect, as `App.Math` wins over `Math`, and a file that imports a facade named `Http` imports the effect under another name, `import Sharp.Net.Http as HttpEffect;`:
 
 - `Database`, in `Sharp.Data`, replaces PDO.
 - `Http`, in `Sharp.Net`, replaces curl.

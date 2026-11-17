@@ -4,6 +4,26 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.24] - 2026-11-17
+
+### Upgrading from 0.6.23
+
+- A name in `uses` resolves as any class name does, spec section 29: a class the file imports or declares under the name, or one in the file's own namespace, wins over the standard effect of that name, as `App.Math` wins over `Math`. 0.6.23 read a standard effect's name in `uses` as the effect whatever the file imported or declared, so `uses Database` in a namespace with its own `Database` named `Sharp.Data.Database`, and a file that imports Laravel's `Http` facade wrote `uses Http` for the effect. Such a file now imports the effect under another name, as `import Sharp.Net.Http as HttpEffect;`, and writes `uses HttpEffect`.
+
+### Added
+
+- A `Method` gives a value of a function type that calls it, spec section 25: `method.createDelegate<Function<Relation(Model) uses Database>>()` gives a function whose call runs the method, an instance method on the receiver the call passes first, of its class, a class below it or one it extends, `Object` included, and `property.getter().createDelegate<Function<int(Order)>>()` reads a computed property. The method's parameters, result and effects must fit the type, as a function's must to be assigned to it, so a PHP# method's effects are the ones the compile solved for its body, a plain PHP method's are those its `extern` lines declare, as `Function<string(RuntimeException)>` holds `getMessage`, and one with neither may have every effect. One that doesn't fit throws `ValueError` naming the method and the reason, as "`App.Shop.Order.notify` has the effect `App.Shop.Mailer`, and `Function<int(App.Shop.Order) uses Sharp.Data.Database>` allows only `Sharp.Data.Database`.". A call of the value has the effects its type lists, and making it is pure, so a base class held to `uses Database` walks its relation methods by an attribute and calls each, where `invoke` may have every effect and no `uses` accepts it.
+
+### Fixed
+
+- A closure of a PHP# method whose effects no function type can say, as one that calls plain PHP no `extern` declares, is of no function type, spec section 21, whatever its result is. 0.6.23 carried such a method's result type alone, and read a result that is itself a function type as the closure's own type, so a closure of `Function<int()> counter()` was a `Function<int()>`.
+- Runs of `mago analyze`, `mago lint` and every other command that starts extension hosts take turns on the folder in Mago's cache they compile the project into for the hosts, as requests take turns on `.sharp/compile.lock`: one run compiles at a time under the folder's `compile.lock`, a run that waited reuses the tree the other compiled, and a run that dies frees the lock. A run's hosts read the tree it started them on until the run ends, so a run after an edit compiles once they are done, and `mago analyze --watch` lets other runs compile while it waits for a change. 0.6.23 let an editor's run and a terminal's run that start together write the folder at once, and one failed with "can't delete the file" on a file the other wrote.
+- `mago analyze --watch` starts its extension hosts again whenever the hosts' compiled tree changed since its last analysis, whichever run compiled it, so its hosts never run a class from an older tree. 0.6.23 started them again only when its own compile wrote a file, so after a terminal's run compiled an edit first, the watch's hosts kept the class from before the edit.
+- A compile, `mago compile`'s and the extension hosts' alike, has nothing to do when only a setting that changes nothing it writes changed: the threads, the stack size, the version checks, the linter's, the formatter's and the guard's settings, and the editor URL. So runs with their own `--threads`, as an editor's and a terminal's, share one compile. 0.6.23 compiled again whenever any setting differed from the last compile's.
+- A class a law reaches compiles when its header names `Iterable<T>`, spec section 12, as `public class Bag : Iterable<string>, Countable`, whether the law is in its own file or reaches it from another one, as through a parameter or a property. The law's translation reads the classes the header names as the checker does, and `Iterable<T>` names none. 0.6.23 refused the class's file with "The lowering of app/Bag.sharp panicked though the checker accepted it, a defect of the checker: resolved name not found at position".
+- A `.sharp` file that calls, reads or writes a member the analysis can't find on a class whose base class or interface is missing is refused at that member, with the error a member the class lacks gives, as "Method `Row.key` does not exist.", since PHP# runs only the member its analysis resolved. A plain PHP file still reports nothing there. 0.6.23 accepted the file, and its compile failed with "The lowering of app/Reader.sharp panicked though the checker accepted it, a defect of the checker: internal error: entered unreachable code: the analysis records what each call of a file the checker accepted runs" or "… the checker refuses `App\Row.key`, which names no member".
+- A class that plain PHP names before `::` counts as used, spec section 5, whichever class declares the member the code reaches through it. So a PHP# class whose only use is a plain PHP `App::make()` or `App::$count`, where its plain PHP parent declares the static method or property, written in full or through a `use` import, is used, as one that plain PHP creates with `new` already was. 0.6.23 counted the use for the parent alone and refused the class with "Nothing uses `App`, so it never runs."
+
 ## [0.6.23] - 2026-11-17
 
 ### Upgrading from 0.6.22
@@ -1206,7 +1226,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.23...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.24...HEAD
+[0.6.24]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.23...v0.6.24
 [0.6.23]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.22...v0.6.23
 [0.6.22]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.21...v0.6.22
 [0.6.21]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.20...v0.6.21

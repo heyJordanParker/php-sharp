@@ -78,6 +78,17 @@ final class Listener
     private function hear(object $event): void {}
 }
 
+/**
+ * @strict-properties
+ * @not-serializable
+ */
+final class Delegate
+{
+    private function __construct() {}
+
+    private function call(mixed ...$arguments): mixed {}
+}
+
 function &statics(string $class, string $key, ?string $field = null): array {}
 
 function keep(string $key, ?\Closure $compute = null): mixed {}
@@ -159,6 +170,8 @@ function constant(string $class, string $name): mixed {}
 function createInstance(string $type, array $arguments): object {}
 
 function invoke(?object $receiver, string $class, string $method, array $arguments, string $readOn): mixed {}
+
+function createDelegate(string $readOn, string $class, string $method, string $type): \Closure {}
 
 function read(?object $receiver, string $class, string $property): mixed {}
 

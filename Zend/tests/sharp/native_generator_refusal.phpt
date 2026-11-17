@@ -1,5 +1,5 @@
 --TEST--
-sharp/bin/native refuses an extern declaration it cannot read, naming its file and line, and writes nothing
+sharp/bin/native refuses an extern declaration it cannot read, naming its file and line, and writes nothing, while a comment that says extern is no declaration
 --FILE--
 <?php
 require __DIR__ . '/native_generator.inc';
@@ -12,6 +12,7 @@ namespace Sharp.Text;
 
 public static class Join
 {
+    // An extern method's body is native code.
     public static extern string lines(List<string> lines);
 }
 
@@ -23,7 +24,7 @@ var_dump(file_exists("$copy/ext/sharp/sharp_native.h"), file_exists("$copy/sharp
 native_generator_remove($copy);
 ?>
 --EXPECT--
-sharp/composer/library/Sharp/Text/Join.sharp:5: sharp/bin/native cannot read `public static extern string lines(List<string> lines);`. It reads `public static extern <type> <name>(<parameters>);`, or `private static extern`, in a `public static class` or a `public foreign class` under `namespace Sharp`, where every type is string, int, float or bool, the return type may be void or List<string>, and every parameter after one with a default has a default too.
+sharp/composer/library/Sharp/Text/Join.sharp:6: sharp/bin/native cannot read `public static extern string lines(List<string> lines);`. It reads `public static extern <type> <name>(<parameters>);`, or `private static extern`, in a `public static class` or a `public foreign class` under `namespace Sharp`, where every type is string, int, float or bool, the return type may be void or List<string>, and every parameter after one with a default has a default too.
 exits with 1
 bool(false)
 bool(false)

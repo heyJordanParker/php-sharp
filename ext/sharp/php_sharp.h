@@ -6,7 +6,7 @@
 extern zend_module_entry sharp_module_entry;
 #define phpext_sharp_ptr &sharp_module_entry
 
-#define PHP_SHARP_VERSION "0.6.23"
+#define PHP_SHARP_VERSION "0.6.24"
 
 #define SHARP_FILE_EXTENSION ".sharp"
 
@@ -200,6 +200,10 @@ typedef enum {
 	/* A type parameter as reflection reads it, spec section 25: its name and its bound, `TItem : App.Mark`. The bound
 	 * is the one member, and the name is its class_name, which is its class value, so `name()` gives `TItem`. */
 	SHARP_TYPE_PARAMETER,
+	/* `: R`, the result alone a PHP# function carries when no function type can say its type, as when it may have an
+	 * effect no `uses` lists: R is the one member. Only a whole text is one, so a function whose result is a function
+	 * type never reads as that type. */
+	SHARP_TYPE_RESULT,
 } sharp_type_kind;
 
 /* The built-in type a SHARP_TYPE_NAMED type names, so a check of a value reads no text. */

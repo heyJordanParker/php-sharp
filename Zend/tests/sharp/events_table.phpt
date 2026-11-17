@@ -1,5 +1,5 @@
 --TEST--
-emit runs nothing when mago compile wrote no listener table, refuses a table mago compile did not write, as the engine refuses a damaged compiled file, and says a table that lists a listener the code no longer has is out of date
+emit runs nothing when mago compile wrote no listener table, refuses a table mago compile did not write, its effects included, as the engine refuses a damaged compiled file, and says a table that lists a listener the code no longer has is out of date
 --FILE--
 <?php
 require __DIR__ . '/Container.inc';
@@ -31,20 +31,22 @@ foreach ([
     'the compiled table' => $compiled,
     'no table' => null,
     'a table that is not a list' => '<?php return 1;',
-    'a table without its listeners' => "<?php return ['inputs' => [], 'dispatcher' => null, 'attributes' => [], 'tags' => []];",
-    'a table without its dispatcher' => "<?php return ['inputs' => [], 'listeners' => [], 'attributes' => [], 'tags' => []];",
-    'a dispatcher that is not a path and a namespace' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => ['app/Module.sharp'], 'attributes' => [], 'tags' => []];",
-    'a row with three fields' => "<?php return ['inputs' => [], 'listeners' => [['App\\Demo\\Notices', 'hear', ['App\\Demo\\Paid']]], 'dispatcher' => null, 'attributes' => [], 'tags' => []];",
-    'a listed type that is not a name' => "<?php return ['inputs' => [], 'listeners' => [['App\\Demo\\Notices', 'hear', [1], true]], 'dispatcher' => null, 'attributes' => [], 'tags' => []];",
-    'a row that does not say whether the method takes the event' => "<?php return ['inputs' => [], 'listeners' => [['App\\Demo\\Notices', 'hear', ['App\\Demo\\Paid'], 1]], 'dispatcher' => null, 'attributes' => [], 'tags' => []];",
+    'a table without its listeners' => "<?php return ['inputs' => [], 'dispatcher' => null, 'attributes' => [], 'effects' => [], 'tags' => []];",
+    'a table without its dispatcher' => "<?php return ['inputs' => [], 'listeners' => [], 'attributes' => [], 'effects' => [], 'tags' => []];",
+    'a dispatcher that is not a path and a namespace' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => ['app/Module.sharp'], 'attributes' => [], 'effects' => [], 'tags' => []];",
+    'a row with three fields' => "<?php return ['inputs' => [], 'listeners' => [['App\\Demo\\Notices', 'hear', ['App\\Demo\\Paid']]], 'dispatcher' => null, 'attributes' => [], 'effects' => [], 'tags' => []];",
+    'a listed type that is not a name' => "<?php return ['inputs' => [], 'listeners' => [['App\\Demo\\Notices', 'hear', [1], true]], 'dispatcher' => null, 'attributes' => [], 'effects' => [], 'tags' => []];",
+    'a row that does not say whether the method takes the event' => "<?php return ['inputs' => [], 'listeners' => [['App\\Demo\\Notices', 'hear', ['App\\Demo\\Paid'], 1]], 'dispatcher' => null, 'attributes' => [], 'effects' => [], 'tags' => []];",
     'an input with three fields' => "<?php return ['inputs' => [['app/Demo/*.sharp', 1, 0]], " . $rows,
     'an input whose hash is not 32 hex digits' => "<?php return ['inputs' => [['app/Demo/*.sharp', 1, 0, 'abc']], " . $rows,
-    'a table without its attributes' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => null, 'tags' => []];",
-    'attributes that are not lists of paths' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => null, 'attributes' => ['app\\demo\\paid' => [1]], 'tags' => []];",
-    'a table without its tags' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => null, 'attributes' => []];",
-    'a family row that is not a key and its variants' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => null, 'attributes' => [], 'tags' => ['App\\Demo\\Method' => ['type']]];",
-    'a listener class that is gone' => $inputs . "'listeners' => [['App\\Demo\\Gone', 'hear', ['App\\Demo\\Paid'], true]], 'dispatcher' => null, 'attributes' => [], 'tags' => []];",
-    'a listener method that is gone' => $inputs . "'listeners' => [['App\\Demo\\Notices', 'gone', ['App\\Demo\\Paid'], true]], 'dispatcher' => null, 'attributes' => [], 'tags' => []];",
+    'a table without its attributes' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => null, 'effects' => [], 'tags' => []];",
+    'attributes that are not lists of paths' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => null, 'attributes' => ['app\\demo\\paid' => [1]], 'effects' => [], 'tags' => []];",
+    'a table without its effects' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => null, 'attributes' => [], 'tags' => []];",
+    'effects that are not lists of names' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => null, 'attributes' => [], 'effects' => ['lib\\mailer' => [1]], 'tags' => []];",
+    'a table without its tags' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => null, 'attributes' => [], 'effects' => []];",
+    'a family row that is not a key and its variants' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => null, 'attributes' => [], 'effects' => [], 'tags' => ['App\\Demo\\Method' => ['type']]];",
+    'a listener class that is gone' => $inputs . "'listeners' => [['App\\Demo\\Gone', 'hear', ['App\\Demo\\Paid'], true]], 'dispatcher' => null, 'attributes' => [], 'effects' => [], 'tags' => []];",
+    'a listener method that is gone' => $inputs . "'listeners' => [['App\\Demo\\Notices', 'gone', ['App\\Demo\\Paid'], true]], 'dispatcher' => null, 'attributes' => [], 'effects' => [], 'tags' => []];",
 ] as $name => $contents) {
     $contents === null ? unlink($table) : file_put_contents($table, $contents);
     echo $name, ': ';
@@ -70,6 +72,8 @@ an input with three fields: CompileError: .sharp/listeners.php is damaged. Run v
 an input whose hash is not 32 hex digits: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 a table without its attributes: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 attributes that are not lists of paths: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
+a table without its effects: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
+effects that are not lists of names: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 a table without its tags: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 a family row that is not a key and its variants: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 a listener class that is gone: CompileError: .sharp/listeners.php is out of date: it lists App.Demo.Gone, which no longer exists. Run vendor/bin/mago compile.
