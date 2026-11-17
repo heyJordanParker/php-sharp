@@ -46,8 +46,7 @@ PHP's names and argument orders would appear wherever a built-in is called.
 
 ## Precedent
 
-- **Chosen:** C#'s `[DllImport] static extern`, Rust's `extern "C" { fn … }` and Kotlin/JS's `external fun`, each a typed declaration of a foreign function the code calls as its own.
-- **Rejected:** C#'s `global::` and decision 83's plain PHP class.
+- **Rejected:** decision 83's plain PHP class.
 
 ## Spec
 

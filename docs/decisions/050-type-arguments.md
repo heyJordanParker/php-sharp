@@ -43,9 +43,7 @@ Every call whose type argument appears only in the result names the type twice, 
 
 ## Precedent
 
-- **Chosen:** C#'s error CS0411, and Swift, which infers a generic parameter from the contextual type of the result.
 - **Rejected, fallback to the bound:** PHPStan and Psalm.
-- **Rejected, arguments only:** C#, which infers from the arguments and never from the result's declared type.
 
 ## Spec
 

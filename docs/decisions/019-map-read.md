@@ -27,11 +27,6 @@ int price = prices[plan];   // compiles; runs: throws when plan is missing
 
 Nothing at the read shows that a key can be missing, so the normal case for a `Map` surfaces as an exception at runtime.
 
-## Precedent
-
-- **Chosen:** Swift's `Dictionary`, Kotlin's `Map`, and TypeScript with `noUncheckedIndexedAccess`.
-- **Rejected:** C#'s `KeyNotFoundException` and Hack's `dict`.
-
 ## Spec
 
 [Section 12, Collections](../spec.md#12-collections)

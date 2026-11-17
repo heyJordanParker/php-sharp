@@ -35,17 +35,17 @@ Each question is about syntax or meaning. The recommendation is mine, and the bu
 6. **Line 259, "Reflection that tells fields from properties".** A `protected` field and a `protected` auto-property both run as PHP's `protected` property today, so nothing tells them apart. What does code call? Options:
    - A: `ReflectionProperty::isField(): bool`, from a flag the bridge sets on each field, beside PHP's `isPromoted()` and `isVirtual()`.
    - B: an attribute the bridge writes on each field, read with `getAttributes()`.
-   - C: C#'s two lists, `getFields()` and `getProperties()` on `ReflectionClass`.
+   - C: two lists, `getFields()` and `getProperties()` on `ReflectionClass`.
    - Recommended: A. It is one flag and one method, and PHP's `getProperties()` keeps listing both, as plain PHP tools expect.
-7. **Lines 191 and 252, an access level on `get`.** C# lets either accessor be narrower. PHP cannot run a `get` narrower than `set`. Master refuses `{ protected get; set; }` as "not supported yet". Recommended: only `set` and `init` take a level, as in Swift's `private(set)`, and a level on `get` is the error "Write the read level on the property, and a narrower one on `set`."
-8. **Line 293, what an observer sees and when it runs.** Recommended, after Swift:
+7. **Lines 191 and 252, an access level on `get`.** Either accessor could be narrower. PHP cannot run a `get` narrower than `set`. Master refuses `{ protected get; set; }` as "not supported yet". Recommended: only `set` and `init` take a level, and a level on `get` is the error "Write the read level on the property, and a narrower one on `set`."
+8. **Line 293, what an observer sees and when it runs.** Recommended:
    - Both observers see `value`, the written value, and `field`, the storage, as accessor bodies do (line 256). In `didSet`, `field` is the new value. In `willSet` it is the value the write replaces (Queue 17): an observer runs only once the object is built, when every member with storage holds a value.
    - `willSet` cannot change or stop the write.
    - Jordan accepted, replacing his first answer (Queue 17): they run only once the object is built, never on an initial value, a write while a constructor, a named constructor or an object initializer runs (Queue 19), or a `with` copy's values.
    - They run when the value is unchanged.
    - Beside a `set` body, the order is `willSet`, the `set` body, `didSet`.
    - They need `set`. On `init`, a get-only or a computed property, they are an error.
-9. **Line 304, the value of `nameof(Order.total)`.** The harness's `Query.orderBy(string column)` takes it. Recommended: the string `"total"`, typed `string`, as C#'s `nameof`. It names an instance or static property visible at the call, never a field or a method. `nameof` becomes a keyword, as `typeof` is, so it can't name a local.
+9. **Line 304, the value of `nameof(Order.total)`.** The harness's `Query.orderBy(string column)` takes it. Recommended: the string `"total"`, typed `string`. It names an instance or static property visible at the call, never a field or a method. `nameof` becomes a keyword, as `typeof` is, so it can't name a local.
 10. **Lines 319 to 328, what a behavior is.** The spec gives the clause and the wrapping order, not the class. Recommended:
     - A behavior implements the standard library interface `Behavior<T>`, with `T get(T value)` and `T set(T value)`. A generic interface needs #102.
     - `set` runs outermost first: `via Trimmed, Tracked` passes the written value to `Trimmed.set`, its result to `Tracked.set`, and that result to storage. `get` runs the other way, from storage through `Tracked.get` and then `Trimmed.get`.
@@ -56,10 +56,10 @@ Each question is about syntax or meaning. The recommendation is mine, and the bu
 11. **Lines 332 to 342, `lazy`.**
     - Jordan's ruling: a `lazy` body may have any effect, and a read carries it. "Getters must be pure." is gone from section 29: a `get` body may have any effect but never writes `this` (`getters_never_write_this`, `getter-writes-this`), and unlike a method marked `readonly` it may call plain PHP and unmarked PHP# methods. The kept value is the language's write.
     - Recommended form: only `lazy T name => expr;`. `lazy` with accessors or an initial value is an error.
-    - If the body throws, nothing is kept and the next read runs it again, as Kotlin's `lazy` does.
+    - If the body throws, nothing is kept and the next read runs it again.
     - `static lazy` lives "the lifetime of a `singleton` (section 32)". #121 makes a singleton live for the request. Recommended: a `static lazy` value is kept where #121 keeps singletons, so the two lifetimes are equal by construction. This needs #121. The other option is a PHP static, equal under PHP-FPM and different in a worker that serves many requests.
-12. **Lines 201 and 237, a static initial value that is not constant.** `private static Plan plan = new Plan();` is refused today as "not supported yet". When does it run? Recommended: once, when the class is first used, as C#'s static initializer runs. The bridge sets it in the class's hidden static method `#statics`, which the engine runs when a request first builds the class's statics, so a preloaded class gets it in every request (Queue 14).
-13. **Lines 196 and 299, a non-nullable settable property with no initial value.** `public int views { get; private set; }` and `public string name { get; set; didSet => … }` must compile, and the example classes have no constructor. Today the first read before a write throws PHP's "must not be accessed before initialization". Options: keep the throw, or start at the type's default (`0`, `""`, `false`) as C# does. Recommended: keep the throw, and name it in a sentence of section 6, since a default `""` hides a missing write.
+12. **Lines 201 and 237, a static initial value that is not constant.** `private static Plan plan = new Plan();` is refused today as "not supported yet". When does it run? Recommended: once, when the class is first used. The bridge sets it in the class's hidden static method `#statics`, which the engine runs when a request first builds the class's statics, so a preloaded class gets it in every request (Queue 14).
+13. **Lines 196 and 299, a non-nullable settable property with no initial value.** `public int views { get; private set; }` and `public string name { get; set; didSet => … }` must compile, and the example classes have no constructor. Today the first read before a write throws PHP's "must not be accessed before initialization". Options: keep the throw, or start at the type's default (`0`, `""`, `false`). Recommended: keep the throw, and name it in a sentence of section 6, since a default `""` hides a missing write.
 
 ## Decisions team-lead approves
 
@@ -191,7 +191,7 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 - **Analyzer:** `expression/name_of.rs` resolves the property on the class, refuses a missing or invisible one, and types the expression `string`.
 - **The bridge:** a string literal of the property's name.
 - **Engine:** a row in `name_of.phpt` passing it to a PHP# method that takes `string`.
-- **As built.** `nameof` names a field too, because team-lead's ruling makes it C#'s `nameof`, and the codex cannot tell a field from an auto-property without a new flag. A method is refused as "Property `Order.sum` does not exist.", and a property not readable at the call as "`Order.secret` is `private`, so `nameof` can't name it here." The expression is the literal string of the name, so `sharp-lean` translates it as that string, and a class law over it is proven.
+- **As built.** `nameof` names a field too, because team-lead's ruling makes it name a field as it names a property, and the codex cannot tell a field from an auto-property without a new flag. A method is refused as "Property `Order.sum` does not exist.", and a property not readable at the call as "`Order.secret` is `private`, so `nameof` can't name it here." The expression is the literal string of the name, so `sharp-lean` translates it as that string, and a class law over it is proven.
 
 ## Section 6.4: reusable property behaviors
 
@@ -270,7 +270,7 @@ Question 1's answer: section 5's `internal` is built whole in this PR, once team
 | 157 | `internal` is the default for classes | Silently accepted: `Hidden`, `class Hidden` with no modifier in `App.Tenant.Store`, is used from `App.Tenant.Other` (`SiblingUse`) with no error | The analyzer refuses a reference to a class, interface, enum or struct from outside its reach, wherever a type name is resolved: `new`, a type, `import`, a static access, `is`, `as`, `typeof` |
 | 160 | A file's namespace matches its path | Silently accepted: `app/Tenant/Other/Mismatch.sharp` declares `namespace App.Tenant.Store;` and compiles | Semantics compares the file's `namespace` line with the PSR-4 folder Composer maps it to, which the compiler already reads for a law's Lean module name |
 | 161 | A test folder may declare the namespace it tests, which gives it `internal` access | Not checked: `Tests/Tenant/HiddenTest.sharp` declares `App.Tenant.Store` and compiles, because nothing is checked | Line 160's check accepts a file in a test folder declaring any namespace. Proposed: a test folder is one Composer's `autoload-dev` maps, which is how a Composer project marks its tests. The spec does not define it, and #121 defines only a test file (one holding a test module). This is for team-lead to approve |
-| 162 | A member is never more visible than its class | Not checked, because no class is narrower than `public` today | The analyzer's reach of a member is the narrower of its own and its class's, as C#'s effective accessibility is |
+| 162 | A member is never more visible than its class | Not checked, because no class is narrower than `public` today | The analyzer's reach of a member is the narrower of its own and its class's |
 | 164 | Too narrow is a compile error at the caller | Works for `private` and `protected`. None for `internal` | Line 157's check, with the caller's namespace in the message: "`Hidden` is internal to `App.Tenant.Store`, and `App.Tenant.Other` is outside it." |
 | 165 | Too wide is a warning, for example a `public` member nothing outside its namespace uses | None: `Wide.unusedOutside` is `public` and used only in its class, and `mago analyze` reports nothing | `too_wide_members` in `statement/class_like/unused_members.rs` warns on a `public` member that nothing outside its namespace and the ones below it uses, its own class's uses and a member nothing uses included. It reads every file's uses, so it runs once after `Effects::solve`, in `IncrementalAnalysisService::run_analyzer_selective` and `AnalysisService::oneshot`. It runs in a project only, a package whose `composer.json` says `"type": "project"` (Jordan's ruling): the loader sets `File::is_project`, and the codex marks the file's PHP# class-likes `MetadataFlags::PROJECT` |
 | 166 | There is no named reach, such as `internal(App\Tenant)` | Refused with 8 generic "Parse error encountered during parsing" (`NamedReach`) | One parse error at the `(`, the error a typo gets, and the declaration parses on as `internal` |
@@ -383,8 +383,8 @@ Not added: no new `sharp_kind`, no change to `ext/sharp/sharp.c` and no new crat
 
 The names, each with the slate it was picked from:
 
-- `NameOf`: the keyword and C#'s `NameOfExpression`, beside `TypeOf`. Also considered: `PropertyReference`, `MemberName`.
-- `BehaviorList`: what the clause holds, beside `PropertyHookList`. Also considered: `ViaClause`, `BehaviorClause`, `Delegation` (Kotlin).
+- `NameOf`: the keyword, beside `TypeOf`. Also considered: `PropertyReference`, `MemberName`.
+- `BehaviorList`: what the clause holds, beside `PropertyHookList`. Also considered: `ViaClause`, `BehaviorClause`, `Delegation`.
 - `PropertyHook::is_observer`: the spec's heading word. Also considered: `is_change_observer`, `is_watcher`.
 - `UntypedPropertyInSharp`: beside `UntypedFieldInSharp`. Also considered: `MissingPropertyType`.
 - `invalid-property-behavior`: what is wrong, at the `via`. Also considered: `behavior-type-mismatch`, `invalid-via`.

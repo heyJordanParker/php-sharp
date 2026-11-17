@@ -28,13 +28,6 @@ Function<int(Function<int(int)> uses Http)> apply;               // would compil
 
 The effects sit outside the type they describe. Inside a type argument list, a comma after an effect can start the next type argument, so a type with two effects needs parentheses there. Next to `?`, the nullable mark can go before or after the effects, and the second spelling reads as a nullable effect.
 
-## Precedent
-
-- **Chosen:** Swift's `throws` and Koka's effect rows, which both write a function's effects inside its function type.
-  - Swift's [Types reference, Function Type](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/types/): "Function types for functions that can throw or rethrow an error must include the `throws` keyword." Its grammar puts `throws` between the parameters and the result: "*function-type* → *attributes*? *function-type-argument-clause* `async`? *throws-clause*? `->` *type*", as in `(Cart) throws -> Charge`.
-  - Koka's [book, Effect types](https://koka-lang.github.io/koka/doc/book.html): "A novel part about Koka is that it automatically infers all the _side effects_ that occur in a function." Under "Combining effects": "We can write such combination as a _row_ of effects as `<div,exn,ndet>`." The row is part of the function type, between the arrow and the result, as in `int -> exn int`.
-- **Rejected:** Java's `throws`, which a method writes after its parameter list, outside any type. The [Java Language Specification, section 8.4](https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.4), writes "MethodHeader: Result MethodDeclarator [Throws]". Java has no function type with effects: `java.util.function.Function` cannot declare a checked exception.
-
 ## Spec
 
 - [Section 14, Functions as values](../spec.md#14-functions-as-values)

@@ -26,20 +26,14 @@ typeof(Order);                                  // the class Order, unless a loc
 
 A bare name inside `typeof` would be a local's value when a local with that name is in scope, and a type otherwise. Jordan ruled that a pattern takes types and constants only, and `typeof` follows the same rule.
 
-### Rejected: `getType()` on every object, as in C#
+### Rejected: `getType()` on every object
 
 ```csharp
-Class<Order> type = order.getType();   // not PHP#: C#'s GetType() on every object
+Class<Order> type = order.getType();   // not PHP#: a getType() on every object
 node.getType();                        // php-parser's Node declares its own getType(), which returns a string
 ```
 
 Plain PHP classes already declare their own `getType()`, such as nikic/php-parser's `Node` and Symfony's `ArgumentMetadata`. A method on every object would collide with theirs, and the same call would mean two things.
-
-## Precedent
-
-- **Chosen:** Swift's `type(of:)` and Python's `type(x)`.
-- **Rejected, `typeof(value)`:** TypeScript's `typeof x`.
-- **Rejected, `getType()`:** C#'s `GetType()`.
 
 ## Spec
 

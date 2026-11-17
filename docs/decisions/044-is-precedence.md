@@ -2,11 +2,11 @@
 
 ## Decision
 
-`is` and `as` bind with the relational comparisons `<`, `<=`, `>` and `>=`, as in C#, not in PHP's `instanceof` place above `!`. So `!entity is HasDesign` parses as `(!entity) is HasDesign`, which is a compile error, because `!` takes a `bool`. The error reads "write entity is not HasDesign". A negative test is written `is not`, as section 21 already has it.
+`is` and `as` bind with the relational comparisons `<`, `<=`, `>` and `>=`, not in PHP's `instanceof` place above `!`. So `!entity is HasDesign` parses as `(!entity) is HasDesign`, which is a compile error, because `!` takes a `bool`. The error reads "write entity is not HasDesign". A negative test is written `is not`, as section 21 already has it.
 
 ## Options
 
-### Chosen: C#'s place, with the comparisons
+### Chosen: with the comparisons
 
 ```csharp
 if (entity is not HasDesign) { … }       // compiles
@@ -23,18 +23,13 @@ if (!entity is HasDesign) { … }          // not PHP#: means !(entity is HasDes
 
 The line reads two ways, as "not (entity is HasDesign)" and as "(not entity) is HasDesign", and only the precedence table says which one runs.
 
-### Rejected: Kotlin's `!is`
+### Rejected: a `!is` operator
 
 ```csharp
-if (entity !is HasDesign) { … }          // not PHP#: Kotlin's !is
+if (entity !is HasDesign) { … }          // not PHP#: a second spelling of is not
 ```
 
 `!is` would be a second spelling of `is not`, which section 21 already uses, including to create a variable (decision 20).
-
-## Precedent
-
-- **Chosen:** C#'s `is` and `is not`, which bind with the relational operators.
-- **Rejected:** PHP's `instanceof`, which binds tighter than `!`, and Kotlin's `!is`.
 
 ## Spec
 

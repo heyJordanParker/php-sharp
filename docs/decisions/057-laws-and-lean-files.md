@@ -4,13 +4,13 @@
 
 Both kinds of facts the checker verifies are written in PHP#, in `.sharp` files (Jordan, 10-21). No `.lean` file of the project is ever read.
 
-**Laws only, as in Bend.** A class, an enum or a module states its laws in PHP#, with `law`. A law is a claim over every value of its parameters, and `when` after the parameters states its condition. `law name(parameters) => claim;` is proven by the checker alone. A law the checker cannot prove alone carries a body after its claim, and the body is its proof, in ordinary PHP#: `if` and `else`, `match` statements with block arms, locals, `return;`, and calls of laws as statements. A call of a law is a fact the case knows from then on, and a law calls itself only on a smaller value. No loop carries an invariant.
+**Laws only.** A class, an enum or a module states its laws in PHP#, with `law`. A law is a claim over every value of its parameters, and `when` after the parameters states its condition. `law name(parameters) => claim;` is proven by the checker alone. A law the checker cannot prove alone carries a body after its claim, and the body is its proof, in ordinary PHP#: `if` and `else`, `match` statements with block arms, locals, `return;`, and calls of laws as statements. A call of a law is a fact the case knows from then on, and a law calls itself only on a smaller value. No loop carries an invariant.
 
 Lean stays underneath. The checker translates the pure code a law reaches and the theorem of each law into the generated `.sharp/` folder on each compile, turns a body into the theorem's proof, and Lean's kernel checks it. Nobody writes or reads Lean. A case the checker cannot close is the error `law-unproven`, with the case's conditions and the claim still to show printed in PHP#.
 
 **A law's claim and its `when` condition compute ints exactly** (Cass, 10-22). A law never runs, so `Money.total(a) + Money.total(b)` in a claim never overflows, and the code the claim calls throws `ArithmeticError` where it does at runtime. Wherever PHP runs the claim without throwing, each value is the exact one, so a law proven of exact values holds of PHP's, and an exact `when` only adds cases the law must hold in. A checked `+` in the claim made the law for a list's rest hold only where `total(rest) + total(b)` fits an int, which the case `[Money first, ...rest]` cannot show, so no sum law proved by calling itself. The trade: a claim true only because its own arithmetic overflows, such as `x + 1 <= 9223372036854775807`, is not proven. Rejected: keep the checked claim as the law's statement and prove each law that calls itself through a second, exact statement. Each such law then carries two statements, and the checker must find a proof that the exact one gives the checked one for every claim.
 
-**Structure is a module's `imports` list, as Java's `module-info` lists what a module `requires`.** A namespace's `Module.sharp` lists the namespaces its code imports from, `module { imports App.Shop.Loyalty, App.Shop.Records; }`, and an import of any other namespace is a compile error at the import. The checker checks the list as it checks types, with no Lean.
+**Structure is a module's `imports` list.** A namespace's `Module.sharp` lists the namespaces its code imports from, `module { imports App.Shop.Loyalty, App.Shop.Records; }`, and an import of any other namespace is a compile error at the import. The checker checks the list as it checks types, with no Lean.
 
 ## Options for laws
 
@@ -89,7 +89,7 @@ public Money add(Money other)
     => new Money(this.amount + other.amount, this.currency);
 ```
 
-Dafny and Eiffel attach claims to each method. Every method body then needs its own proof, a caller must show each `requires` at every call, and a fact that spans methods, such as one about `times` and `add` together, has no home. A law states a fact on its own, over the code it names, and `when` covers what `requires` would.
+Contracts attach claims to each method. Every method body then needs its own proof, a caller must show each `requires` at every call, and a fact that spans methods, such as one about `times` and `add` together, has no home. A law states a fact on its own, over the code it names, and `when` covers what `requires` would.
 
 ### Rejected: loop invariants
 
@@ -106,7 +106,7 @@ public static int openCount(List<Order> orders)
 }
 ```
 
-Dafny proves a loop through an invariant the developer writes on it. The checker proves a loop that only counts or sums alone, and a loop it cannot prove is written as recursion that gets smaller, which a law's body proves with a call of the law itself.
+A loop invariant is a claim the developer writes on a loop so a prover can prove the loop. The checker proves a loop that only counts or sums alone, and a loop it cannot prove is written as recursion that gets smaller, which a law's body proves with a call of the law itself.
 
 ### Rejected: one rules file beside each namespace folder
 
@@ -149,7 +149,7 @@ module
 
 A namespace states its own dependencies in the module file it already has, in PHP#. An import outside the list is a compile error at the import line, and two lists that name each other are a compile error on each list, so namespaces import one way.
 
-### Rejected: a provider-side `visible to` list, as Rust's `pub(in path)` and Go's `internal`
+### Rejected: a provider-side `visible to` list
 
 ```csharp
 // app/Shared/Ledger/Module.sharp
@@ -159,7 +159,7 @@ module
 }
 ```
 
-The namespace that is used names who may use it. Rust's `pub(in path)` and Go's `internal` folders work this way. A namespace then can't see its own dependencies in one place, and a rule such as "Store imports only Community and Schema" needs a line in every namespace Store must not reach.
+The namespace that is used names who may use it. A namespace then can't see its own dependencies in one place, and a rule such as "Store imports only Community and Schema" needs a line in every namespace Store must not reach.
 
 ### Rejected: structure rules as Lean `@[rule]` definitions in `Module.lean`
 
@@ -175,12 +175,8 @@ This was the previous design: Lean ran each rule over the code's namespaces, imp
 
 ## Precedent
 
-- **Chosen, laws:** Bend 2, where a law and its proof are in the same file: a law is proven by a definition of the same name, written in Bend itself. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, check code through a prover the developer never writes.
-- **Chosen, the error that shows what is left:** Lean's and Agda's goal display, printed here in PHP#.
-- **Chosen, structure:** Java's `module-info.java`, whose `requires` lists the modules a module reads.
+- **Chosen, the error that shows what is left:** Lean's goal display, printed here in PHP#.
 - **Rejected, proof files:** the previous version of this decision.
-- **Rejected, contracts and loop invariants:** Dafny, Eiffel.
-- **Rejected, a provider-side list:** Rust's `pub(in path)`, Go's `internal`.
 
 ## Spec
 

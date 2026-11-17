@@ -33,7 +33,7 @@ Image image = new Thumbnail();
 image.resize(width: 800, height: 600);   // compiles; runs in PHP: throws Error "Unknown named parameter $width"
 ```
 
-PHP checks the names against the class of the object, so a call that works on `Image` fails on `Thumbnail`. C# checks them against the declared type instead, so one parameter has a different name depending on how the caller holds the object.
+PHP checks the names against the class of the object, so a call that works on `Image` fails on `Thumbnail`. A check against the declared type instead gives one parameter a different name depending on how the caller holds the object.
 
 ### Rejected: named-only parameters
 
@@ -48,9 +48,7 @@ Only parameters their author marked can be named, and plain PHP has no such mark
 
 ## Precedent
 
-- **Chosen:** C#, where any parameter can be named, and Kotlin, which also warns when an override renames a parameter.
-- **Rejected, renames allowed:** PHP and C#.
-- **Rejected, named-only parameters:** Hack and Dart.
+- **Rejected, renames allowed:** PHP.
 
 ## Spec
 

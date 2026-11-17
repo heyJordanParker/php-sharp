@@ -16,7 +16,7 @@ limits.has("pro");           // true
 limits.has("team");          // false
 ```
 
-A read gives `int?` as Kotlin's does (section 12), and one method answers the one question a read can't.
+A read gives `int?` (section 12), and one method answers the one question a read can't.
 
 ### Rejected: PHP's `isset`
 
@@ -29,7 +29,6 @@ isset($limits["pro"]);       // false: a stored null reads as missing
 
 ## Precedent
 
-- **Chosen:** Kotlin's `containsKey`.
 - **Rejected:** PHP's `isset`.
 
 ## Spec

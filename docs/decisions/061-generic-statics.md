@@ -36,11 +36,6 @@ Counter<User>.count;                                     // would be 1: every Co
 
 Every `Counter<…>` would share one static, so a static could not use `T`. A cache or registry per element type would become a hand-kept map keyed by class.
 
-## Precedent
-
-- **Chosen:** C#, where each closed generic type has its own static fields.
-- **Rejected:** Java, whose erased generics share one static across every type argument.
-
 ## Spec
 
 - [Section 11, Generics](../spec.md#11-generics)

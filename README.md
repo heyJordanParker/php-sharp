@@ -1,6 +1,6 @@
 # PHP#
 
-PHP# is a typed language with C#-shaped syntax that runs on PHP's engine and calls plain PHP freely, as Kotlin runs on the JVM and calls Java. An app moves to PHP# one file at a time.
+PHP# is a typed language that runs on PHP's engine and calls plain PHP freely. An app moves to PHP# one file at a time.
 
 The checker, a fork of [Mago](sharp/mago/) in this repository, type-checks PHP and PHP# files together. The engine runs the same Mago front end, so both read every `.sharp` file the same way.
 
@@ -8,15 +8,12 @@ The checker, a fork of [Mago](sharp/mago/) in this repository, type-checks PHP a
 
 **If it compiles, it's proven.**
 An Agent knows it's wrong the instant it writes the mistake.
-Precedent: Elm, Rust and Lean.
 
 **Signatures tell the whole truth.**
 Read the signature and you know everything the code does.
-Precedent: Haskell and Rust.
 
 **Everything is instant.**
 Every tool answers instantly to any number of parallel Agents.
-Precedent: Go and esbuild.
 
 ## Example
 

@@ -6,7 +6,7 @@ Namespaces, types, type parameters, events and enum cases are PascalCase. Method
 
 ## Options
 
-### Chosen: TypeScript's casing
+### Chosen: PascalCase types and camelCase members
 
 ```csharp
 namespace App.Billing;
@@ -38,7 +38,7 @@ public class Receipt
 
 Laravel and PHP's own classes name methods and properties in camelCase. A PHP# class that extends a Laravel class uses one casing for its own members and the ones it inherits.
 
-### Rejected: C#'s PascalCase members
+### Rejected: PascalCase members
 
 ```csharp
 public class Invoice : Model
@@ -53,7 +53,7 @@ public class Invoice : Model
 
 Every class that extends a Laravel class would mix two casings, its own members in PascalCase and Laravel's in camelCase.
 
-### Rejected: Rust's snake_case members
+### Rejected: snake_case members
 
 ```csharp
 public class Invoice : Model
@@ -70,10 +70,8 @@ Every class that extends a Laravel class would mix two casings, for the same rea
 
 ## Precedent
 
-- **Chosen:** TypeScript.
+- **Chosen:** Laravel and PHP's own classes, which name methods and properties in camelCase.
 - **Chosen, the warning:** Mago's naming lint rules, such as `method-name`, `class-name` and `constant-name`, and their message shape, as in "Method name `TotalIn` should be in camel case."
-- **Rejected, PascalCase members:** C#.
-- **Rejected, snake_case members:** Rust.
 
 ## Spec
 

@@ -51,12 +51,6 @@ Map<string, Function<Element(string)>> makers = ["form": key => new FormElement(
 
 Every `new $class` becomes a hand-written map of lambdas, and a class name from Laravel can only be built through the container.
 
-## Precedent
-
-- **Chosen:** Hack's `classname<T>` and Swift's metatypes. Swift's `required init` for `new` on a class value. TypeScript's error 2699 for a static named like a member of the class value's own type.
-- **Rejected, `new` only:** Hack's `new $cls()` with `<<__ConsistentConstruct>>`.
-- **Rejected, no class values:** C# and Rust.
-
 ## Spec
 
 - [Section 25, Referring to classes](../spec.md#25-referring-to-classes)

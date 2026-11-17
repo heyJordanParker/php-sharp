@@ -25,10 +25,6 @@ get_class($page) === PaginatedList::class;                  // would be false
 
 Plain PHP compares class names, keys arrays by them and autoloads by them. A name that carries type arguments breaks each of those for every generic object.
 
-## Precedent
-
-- **Chosen:** C#'s `Type.GetGenericArguments()`.
-
 ## Spec
 
 - [Section 11, Generics](../spec.md#11-generics)

@@ -40,11 +40,8 @@ The code compiles and still misstates what can be null, and the next reader copi
 
 ## Precedent
 
-- **Chosen, the rule:** Kotlin, Swift, TypeScript's `strictNullChecks`, and C#'s nullable reference types.
-- **Chosen, a check on a value that is never null:** typescript-eslint's `no-unnecessary-condition`, Psalm's `RedundantCondition`, and Kotlin's warnings on a useless `?.` or `?:`.
-- **Chosen, a nullable parameter rejected on every path:** IntelliJ's data-flow inspections. No compiler has this error.
-- **Chosen, a nullable return that is never null:** Kotlin's "Redundant nullable return type" inspection.
-- **Rejected, warnings:** the linters, inspections and Kotlin warnings named for each error, which all leave the code compiling.
+- **Chosen, a check on a value that is never null:** Psalm's `RedundantCondition`.
+- **Rejected, warnings:** Psalm's `RedundantCondition`, which leaves the code running.
 
 ## Spec
 

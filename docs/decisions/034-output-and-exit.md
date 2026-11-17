@@ -10,7 +10,7 @@ Superseded in part by Jordan's ruling of 10-18: a form PHP# never writes fails a
 
 ## Decision
 
-Output and exit are function calls only. `echo` and `print` are removed, with a compile error that names `printf` or `fwrite`. `die` is removed, with a compile error that says to write the message to STDERR, then `exit(1)`, because `die("…")` exits with status 0. `exit(code)` stays as PHP 8.4's built-in function. It skips `finally` blocks, as in Java and C#, and has the effect `Process`, while printing has the effect `Console` (decision 63).
+Output and exit are function calls only. `echo` and `print` are removed, with a compile error that names `printf` or `fwrite`. `die` is removed, with a compile error that says to write the message to STDERR, then `exit(1)`, because `die("…")` exits with status 0. `exit(code)` stays as PHP 8.4's built-in function. It skips `finally` blocks, and has the effect `Process`, while printing has the effect `Console` (decision 63).
 
 ## Options
 
@@ -37,7 +37,6 @@ die("Prune failed");                         // not PHP#: prints the message, th
 
 ## Precedent
 
-- **Chosen:** C#, Kotlin, Swift, Go and Rust, which print and exit through library functions.
 - **Rejected:** PHP's `echo`, `print` and `die`.
 
 ## Spec

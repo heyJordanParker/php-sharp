@@ -33,10 +33,6 @@ public static export void redirect() { … }            // a keyword every reade
 
 A keyword grows the language for a job only interop code has, where an attribute is read only where it is written.
 
-## Precedent
-
-- **Chosen:** Rust's `#[no_mangle] pub extern "C" fn`, C#'s `[UnmanagedCallersOnly(EntryPoint = …)]`, Go's `//export` and Kotlin/Native's `@CName`, each of which names a function foreign code calls by its symbol.
-
 ## Spec
 
 - [Section 23, Namespaces and imports](../spec.md#23-namespaces-and-imports)

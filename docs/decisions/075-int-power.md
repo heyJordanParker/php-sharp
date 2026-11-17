@@ -62,18 +62,9 @@ A PHP developer rewrites every `**` and `**=`, and PHP# gains a method where PHP
 
 ## Precedent
 
-- **Chosen, an `int` that throws on a negative exponent:** Rust and C#'s `BigInteger.Pow`.
-  - Rust's `i64::pow` takes its exponent as a `u32`, so a negative exponent does not compile. A floating-point power is a separate method on `f64`, `powi` or `powf`.
-  - C#'s `BigInteger.Pow(BigInteger value, int exponent)` returns a `BigInteger` and throws `ArgumentOutOfRangeException` when the exponent is negative.
-- **Rejected, always a `float`:** C#'s `Math.Pow`, Java's `Math.pow`, Kotlin and JavaScript.
-  - C#'s `Math.Pow` and Java's `Math.pow` take two `double`s and return a `double`.
-  - Kotlin's `pow` is defined on `Double` and `Float`, not on `Int`.
-  - JavaScript's `**` on numbers gives a double-precision number, so `2 ** -1` is `0.5`.
-- **Rejected, the type follows the exponent's sign:** Python and PHP.
-  - Python's `2 ** 3` is the `int` 8, and `2 ** -1` is the `float` 0.5.
+- **Rejected, the type follows the exponent's sign:** PHP.
   - PHP's `2 ** 3` is `int(8)`, and `2 ** -1` is `float(0.5)`. PHP also gives a `float` when the result overflows.
-- **Chosen, keep `**`:** PHP, Python, Ruby, JavaScript and Fortran all write a power as `**`.
-- **Rejected, power without an operator:** Rust, Kotlin, C#, Swift, Java and Go have no power operator. Rust writes `i64::pow`, Kotlin `Double.pow`, C# `Math.Pow`, Swift `pow`, Java `Math.pow`, and Go `math.Pow`.
+- **Chosen, keep `**`:** PHP writes a power as `**`.
 
 ## Spec
 

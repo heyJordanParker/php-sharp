@@ -28,7 +28,7 @@ query.orderByRaw(Sql.identifier(column, ["name", "created_at"]));               
 
 Each replaces a plain PHP class a project wrote under decision 83 to call `strlen`, `substr`, `unpack`, `trim` with a character list, `json_encode` with its flags, or to pick an identifier from a list, and each mirrors a name PHP# or PHP's flag already uses.
 
-### Rejected: a `Bytes` type, as Kotlin's `ByteArray` and Swift's `Data`
+### Rejected: a `Bytes` type
 
 ```csharp
 Bytes raw = Ip.toBinary("::1");                          // would need a conversion at every crossing
@@ -46,12 +46,7 @@ It reopens the injection `literal-string` closes: any text becomes trusted SQL w
 
 ## Precedent
 
-- **Chosen, bytes:** Kotlin's `encodeToByteArray()` and `trim(vararg chars)`, C#'s `Encoding.GetByteCount` and `Trim(params char[])`, Rust's `str::len()` in bytes and `trim_matches`, and Hack's `Str\length` and `Str\trim` with a `$char_mask`.
-- **Chosen, JSON switches:** Swift's `JSONEncoder.OutputFormatting.withoutEscapingSlashes` and C#'s `JsonSerializerOptions.Encoder`.
-- **Chosen, a JSON value with structural `==`:** kotlinx.serialization's `JsonElement`, .NET's `JsonNode.DeepEquals` and Rust's `serde_json::Value`.
-- **Chosen, an allow-listed identifier:** the PHP RFC `is_literal` (Craig Francis, 2021), whose example takes a sort column from user input only by finding it in an array of allowed columns and appending that array's own literal, "so the user (attacker) cannot use anything unexpected". OWASP's SQL Injection Prevention Cheat Sheet: parameter markers "represent data values, not table names, column names, or SQL keywords", so a choice among them maps to "a small set of application-owned values allowed for that query" and anything else is rejected. psycopg's `sql.Identifier`, a separate type for a name in composed SQL, since inserting a table name as text "is an accident waiting to happen". Rails' `order`, which refuses a raw argument that names no column with `UnknownAttributeReference`.
-- **Rejected, `Bytes`:** Kotlin's `ByteArray` and Swift's `Data`.
-- **Rejected, an unchecked cast:** Rails' `Arel.sql()`, which marks any text as trusted SQL.
+- **Chosen, an allow-listed identifier:** the PHP RFC `is_literal` (Craig Francis, 2021), whose example takes a sort column from user input only by finding it in an array of allowed columns and appending that array's own literal, "so the user (attacker) cannot use anything unexpected". OWASP's SQL Injection Prevention Cheat Sheet: parameter markers "represent data values, not table names, column names, or SQL keywords", so a choice among them maps to "a small set of application-owned values allowed for that query" and anything else is rejected.
 
 ## Spec
 

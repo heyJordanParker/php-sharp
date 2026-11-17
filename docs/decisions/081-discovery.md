@@ -28,7 +28,7 @@ A type named after a word PHP reserves, compared ignoring case, as `Case`, `Matc
 
 `mago compile` writes the installed standard library's native fingerprint into each compiled file, and the engine refuses a compiled file whose fingerprint is not its own, whatever loads it: the `.php` file, a `require`, the plugin's loader, opcache or preloading. Composer's own process runs on any engine, so `composer install` runs there and prints the refusal as an error line. PHP code that lists a folder's `*.php` files and names each class by its path, as Spatie's route attributes, Laravel's console kernel and Laravel's event discovery do, finds and loads the PHP# class with no change of its own.
 
-Nobody edits the file. A `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, because PHP names a class whatever its case. The next compile rewrites a changed file and deletes the file of a removed source, which until then declares nothing. `mago compile` lists the files in a `.gitignore` of its own in each folder that holds one, which lists itself too, so each checkout of a repository ignores its own files alone. Editors hide them, as they hide `tsc`'s `.js` files: VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, PhpStorm through file nesting.
+Nobody edits the file. A `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, because PHP names a class whatever its case. The next compile rewrites a changed file and deletes the file of a removed source, which until then declares nothing. `mago compile` lists the files in a `.gitignore` of its own in each folder that holds one, which lists itself too, so each checkout of a repository ignores its own files alone. Editors hide them: VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, PhpStorm through file nesting.
 
 A `.sharp` file in an `autoload-dev` folder gets no file, so a test class keeps one file: PHPUnit loads a test class only from the file it lists, and a project lists its PHP# tests with `suffix="Test.sharp"`. A package in `vendor/` gets none, because nothing is written into `vendor/` (decision 29).
 
@@ -88,9 +88,7 @@ Every library would need its own change, and a user would choose libraries by wh
 
 ## Precedent
 
-- **Chosen:** TypeScript's `tsc`, which writes `.js` beside `.ts` where every JavaScript tool already looks, and Kotlin, whose `.class` files Java's classpath scanners find because they sit where those scanners look.
-- **Chosen, the declaration:** TypeScript's `.d.ts` file, a generated declaration that tools read and that emits no code, which `tsc` never reads in place of the `.ts` file beside it, and Kotlin's light classes, the Java declarations the IDE derives from Kotlin source for Java tools.
-- **Chosen, hiding the files:** VS Code's `files.exclude` sibling condition and JetBrains' file nesting, made for `tsc`'s output.
+- **Chosen, hiding the files:** VS Code's `files.exclude` sibling condition and JetBrains' file nesting.
 
 ## Spec
 

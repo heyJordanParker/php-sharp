@@ -8,13 +8,13 @@ Jordan's rulings of 10-22. This replaces [decision 80](080-global-calls-of-repla
 
 **`global.` does not exist in PHP# code.** `global` is an ordinary name, so `global.levenshtein(a, b)` is the error `gadget.levenshtein(a, b)` gets: `global` names no class, and no namespace the file imports.
 
-**PHP is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation. The standard library's own files, the files of the package named `heyjordanparker/php-sharp-composer`, keep `global.` to call PHP's built-ins. A built-in the standard library has no member for is declared with `[Import]`, a static method without a body whose PHP# types check each argument and the result ([decision 93](093-import.md)).
+**PHP is reached only through the standard library.** The standard library's own files, the files of the package named `heyjordanparker/php-sharp-composer`, keep `global.` to call PHP's built-ins. A built-in the standard library has no member for is declared with `[Import]`, a static method without a body whose PHP# types check each argument and the result ([decision 93](093-import.md)).
 
 **A bare call of a PHP function is the error a misspelled name gets** (Jordan's rule of 10-18: a form PHP# never writes fails as a typo does). PHP# has no top-level functions, so `trim(name)`, `levenshtein(a, b)` and `render(html)` each name no function, with no message that recognizes PHP's function or names what to write instead. A bare PHP constant, a bare `extern trim;` and an `import strlen;` are the same. The checker keeps no table of PHP's functions and their replacements.
 
 **A PHP built-in class is the name a misspelled class is** (Cass's ruling of 10-22, under this decision). A class, interface or enum PHP or an extension builds in, named in a `.sharp` file outside the standard library, is the error a misspelling gets: `import PDO;` is an import of no class, a bare `PDO` names no type, and no help names an import of it. The standard library's own files name them, and creating one there has the effects its `extern` lists.
 
-**The standard library names the few root classes a PHP# class needs, with no import,** as Kotlin and Java import `java.lang` by default. `Builtins.sharp` declares each one, and the checker's list is generated from it:
+**The standard library names the few root classes a PHP# class needs, with no import.** `Builtins.sharp` declares each one, and the checker's list is generated from it:
 
 - The exception classes of PHP's root namespace, such as `ValueError`, `RuntimeException` and `JsonException`, which code throws and catches.
 - `Throwable`, which every exception is, and which catches a bug (spec section 31).
@@ -99,11 +99,6 @@ public Any? all() => Collections.collect([1]);
 ```
 
 A folder's name is no namespace PHP declares, so the import names nothing a class of the library uses, and a project imports a namespace the library's own code never writes.
-
-## Precedent
-
-- **Chosen:** Rust's `std` and Swift's Foundation as the only way to the platform. Kotlin, whose top-level functions belong to the package of their file, called through it from Java.
-- **Rejected:** C#'s `global::`, which reaches any foreign function from any code with no declaration. A typed declaration, as C#'s P/Invoke and Rust's `extern "C"` write one, is [decision 93](093-import.md)'s `[Import]`.
 
 ## Spec
 

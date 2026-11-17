@@ -28,7 +28,6 @@ PHP has one array, so `[]` and `[:]` lower to the same value, and the place coul
 
 ## Precedent
 
-- **Chosen:** Swift, whose compiler refuses `[]` where a dictionary is declared with "use [:] to get an empty dictionary literal" ([`should_use_empty_dictionary_literal`](https://github.com/swiftlang/swift/blob/ec237352cc40da65602ea7c940ec6d164deb70c9/include/swift/AST/DiagnosticsSema.def#L5291-L5292)). [The Swift Programming Language](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/collectiontypes/#Creating-an-Empty-Dictionary) writes the empty dictionary as `[:]`, "a colon inside a pair of square brackets".
 - **Rejected:** PHP, whose `[]` is any array.
 
 ## Spec

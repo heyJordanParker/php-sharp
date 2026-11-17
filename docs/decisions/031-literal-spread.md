@@ -34,13 +34,12 @@ Every `Map` merge takes two statements and a method name, while a `List` merge t
 Map<string, int> merged = defaults + overrides;           // not PHP#: which value wins for a key in both?
 ```
 
-PHP's array `+` keeps the left value for a key in both, and Kotlin's map `+` keeps the right one. Each meaning surprises a reader who knows the other.
+PHP's array `+` keeps the left value for a key in both, and a merge that keeps the right one reads just as naturally. Each meaning surprises a reader who expects the other.
 
 ## Precedent
 
-- **Chosen:** JavaScript's array and object spread, and Dart's spread in list and map literals. PHP's `array_replace` for the merge that keeps keys.
-- **Rejected, `List`-only spread:** TypeScript's array spread with Kotlin's `putAll`, and C# 12's `[..a, b]`.
-- **Rejected, `+`:** PHP's array union and Kotlin's `Map.plus`.
+- **Chosen:** PHP's `array_replace` for the merge that keeps keys.
+- **Rejected, `+`:** PHP's array union.
 
 ## Spec
 

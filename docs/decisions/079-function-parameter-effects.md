@@ -42,11 +42,6 @@ public Holder keep(Function<string()> body) => new Holder(body);   // would comp
 
 `keep` has no effect at its call, and the `Holder` runs `body`'s `Environment` later, where no caller sees it. Laws would reason about code that reaches `Environment`.
 
-## Precedent
-
-- **Taking on effects:** Swift's `rethrows`, Kotlin's inline lambdas and Hack's `ctx $f`, the precedents of decision 6, which this keeps without the written name.
-- **A function parameter that never escapes:** Swift. The [Swift book, Escaping Closures](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/closures/#Escaping-Closures): "A closure is said to escape a function when the closure is passed as an argument to the function, but is called after the function returns." A closure parameter escapes only when its type is marked `@escaping`. Kotlin's [inline functions](https://kotlinlang.org/docs/inline-functions.html): "Inlinable lambdas can only be called inside inline functions or passed as inlinable arguments."
-
 ## Spec
 
 [Section 29, Effects](../spec.md#29-effects)

@@ -51,8 +51,7 @@ A helpers file holds dozens of functions, and decision 91 already gives a whole 
 
 ## Precedent
 
-- **Chosen:** C#'s `extern alias`, which gives an assembly a root namespace the code imports, and TypeScript's `declare module`, which names a library without types once for every file.
-- **Rejected, the classes beside the function:** no language reads a namespace from a file's neighbors. Kotlin gives a top-level function the package its own file declares.
+- **Rejected, the classes beside the function:** no language reads a namespace from a file's neighbors.
 
 ## Spec
 

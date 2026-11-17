@@ -2,7 +2,7 @@
 
 ## Decision
 
-A `.sharp` file runs only after the checker accepts it, and a type error stops it from running, as in C# and Java. The checker's types reach the running program, inferred ones too. A generic method can test a type parameter its call inferred, `typeof(TItem)` works on every type parameter, and a loop over a `Map` keyed by a backed enum gives its keys back as the enum with no type written. This reverses the earlier model, where each file compiled alone from its own text. `vendor/bin/mago compile` compiles each accepted `.sharp` file into a `.sharpc` file in one `.sharp/` folder at the project root, and the engine runs only current compiled files. A type error, such as an import its module's `imports` line leaves out, or a law left unproven (decision 57) stops a file from running. `ignore` and the baseline hide warnings, never an error, and no comment hides an issue.
+A `.sharp` file runs only after the checker accepts it, and a type error stops it from running. The checker's types reach the running program, inferred ones too. A generic method can test a type parameter its call inferred, `typeof(TItem)` works on every type parameter, and a loop over a `Map` keyed by a backed enum gives its keys back as the enum with no type written. This reverses the earlier model, where each file compiled alone from its own text. `vendor/bin/mago compile` compiles each accepted `.sharp` file into a `.sharpc` file in one `.sharp/` folder at the project root, and the engine runs only current compiled files. A type error, such as an import its module's `imports` line leaves out, or a law left unproven (decision 57) stops a file from running. `ignore` and the baseline hide warnings, never an error, and no comment hides an issue.
 
 ## Options
 
@@ -29,9 +29,9 @@ project/
     └── app/Orders/Order.sharpc     <- what the engine runs; a missing, stale or mismatched one is refused, naming the fix
 ```
 
-The checker compiles, and the engine runs its output, as C#'s compiler and runtime split the work. `mago compile` mirrors the source paths into one folder, vendor packages included, so nothing is written into `vendor/`. A deploy runs `mago compile`, which also writes the `.php` file decision 81 puts beside each of the project's sources that declares a type. In development, `sharp.compile_command` compiles a stale file on demand. A check that reads the whole project, such as a cycle between two modules' `imports` lines, can lag in development until the next full compile, and is exact at deploy.
+The checker compiles, and the engine runs its output. `mago compile` mirrors the source paths into one folder, vendor packages included, so nothing is written into `vendor/`. A deploy runs `mago compile`, which also writes the `.php` file decision 81 puts beside each of the project's sources that declares a type. In development, `sharp.compile_command` compiles a stale file on demand. A check that reads the whole project, such as a cycle between two modules' `imports` lines, can lag in development until the next full compile, and is exact at deploy.
 
-### Rejected: each file compiles alone (Hack's model)
+### Rejected: each file compiles alone
 
 ```csharp
 inbox.holds(orders, message);                        // compile error: holds uses TItem as a class, so write it: holds<Order>(…)
@@ -41,7 +41,7 @@ for (const [Status status, int n] of counts) { … }   // the key's type is writ
 
 The engine sees one file's text, so a type the checker inferred never reaches it. A call must write every type argument the body uses as a class, and the signature does not show which calls must.
 
-### Rejected: pass a `Class<T>` argument (Java's model)
+### Rejected: pass a `Class<T>` argument
 
 ```csharp
 public bool holds<TItem>(Class<TItem> type, List<TItem> items, Any value) => value is type;   // not PHP#: the class travels as an argument
@@ -60,10 +60,6 @@ The checker's types would be keyed by positions in the checker's own parse, so t
 
 ## Precedent
 
-- **Chosen:** C#, whose runtime builds a specialized generic type for each type argument, and Swift, which passes type metadata. Both compile before the code runs, as Java does.
-- **Chosen, how code runs:** C#'s split between the compiler and the runtime, TypeScript's `outDir`, Python's `PYTHONPYCACHEPREFIX`, and Roslyn analyzers at severity `error`, which stop a build as a type error does.
-- **Rejected, each file compiles alone:** Hack's `reify`, whose type arguments must be written at every call.
-- **Rejected, a `Class<T>` argument:** Java's `Class<T>`, and Kotlin's `KClass<T>` outside `reified` functions.
 - **Earlier decisions:** this extends decision 7 to inferred type arguments, supersedes decision 26's rejection of "the checker's types decide what the engine emits", and changes decision 27's loop rule.
 
 ## Spec

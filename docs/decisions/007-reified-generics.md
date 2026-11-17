@@ -45,13 +45,6 @@ if (page is PaginatedList<Order>) { … }          // compiles only when Paginat
 
 Each class author decides whether its type arguments exist at runtime, and every caller must know which choice the author made.
 
-## Precedent
-
-- **Chosen:** Typed Racket's checks where typed and untyped code meet, Hack's like types, and TypeScript projects validating input with zod.
-- **Rejected, every write checked:** C#.
-- **Rejected, erased:** Java, TypeScript, Kotlin and Python.
-- **Rejected, opt-in `reify`:** Kotlin's `reified` and Hack's `reify`.
-
 ## Spec
 
 - [Section 11, Generics](../spec.md#11-generics)

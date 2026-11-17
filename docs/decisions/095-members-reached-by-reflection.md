@@ -2,7 +2,7 @@
 
 Jordan's ruling of 11-13. Spec section 5's too-wide warning skipped any member with an attribute. It now skips only a member whose attribute says a framework reaches it by reflection.
 
-0.6.13 renamed the mark `[DynamicallyAccessed]`, after .NET's `[DynamicallyAccessedMembers]`, and made too wide a compile error in an application. A marked attribute on a class now covers every public member of the class, and the mark on a member is a compile error. The decision below still holds under the new name.
+0.6.13 renamed the mark `[DynamicallyAccessed]`, and made too wide a compile error in an application. A marked attribute on a class now covers every public member of the class, and the mark on a member is a compile error. The decision below still holds under the new name.
 
 ## Decision
 
@@ -54,9 +54,7 @@ Each route would repeat what its attribute already says.
 
 ## Precedent
 
-- **Chosen:** .NET's `[DynamicallyAccessedMembers]`, which tells the trimmer that reflection reaches a type's members, so it keeps them. The standard library's own marks read the same way, as `[ComparedByEquality]` and `[EncodedAsJson]` say what is done to what they mark.
-- **Rejected, any attribute:** none of .NET, Kotlin or Java treats an attribute or an annotation as a use.
-- **Rejected, a mark on each member:** Android's `@Keep`, which ProGuard reads on each member it keeps.
+- **Chosen:** the standard library's own marks, as `[ComparedByEquality]` and `[EncodedAsJson]` say what is done to what they mark.
 
 ## Spec
 

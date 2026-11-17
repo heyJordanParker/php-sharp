@@ -36,7 +36,6 @@ Two files in one project could write `App.Store` and `App.store`. PHP would run 
 
 ## Precedent
 
-- **Chosen:** .NET's [Framework Design Guidelines, Names of Namespaces](https://learn.microsoft.com/en-us/dotnet/standard/design-guidelines/names-of-namespaces): "DO use PascalCasing, and separate namespace components with periods (e.g., `Microsoft.Office.PowerPoint`)." PHP# enforces with an error what .NET states as a guideline.
 - **Rejected:** PHP, which checks no letter in a namespace and compares namespaces ignoring case.
 
 ## Spec

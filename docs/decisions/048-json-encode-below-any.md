@@ -40,7 +40,6 @@ Every payload with a loose part needs a struct or a fully written type before it
 
 ## Precedent
 
-- **Chosen:** System.Text.Json, which serializes by the declared type and, below a property typed `object`, by the value's runtime type. Swift's `JSONEncoder`, where a `Dictionary` is always a JSON object.
 - **Rejected:** PHP's own `json_encode` of an array, which gives `[]` for an empty one whatever it stands for. Refusing to encode any value whose type contains `Any`.
 
 ## Spec

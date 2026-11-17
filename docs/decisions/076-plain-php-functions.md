@@ -74,8 +74,7 @@ The call reads like a method of the class or a local function value. Only the im
 
 ## Precedent
 
-- **Chosen:** Go, which calls a package's functions as `pdf.Render(html)`. Python after `import pdf`. Java calling Kotlin's top-level functions through their file's class, and C# calling F# modules. C#'s `global::`, which names the root namespace.
-- **Rejected:** PHP's `use function` and Kotlin's import of a single top-level function.
+- **Rejected:** PHP's `use function`.
 
 ## Spec
 

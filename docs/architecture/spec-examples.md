@@ -4,17 +4,11 @@
 
 An example that fails is listed in `sharp/baseline/spec/`, one empty file each. Their count was the v1 meter, and every example passes today, so the folder is gone. CI keeps the list honest: an example that passes leaves it, an example off it passes, and an example the base already checked never joins it.
 
-## Precedents
+## What an example states
 
-- **Rust's doctests** compile every block in the documentation. Hidden lines starting with `# ` supply setup the reader doesn't need, and `compile_fail`, `should_panic` and `ignore` on the fence say what the block must do.
-- **Go's testable examples** run a function and compare what it prints with its `// Output:` comment.
-- **Python's doctest** runs each `>>>` line and compares its value with the line below. The `ELLIPSIS` option lets `...` match any text.
-
-PHP#'s spec takes from each:
-
-- **From Rust:** every block compiles, and hidden setup lives with the example. Markdown can't hide lines inside a block, so the setup goes in an HTML comment on the line before it, which GitHub doesn't render.
-- **From Go and Python:** the expected result sits on the line it describes. The spec already writes it there, as `// compile error: …` or `// 3`, so the check reads the spec's own annotations. It adds none.
-- **From Python:** `…` in an expected value matches any text, as `ELLIPSIS` does.
+- **Every block compiles,** and hidden setup lives with the example. Markdown can't hide lines inside a block, so the setup goes in an HTML comment on the line before it, which GitHub doesn't render.
+- **The expected result sits on the line it describes.** The spec already writes it there, as `// compile error: …` or `// 3`, so the check reads the spec's own annotations. It adds none.
+- **`…` in an expected value matches any text.**
 
 ## The marker
 
@@ -69,7 +63,7 @@ A file with no `namespace` line gets `namespace App;`, the namespace of the shar
 
 Each type then gets a file of its own, as section 27 says a `.sharp` file declares one type. The types of the block, of its setup and the example class each go to the path their namespace and name give, as `app/Store/Cart.sharp` for `App.Store.Cart`, after the file's `namespace` and `import` lines. What is no type, such as an `extern` line or a `module` block, stays with the first type, and a comment above a type goes with it. Each file maps its lines to the spec's, so an error still names the spec's line. A block whose first line is a path comment, such as `// app/Store/Cart.sharp`, keeps every type it writes in that file, as written, so `one-type-per-file` shows its error, and each type its setup alone declares still gets a file of its own. Two files of one example at one path stop the run, since two types of one name are an error in the example itself.
 
-The spec writes `…` for code the reader doesn't need. `sharp/bin/spec` replaces it, as Kotlin's `TODO()` and Rust's `todo!()` stand in for a missing body:
+The spec writes `…` for code the reader doesn't need. `sharp/bin/spec` replaces it with code that stands in for the missing part:
 
 - `{ … }` after a type's header, or after `if`, `else`, `while`, `for`, `do`, `try`, `catch` or `finally`, becomes `{ }`, so a run passes through it.
 - `{ … }` anywhere else becomes `{ throw new Elided(); }`.
@@ -221,7 +215,7 @@ sharp/baseline/spec/
 
 `sharp/bin/spec` fails on a file that is not empty, on a path that is not `<section>/<id>`, and on an id listed under two sections.
 
-**The list records which examples fail, not how,** as test262's expected-failure lists do in V8 and SpiderMonkey. A listed example may change its errors, so a checker that turns a parse error into a named "not supported yet" refusal passes, and so does a later change to `sharp/mago/` that does the same. The list doesn't notice a listed example getting worse. Mago's own tests and `Zend/tests/sharp/` cover the rules those examples use.
+**The list records which examples fail, not how.** A listed example may change its errors, so a checker that turns a parse error into a named "not supported yet" refusal passes, and so does a later change to `sharp/mago/` that does the same. The list doesn't notice a listed example getting worse. Mago's own tests and `Zend/tests/sharp/` cover the rules those examples use.
 
 `sharp/bin/spec` fails when the list differs from what the examples do, and prints the commands that make it match: `git rm -q sharp/baseline/spec/<section>/<id>` for an example that passes, and `mkdir -p` and `touch` for one that fails. An example that fails prints every line that differs from its annotation, with the checker's message or the value it gave.
 

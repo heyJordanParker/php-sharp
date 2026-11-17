@@ -37,9 +37,8 @@ The order depends on the server's locale, so the same code sorts differently on 
 
 ## Precedent
 
-- **Chosen:** Go, whose `<` on strings and `strings.Compare` order bytes.
 - **Rejected, PHP's comparison:** PHP 8's string-to-string comparison.
-- **Rejected, locale collation:** C's `strcoll`, which PHP exposes as `strcoll()`.
+- **Rejected, locale collation:** PHP's `strcoll()`.
 
 ## Spec
 

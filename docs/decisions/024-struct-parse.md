@@ -49,10 +49,8 @@ Every struct that receives outside data needs the marker first, and a struct wit
 
 ## Precedent
 
-- **Chosen:** C#'s `System.Text.Json`, which reads any type with no opt-in, and PHP's Valinor.
-- **Rejected, opt in with an attribute:** Swift's `Codable`, Rust's `#[derive(Deserialize)]`, Kotlin's `@Serializable`, and spatie/laravel-data.
-- **Chosen, the name `Key`:** Swift's `CodingKeys`.
-- **Rejected names:** C#'s `JsonPropertyName` and Kotlin's `SerialName`, which are tied to a format, Rust's `serde(rename)`, and Pydantic's `alias`.
+- **Chosen:** PHP's Valinor, which reads any type with no opt-in.
+- **Rejected, opt in with an attribute:** spatie/laravel-data.
 
 ## Spec
 

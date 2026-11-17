@@ -20,7 +20,7 @@ Class.of(row).name();                                        // "App.Orders.Coun
 
 A router or an action lookup that takes a method's name as a string gets one the checker checks, so a rename breaks the build instead of the request. A message that names a class reads it from the class itself.
 
-### Rejected: a method reference with a name, as Kotlin's `::index.name`
+### Rejected: a method reference with a name
 
 ```csharp
 OrdersController.index.name;                                 // OrdersController.index reads a static value, and an instance method has none without an object
@@ -35,11 +35,6 @@ Class.of(row).name();                                        // would be "App\Or
 ```
 
 Jordan left the separator open. The dots are the form PHP# code and the spec write a class name in, as `"App.RushOrder"` and every PHP# error message write it. A plain PHP library that compares PHP's form takes the class value itself, which reaches it as PHP's class-name string (decision 17).
-
-## Precedent
-
-- **Chosen:** C#'s `nameof`, which names a variable, a type or a member, as in `nameof(List<int>.Add)`, Swift's `#selector`, a compiler-checked method name, and C#'s `Type.FullName`.
-- **Rejected:** Kotlin's callable references, and Hack's `nameof`, which names classes alone.
 
 ## Spec
 

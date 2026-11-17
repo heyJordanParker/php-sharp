@@ -40,9 +40,7 @@ A plain PHP parameter or return typed `int|string` could not be written in PHP#.
 
 ## Precedent
 
-- **Chosen:** PHP 8, TypeScript, Python and Scala 3.
-- **Rejected, named unions only:** Hack's case types.
-- **Rejected, no unions:** Rust, Swift, Kotlin and C#.
+- **Chosen:** PHP 8.
 
 ## Spec
 

@@ -59,10 +59,7 @@ Every parameter must also say whether it borrows the collection, borrows it to c
 
 ## Precedent
 
-- **Chosen:** Swift's `Array`, `Dictionary` and `Set`, PHP's own arrays, and Hack's `vec`, `dict` and `keyset`.
-- **Rejected, shared references:** C#, Java, Kotlin and TypeScript. Hack shipped `Vector`, `Map` and `Set` as shared objects, then deprecated them for `vec`, `dict` and `keyset`.
-- **Rejected, immutable collections:** Clojure and Scala.
-- **Rejected, ownership and borrowing:** Rust.
+- **Chosen:** PHP's own arrays.
 
 ## Spec
 

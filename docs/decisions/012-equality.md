@@ -42,9 +42,7 @@ A forgotten override compiles and gives a wrong answer at runtime.
 
 ## Precedent
 
-- **Chosen:** Swift's `Equatable` and Rust's `PartialEq`.
 - **Rejected, property by property:** PHP.
-- **Rejected, identity unless overridden:** C#, Java, Kotlin, Python and JavaScript.
 
 ## Spec
 

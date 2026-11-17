@@ -27,7 +27,6 @@ Truthiness makes `"0"` false and `"false"` true, and puts 0 and null in one bran
 
 ## Precedent
 
-- **Chosen:** C# and Swift. Hack accepts truthiness and its linter reports it.
 - **Rejected:** PHP.
 
 ## Spec

@@ -37,7 +37,7 @@ A lazy source is one ordinary method, written in the order its values come out. 
 ### Rejected: a hand-written `Iterator` class
 
 ```csharp
-public class CsvRows : Iterator<List<string>>   // not PHP#: Rust's and Java's Iterator
+public class CsvRows : Iterator<List<string>>   // not PHP#: a class with next()
 {
     public CsvRows(string path) { … }            // opens the file and keeps the position in a field
     public List<string>? next() { … }            // reads one line, parses it and moves the position
@@ -45,11 +45,6 @@ public class CsvRows : Iterator<List<string>>   // not PHP#: Rust's and Java's I
 ```
 
 Every lazy source becomes a class that keeps its position in fields between `next()` calls. The code no longer reads in the order the values come out.
-
-## Precedent
-
-- **Chosen:** C#'s `yield return` iterators, and Python's and JavaScript's generators.
-- **Rejected:** Rust's `Iterator` and Java's `Iterator`, each a type with `next()`.
 
 ## Spec
 

@@ -7,7 +7,7 @@ Spec section 31: `Result`, the `try` operator and the `Error` interface. This no
 team-lead answered the seven questions in Queue 1. Each answer is written into the spec as a plain rule, with an example line where it changes what users write.
 
 1. **Q1:** as proposed. `try` returns a new `Err` holding the same error, with the enclosing method's type arguments, `==` to the original. An operand error type that does not fit the method's is a compile error that names both. Line 4039 says "an `Err` holding the same error".
-2. **Q2:** as proposed. `try` is a prefix operator with `!`'s precedence; member access and calls bind tighter. The operand is any `Result` expression, and `try` stands anywhere an expression can. Line 4039 names Zig alone, and the spec gains the line `(try gateway.charge(cart)).total`.
+2. **Q2:** as proposed. `try` is a prefix operator with `!`'s precedence; member access and calls bind tighter. The operand is any `Result` expression, and `try` stands anywhere an expression can. Line 4039 states the reach, and the spec gains the line `(try gateway.charge(cart)).total`.
 3. **Q3:** every enum can declare a computed property, a backed enum included. No enum declares a stored property. Line 2638 becomes "An enum declares no stored property; a computed property is allowed." One mechanism serves every enum, so a backed enum stays a PHP backed enum: the engine lets a PHP# enum declare a virtual property, one with a `get` body and no storage (see E3). `Enum::runs_as_classes()` replaces `has_data_case()`, since an enum with type parameters runs as classes too.
 4. **Q4:** as proposed. A bare `Error` always names `Sharp.Error`. An import whose last part is `Error` is a compile error that says `Error` is PHP#'s interface. `catch (Error …)` is a compile error that names `Throwable`.
 5. **Q5:** as proposed. A type is `Result<Order, PaymentError>.Ok`. A call takes its type arguments from the declared type its result goes into or the method's return type, and one nothing fixes names them, `Result<int, PaymentError>.Ok(5)`. A pattern names the bare case. The declared-type inference extends to every static call on a generic class or enum, as section 11's line 750 says, so `Holder<int> h = Holder.of(5);` compiles, and the wrong second message "Holder<int> cannot be used as Holder<int>." goes.
@@ -45,17 +45,17 @@ Spec line 4039: "If the call returns `Err`, the enclosing method returns that sa
 
 Generics are reified (section 11, "The running program knows every type argument"). The `Err` that `charge` makes carries `<Order, PaymentError>`. If `checkout`, declared `Result<Receipt, PaymentError>`, returns that object itself, then `failure is Result<Receipt, PaymentError>` is false on a value the checker proves is one.
 
-- **Proposed:** `try` returns a new `Err` holding the same `error` value, with the enclosing method's type arguments. It is `==` to the original, since it is the same case with an equal field (section 20). The operand's error type must fit the method's error type: `PaymentError` into `Error` passes, `Error` into `PaymentError` is a compile error. This is what Rust's `?` does, which builds a new `Err` from the old error.
-- Kotlin's shape instead: each case carries only the type parameters its fields name, so `Err` is a `Result<never, TError>`, and `Result` is declared `Result<out T, out TError : Error>`. The same object then fits. This changes the spec's declaration, needs variance on an enum and `never` as a type argument.
+- **Proposed:** `try` returns a new `Err` holding the same `error` value, with the enclosing method's type arguments. It is `==` to the original, since it is the same case with an equal field (section 20). The operand's error type must fit the method's error type: `PaymentError` into `Error` passes, `Error` into `PaymentError` is a compile error.
+- Variance instead: each case carries only the type parameters its fields name, so `Err` is a `Result<never, TError>`, and `Result` is declared `Result<out T, out TError : Error>`. The same object then fits. This changes the spec's declaration, needs variance on an enum and `never` as a type argument.
 
 ### Q2. How far `try` reaches, and what it takes
 
-Spec lines 4039 and 4047: "`try` passes a failure up to the caller", "Zig and Swift use `try` the same way", `const order = try gateway.charge(cart);`.
+Spec lines 4039 and 4047: "`try` passes a failure up to the caller", `const order = try gateway.charge(cart);`.
 
-Zig and Swift differ. Swift's `try` covers the whole expression to its right, so `try a.load() ?? b` is `try (a.load() ?? b)`. Zig's `try` is a prefix operator, so it is `(try a.load()) ?? b`.
+Two readings differ. A `try` that covers the whole expression to its right reads `try a.load() ?? b` as `try (a.load() ?? b)`. A prefix `try` reads it as `(try a.load()) ?? b`.
 
-- **Proposed:** `try` is a prefix operator with the precedence of `!`, as C#'s and TypeScript's `await` is. It takes the whole member chain after it, so a member of the `Ok` value is written `(try gateway.charge(cart)).receipt()`. Its operand is any expression whose type is a `Result`, not only a call. It stands wherever an expression stands, as `?? return` does. A `try` outside a method or lambda, such as in a property's initial value, and a `try` in a method whose return type is not a `Result`, are compile errors.
-- Swift's reach: `try` covers everything to its right, binary operators included.
+- **Proposed:** `try` is a prefix operator with the precedence of `!`. It takes the whole member chain after it, so a member of the `Ok` value is written `(try gateway.charge(cart)).receipt()`. Its operand is any expression whose type is a `Result`, not only a call. It stands wherever an expression stands, as `?? return` does. A `try` outside a method or lambda, such as in a property's initial value, and a `try` in a method whose return type is not a `Result`, are compile errors.
+- The wide reach: `try` covers everything to its right, binary operators included.
 
 ### Q3. An enum that implements `Error`
 
@@ -86,7 +86,7 @@ Section 20, line 2234: "Each case is its own type, so a method can take `Payment
 Line 4037 settles patterns: a pattern names the bare case, `Result.Ok(Order order)` or `Result.Err e`, and takes the subject's type arguments. Line 4034 settles a call whose arguments and declared type fix the type arguments: `Result.Err(PaymentError.Declined(reason))`. Two forms are open.
 
 - **Proposed:** a type writes the enum's type arguments before the case, `Result<Order, PaymentError>.Ok`, and so does a call nothing fixes, `Result<int, PaymentError>.Ok(5)`, as `Counter<Order>.track(order)` names a generic class's type arguments today. One spelling serves both.
-- Kotlin's spelling, the case with the type arguments after it: `Result.Ok<Order, PaymentError>`.
+- The case with the type arguments after it: `Result.Ok<Order, PaymentError>`.
 
 ### Q6. Generic enums a project writes
 
@@ -365,13 +365,13 @@ team-lead approves these. Everything not here is tactical.
 - **`Enum.type_parameters: Option<TypeParameterList>`,** a field on an existing node, named as on `Class` and `Interface`.
 - **`Enum::runs_as_classes()`,** replacing `has_data_case()`: an enum runs as classes when a case carries data or the enum declares type parameters.
 - **`Expression::Propagate(Propagate { r#try, value })`,** with `NodeKind::Propagate`, `Node::Propagate` and the walker's `walk_propagate`. The variant can't be `Try`, which the statement's struct already is. Its callsite is `Expression::Propagate(propagate) => self.propagate(propagate)` in the bridge. The slate:
-  - `Propagate` — what happens to the failure; the spec's "passes a failure up", and Rust's reference calls `?` the "error propagation expression"; reads "the expression propagates (its failure)". Recommended.
-  - `PassUp` — the spec's own words; a verb phrase, which no sibling node is. Runner-up.
-  - `EarlyReturn` — the failure branch; reads "an early return", which misses the `Ok` value it also gives.
-  - `TryValue` — the success branch, "the value `try` gives"; misses the return.
-  - `Forward` — the failure goes to the caller; readers add different words, "forward (the value? the call?)".
-  - `Unwrap` — removed: Rust's `unwrap` panics on `Err`, so a reader adds the wrong meaning.
-  - `TryOperator` — removed: `Operator` is a declared `operator ==` member in the CST (`class_like/operator.rs`).
+  - `Propagate`: what happens to the failure. The spec's "passes a failure up". Reads "the expression propagates (its failure)". Recommended.
+  - `PassUp`: the spec's own words. A verb phrase, which no sibling node is. Runner-up.
+  - `EarlyReturn`: the failure branch. Reads "an early return", which misses the `Ok` value it also gives.
+  - `TryValue`: the success branch, "the value `try` gives". Misses the return.
+  - `Forward`: the failure goes to the caller. Readers add different words, "forward (the value? the call?)".
+  - `Unwrap`: removed. It reads as taking the `Ok` value out, and misses the return of the failure.
+  - `TryOperator`: removed. `Operator` is a declared `operator ==` member in the CST (`class_like/operator.rs`).
   - `TryExpression` — removed: it repeats `Expression::`.
 - **No new issue code.** `try` reuses `invalid-operand` and `invalid-return-statement`, a case nothing fixes reuses `missing-template-parameter`, and `catch (Error …)` reuses `invalid-catch-type`.
 - **No new engine function or opcode.** The engine's one change is that a PHP# enum may declare a virtual property (Q3).

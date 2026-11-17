@@ -39,16 +39,10 @@ public void renewAll(List<int> customerIds, string plan)
 ### Rejected: a block that runs only when the value is not null
 
 ```csharp
-customers[id]?.let(customer => charge(customer, price));   // not PHP#: Kotlin's ?.let { }
+customers[id]?.let(customer => charge(customer, price));   // not PHP#: a let block after ?.
 ```
 
 This is a second way to do what `is Type name` already does.
-
-## Precedent
-
-- **Chosen:** Kotlin's `?: return`, `?: continue` and `?: break`, Swift's `guard … else`, and Rust's `let … else`.
-- **Rejected, only `?? throw`:** C#.
-- **Rejected, a block that runs only when the value is not null:** Kotlin's `?.let { }`.
 
 ## Spec
 

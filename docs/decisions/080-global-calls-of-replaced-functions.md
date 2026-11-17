@@ -43,11 +43,6 @@ public string label(string name) => global.trim(name);                          
 
 Every replaced function has two spellings, and one of them is PHP's, so writing PHP# means knowing PHP's functions. A class prints or exits with no `Console` or `Process` in its constructor, so a test cannot give it a fake one.
 
-## Precedent
-
-- **Chosen:** Kotlin, which reports a Java class Kotlin maps to its own, such as `java.lang.Integer`, with the Kotlin type to write.
-- **Rejected:** Rust's `extern "C"` and C#'s P/Invoke, which reach any foreign function, including one the standard library wraps.
-
 ## Spec
 
 - [Section 8, Functions](../spec.md#8-functions)

@@ -43,13 +43,6 @@ A scope kept in one global, restored when its body returns, makes a fiber that s
 
 A type pointer reaches objects, frames, closures, run-time caches and class values, and none of them counts it. A refcount, or a sweep at each scope's end, would free types a real app reuses on its next request, at the cost of hundreds of lines where each missed holder is a crash.
 
-## Precedent
-
-- **Lifetimes:** ASP.NET Core's host defines `Singleton`, `Scoped` and `Transient`, and `IServiceScopeFactory.CreateScope()` starts a scope.
-- **A scope that follows the work it starts:** .NET's `AsyncLocal`, Node's `AsyncLocalStorage.run` and tokio's task-local `scope`. .NET throws `ObjectDisposedException` when code uses a disposed scope.
-- **Statics under a long-running host:** C#, TypeScript and Rust keep a static for the process's life.
-- **Run-time types:** C# keeps each generic instantiation it makes at run time, as `MakeGenericType` makes one, for the process's life.
-
 ## Spec
 
 - [Section 6, Fields and properties](../spec.md#6-fields-and-properties)

@@ -20,7 +20,7 @@ public class Order : Model
 }
 ```
 
-A property always has a type, with no exception. The checker proves the written type against the parent's. For an untyped parent, the running program does not enforce the type, so plain PHP code in `Model` can still store anything there. TypeScript makes the same trade.
+A property always has a type, with no exception. The checker proves the written type against the parent's. For an untyped parent, the running program does not enforce the type, so plain PHP code in `Model` can still store anything there.
 
 An auto-property override lowers to the same PHP property a field does, `#[\Override] protected $table = 'orders';`. PHP runs hooks on a redeclared property whether the parent types it or not, so accessor bodies need no exception.
 
@@ -30,7 +30,7 @@ An auto-property override lowers to the same PHP property a field does, `#[\Over
 protected override string? table = "orders";             // not PHP#: an override is a property
 ```
 
-C# overrides only properties, and a field takes no `virtual`. Two forms for one override would leave every reader to learn both.
+PHP# overrides only properties, and a field takes no `virtual`. Two forms for one override would leave every reader to learn both.
 
 ### Rejected: `override` with no written type
 
@@ -55,9 +55,6 @@ No Eloquent attribute covers `$with`, and other libraries' base classes have non
 
 ## Precedent
 
-- **Chosen:** C#, Swift and Java, which repeat the type on an override, and C#, which overrides only properties. TypeScript, which checks types it erases at runtime.
-- **Rejected, a field:** Java, which hides a parent's field instead of overriding it.
-- **Rejected, no written type:** Kotlin's and TypeScript's `override` on a property with an initial value and no written type.
 - **Rejected, attributes only:** Laravel 13's class attributes.
 
 ## Spec

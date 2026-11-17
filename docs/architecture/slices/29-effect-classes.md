@@ -24,7 +24,7 @@ Both exceptions carry the message shape `"Class.method: …"`.
 
 ## Environment
 
-The precedents are Go's `os.Getenv`, `os.Getwd` and `os.Chdir`, and Rust's `std::env`. `currentDirectory()` reads the directory on every call, so it follows `changeDirectory`.
+`currentDirectory()` reads the directory on every call, so it follows `changeDirectory`.
 
 ```csharp
 public foreign class Environment
@@ -49,7 +49,7 @@ PHP's other environment functions, such as `gethostname`, `php_uname` and the `i
 
 ## Clock
 
-The precedent is .NET `TimeProvider`: `GetUtcNow`, `GetTimestamp`, `GetElapsedTime` and `Delay`. A moment stays an `int` of Unix seconds, as `Date.format` and `Date.parse` take it.
+A moment stays an `int` of Unix seconds, as `Date.format` and `Date.parse` take it.
 
 ```csharp
 public foreign class Clock
@@ -68,7 +68,7 @@ public foreign class Clock
 
 ## Random
 
-The precedent is .NET `System.Random`: `Next(min, max)` with `max` excluded, `NextDouble`, `NextBytes`, `Shuffle` and `GetItems`. The backend is PHP's `Random\Randomizer`.
+`nextInt(min, max)` excludes `max`. The backend is PHP's `Random\Randomizer`.
 
 ```csharp
 public foreign class Random
@@ -91,7 +91,7 @@ public foreign class Random
 
 ## Console
 
-The precedent is .NET `Console`: `Write`, `WriteLine`, `Error.Write` and `ReadLine`. PHP# strings interpolate with `${}`, so no member takes a format string.
+PHP# strings interpolate with `${}`, so no member takes a format string.
 
 ```csharp
 public foreign class Console
@@ -110,7 +110,7 @@ public foreign class Console
 
 ## Process
 
-The precedents are .NET `Environment.Exit` and `Process.RunAndCaptureText`, which returns the exit code as data. The backend is `proc_open` with an argument list, so no shell string is involved.
+A run returns the exit code as data. The backend is `proc_open` with an argument list, so no shell string is involved.
 
 ```csharp
 public foreign class Process
@@ -134,7 +134,7 @@ Mago parses `exit` as a construct, not as a function call, so the bare-call chec
 
 ## Files
 
-The precedent is .NET `File` and `Directory`, which read and write whole files. A missing file is a returned `null`, the library's convention for a missing value.
+A file is read and written whole. A missing file is a returned `null`, the library's convention for a missing value.
 
 ```csharp
 public foreign class Files
@@ -177,7 +177,7 @@ public foreign class Files
 
 ## Http
 
-The precedent is .NET `HttpClient`, with `GetAsync` and `SendAsync`, plus `HttpRequestMessage`, `HttpResponseMessage` and `HttpMethod`. A 404 or a 500 is a returned response. The backend is curl.
+A 404 or a 500 is a returned response. The backend is curl.
 
 ```csharp
 public foreign class Http
@@ -210,7 +210,7 @@ A JSON request body needs `Json.encode`, which the library doesn't have yet.
 
 ## Cache
 
-The APCu functions map to it, each to the member that does its work and the rest of the family to `get`, `set` and `remove`. APCu is no PHP built-in, so `Builtins.sharp` declares none of them, while PHP's own `opcache_*` functions carry `Cache`. The store is a SQLite file through PDO SQLite, which the runtime image ships, the way .NET's SQL Server distributed cache keeps entries in a table. The precedent is .NET `IDistributedCache`, with `Get`, `Set` and `Remove`. Values are strings, which in PHP# also cover bytes, so a User encodes a structured value with `Json`.
+The APCu functions map to it, each to the member that does its work and the rest of the family to `get`, `set` and `remove`. APCu is no PHP built-in, so `Builtins.sharp` declares none of them, while PHP's own `opcache_*` functions carry `Cache`. The store is a SQLite file through PDO SQLite, which the runtime image ships, with the entries in a table. Values are strings, which in PHP# also cover bytes, so a User encodes a structured value with `Json`.
 
 ```csharp
 public foreign class Cache
@@ -230,7 +230,7 @@ public foreign class Cache
 
 ## Mail
 
-The precedent is .NET `MailMessage`, `MailAddress` and `SmtpClient.Send`. The backend is PHP's `mail()`, which hands the message to the local sendmail.
+The backend is PHP's `mail()`, which hands the message to the local sendmail.
 
 ```csharp
 public foreign class Mail
@@ -254,7 +254,7 @@ public struct MailMessage(
 
 ## Database
 
-The precedent is .NET `DbCommand` (`ExecuteReader`, `ExecuteScalar`, `ExecuteNonQuery`) and `DbConnection.BeginTransaction`. The backend is PDO, and the runtime image ships its SQLite, PostgreSQL and MySQL drivers. A row is a `Map<string, Any?>`, which a struct's `parse` turns into a typed value.
+The backend is PDO, and the runtime image ships its SQLite, PostgreSQL and MySQL drivers. A row is a `Map<string, Any?>`, which a struct's `parse` turns into a typed value.
 
 ```csharp
 public foreign class Database
@@ -285,7 +285,7 @@ The `pg_*` and `mysqli_*` families hold about 230 functions. A connect function 
 
 Each type is its own file:
 
-- `Duration`, a struct in `Sharp.Time`, as .NET's `TimeSpan`. `Clock`, `Process`, `Http` and `Cache` take it.
+- `Duration`, a struct in `Sharp.Time`. `Clock`, `Process`, `Http` and `Cache` take it.
 - `HttpMethod`, an enum, and the `HttpRequest` and `HttpResponse` structs, in `Sharp.Net`.
 - `ProcessResult`, a struct in `Sharp`.
 - `MailAddress` and `MailMessage`, structs in `Sharp.Net`.
@@ -293,9 +293,9 @@ Each type is its own file:
 ```csharp
 public struct Duration(int nanoseconds)
 {
-    public static Duration ofSeconds(int seconds);           // as .NET TimeSpan.FromSeconds
+    public static Duration ofSeconds(int seconds);           // a whole number of seconds
 
-    public static Duration ofMilliseconds(int milliseconds); // as .NET TimeSpan.FromMilliseconds
+    public static Duration ofMilliseconds(int milliseconds); // a whole number of milliseconds
 
     public int seconds => this.nanoseconds / 1_000_000_000;   // whole seconds
 }

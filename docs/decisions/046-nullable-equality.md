@@ -17,7 +17,7 @@ if (price != null) { … }         // compiles: the normal null check
 if (price is not null) { … }     // compiles: an ordinary pattern
 ```
 
-The null check every PHP, C#, Java, Kotlin and TypeScript programmer writes works as it reads, and an `operator ==` is written for two real values.
+The null check every PHP programmer writes works as it reads, and an `operator ==` is written for two real values.
 
 ### Rejected: `is null` and `is not null` as the only null check
 
@@ -27,11 +27,6 @@ if (price is not null) { … }     // compiles
 ```
 
 Every null check needs a pattern, and the familiar `!= null` becomes an error. The pattern form exists to keep a user-defined `==` away from null, and lifting already does that.
-
-## Precedent
-
-- **Chosen:** C#'s lifted operators on nullable values, and Kotlin's `==`, which checks for null before it calls `equals`.
-- **Rejected:** Python's PEP 8 rule that comparisons to `None` use `is` and `is not`, and C#'s style analyzers that prefer `is null`.
 
 ## Spec
 
