@@ -4,21 +4,25 @@ set -euo pipefail
 # Serves sharp/hosts from FrankenPHP's worker mode, and compares what each request prints with
 # sharp/hosts/expected/frankenphp.txt. FrankenPHP is built with Go against the engine sharp/bin/build installs.
 usage() {
-  echo "usage: sharp/bin/hosts [--linux]" >&2
+  echo "usage: sharp/bin/hosts [--linux] [--no-build]" >&2
   exit 2
 }
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 linux=false
+# --no-build serves the fixture with the mago an earlier sharp/bin/build-mago made, as sharp/bin/test --no-build runs.
+build=true
+container_command=(sharp/bin/hosts)
 for arg in "$@"; do
   case "$arg" in
     --linux) linux=true ;;
+    --no-build) build=false; container_command+=("$arg") ;;
     *) usage ;;
   esac
 done
 
 if $linux; then
-  exec "$root/sharp/docker/run" sharp/bin/hosts
+  exec "$root/sharp/docker/run" "${container_command[@]}"
 fi
 if [[ "$(uname -s)" != Linux ]]; then
   echo "sharp/bin/hosts runs on Linux. Run sharp/bin/hosts --linux." >&2
@@ -32,8 +36,14 @@ if [[ ! -x "$install/bin/php-config" ]]; then
   exit 1
 fi
 
-"$root/sharp/bin/build-mago" --quiet
+if $build; then
+  "$root/sharp/bin/build-mago" --quiet
+fi
 mago="$build_dir/mago/debug/mago"
+if [[ ! -x $mago ]]; then
+  echo "$mago is missing. Run sharp/bin/build-mago first." >&2
+  exit 1
+fi
 
 fixture="$root/sharp/hosts"
 # Composer keeps the copy of sharp/composer an earlier run installed while composer.lock is unchanged, so the install
