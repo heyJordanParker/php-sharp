@@ -24,11 +24,11 @@ jobs:
   # as this job does.
   #
   # A pull request runs the Linux suites, each job on 4 cores. A release's pull request, whose sharp/mago/Cargo.toml
-  # version has no tag yet, also runs what needs the Mac, the arm64 Linux suite, the runtime image and the release
-  # assets, so every check that guards a release runs before the merge, on the tree that merges. GitHub runs 20 of the
-  # account's hosted jobs at once, across all its repositories, and a job past them waits: a pull request's runs hold 14
-  # at most, and a release's 18, and mago.yml's checks run beside patch-coverage, since one after the other they took
-  # 13.4 minutes on pull request #337.
+  # version has no tag yet, also runs what needs the Mac, the runtime image and the release assets, so every check that
+  # guards a release runs before the merge, on the tree that merges. GitHub runs 20 of the account's hosted jobs at once,
+  # across all its repositories, and a job past them waits: a pull request's runs hold 14 at most, and a release's 18,
+  # and mago.yml's checks run beside patch-coverage, since one after the other they took 13.4 minutes on pull request
+  # #337.
   #
   # A tree runs the checks once, as bors's "not rocket science" rule tests the exact tree that lands once. A push to
   # master runs none of them when a pull request's run passed CI_PASSED on its tree, as .github/actions/passed-tree
@@ -114,22 +114,74 @@ jobs:
             BASE=$(git hash-object -t tree /dev/null)
           fi
           sharp/bin/check --changes "$BASE" | tee -a "$GITHUB_OUTPUT"
-  # Every Linux suite job builds what it needs itself in the sharp/docker image, on 4 cores, from the caches HOSTS saves
-  # on master: the engine through ccache, and mago on master's target. A build job the suites waited on would add its
-  # minutes to every one of them. .github/actions/linux-build builds the engine while the target restores.
+  # The run's one Linux build, which every Linux suite runs on: the engine, its install and mago, which the suites run
+  # with --no-build. Each of the 8 suite jobs built them itself for 2 to 5 minutes on release pull request #363's run,
+  # where the bump rebuilt every Mago crate in each, so a run built the same code 8 times. The suites wait for it, so its
+  # minutes are on every suite's path, and it keeps them few: .github/actions/linux-build builds the engine through
+  # ccache in the sharp/docker image, which sharp/docker/run passes CC and CXX into, with its folder at
+  # sharp/build/cache/ccache under the XDG_CACHE_HOME sharp/docker/run sets, while master's Mago target restores, and
+  # sharp/bin/build-mago then builds only what changed since master's build, with every test binary, as mago.yml's build
+  # job builds them on the same target. It also runs the checks of generated files, which took 18 seconds on release
+  # pull request #379's run, since one of them reads the header the build generates: a job starts once every job it
+  # needs has ended, so the suites wait for them too.
   #
-  # Each of those jobs compiles through ccache in the image, which sharp/docker/run passes CC and CXX into, with its
-  # folder at sharp/build/cache/ccache, under the XDG_CACHE_HOME sharp/docker/run sets.
-  #
+  # On each push to master it saves the ccache, the Rust toolchain and crates, and the target, which every pull
+  # request's run restores, as .github/actions/mago-cache explains. A cache only its own ref's runs would restore is no
+  # use to the next pull request, so only master saves. So it runs on every push to master, even one whose tree a pull
+  # request's run passed, but for the push that publishes a release, which builds nothing, so the next push saves them.
+  # CI_PASSED, which runs after it, deletes the caches it replaced.
+  BUILD_LINUX:
+    needs: CHANGES
+    if: >-
+      needs.CHANGES.outputs.code == 'true'
+      && !(needs.CHANGES.outputs.passed && needs.CHANGES.outputs.bump == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+      CC: ccache gcc
+      CXX: ccache g++
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # sharp/bin/build-mago builds inside the image, where CARGO_HOME and RUSTUP_HOME are sharp/build/cargo and
+      # sharp/build/rustup, which the Rust cache holds.
+      - name: Build and install the engine, and restore the Rust and Mago caches
+        uses: ./.github/actions/linux-build
+        with:
+          save: ${{ github.event_name == 'push' }}
+      - name: Build mago and its test binaries
+        run: sharp/docker/run sharp/bin/build-mago --quiet
+      # What the suites run: the CLI, phpdbg, which run-tests.php finds beside it for the tests that need it, the install
+      # sharp/bin/hosts builds FrankenPHP against, and mago. An artifact keeps no file's mode, so the files travel in a
+      # tar, compressed here, since Actions would compress them on one thread.
+      - name: Pack the engine and mago for the suites
+        run: |
+          build="sharp/build/linux-$(uname -m)"
+          tar --zstd -cf "$RUNNER_TEMP/build.tar.zst" "$build/sapi/cli/php" "$build/sapi/phpdbg/phpdbg" "$build/install" \
+            "$build/mago/debug/mago"
+      - name: Upload the engine and mago for the suites
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-linux
+          path: ${{ runner.temp }}/build.tar.zst
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+      - name: Verify the generated files, and that no Cargo.lock names a local source
+        run: sharp/bin/check generated
+
   # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in two slices, each without opcache, in shared
   # memory twice per process, and under the tracing JIT production runs with the opcache. The slices balance by the
   # seconds sharp/baseline/seconds lists, and the one that weighs least runs mago convert's whole-project proof, as
-  # sharp/bin/test explains. The first slice also runs sharp/bin/spec's self-test, and the second the census, the
-  # differential, PHPUnit and the checks of generated files. Each slice first builds the engine and mago, which took
-  # 3.7 to 3.9 minutes of release pull request #343's run, where three slices then tested for 101, 145 and 144 seconds.
+  # sharp/bin/test explains. The second slice also runs the census, the differential and PHPUnit.
   LINUX:
     name: LINUX (${{ matrix.shard }}/2)
-    needs: CHANGES
+    needs: [CHANGES, BUILD_LINUX]
     if: needs.CHANGES.outputs.code == 'true' && !needs.CHANGES.outputs.passed
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -143,34 +195,30 @@ jobs:
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-      CC: ccache gcc
-      CXX: ccache g++
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # sharp/bin/test builds mago with sharp/bin/build-mago, inside the image, where CARGO_HOME and RUSTUP_HOME are
-      # sharp/build/cargo and sharp/build/rustup. Every Linux job that builds mago in the image shares these caches.
-      - name: Build the engine, and restore the Rust and Mago caches
-        uses: ./.github/actions/linux-build
+      # sharp/docker/run pulls the image base-images.yml builds from ghcr.io.
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ github.token }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Download BUILD_LINUX's engine and mago
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-linux
+          path: ${{ runner.temp }}
+      - name: Unpack BUILD_LINUX's engine and mago
+        run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
       - name: Test PHP#
         run: >-
-          sharp/bin/test --linux --shard ${{ matrix.shard }}/2
+          sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/2
           ${{ matrix.shard == 2 && '--census --differential --phpunit' || '' }}
-      # sharp/bin/test --spec runs the self-test with every example, which SPEC checks in slices, so this runs the
-      # self-test alone, with the mago sharp/bin/test built, as sharp/bin/test passes it.
-      - name: Check sharp/bin/spec's rules on sharp/spec-self-test.md
-        if: matrix.shard == 1
-        run: |
-          build="sharp/build/linux-$(uname -m)"
-          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --self-test
-      - name: Verify the generated files, and that no Cargo.lock names a local source
-        if: matrix.shard == 2
-        run: sharp/bin/check generated
-  # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before. On
-  # release pull request #343 its build and tests took 8.8 minutes, and sharp/bin/spec's self-test 77 seconds more, which
-  # alone held the run past 10 minutes, so the self-test runs in LINUX (1/2).
+  # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before, and
+  # sharp/bin/spec's self-test. Each took 155 and 54 seconds on release pull request #379's run, where LINUX (1/2), which
+  # ran the self-test after its slice, took 377 seconds, the longest suite job.
   UPSTREAM:
-    needs: CHANGES
+    needs: [CHANGES, BUILD_LINUX]
     if: needs.CHANGES.outputs.code == 'true' && !needs.CHANGES.outputs.passed
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -180,22 +228,34 @@ jobs:
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-      CC: ccache gcc
-      CXX: ccache g++
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build the engine, and restore the Rust and Mago caches
-        uses: ./.github/actions/linux-build
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ github.token }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Download BUILD_LINUX's engine and mago
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-linux
+          path: ${{ runner.temp }}
+      - name: Unpack BUILD_LINUX's engine and mago
+        run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
       - name: Test upstream
-        run: sharp/bin/test --linux --upstream
+        run: sharp/bin/test --linux --no-build --upstream
+      # sharp/bin/test --spec runs the self-test with every example, which SPEC checks in slices, so this runs the
+      # self-test alone, with BUILD_LINUX's mago, as sharp/bin/test passes it.
+      - name: Check sharp/bin/spec's rules on sharp/spec-self-test.md
+        run: |
+          build="sharp/build/linux-$(uname -m)"
+          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --self-test
   # Every code example in docs/spec.md and README.md, compared with sharp/baseline/spec, in four slices of the examples.
-  # Each slice runs sharp/bin/spec on the engine with the mago sharp/bin/build-mago builds, as sharp/bin/test --spec does.
-  # Each slice first builds the engine and mago, which took 3.7 to 4.7 minutes of release pull request #343's run, where
-  # five slices then checked their examples in 123 to 161 seconds.
+  # Each slice runs sharp/bin/spec on BUILD_LINUX's engine and mago, as sharp/bin/test --spec does. Five slices checked
+  # their examples in 123 to 161 seconds on release pull request #343's run.
   SPEC:
     name: SPEC (${{ matrix.shard }}/4)
-    needs: CHANGES
+    needs: [CHANGES, BUILD_LINUX]
     if: needs.CHANGES.outputs.code == 'true' && !needs.CHANGES.outputs.passed
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -209,29 +269,30 @@ jobs:
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-      CC: ccache gcc
-      CXX: ccache g++
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build the engine, and restore the Rust and Mago caches
-        uses: ./.github/actions/linux-build
-      - name: Build mago
-        run: sharp/docker/run sharp/bin/build-mago --quiet
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ github.token }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Download BUILD_LINUX's engine and mago
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-linux
+          path: ${{ runner.temp }}
+      - name: Unpack BUILD_LINUX's engine and mago
+        run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
       - name: Check the examples of docs/spec.md and README.md
         run: |
           build="sharp/build/linux-$(uname -m)"
           sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/4
-  # The fixture in sharp/hosts, served from FrankenPHP's worker mode. HOSTS builds the engine FrankenPHP is built against
-  # with Go, and mago itself, beside the suites, so it never waits for their tests. It runs on every push to master, even
-  # one whose tree a pull request's run passed, because that push's HOSTS saves what every pull request's run restores:
-  # the engine's ccache, the Mago target with the Rust toolchain and crates, as .github/actions/mago-cache explains, and
-  # the Go modules and Go's build cache of FrankenPHP's packages. A cache only its own ref's runs would restore is no use
-  # to the next pull request, so only master saves. CI_PASSED, which runs after it, deletes the caches it replaced. The
-  # push's jobs share the 20 jobs GitHub runs at once with every pull request's, so one job builds and saves them all.
-  # The push that publishes a release its pull request's run passed builds nothing, so the next push saves them.
+  # The fixture in sharp/hosts, served from FrankenPHP's worker mode, with FrankenPHP built with Go against
+  # BUILD_LINUX's installed engine, and BUILD_LINUX's mago. It runs on every push to master that BUILD_LINUX runs on,
+  # even one whose tree a pull request's run passed, because that push's HOSTS saves the Go modules and Go's build cache
+  # of FrankenPHP's packages, which every pull request's run restores, as BUILD_LINUX saves its caches.
   HOSTS:
-    needs: CHANGES
+    needs: [CHANGES, BUILD_LINUX]
     if: >-
       needs.CHANGES.outputs.code == 'true'
       && !(needs.CHANGES.outputs.passed && needs.CHANGES.outputs.bump == 'true')
@@ -243,17 +304,20 @@ jobs:
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-      CC: ccache gcc
-      CXX: ccache g++
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # sharp/bin/hosts builds mago before it compiles the fixture, as sharp/bin/test does in LINUX, so the target holds
-      # every test binary too, as sharp/bin/build-mago builds them.
-      - name: Build and install the engine, and restore the Rust and Mago caches
-        uses: ./.github/actions/linux-build
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ github.token }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Download BUILD_LINUX's engine and mago
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          save: ${{ github.event_name == 'push' }}
+          name: build-linux
+          path: ${{ runner.temp }}
+      - name: Unpack BUILD_LINUX's engine and mago
+        run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
       # sharp/bin/hosts keeps Go's build cache in the build's folder, because the cache never reads the PHP headers
       # FrankenPHP's C files include, as it explains. So the key holds the hash of the headers the engine just installed,
       # and a change to them restores nothing, as a new build folder would hold nothing.
@@ -266,7 +330,7 @@ jobs:
           key: SHARP_HOSTS_GO-${{ runner.arch }}-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile', 'sharp/build/linux-x86_64/install/include/**') }}-${{ github.sha }}
           restore-keys: SHARP_HOSTS_GO-${{ runner.arch }}-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile', 'sharp/build/linux-x86_64/install/include/**') }}-
       - name: Serve the fixture from FrankenPHP
-        run: sharp/bin/hosts --linux
+        run: sharp/bin/hosts --linux --no-build
       - name: Save the Go modules and build cache
         if: github.event_name == 'push'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -275,39 +339,6 @@ jobs:
             sharp/build/go/pkg/mod
             sharp/build/linux-x86_64/frankenphp/go-build
           key: SHARP_HOSTS_GO-${{ runner.arch }}-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile', 'sharp/build/linux-x86_64/install/include/**') }}-${{ github.sha }}
-  # The PHP# suite on arm64 Linux, the platform of the Linux VMs on the Mac, in the arm64 sharp/docker image on the
-  # self-hosted Mac runners, whose Docker keeps the image and whose kept build folder holds sharp/build/linux-aarch64. A
-  # release's pull request runs it, and a push whose tree no pull request's run passed. Whole, it took 24 to 31 minutes
-  # of tests on the pushes of pull requests #351 and #352, so it runs in three slices, one per Mac runner, and the third
-  # runs the census, the differential and PHPUnit. A job never installs on those runners, and never sets them up: the
-  # first step only checks that Docker answers there.
-  LINUX_ARM64:
-    name: LINUX_ARM64 (${{ matrix.shard }}/3)
-    needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.full == 'true'
-    runs-on: macos-arm64-local
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    steps:
-      # actions/checkout's clean deletes sharp/build. Each job on the self-hosted Macs keeps it instead, as
-      # .github/actions/clean-kept-build explains.
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          clean: false
-      - name: Remove what an earlier job left, except the builds
-        uses: ./.github/actions/clean-kept-build
-      - name: Docker answers on this runner
-        run: docker info --format 'Docker {{.ServerVersion}}, {{.OSType}}/{{.Architecture}}, {{.NCPU}} CPUs'
-      - name: Build
-        run: sharp/bin/build --linux
-      - name: Test PHP#
-        run: >-
-          sharp/bin/test --linux --shard ${{ matrix.shard }}/3
-          ${{ matrix.shard == 3 && '--census --differential --phpunit' || '' }}
   # The engine built with AddressSanitizer, so a memory error of the engine fails a test, nightly on master's tip.
   # sharp/bin/build has no flag for php-src's --enable-address-sanitizer, so it builds as php-src's own CI does: a debug
   # build whose CFLAGS and LDFLAGS add -fsanitize=address and ZEND_TRACK_ARENA_ALLOC. sharp/docker/run passes no CFLAGS
@@ -367,29 +398,21 @@ jobs:
         uses: ./.github/actions/red-master-issue
         with:
           title: The nightly ASAN run failed
-  # The checks only macOS can fail: the engine's build, mago compile and the suite on a disk that ignores case, without
-  # opcache and in shared memory, since Apple silicon has no thread-safe JIT, the census and the differential. A
-  # release's pull request runs it, and a push whose tree no pull request's run passed. Whole, its tests took 11 to 12
-  # minutes on the pushes of pull requests #351 and #352, so it runs in three slices, one per Mac runner, and the third
-  # runs the census and the differential: three whole suites at once each ran past the 60-minute limit, as the runners
-  # share one Mac, and three slices are one suite. A job never installs on the self-hosted Mac runners, so they check that
-  # Homebrew already has the build's formulae and build without ccache.
-  MACOS:
-    name: MACOS (${{ matrix.shard }}/3)
+  # The run's one macOS build, which MACOS runs on: the engine and mago, as BUILD_LINUX builds Linux's. A release's pull
+  # request runs it, and a push whose tree no pull request's run passed. A job never installs on the self-hosted Mac
+  # runners, so it checks that Homebrew already has the build's formulae, and builds without ccache.
+  #
+  # The 12-core Mac runs this job beside the other runners' jobs and the work the suite checks, and two or three jobs
+  # that each took every core held its load between 200 and 480 for hours. So every job on the self-hosted Macs caps its
+  # parallelism: CARGO_BUILD_JOBS sets cargo's jobs, and sharp/bin/build's make and sharp/bin/test's run-tests.php read
+  # it as their -j. RUST_TEST_THREADS sets libtest's threads, RAYON_NUM_THREADS a rayon pool that sets no size of its
+  # own, MAGO_THREADS mago's pool, which sets its own size and so never reads RAYON_NUM_THREADS, and LEAN_NUM_THREADS
+  # Lean's.
+  BUILD_MACOS:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.full == 'true'
     runs-on: macos-arm64-local
     timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    # The 12-core Mac runs this job beside the other runners' jobs and the work the suite checks, and two or three jobs
-    # that each took every core held its load between 200 and 480 for hours. So every job on the self-hosted Macs caps
-    # its parallelism: CARGO_BUILD_JOBS sets cargo's jobs, and sharp/bin/build's make and sharp/bin/test's run-tests.php
-    # read it as their -j. RUST_TEST_THREADS sets libtest's threads, RAYON_NUM_THREADS a rayon pool that sets no size of
-    # its own, MAGO_THREADS mago's pool, which sets its own size and so never reads RAYON_NUM_THREADS, and
-    # LEAN_NUM_THREADS Lean's.
     env:
       FORMULAE: autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
       CARGO_BUILD_JOBS: 4
@@ -398,9 +421,9 @@ jobs:
       MAGO_THREADS: 4
       LEAN_NUM_THREADS: 2
     steps:
-      # actions/checkout's clean deletes sharp/build. Each job on the self-hosted Macs keeps it instead, as
-      # .github/actions/clean-kept-build explains, so the engine and mago rebuild only what changed, which takes
-      # seconds, where a build from nothing took 19 minutes.
+      # actions/checkout's clean deletes sharp/build. The build keeps it instead, as .github/actions/clean-kept-build
+      # explains, so the engine and mago rebuild only what changed since that runner's last build, where a build from
+      # nothing took 19 minutes.
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -418,11 +441,65 @@ jobs:
           type -a rustup rustc cargo
           rustc --version
           cargo --version
-      - name: Build
+      - name: Build the engine
         run: sharp/bin/build
+      - name: Build mago and its test binaries
+        run: sharp/bin/build-mago --quiet
+      # The CLI, phpdbg and mago. An artifact keeps no file's mode, so the files travel in a tar, as BUILD_LINUX's do.
+      - name: Pack the engine and mago for MACOS
+        run: |
+          build="sharp/build/darwin-$(uname -m)"
+          tar --zstd -cf "$RUNNER_TEMP/build.tar.zst" "$build/sapi/cli/php" "$build/sapi/phpdbg/phpdbg" "$build/mago/debug/mago"
+      - name: Upload the engine and mago for MACOS
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-macos
+          path: ${{ runner.temp }}/build.tar.zst
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+  # The checks only macOS can fail: mago compile and the suite on a disk that ignores case, without opcache and in shared
+  # memory, since Apple silicon has no thread-safe JIT, the census and the differential, on BUILD_MACOS's engine and
+  # mago. Whole, its tests took 11 to 12 minutes on the pushes of pull requests #351 and #352, so it runs in three
+  # slices, one per Mac runner, and the third runs the census and the differential: three whole suites at once each ran
+  # past the 60-minute limit, as the runners share one Mac, and three slices are one suite. Each slice checks out into a
+  # folder of its own, shard, because the runner's kept build is for BUILD_MACOS: a copy of another runner's engine and
+  # mago in it would leave cargo and make holding outputs they didn't build, which they take for current.
+  MACOS:
+    name: MACOS (${{ matrix.shard }}/3)
+    needs: [CHANGES, BUILD_MACOS]
+    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.full == 'true'
+    runs-on: macos-arm64-local
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    # The self-hosted Macs cap each job's parallelism, as BUILD_MACOS explains.
+    env:
+      CARGO_BUILD_JOBS: 4
+      RUST_TEST_THREADS: 4
+      RAYON_NUM_THREADS: 4
+      MAGO_THREADS: 4
+      LEAN_NUM_THREADS: 2
+    defaults:
+      run:
+        working-directory: shard
+    steps:
+      - name: git checkout, into a folder of its own
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: shard
+      - name: Download BUILD_MACOS's engine and mago
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-macos
+          path: ${{ runner.temp }}
+      - name: Unpack BUILD_MACOS's engine and mago
+        run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
       - name: Test PHP#
         run: >-
-          sharp/bin/test --shard ${{ matrix.shard }}/3
+          sharp/bin/test --no-build --shard ${{ matrix.shard }}/3
           ${{ matrix.shard == 3 && '--census --differential' || '' }}
   # The checks that keep the release pipeline on pinned code, which sharp/bin/check workflows runs: an action that is not
   # ours runs only at a full commit SHA, so a moved tag can't change what runs, no Dockerfile under sharp/docker names a
@@ -464,7 +541,19 @@ jobs:
   CI_PASSED:
     if: always() && github.event_name != 'schedule'
     needs:
-      [CHANGES, LINUX, UPSTREAM, SPEC, HOSTS, LINUX_ARM64, MACOS, WORKFLOWS, RELEASE_ASSETS, IMAGE, RELEASE, COMPOSER]
+      - CHANGES
+      - BUILD_LINUX
+      - LINUX
+      - UPSTREAM
+      - SPEC
+      - HOSTS
+      - BUILD_MACOS
+      - MACOS
+      - WORKFLOWS
+      - RELEASE_ASSETS
+      - IMAGE
+      - RELEASE
+      - COMPOSER
     runs-on: ubuntu-24.04
     permissions:
       actions: write
@@ -481,7 +570,7 @@ jobs:
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
           allowed-skips: >-
-            LINUX, UPSTREAM, SPEC, HOSTS, LINUX_ARM64, MACOS, RELEASE_ASSETS, IMAGE, RELEASE, COMPOSER
+            BUILD_LINUX, LINUX, UPSTREAM, SPEC, HOSTS, BUILD_MACOS, MACOS, RELEASE_ASSETS, IMAGE, RELEASE, COMPOSER
           jobs: ${{ toJSON(needs) }}
       # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed run on master
@@ -490,10 +579,10 @@ jobs:
         with:
           title: A push to master failed PHP# CI
           range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
-      # HOSTS saved its target, ccache and Go caches on master when it ended, so this job, which needs it, deletes the
-      # ones they replaced.
+      # BUILD_LINUX saved its target and ccache on master when it ended, and HOSTS its Go caches, so this job, which
+      # needs both, deletes the ones they replaced.
       - name: Delete the caches this run replaced
-        if: always() && github.event_name == 'push' && needs.HOSTS.result == 'success'
+        if: always() && github.event_name == 'push' && needs.BUILD_LINUX.result == 'success'
         uses: ./.github/actions/mago-cache-prune
   # Splits sharp/composer and sharp/mago and pushes them to master of heyJordanParker/php-sharp-composer and
   # heyJordanParker/mago-sharp, whose webhooks tell Packagist, once every check of the push passed: it needs RELEASE,
@@ -676,6 +765,17 @@ jobs:
         uses: ./.github/actions/boot-image
         with:
           image: ghcr.io/heyjordanparker/php-sharp@${{ steps.build.outputs.digest }}
+      # No job runs the PHP# suite on arm64, so this platform's engine shows here that it starts and loads PHP#.
+      - name: The image's php prints its version and lists the sharp extension
+        env:
+          IMAGE: ghcr.io/heyjordanparker/php-sharp@${{ steps.build.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          docker run --rm "$IMAGE" php -v
+          if ! docker run --rm "$IMAGE" php -m | grep -qx sharp; then
+            echo "::error::php -m in the $PLATFORM image lists no sharp extension."
+            exit 1
+          fi
       # rustup comes after the extensions, so they build as in the app's image. The builder is Docker's own, which reads
       # the pulled image, where Buildx's would not.
       - name: Install the extensions
@@ -720,7 +820,7 @@ jobs:
   # starts no workflow, so this run publishes, and COMPOSER then publishes the Composer packages. A rerun of a failed
   # RELEASE finds what an earlier attempt published, and leaves it.
   RELEASE:
-    needs: [CHANGES, LINUX, UPSTREAM, SPEC, HOSTS, LINUX_ARM64, MACOS, WORKFLOWS, RELEASE_ASSETS, IMAGE]
+    needs: [CHANGES, BUILD_LINUX, LINUX, UPSTREAM, SPEC, HOSTS, BUILD_MACOS, MACOS, WORKFLOWS, RELEASE_ASSETS, IMAGE]
     if: ${{ !failure() && !cancelled() && github.event_name == 'push' && needs.CHANGES.outputs.bump == 'true' }}
     runs-on: ubuntu-24.04
     permissions:

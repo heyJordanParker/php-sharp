@@ -1,15 +1,15 @@
 name: Build the engine in the sharp/docker image, beside Mago's target restore
 description: >-
-  Builds the engine sharp/bin/build --linux builds, through the ccache HOSTS saves on master, while the Mago target and
-  Rust caches restore, as .github/actions/mago-cache explains. The restore downloads and unpacks the target and the build
-  compiles, so the two run at once, where one after the other they took 1.5 to 3.5 and 2 to 3 minutes of each job that
-  builds the engine. sharp/docker/run pulls the image base-images.yml builds from ghcr.io, or builds it FROM ghcr.io's
+  Builds the engine sharp/bin/build --linux builds, through the ccache sharp.yml's BUILD_LINUX saves on master, while
+  the Mago target and Rust caches restore, as .github/actions/mago-cache explains. The restore downloads and unpacks the
+  target and the build compiles, so the two run at once, where one after the other they took 1.5 to 3.5 and 2 to 3
+  minutes. sharp/docker/run pulls the image base-images.yml builds from ghcr.io, or builds it FROM ghcr.io's
   copies of the base images when the Dockerfile changed, so a pull never meets an anonymous quota. The job sets
   BASE_IMAGE, GOLANG_IMAGE, and CC and CXX to ccache's.
 
 inputs:
   save:
-    description: true in HOSTS on master's push run, which saves the target and the ccache under its commit.
+    description: true in BUILD_LINUX on master's push run, which saves the target and the ccache under its commit.
     required: false
     default: ''
 
