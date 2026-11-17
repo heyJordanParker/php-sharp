@@ -8,7 +8,9 @@ set -euo pipefail
 # in CI. CI's jobs run the gates no other script holds through this script: LINUX the generated files, WORKFLOWS the
 # workflows, and mago.yml's checks and plain-php theirs.
 #
-# With --changes <base>, it prints what the change since <base> needs, as CI's CHANGES jobs write it to $GITHUB_OUTPUT.
+# With --changes <base>, it prints what the change since <base> needs, as CI's CHANGES jobs write it to $GITHUB_OUTPUT,
+# sharp/mago/Cargo.toml's version, and bump: whether origin has no tag yet for that version, so the change releases
+# it. A release runs every check, so a bump's code and mago are true.
 usage() {
   echo "usage: sharp/bin/check [workflows | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php | patch-coverage]..." >&2
   echo "       sharp/bin/check --changes <base>" >&2
@@ -47,11 +49,33 @@ changes() {
   echo "mago=$mago"
 }
 
+# git ls-remote --exit-code exits 2 when origin has no such ref, and with another code when it can't ask.
+bump() {
+  local version status=0
+  version="$(sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q;}' "$root/sharp/mago/Cargo.toml")"
+  git -C "$root" ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null || status=$?
+  echo "version=$version"
+  case "$status" in
+    0) echo "bump=false" ;;
+    2) echo "bump=true" ;;
+    *)
+      echo "git ls-remote couldn't ask origin for tag v$version: it exited $status." >&2
+      exit 1
+      ;;
+  esac
+}
+
 if [[ ${1:-} == --changes ]]; then
   if [[ $# -ne 2 ]]; then
     usage
   fi
-  changes "$2"
+  release="$(bump)"
+  if [[ $release == *bump=true ]]; then
+    printf 'code=true\nmago=true\n'
+  else
+    changes "$2"
+  fi
+  echo "$release"
   exit 0
 fi
 

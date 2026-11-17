@@ -3,4 +3,3 @@ self-hosted-runner:
   # The labels of the self-hosted Mac runners, as sharp/README.md's CI section names them.
   labels:
     - macos-arm64-local
-    - macos-arm64-suite
