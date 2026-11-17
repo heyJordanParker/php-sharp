@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- With an extension that takes a method's return from its body, `mago analyze --watch` checks again only the files an edit reaches, as without one. An edit of such a method's body changes the return its callers read, so it checks again the files that call it, and the files that call a method whose return is taken from a body that calls it, along the whole chain. 0.6.26 analyzed the whole project again after every edit once an extension took any method's return from its body: in a 6-file project, an edit of one such body checked all 6 files again, and now checks the 4 the edit reaches.
+
 ## [0.6.26] - 2026-11-17
 
 ### Upgrading from 0.6.25
