@@ -1,26 +1,17 @@
 name: Release
 
-# A tag such as v0.4.0 releases PHP# and Mago at one version: ext/sharp/php_sharp.h's PHP_SHARP_VERSION and
-# sharp/mago/Cargo.toml's version must both be 0.4.0, and sharp/CHANGELOG.md must have a "## [0.4.0]" section. This
-# workflow publishes php-sharp's GitHub release, with the mago binary per platform, that section as its notes and the
-# SHA-256 of every asset, and publishes the tag's heyjordanparker/mago-sharp version with those SHA-256s. sharp.yml's
-# IMAGE_TAGS job publishes the engine's images from the same tag, and its COMPOSER job publishes
-# heyjordanparker/php-sharp-composer.
+# Builds a release's assets: the mago binary per platform with its attestation, Mago's source archives, the SHA-256 of
+# every asset and the release's notes. PHP# and Mago release at one version: ext/sharp/php_sharp.h's PHP_SHARP_VERSION
+# and sharp/mago/Cargo.toml's version must be equal, and sharp/CHANGELOG.md must have that version's section.
 #
-# A release builds its binaries once, as Humble and Farley's Continuous Delivery asks. The push of the bump's merge
-# commit to master builds every asset: sharp.yml's RELEASE_ASSETS calls this workflow when the push changes
-# sharp/mago/Cargo.toml's version. The tag on that commit then publishes exactly those assets, as bump_assets explains,
-# and builds them itself only when no push run built them, or they expired or were built from another tree. A dispatch
-# checks what a tag would publish, and publishes nothing.
+# A release builds its binaries once, as Humble and Farley's Continuous Delivery asks. sharp.yml's RELEASE_ASSETS calls
+# this workflow in a bump's pull request run, beside the suites, and sharp.yml's RELEASE publishes exactly these files
+# when the merge's tree is the one that run passed. Its attestations name this workflow as their signer, which
+# install.sh and mago self-update verify, so the binaries build here and nowhere else.
 on:
   workflow_call:
-  workflow_dispatch:
-  push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+*"
 
-# Every artifact is kept as long as the repository's artifact retention sets, 90 days, GitHub's longest, so the
-# assets a bump's push built are still there for its tag.
+# Every artifact is kept as long as the repository's artifact retention sets, 90 days, GitHub's longest.
 env:
   CICD_INTERMEDIATES_DIR: ${{ github.workspace }}/_cd-intermediates
 
@@ -32,70 +23,9 @@ defaults:
     working-directory: sharp/mago
 
 jobs:
-  # Every other job needs crate_metadata, which needs ci, so a release publishes only a commit whose own push runs of
-  # Mago CI and PHP# CI passed on master, through the same check as sharp.yml's CHANGES, so the two workflows publish a
-  # tag or neither does. The suites do not run again here. In the push run that calls this workflow, CI runs beside it,
-  # so ci skips there, and the tag checks it.
-  ci:
-    name: Mago CI and PHP# CI passed on the commit's push
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      checks: read
-      contents: read
-      pull-requests: read
-    defaults:
-      run:
-        working-directory: .
-    steps:
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # The push run's ci-passed and CI_PASSED pass only when every job the push runs passed, the macOS ones among them,
-      # and the Linux ones passed on that run or on the pull request whose tree it is, as mago.yml's and sharp.yml's
-      # CHANGES explain.
-      - name: Find the commit's Mago CI push run that passed
-        id: mago
-        uses: ./.github/actions/passed-tree
-        with:
-          workflow: mago.yml
-          events: push
-          passed: any(.jobs[]; .name == "ci-passed" and .conclusion == "success")
-          on-master: true
-
-      - name: Find the commit's PHP# CI push run that passed
-        id: sharp
-        uses: ./.github/actions/passed-tree
-        with:
-          workflow: sharp.yml
-          events: push
-          passed: any(.jobs[]; .name == "CI_PASSED" and .conclusion == "success")
-          on-master: true
-
-      - name: Both push runs passed on the commit
-        env:
-          MAGO: ${{ steps.mago.outputs.run }}
-          SHARP: ${{ steps.sharp.outputs.run }}
-        run: |
-          for workflow in "Mago CI:$MAGO" "PHP# CI:$SHARP"; do
-            if [[ -z ${workflow#*:} ]]; then
-              echo "::error::No push run of ${workflow%%:*} passed on master's commit $GITHUB_SHA. Wait for it to pass, or rerun it, and once it passes, rerun this run with gh run rerun $GITHUB_RUN_ID."
-              failed=true
-            fi
-          done
-          if [[ ${failed:-} == true ]]; then
-            exit 1
-          fi
-          echo "Commit $GITHUB_SHA passed Mago CI in $MAGO and PHP# CI in $SHARP."
-
-  # ci skips in the push run that builds the assets, and a job that needs a skipped job runs only by a condition of its
-  # own.
   crate_metadata:
     name: extract crate metadata
     runs-on: ubuntu-latest
-    needs: ci
-    if: ${{ !failure() && !cancelled() }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: extract crate information
@@ -112,17 +42,13 @@ jobs:
             ] |
             join("\n")
           ' | tee -a "$GITHUB_OUTPUT"
-      - name: The tag, PHP# and Mago share one version
+      - name: PHP# and Mago share one version
         env:
           VERSION: ${{ steps.crate_metadata.outputs.version }}
         run: |
           engine=$(sed -n 's/^#define PHP_SHARP_VERSION "\(.*\)"$/\1/p' ../../ext/sharp/php_sharp.h)
           if [[ "$engine" != "$VERSION" ]]; then
             echo "::error::ext/sharp/php_sharp.h is PHP# $engine, and sharp/mago/Cargo.toml is Mago $VERSION. Release both at one version."
-            exit 1
-          fi
-          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "v$VERSION" ]]; then
-            echo "::error::Tag $GITHUB_REF_NAME releases version $VERSION. Tag it v$VERSION."
             exit 1
           fi
       # The section runs from its "## [<version>]" heading, which may carry a date, to the next version's heading or
@@ -142,9 +68,8 @@ jobs:
             exit 1
           fi
           cat "$notes"
-      # Only the release job reads them, from its own run, so the push run that builds the assets uploads none.
+      # sharp.yml's RELEASE publishes them with the assets.
       - name: "Artifact upload: release notes"
-        if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-notes
@@ -158,109 +83,11 @@ jobs:
       homepage: ${{ steps.crate_metadata.outputs.homepage }}
       msrv: ${{ steps.crate_metadata.outputs.msrv }}
 
-  # The push run that built this commit's assets: the sharp.yml push run on master whose RELEASE_ASSETS wrote their
-  # SHA-256s, on this commit's tree, as .github/actions/passed-tree finds it. The tag publishes its assets only when
-  # each one is still kept, matches its SHA-256 and its attestation, and the commit the attestation names has this
-  # commit's tree. When no run holds them, or they expired, or they were built from another tree, this run builds them,
-  # and says so. An asset that fails its SHA-256 or its attestation fails the release instead, because it was changed
-  # after the build.
-  bump_assets:
-    name: Find the assets the bump's push built
-    runs-on: ubuntu-latest
-    needs: crate_metadata
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
-    permissions:
-      actions: read
-      attestations: read
-      checks: read
-      contents: read
-      pull-requests: read
-    defaults:
-      run:
-        working-directory: .
-    env:
-      VERSION: ${{ needs.crate_metadata.outputs.version }}
-    outputs:
-      run-id: ${{ steps.check.outputs.run-id }}
-    steps:
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          sparse-checkout: .github/actions
-
-      - name: Find the bump's push run that built the assets of the commit's tree
-        id: bump
-        uses: ./.github/actions/passed-tree
-        with:
-          workflow: sharp.yml
-          events: push
-          passed: any(.jobs[]; .name == "RELEASE_ASSETS / Write the SHA-256 of every asset" and .conclusion == "success")
-
-      - name: Download the bump's assets, and check their SHA-256s, their attestations and the tree they were built from
-        id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN: ${{ steps.bump.outputs.run }}
-        run: |
-          build() {
-            echo "::warning::$1 So this run builds every asset from commit $GITHUB_SHA."
-            exit 0
-          }
-          if [[ -z $RUN ]]; then
-            build "No push run built the assets of commit $GITHUB_SHA's tree."
-          fi
-          id=${RUN##*/}
-          sums="mago-$VERSION-sha256sums.txt"
-          kept="$RUNNER_TEMP/kept"
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/artifacts?per_page=100" \
-            --jq '.artifacts[] | select(.expired | not) | .name' > "$kept"
-          if ! grep -qxF sha256sums "$kept"; then
-            build "Run $RUN no longer keeps $sums: it expired or was deleted."
-          fi
-          gh run download "$id" --name sha256sums --dir assets
-          mapfile -t assets < <(cut -d ' ' -f 3- "assets/$sums")
-          for asset in "${assets[@]}"; do
-            if ! grep -qxF -- "$asset" "$kept"; then
-              build "Run $RUN no longer keeps $asset: it expired or was deleted."
-            fi
-          done
-          for asset in "${assets[@]}"; do
-            gh run download "$id" --name "$asset" --dir assets
-          done
-          if ! (cd assets && sha256sum --check --strict "$sums"); then
-            echo "::error::An asset run $RUN built has a SHA-256 other than the one its $sums names, so nothing is published. Delete that run's artifacts, and this run builds every asset."
-            exit 1
-          fi
-          tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)
-          for asset in "${assets[@]}"; do
-            if ! commits=$(gh attestation verify "assets/$asset" --repo "$GITHUB_REPOSITORY" \
-              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" --format json \
-              --jq '.[].verificationResult.statement.predicate.buildDefinition.resolvedDependencies[].digest.gitCommit // empty'); then
-              echo "::error::$asset from run $RUN has no build attestation signed by $GITHUB_REPOSITORY/.github/workflows/release.yml, so nothing is published. Delete that run's artifacts, and this run builds every asset."
-              exit 1
-            fi
-            if [[ -z $commits ]]; then
-              echo "::error::$asset's attestation from run $RUN names no commit it was built from, so its tree can't be checked and nothing is published. Delete that run's artifacts, and this run builds every asset."
-              exit 1
-            fi
-            for commit in $commits; do
-              built=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)
-              if [[ $built != "$tree" ]]; then
-                build "Run $RUN built $asset from commit $commit, whose tree $built isn't commit $GITHUB_SHA's tree $tree."
-              fi
-              echo "$asset: its SHA-256 and its attestation match, and it was built from commit $commit, whose tree is $tree."
-            done
-          done
-          echo "run-id=$id" >> "$GITHUB_OUTPUT"
-          echo "::notice::This run publishes the assets run $RUN built from commit $GITHUB_SHA's tree, and builds none."
-
   # sharp/mago/.gitattributes leaves Mago's sources out of git archive, and so out of php-sharp's own tag archives.
-  # It and build run on the bump's push, and on a tag only when bump_assets found no assets to publish.
   source_archive:
     name: Create source code archives
     runs-on: ubuntu-latest
-    needs: [crate_metadata, bump_assets]
-    if: ${{ !failure() && !cancelled() && !needs.bump_assets.outputs.run-id }}
+    needs: crate_metadata
     permissions:
       contents: read
       id-token: write
@@ -315,8 +142,7 @@ jobs:
   build:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
-    needs: [crate_metadata, bump_assets]
-    if: ${{ !failure() && !cancelled() && !needs.bump_assets.outputs.run-id }}
+    needs: crate_metadata
     permissions:
       contents: read
       id-token: write
@@ -327,17 +153,15 @@ jobs:
         job:
           # Each job in this matrix defines a build target. The following custom keys control the pipeline steps:
           # - `smoke: true`: Smoke-checks the built binary. Only targets the job's runner can execute set it.
-          # - `pgo: true`: Builds with profile-guided optimization, profiled on corpus/. Only aarch64-apple-darwin
-          #   sets it.
+          # - `pgo: true`: Builds with profile-guided optimization, from the profile of corpus/ that mago.yml's
+          #   pgo-profile saved on master's last push that changed Mago. Only aarch64-apple-darwin sets it.
           #
           # The targets PHP# runs on: macOS on Apple silicon, and glibc Linux on arm64 and x86_64.
 
-          ## macOS: aarch64, on the self-hosted Apple silicon runners. GitHub's macos-latest never started on throwaway
-          ## bump #248: twice its jobs ended "not acquired by Runner of type hosted even after multiple attempts", for
-          ## macOS arm64's capacity, so a release that waits on it can't publish.
+          ## macOS: aarch64
           - {
               target: aarch64-apple-darwin,
-              os: macos-arm64-local,
+              os: macos-15,
               smoke: true,
               pgo: true,
             }
@@ -349,25 +173,15 @@ jobs:
               smoke: true,
             }
 
-    # The self-hosted Macs cap each job's parallelism, as sharp.yml's MACOS explains.
+    # The build goes to sharp/mago/target, where the steps below read the binary, and never into the folder
+    # sharp/.cargo's config names for the Mac's dev builds.
     env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/sharp/mago/target
       BUILD_CMD: cargo
-      CARGO_BUILD_JOBS: 4
-      RUST_TEST_THREADS: 4
-      RAYON_NUM_THREADS: 4
-      MAGO_THREADS: 4
-      LEAN_NUM_THREADS: 2
 
     steps:
-      # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          clean: false
-
-      - name: Remove what an earlier job left, except the builds
-        if: runner.environment == 'self-hosted'
-        uses: ./.github/actions/clean-kept-build
 
       - name: set version env variable
         id: version
@@ -390,15 +204,23 @@ jobs:
           toolchain: ${{ needs.crate_metadata.outputs.msrv }}
           targets: ${{ matrix.job.target }}
 
-      # No cache: a bump's push builds the assets once, and no later run of a bump or a tag builds again.
-      - name: install PGO tools
+      # Built from nothing, with no cache: a bump's pull request run builds the assets once, and the merge publishes
+      # them. A profile only guides LLVM's choices, and a function changed since the profile was made builds without
+      # its counts, as LLVM warns, so a profile of master's last push that changed Mago serves the bump. An
+      # instrumented build, the corpus's analysis and a second build in this job took 38 minutes on the M2 Max runner of
+      # release pull request #353's run, whose jobs on GitHub's runners had all ended 13 minutes after it started.
+      - name: Restore the profile mago.yml's pgo-profile saved on master
         if: matrix.job.pgo
-        shell: bash
-        run: |
-          rustup component add llvm-tools-preview
-          if ! command -v cargo-pgo &>/dev/null; then
-            cargo install cargo-pgo
-          fi
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/mago-pgo
+          key: PGO_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: PGO_MAGO-${{ runner.arch }}-
+          fail-on-cache-miss: true
+
+      - name: Build with the profile
+        if: matrix.job.pgo
+        run: echo "RUSTFLAGS=-Cprofile-use=$GITHUB_WORKSPACE/sharp/build/mago-pgo/mago.profdata" >> "$GITHUB_ENV"
 
       - name: install cross
         if: startsWith(matrix.job.os, 'ubuntu') && !matrix.job.pgo
@@ -439,32 +261,9 @@ jobs:
           cargo -V
           rustc -V
 
-      # setup-php brew-installs PHP on macOS, so the self-hosted runners use their Homebrew PHP and Composer instead.
-      - name: setup PHP for PGO profiling
-        if: matrix.job.pgo && runner.environment == 'github-hosted'
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
-        with:
-          php-version: "8.3"
-          tools: composer
-
-      - name: setup PHP corpus for PGO profiling
-        if: matrix.job.pgo
-        shell: bash
-        run: |
-          cd corpus
-          composer update --ignore-platform-reqs
-          cd ..
-
       - name: build
         shell: bash
-        run: |
-          if [[ "${{ matrix.job.pgo }}" == "true" ]]; then
-            cargo pgo build -- --target=${{ matrix.job.target }}
-            cargo pgo run -- -- --workspace corpus/ analyze --reporting-format count || true
-            cargo pgo optimize build -- --target=${{ matrix.job.target }}
-          else
-            $BUILD_CMD build --locked --release --target=${{ matrix.job.target }}
-          fi
+        run: $BUILD_CMD build --locked --release --target=${{ matrix.job.target }}
 
       - name: set binary name
         id: bin
@@ -483,8 +282,8 @@ jobs:
           echo "binary for target '${{ matrix.job.target }}' requires the following GLIBC versions:"
           strings "${{ steps.bin.outputs.BIN_PATH }}" | grep GLIBC_ || echo "No GLIBC version strings found."
 
-      # A tag publishes only a tree the ci job finds passed the full suite, so this checks only the binary this job
-      # builds, as mago.yml's plain-php job checks the one CI built.
+      # The calling run's suites check the tree, so this checks only the binary this job builds, as mago.yml's
+      # plain-php job checks the one CI built.
       - name: The binary prints the release's version, and analyzes and compiles a one-class PHP# project
         if: matrix.job.smoke
         shell: bash
@@ -559,15 +358,13 @@ jobs:
           path: ${{ steps.package.outputs.PKG_PATH }}
           if-no-files-found: error
 
-  # install.sh checks a download against these SHA-256s when gh is missing, and the composer job pins them in the tag's
-  # heyjordanparker/mago-sharp version. They are written where the assets were built, so a tag that publishes the
-  # bump's assets publishes the bump's SHA-256s too. A job whose condition names no status function runs only when
-  # every job before it passed, and ci and bump_assets skip on the bump's push, so each job after them names its own.
+  # install.sh checks a download against these SHA-256s when gh is missing, and sharp.yml's COMPOSER pins them in the
+  # release's heyjordanparker/mago-sharp version. They are written where the assets were built, so the release
+  # publishes the SHA-256s of exactly these assets.
   sums:
     name: Write the SHA-256 of every asset
     runs-on: ubuntu-latest
-    needs: [crate_metadata, bump_assets, source_archive, build]
-    if: ${{ !failure() && !cancelled() && !needs.bump_assets.outputs.run-id }}
+    needs: [crate_metadata, source_archive, build]
     defaults:
       run:
         working-directory: .
@@ -610,158 +407,3 @@ jobs:
           name: sha256sums
           path: ${{ runner.temp }}/mago-${{ env.VERSION }}-sha256sums.txt
           if-no-files-found: error
-
-  # Publishes the assets of the run bump_assets found, or of this run when it found none, once they are exactly the
-  # ones their SHA-256s name.
-  release:
-    name: Publish the release
-    runs-on: ubuntu-latest
-    needs: [crate_metadata, bump_assets, sums]
-    if: ${{ !failure() && !cancelled() && (github.ref_type == 'tag' || github.event_name == 'workflow_dispatch') }}
-    permissions:
-      actions: read
-      contents: write
-    defaults:
-      run:
-        working-directory: .
-    env:
-      VERSION: ${{ needs.crate_metadata.outputs.version }}
-    steps:
-      - name: Download every asset
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: mago-${{ needs.crate_metadata.outputs.version }}-*
-          path: assets
-          merge-multiple: true
-          run-id: ${{ needs.bump_assets.outputs.run-id || github.run_id }}
-          github-token: ${{ github.token }}
-
-      - name: Download the SHA-256s
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: sha256sums
-          path: assets
-          run-id: ${{ needs.bump_assets.outputs.run-id || github.run_id }}
-          github-token: ${{ github.token }}
-
-      - name: The downloaded assets are exactly the ones the SHA-256s name, and match them
-        shell: bash
-        run: |
-          sums="mago-${VERSION}-sha256sums.txt"
-          { cut -d ' ' -f 3- "assets/$sums"; echo "$sums"; } | sort > expected-assets.txt
-          find assets -type f -printf '%f\n' | sort > downloaded-assets.txt
-          diff -u expected-assets.txt downloaded-assets.txt || {
-            echo "::error::The downloaded assets differ from the ones $sums names."
-            exit 1
-          }
-          (cd assets && sha256sum --check --strict "$sums")
-
-      - name: Download the release notes
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: release-notes
-          path: ${{ runner.temp }}
-
-      # A draft an earlier run made takes this run's notes when it is published.
-      - name: Upload every asset to the draft release, check it, then publish it
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
-          NOTES: ${{ runner.temp }}/release-notes.md
-        run: |
-          if [[ "$GITHUB_REF_TYPE" != tag ]]; then
-            echo "$GITHUB_REF is not a release tag, so nothing is published."
-            exit 0
-          fi
-          if ! is_draft=$(gh release view "$TAG" --json isDraft --jq .isDraft 2> view-error.txt); then
-            grep -q "release not found" view-error.txt || { cat view-error.txt >&2; exit 1; }
-            gh release create "$TAG" --draft --verify-tag --title "$TAG" --notes-file "$NOTES"
-            is_draft=true
-          fi
-          if [[ $is_draft != true ]]; then
-            echo "::error::Release $TAG is already published, so this run changes nothing. Release a new tag."
-            exit 1
-          fi
-          gh release upload "$TAG" assets/* --clobber
-          gh release view "$TAG" --json assets --jq '.assets[].name' | sort > released-assets.txt
-          diff -u expected-assets.txt released-assets.txt || {
-            echo "::error::Draft release $TAG holds different assets than expected, so it stays a draft."
-            exit 1
-          }
-          gh release edit "$TAG" --notes-file "$NOTES" --draft=false
-
-  # The tag's heyjordanparker/mago-sharp version is sharp/mago's split, as sharp.yml's COMPOSER job pushes a branch,
-  # plus a commit that adds the release's SHA-256s as composer/sha256sums.txt. The Composer wrapper refuses an
-  # archive whose SHA-256 differs, so the package version pins the exact binary, as esbuild's and Biome's npm
-  # packages do. The tag is pushed once the release is public, so every asset it names can be downloaded, and the
-  # push never forces, so a published version never changes.
-  composer:
-    name: Publish heyjordanparker/mago-sharp
-    runs-on: ubuntu-latest
-    needs: [crate_metadata, bump_assets, release]
-    if: ${{ !failure() && !cancelled() && github.ref_type == 'tag' }}
-    permissions:
-      actions: read
-      contents: read
-    defaults:
-      run:
-        working-directory: .
-    env:
-      VERSION: ${{ needs.crate_metadata.outputs.version }}
-    steps:
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Install splitsh-lite
-        uses: ./.github/actions/splitsh-lite
-
-      - name: Split sharp/mago
-        run: splitsh-lite --prefix=sharp/mago --target=refs/heads/mago
-
-      - name: Download the SHA-256s
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: sha256sums
-          path: ${{ runner.temp }}
-          run-id: ${{ needs.bump_assets.outputs.run-id || github.run_id }}
-          github-token: ${{ github.token }}
-
-      # The tag pins these SHA-256s for good, so the assets a user downloads from the published release must match
-      # them before the tag exists, and so must the sums file install.sh checks a download against.
-      - name: The published assets match the SHA-256s the tag pins
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          published="$RUNNER_TEMP/published"
-          gh release download "$GITHUB_REF_NAME" --dir "$published"
-          if ! cmp "$RUNNER_TEMP/mago-$VERSION-sha256sums.txt" "$published/mago-$VERSION-sha256sums.txt"; then
-            echo "::error::Release $GITHUB_REF_NAME publishes a mago-$VERSION-sha256sums.txt that differs from the one this run wrote, so no heyjordanparker/mago-sharp tag is pushed."
-            exit 1
-          fi
-          if ! (cd "$published" && sha256sum --check --strict "$RUNNER_TEMP/mago-$VERSION-sha256sums.txt"); then
-            echo "::error::An asset of release $GITHUB_REF_NAME has a SHA-256 other than the one this run wrote, so no heyjordanparker/mago-sharp tag is pushed."
-            exit 1
-          fi
-
-      - name: git checkout heyJordanParker/mago-sharp
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: heyJordanParker/mago-sharp
-          ssh-key: ${{ secrets.MAGO_SHARP_DEPLOY_KEY }}
-          path: sharp/build/mago-sharp
-
-      - name: Push the tag, with the SHA-256 of every release asset
-        working-directory: sharp/build/mago-sharp
-        run: |
-          git fetch "$GITHUB_WORKSPACE" refs/heads/mago
-          git switch --detach FETCH_HEAD
-          cp "$RUNNER_TEMP/mago-$VERSION-sha256sums.txt" composer/sha256sums.txt
-          git add composer/sha256sums.txt
-          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit --message "The SHA-256 of every mago $VERSION release asset"
-          git push origin "HEAD:refs/tags/$GITHUB_REF_NAME"

@@ -382,9 +382,8 @@ strip = 'none'
 #   thin local LTO, 16 units, incremental       134.3 s + 2.0 s +  8.5 s + 109.8 s =  254.5 s
 #   thin local LTO, 256 units, incremental       14.7 s + 2.4 s +  9.2 s + 122.8 s =  149.1 s, this profile
 #
-# The hosted CI runners build it with CARGO_INCREMENTAL=0, because .github/actions/mago-cache saves their target
-# folder, and with incremental state this profile's folder compressed to 1.2 GB on that Mac, where release's took
-# 531 MB. The self-hosted Macs keep their folder, so they build it incrementally.
+# CI builds it with CARGO_INCREMENTAL=0, because .github/actions/mago-cache saves its target folder, and with
+# incremental state this profile's folder compressed to 1.2 GB on that Mac, where release's took 531 MB.
 [profile.test-run]
 inherits = 'release'
 lto = false

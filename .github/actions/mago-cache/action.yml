@@ -9,9 +9,7 @@ description: >-
   cached build, so cargo would rebuild every Mago crate. As Deno's mtime_cache action does, each file the cached build
   was built from, by its blob, and each folder whose entries are the same, goes back to a time before that build. A
   file that changed keeps the checkout's time, and so does a folder that gained or lost an entry, which a build script
-  that watches a folder reads, such as build-id's, so cargo rebuilds what they reach. A self-hosted runner keeps
-  sharp/build and its checkout's times, as .github/actions/clean-kept-build explains, so there it restores nothing and
-  moves no time: its folder may hold a later build of another branch, which an old time would hide from cargo.
+  that watches a folder reads, such as build-id's, so cargo rebuilds what they reach.
 
 inputs:
   name:
@@ -46,14 +44,14 @@ runs:
     # the hashed files, as every release's version bump makes, restores the newest Rust cache of any hash, so rustup
     # and cargo fetch only what changed, where the exact key alone left every job to fetch the toolchain and crates.
     - name: Rust cache, saved on master
-      if: runner.environment == 'github-hosted' && inputs.rust != '' && github.ref == 'refs/heads/master'
+      if: inputs.rust != '' && github.ref == 'refs/heads/master'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ inputs.rust-paths }}
         key: ${{ inputs.rust }}_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
         restore-keys: ${{ inputs.rust }}_RUST-${{ runner.arch }}-
     - name: Rust cache, restored only
-      if: runner.environment == 'github-hosted' && inputs.rust != '' && github.ref != 'refs/heads/master'
+      if: inputs.rust != '' && github.ref != 'refs/heads/master'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ inputs.rust-paths }}
@@ -64,7 +62,7 @@ runs:
     # and links faster, and a panic still names its file and line. The jobs that share the target write the same
     # config, so each reuses the others' builds.
     - name: Build without debug info in the sharp/docker image
-      if: runner.environment == 'github-hosted' && contains(inputs.rust-paths, 'sharp/build/cargo')
+      if: contains(inputs.rust-paths, 'sharp/build/cargo')
       shell: bash
       working-directory: ${{ github.workspace }}
       run: |
@@ -79,14 +77,14 @@ runs:
     # cargo config the step before writes too, since a profile setting names every crate's copy anew: the switch to
     # debug = false left SHARP_LINUX's target with both copies, 5.7 GB.
     - name: Mago cache, saved at the end of the job on master
-      if: runner.environment == 'github-hosted' && inputs.name != '' && inputs.save == 'true' && github.ref == 'refs/heads/master'
+      if: inputs.name != '' && inputs.save == 'true' && github.ref == 'refs/heads/master'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: sharp/build/*/mago
         key: ${{ inputs.name }}_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock', 'sharp/build/cargo/config.toml') }}-${{ github.sha }}
         restore-keys: ${{ inputs.name }}_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock', 'sharp/build/cargo/config.toml') }}-
     - name: Mago cache, restored only
-      if: runner.environment == 'github-hosted' && inputs.name != '' && (inputs.save != 'true' || github.ref != 'refs/heads/master')
+      if: inputs.name != '' && (inputs.save != 'true' || github.ref != 'refs/heads/master')
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: sharp/build/*/mago
@@ -95,7 +93,7 @@ runs:
           ${{ inputs.name }}_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock', 'sharp/build/cargo/config.toml') }}-
           ${{ inputs.name }}_MAGO-${{ runner.arch }}-
     - name: Give what the cached mago was built from a time before that build
-      if: runner.environment == 'github-hosted' && inputs.name != ''
+      if: inputs.name != ''
       shell: bash
       working-directory: ${{ github.workspace }}
       run: |

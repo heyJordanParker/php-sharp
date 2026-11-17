@@ -1,7 +1,8 @@
 name: Prune the Mago target, ccache and Go caches
 description: >-
-  Runs in a master push run's last job, once every job has saved its Mago target with .github/actions/mago-cache, and
-  sharp.yml's HOSTS its ccache and its Go modules and build cache. A key is its name, architecture and inputs' hash,
+  Runs in a master push run's last job, once every job has saved its Mago target with .github/actions/mago-cache,
+  sharp.yml's HOSTS its ccache and its Go modules and build cache, and mago.yml's pgo-profile its PGO_MAGO profile. A
+  key is its name, architecture and inputs' hash,
   then -<commit>, so each such run saves a new key beside the old ones. For each name and architecture, it keeps the
   newest key on the run's branch and deletes the older ones, of any hash, so the caches hold one of each kind: a run
   whose hash matches none restores the newest of any hash, and an older hash's target would stay until GitHub evicted

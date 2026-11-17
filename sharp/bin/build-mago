@@ -15,9 +15,9 @@ target="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/m
 # compiles its own copy of the shared crates, and so does each version bump or Cargo.lock change. A fresh build holds
 # 5.9 GiB, 7 lists took one slot from 5.85 to 7.37 GiB, and live slots reached 16 GiB. So in a builder's slot, a
 # profile folder above 10 GiB goes, and mago builds it from nothing.
-# In CI the folder is a cache that CI keeps itself. clean-kept-build bounds it on the self-hosted Macs. On GitHub-hosted
-# runners mago-cache restores it with a manifest, $target/sources, which a delete would lose, so a later restore would
-# rebuild every crate. sharp/docker/run doesn't pass GITHUB_ACTIONS into the container, so a hosted Linux job shows by that manifest.
+# In CI the folder is a cache that CI keeps itself: mago-cache restores it with a manifest, $target/sources, which a
+# delete would lose, so a later restore would rebuild every crate. sharp/docker/run doesn't pass GITHUB_ACTIONS into the
+# container, so a Linux job in CI shows by that manifest.
 # A profile folder in use stays. Cargo holds the flock on the folder's .cargo-lock while it builds there, and releases
 # it before it runs the test binaries, which run from the folder, as each mago the tests start does. So the prune
 # skips the folder while it can't take that flock without waiting, or while a process runs from the build. Each
