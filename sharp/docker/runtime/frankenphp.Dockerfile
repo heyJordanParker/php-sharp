@@ -316,10 +316,20 @@ RUN set -eux; \
 
 WORKDIR /go/src/app
 COPY --link --from=frankenphp-source / ./
-RUN go mod download
-
-WORKDIR /go/src/app/caddy
-RUN go mod download
+# A fetch from proxy.golang.org can fail on the network alone, as 0.6.25's arm64 build failed with "stream error:
+# stream ID 1; INTERNAL_ERROR; received from peer", so the download retries, as .github/actions/setup-lean retries
+# Lean's. go.sum checks every module it fetched, and a retry fetches only the modules still missing.
+RUN for attempt in 1 2 3; do \
+		if go mod download && (cd caddy && go mod download); then \
+			exit 0; \
+		fi; \
+		if [[ $attempt != 3 ]]; then \
+			echo "Retrying the Go module download in $((attempt * 15)) seconds (retry $attempt of 2)" >&2; \
+			sleep $((attempt * 15)); \
+		fi; \
+	done; \
+	echo "The Go module download failed 3 times. The output above names the cause." >&2; \
+	exit 1
 
 # See https://github.com/docker-library/php/blob/master/8.5/trixie/zts/Dockerfile#L57-L59 for PHP values
 ENV CGO_CFLAGS="-DFRANKENPHP_VERSION=$FRANKENPHP_VERSION $PHP_CFLAGS"

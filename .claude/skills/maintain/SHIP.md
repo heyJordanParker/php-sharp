@@ -20,7 +20,7 @@ Stage those files by name, never with `git add -A`, because builders' work in pr
 
 Push the branch, then run `gh pr create --body-file <file>`. The body says what users can do now, the fixes with the issues they close, and how to upgrade past a break.
 
-Watch `gh pr checks` with a Monitor that prints each failed check and exits when none is pending. A failed check gets fixed on the branch at its root, with a test that fails first, never rerun blindly.
+Watch `gh pr checks` with a Monitor that prints each failed check and exits when none is pending. A failed check gets fixed on the branch at its root, with a test that fails first, never rerun blindly. A builder fixes it, the one whose issue it came from when it's still running, else a fresh one, and it takes the next free slot ahead of every other issue. The maintainer never edits code or runs cargo.
 
 ## 3. Merge only the head the checks covered
 
@@ -30,7 +30,7 @@ gh pr merge <number> --repo heyJordanParker/php-sharp --merge --match-head-commi
 
 ## 4. Publish
 
-Wait until both of the merge commit's push runs, `PHP#` and `Mago`, pass. Then run `git tag -a v<version> -m "PHP# <version>" <merge sha>` and push the tag. A tag pushed before those runs pass fails. If a later merge replaced that push run, push a new bump.
+The merge commit's push publishes, and nobody tags by hand. Wait until its `PHP#` run passes: its `RELEASE` job publishes the GitHub release, which tags the merge commit `v<version>`, and `COMPOSER` tags both Composer packages. If a later merge replaced that push run, the next PR is a release's PR too, and its merge publishes.
 
 ## 5. Verify what users install
 
