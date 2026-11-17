@@ -64,6 +64,9 @@ jobs="$("$root/sharp/bin/jobs")"
 # stops it, its workers and their tests, which would go on writing in the folder.
 TMPDIR="$(mktemp -d)"
 export TMPDIR
+# Each `mago` a test starts runs on one thread, so a run's load is its test threads. A test about threads passes
+# --threads, which wins over MAGO_THREADS.
+export MAGO_THREADS=1
 tests_group=
 trap 'if [[ -n $tests_group ]]; then kill -KILL -- "-$tests_group" || true; wait "$tests_group" || true; fi; rm -rf "$TMPDIR"' EXIT
 
