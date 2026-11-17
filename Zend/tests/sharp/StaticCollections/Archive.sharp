@@ -51,8 +51,8 @@ class Archive
     public static int tickTwice()
     {
         Archive.ticker = new Ticker();
-        Archive.ticker.tick();
-        return Archive.ticker.tick();
+        Archive.ticker?.tick();
+        return Archive.ticker?.tick() ?? 0;
     }
 
     public List<string> keep(string title)

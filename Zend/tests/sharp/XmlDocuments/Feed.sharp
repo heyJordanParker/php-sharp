@@ -1,0 +1,27 @@
+namespace XmlDocuments;
+
+import Dom.Element;
+import Dom.XMLDocument;
+
+// Reads and writes an XML document through PHP 8.4's DOM, which the standard library names, decision 83.
+public static class Feed
+{
+    public static string? namespaceOf(string xml) => XMLDocument.createFromString(xml).documentElement?.namespaceURI;
+
+    public static string? title(string xml) => XMLDocument.createFromString(xml).querySelector("entry")?.getAttribute("title");
+
+    public static string retitled(string xml, string title)
+    {
+        const feed = XMLDocument.createFromString(xml);
+        if (feed.querySelector("entry") is Element entry) {
+            entry.setAttribute("title", title);
+            entry.append(feed.createCDATASection("<b>new</b>"));
+        }
+
+        return feed.saveXml() is string written ? written : throw new ValueError("The feed cannot be written as XML.");
+    }
+
+    public static string? markup(string xml) => XMLDocument.createFromString(xml).querySelector("entry")?.outerHTML;
+
+    public static string? content(string xml) => XMLDocument.createFromString(xml).querySelector("entry")?.innerHTML;
+}
