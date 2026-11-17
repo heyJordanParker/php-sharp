@@ -1,5 +1,5 @@
 --TEST--
-TimeZone's fixedOffset gives the offset of every zone whose clocks never change, as Rust jiff's TimeZone::to_fixed_offset does, from the zone's rules: a fixed offset's name, as "+03:00", "UTC" and "Etc/GMT-3", and null for a zone the database gives any change of offset, as "Europe/Sofia" and "Asia/Kolkata", which last changed in 1945. A project's struct refuses any zone that never changes its clocks in its constructor through it, and a zone of either kind keeps its one field, its name, so Json writes only that, and still round-trips through toString, DateTime.parse and Json
+TimeZone's fixedOffset gives the offset of every zone whose clocks never change, from the zone's rules: a fixed offset's name, as "+03:00", "UTC" and "Etc/GMT-3", and null for a zone the database gives any change of offset, as "Europe/Sofia" and "Asia/Kolkata", which last changed in 1945. A project's struct refuses any zone that never changes its clocks in its constructor through it, and a zone of either kind keeps its one field, its name, so Json writes only that, and still round-trips through toString, DateTime.parse and Json
 --FILE--
 <?php
 require __DIR__ . '/attempt.inc';
