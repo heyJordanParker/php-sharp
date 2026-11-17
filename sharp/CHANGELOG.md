@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.24] - 2026-11-17
+
 ### Upgrading from 0.6.23
 
 - A name in `uses` resolves as any class name does, spec section 29: a class the file imports or declares under the name, or one in the file's own namespace, wins over the standard effect of that name, as `App.Math` wins over `Math`. 0.6.23 read a standard effect's name in `uses` as the effect whatever the file imported or declared, so `uses Database` in a namespace with its own `Database` named `Sharp.Data.Database`, and a file that imports Laravel's `Http` facade wrote `uses Http` for the effect. Such a file now imports the effect under another name, as `import Sharp.Net.Http as HttpEffect;`, and writes `uses HttpEffect`.
@@ -1224,7 +1226,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.23...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.24...HEAD
+[0.6.24]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.23...v0.6.24
 [0.6.23]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.22...v0.6.23
 [0.6.22]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.21...v0.6.22
 [0.6.21]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.20...v0.6.21
