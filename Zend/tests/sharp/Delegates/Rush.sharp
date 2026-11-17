@@ -1,0 +1,9 @@
+namespace App.Delegates;
+
+// An order whose `count` has the effect `Mailer`, which a delegate of `Order.count` that allows none refuses.
+public class Rush : Order
+{
+    public Rush(Database database, Mailer mailer) : super(database, mailer) { }
+
+    public override int count() => this.mailer.sent() + 1;
+}

@@ -1,0 +1,34 @@
+namespace App.Delegates;
+
+import Demo.Helper;
+
+// A method with the effect `Database`, one with `Database` and `Mailer`, a pure one with a parameter, a static one, a
+// virtual one `Rush` gives the effect `Mailer`, a property with a `set`, a computed one and a static computed one, and
+// a method whose result is a function type, for `Method.createDelegate`.
+public class Order
+{
+    public Order(protected Database database, protected Mailer mailer) { }
+
+    public int total { get; set => field = value; } = 4;
+
+    public int doubled => this.total * 2;
+
+    public static int stock => 5;
+
+    public int rows() => this.database.rows();
+
+    public int notify() => this.database.rows() + this.mailer.sent();
+
+    public int add(int amount) => this.total + amount;
+
+    public static int unit() => 1;
+
+    public virtual int count() => 1;
+
+    public Order itself() => this;
+
+    // Calls plain PHP no `extern` declares, so it may have every effect and carries its result alone.
+    public Function<int()> counter() => Order.counted(Helper.take(1));
+
+    static Function<int()> counted(int start) => () => start;
+}
