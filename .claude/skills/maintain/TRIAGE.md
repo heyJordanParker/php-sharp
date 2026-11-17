@@ -31,6 +31,8 @@ Every triaged issue carries exactly one category and one state label. A new issu
 
 ## Triage one problem
 
+A question about how to use PHP#, an audit of a consumer's own rules, or a request to pick a form for a consumer's code is not a problem. It gets no issue and no answer, because the spec answers it and the maintainer's time goes to PHP#. Only a defect, with a repro, or a missing capability enters triage.
+
 1. **File it.** The issue states the problem as behavior: what a PHP# program does today, and why that's wrong. The tracker is public, so the issue never names a consumer project, its files or its people. Its repro is a generic program that shows the same failure.
 2. **Check that it's new.** Search the code for the capability by its concept, not the report's wording, and search closed issues. If PHP# already has the correct form, close the issue as `wontfix` with that form shown as code. A consumer project is a measurement, never a source of features: its feature request is built only when it is good for PHP# on its own, because it solves several problems, it helps agents write better code, and PHP# has no form for it today. Otherwise the consumer restructures on its side.
 3. **Verify the claim.** Reproduce it: a command that fails today, or a test that goes red. Record what happened: confirmed with its code path, failed, or not enough detail for `needs-info`.
