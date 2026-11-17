@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- `mago compile` reports the issues of each `.sharp` file of the project it lowers, which it reads from each file it loaded, so it no longer resolves the path of each of the project's files on disk first. 0.6.25 resolved them one by one before its analysis, about 1 s of a compile in a project of 19,000 vendor files.
+
 ## [0.6.25] - 2026-11-17
 
 ### Fixed
