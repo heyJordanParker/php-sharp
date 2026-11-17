@@ -1,5 +1,5 @@
 --TEST--
-Data in and out, spec section 10: Json.encode writes a struct by its keys, a value as text by its toString() and a family's variant with its name under the tag's key, leaving out a null field marked omitNull, and Json.decode<T> and Query.decode<T> read it back through the one reader: a list of structs, a tagged data enum, a tagged abstract class and a sealed interface by their names, a union of two structs in the order the field writes them, and a query's number from its text, each bad field one InvalidFields problem under its path, a long text cut at 40 bytes. typeof(Self).withTag builds a family's variant by its name, or gives null
+Data in and out, spec section 10: Json.encode writes a struct by its keys, a value as text by its toString() and a family's variant with its name under the tag's key, leaving out a null field marked omitNull, and Json.decode<T> and Query.decode<T> read it back through the one reader: a list of structs, a tagged data enum, a tagged abstract class and a sealed interface by their names, a union of two structs and a union of scalars in the order the field writes them, a scalar from JSON as it is and from a query's text, and a query's number from its text, each bad field one InvalidFields problem under its path, a long text cut at 40 bytes. typeof(Self).withTag builds a family's variant by its name, or gives null
 --FILE--
 <?php
 require __DIR__ . '/attempt.inc';
@@ -53,6 +53,15 @@ attempt(fn () => Ledger::search('q=shoes&page=' . str_repeat('9x', 30)));
 echo "Union\n";
 $prize = Ledger::prize('{"first":{"code":"A"},"rest":[{"code":"B"}]}');
 var_dump(get_class($prize->first), get_class($prize->rest[0]));
+
+echo "Scalars\n";
+foreach (['a', 3, 1.5, true, null] as $value) {
+    var_dump(Ledger::property(['default' => $value])->default);
+}
+attempt(fn () => Ledger::property(['default' => [1]]));
+var_dump(Ledger::propertyOf('{"default":3,"size":"3"}'));
+echo Ledger::encodedProperty(Ledger::propertyOf('{"default":1.5,"size":2}')), "\n";
+var_dump(Ledger::propertyFrom('default=3&size=3'), Ledger::propertyFrom('size=big')->size);
 ?>
 --EXPECTF--
 Payment
@@ -100,3 +109,24 @@ Sharp\InvalidFields: page: expected int, got string '9x9x9x9x9x9x9x9x9x9x9x9x9x9
 Union
 string(17) "DataInOut\Voucher"
 string(16) "DataInOut\Coupon"
+Scalars
+string(1) "a"
+int(3)
+float(1.5)
+bool(true)
+NULL
+Sharp\InvalidFields: default: expected (bool|float|int|string)?, got List in ComponentProperty.sharp on line %d
+object(DataInOut\ComponentProperty)#%d (2) {
+  ["default"]=>
+  int(3)
+  ["size"]=>
+  string(1) "3"
+}
+{"default":1.5,"size":2}
+object(DataInOut\ComponentProperty)#%d (2) {
+  ["default"]=>
+  string(1) "3"
+  ["size"]=>
+  int(3)
+}
+string(3) "big"

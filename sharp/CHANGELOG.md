@@ -4,6 +4,17 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.22] - 2026-11-17
+
+### Fixed
+
+- A `match` arm that compares with a string fixed at compile time names the value the `match` tests in every arm, spec section 24, as "A pattern compares `method` with `"GET"`, a string fixed at compile time, so it selects one of a closed set of values.". 0.6.21 printed an empty subject, as "A pattern compares `` with `"GET"`", in every arm whose `match` tests a local, and in each arm after the first whose `match` tests a call, as `this.named()`.
+- A struct's or a class's `parse`, `tryParse`, `Json.decode<T>` and `Query.decode<T>` read a field whose type is a union of scalars, as `(string|int|float|bool)?` or `int|string`, spec section 10: the first member, in the order the field writes them, that reads the value takes it, JSON's value as it is and a query's from its text, so `int|string` reads `"3"` from JSON as `"3"` and from a query as `3`. A value no member reads is the field's `InvalidFields` problem, and `Json.encode` writes the value as it is. 0.6.21 refused the call with "`ComponentProperty.parse` can't read `default`: `scalar` is no type `parse` reads."
+- An extension reads a bound written `Equatable` as the compile resolves it, `Sharp\Equatable`, in every namespace, spec section 11, so `SourceFile::getResolvedNames()` names it in `App\Mappings` too. A plain PHP `Equatable` of the file's namespace wins over it in the checker, the compile and an extension alike, as `App\Math` wins over `Math`. 0.6.21's resolved names gave the file's own namespace, as `App\Mappings\Equatable`, a class no project declares.
+- `mago move` deletes an import line whole when a move turns it into an import of the file's own namespace, whatever the order of the moves, and adds the file's new imports beside the ones it keeps. 0.6.21 deleted the line's text where it also added an import at the line's end, and left `mport App.Parts.Z;`, which doesn't parse.
+- `mago convert` writes PHP# an application compiles. It reads whether a package is an application from the nearest `composer.json` at or above the file, as the checker does. A member of a class held at run time is found by its `nameof`, as `method.name == nameof(Order.label)`, where 0.6.21 wrote `method.name == "label"`, which an application refuses. A constant read through such a class stays plain PHP in an application. A property narrowed to `private` takes no `private set`, and a `protected` one keeps `{ get; private set; }`. A returned property keeps its declared type, as `int?`, where 0.6.21 wrote the type PHP had narrowed it to.
+- `internal (int|string)? value` parses as an `internal` member of a grouped type, after an attribute too, spec section 5. 0.6.21 read the parentheses as a named reach and refused the line.
+
 ## [0.6.21] - 2026-11-16
 
 ### Upgrading from 0.6.20
@@ -1177,7 +1188,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.21...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.22...HEAD
+[0.6.22]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.21...v0.6.22
 [0.6.21]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.20...v0.6.21
 [0.6.20]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.19...v0.6.20
 [0.6.19]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.18...v0.6.19
