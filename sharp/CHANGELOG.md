@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.23] - 2026-11-17
+
 ### Upgrading from 0.6.22
 
 - A property never narrows, spec section 21, a stored one, another object's and a static one included, because each read may give another value. A read after `!= null`, `== null` with an early exit, `!`, a `&&` chain, `??=`, an assignment, a `match` arm or the rest of a `?.` chain keeps the property's declared type, as a read after `is` without a name already did. 0.6.22 narrowed the property after each of them, so `if (this.visits != null) { return this.visits; }` compiled where `visits` is an `int?`. It is a compile error at the read, and the error says "`this.visits` is `int?`: a property never narrows, because each read may give another value." and "Bind the tested value, as `this.visits is int visits`.". Bind the tested value, as `if (this.visits is int visits) { return visits; }`, or read the property into a local once and test the local. A local, a parameter and an accessor's `field` narrow as before.
@@ -1204,7 +1206,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.22...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.23...HEAD
+[0.6.23]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.22...v0.6.23
 [0.6.22]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.21...v0.6.22
 [0.6.21]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.20...v0.6.21
 [0.6.20]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.19...v0.6.20
