@@ -587,7 +587,9 @@ fn find_atomic_template_positions(
 /// value is then of another type, not a wider one, so the issue becomes `invalid`, with spec section 11.1's message and
 /// note. When one type argument differs and its `out` (`A` within `B`) or `in` (`B` within `A`) would accept it, the
 /// help names the marker by where `C` uses the type parameter, unless that marker allows only the opposite
-/// substitution, as `out` lets `C<B>` take a `C<A>` but never the other way.
+/// substitution, as `out` lets `C<B>` take a `C<A>` but never the other way. Where `C` is a plain PHP class, which
+/// takes no `out` or `in`, the issue keeps its code and message, and a note names each type argument that differs, as
+/// each side holds it.
 pub(crate) fn explain_blocked_substitution<A>(
     context: &Context<'_, '_, A>,
     input: &TUnion,
@@ -617,8 +619,7 @@ where
     }) else {
         return unchanged(issue);
     };
-    let Some(class) = codebase.get_class_like(given_object.name.as_bytes()).filter(|class| class.flags.is_sharp())
-    else {
+    let Some(class) = codebase.get_class_like(given_object.name.as_bytes()) else {
         return unchanged(issue);
     };
     let given_arguments = given_object.get_type_parameters().unwrap_or_default();
@@ -639,7 +640,9 @@ where
     // A refused type argument past the class's count stays out of the comparison, so `Holder<Order, int>` compares its
     // `Order` alone. Each entry is a differing type argument's index, and whether it widens and narrows the wanted one.
     let mut blocked = Vec::new();
-    for (index, (given_argument, wanted_argument)) in given_arguments.iter().zip(wanted_arguments).enumerate() {
+    for (index, (given_argument, wanted_argument)) in
+        given_arguments.iter().zip(wanted_arguments).take(class.template_types.len()).enumerate()
+    {
         let widens = contains(given_argument, wanted_argument);
         let narrows = contains(wanted_argument, given_argument);
         if widens && narrows {
@@ -654,6 +657,22 @@ where
     }
 
     if blocked.is_empty() {
+        return unchanged(issue);
+    }
+
+    if !class.flags.is_sharp() {
+        for &(index, ..) in &blocked {
+            let Some((name, _)) = class.template_types.get_index(index) else {
+                unreachable!("a blocked type argument is one of the class's");
+            };
+            issue = issue.with_note(format!(
+                "The type argument `{name}` is `{}` here, and `{}` in `{}`.",
+                display_sharp_type(context, &given_arguments[index]),
+                display_sharp_type(context, &wanted_arguments[index]),
+                display_sharp_type(context, &wrap_atomic(wanted.clone())),
+            ));
+        }
+
         return unchanged(issue);
     }
 

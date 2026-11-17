@@ -9,9 +9,9 @@ Build the work one issue's agent brief describes. The brief is the contract: its
 
 ## 1. Read the issue
 
-Run `gh issue view <number> --repo heyJordanParker/php-sharp --comments`. State its title. The latest `## Agent Brief` comment is the contract, and each later comment that opens with `Brief update:` changes it.
+Run `gh issue view <number> --repo heyJordanParker/php-sharp --comments`. State its title. The latest `## Agent Brief` comment is the contract, and each later comment that opens with `Brief update:` changes it. Read the issue again on every `/implement`, a resume included, since a `Brief update:` posted after your last report is work you haven't done yet.
 
-A design call the brief left open is the maintainer's. Report it as a question and stop, rather than deciding it.
+A design call the brief left open is the maintainer's. Report it as a question in your final reply and stop, rather than deciding it. Never file anything to an inbox or tracker other than the issue itself.
 
 ## 2. Build it test first
 

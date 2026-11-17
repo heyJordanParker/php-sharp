@@ -1,7 +1,6 @@
 ---
 name: maintain
 description: The maintainer's loop that runs PHP#: triage every reported problem into a GitHub issue, dispatch ready issues to builders, verify what they return, and ship releases. Run by `/loop /maintain`, once per tick and on every builder or CI notification.
-disable-model-invocation: true
 ---
 
 # Maintain
@@ -72,11 +71,13 @@ The verifier is never the author, so the maintainer verifies every builder's wor
 A miss goes back to the same builder as a `Brief update:` comment naming the root cause.
 
 ### Commit the moment it is green
+A commit takes each listed file whole, so first run `trace diff` on each file the list shares with another running builder. When a shared file holds another builder's lines, ask that builder for its green files and commit both together, so no commit carries code its own tests never ran.
+
 Remove any Co-Authored-By line and any consumer project's name from the builder's `commit-<n>.txt`. Then run `git add --pathspec-from-file=<files-n.txt>`, which adds its new files, and `git commit -F <commit-n.txt> --pathspec-from-file=<files-n.txt>`, which commits exactly those paths whatever else is staged. Finished work is never held for a batch commit, because held work tangles with work in progress in shared files.
 
 ## 6. Ship with SHIP.md
 
-An issue labelled `blocking` ships in its own release the moment it is green. Everything else ships with the next release. [SHIP.md](SHIP.md) holds the steps.
+An issue labelled `blocking` ships in its own release the moment it is green, and so does every speed fix with a measured gain, because a slow compile slows every agent on the machine. Everything else ships with the next release. [SHIP.md](SHIP.md) holds the steps.
 
 ## 7. Report status
 

@@ -52,41 +52,37 @@ pub(crate) fn bytes_to_string_lossy(bytes: &[u8]) -> Cow<'_, str> {
 /// The maximum allowed file size (256 MiB).
 const MAXIMUM_FILE_SIZE: usize = 256 * 1024 * 1024;
 
-/// Reads a file from disk and constructs a `File` object.
-///
-/// This function handles determining the file's logical name relative to the workspace,
-/// reading its contents as bytes, and robustly converting those bytes to a string.
-/// If the file contains invalid UTF-8 sequences, a warning is logged, and the
-/// conversion is performed lossily, replacing invalid characters.
-///
-/// # Arguments
-///
-/// * `workspace`: The root directory of the project, used to calculate the logical name.
-/// * `path`: The absolute path to the file to read.
-/// * `file_type`: The [`FileType`] to assign to the created file.
+/// Reads the file at `path` from disk as a [`File`] of `file_type`, as [`file_from`] names it.
 ///
 /// # Errors
 ///
-/// Returns a [`DatabaseError::IOError`] naming `path` if the file cannot be read from the filesystem.
+/// Returns a [`DatabaseError::IOError`] naming `path` if the file cannot be read from the filesystem, and the error of
+/// [`file_from`].
 pub(crate) fn read_file(workspace: &Path, path: &Path, file_type: FileType) -> Result<File, DatabaseError> {
     let bytes = read(path).map_err(|error| DatabaseError::io(IOAction::ReadFile, path, error))?;
 
+    file_from(workspace, path, file_type, bytes)
+}
+
+/// The [`File`] of `file_type` at `path` that holds `bytes`, named by [`File::logical_name`].
+///
+/// # Errors
+///
+/// Returns a [`DatabaseError::FileTooLarge`] naming `path` if `bytes` are over [`MAXIMUM_FILE_SIZE`].
+pub(crate) fn file_from(
+    workspace: &Path,
+    path: &Path,
+    file_type: FileType,
+    bytes: Vec<u8>,
+) -> Result<File, DatabaseError> {
     if bytes.len() > MAXIMUM_FILE_SIZE {
         return Err(DatabaseError::FileTooLarge(path.to_path_buf(), bytes.len(), MAXIMUM_FILE_SIZE));
     }
 
-    // Normalize to forward slashes for cross-platform determinism
-    #[cfg(windows)]
-    let logical_name = path
-        .strip_prefix(workspace)
-        .unwrap_or(path)
-        .as_os_str()
-        .as_encoded_bytes()
-        .iter()
-        .map(|i| if *i == b'\\' { b'/' } else { *i })
-        .collect::<Vec<_>>();
-    #[cfg(not(windows))]
-    let logical_name = path.strip_prefix(workspace).unwrap_or(path).as_os_str().as_encoded_bytes().to_owned();
-
-    Ok(File::new(Cow::Owned(logical_name), file_type, Some(path.to_path_buf()), Cow::Owned(bytes)))
+    Ok(File::new(
+        Cow::Owned(File::logical_name(workspace, path)),
+        file_type,
+        Some(path.to_path_buf()),
+        Cow::Owned(bytes),
+    ))
 }

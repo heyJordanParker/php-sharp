@@ -134,7 +134,7 @@ editor-url = "phpstorm://open?file=%file%&line=%line%&column=%column%"
 
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `version` | string | none | Pins the Mago version this project is tested against. Accepts a major (`"0"`), minor (`"0.6"`), or exact (`"0.6.25"`) pin. See [version pinning](#version-pinning). |
+| `version` | string | none | Pins the Mago version this project is tested against. Accepts a major (`"0"`), minor (`"0.6"`), or exact (`"0.6.26"`) pin. See [version pinning](#version-pinning). |
 | `php-version` | string | latest stable | The PHP version Mago should target for parsing and analysis. `mago init` autodetects this from `composer.json` when possible. |
 | `allow-unsupported-php-version` | boolean | `false` | Allow Mago to run on a PHP version it does not officially support. Not recommended. |
 | `no-version-check` | boolean | `false` | Silences the warning emitted when the installed binary drifts from the pinned version. Major-version drift is always fatal. |
@@ -150,7 +150,7 @@ Three pin levels:
 
 - **Major pin** (`version = "0"`): any `0.x.y` satisfies the pin. A bump to `1.x` is a hard error because a new major may ship with incompatible defaults, schema changes, or rule behaviour. From 1.0 on, this is the default `mago init` writes.
 - **Minor pin** (`version = "0.6"`): any `0.6.y` satisfies the pin. Drift to a different minor warns; drift across majors is still fatal. Before 1.0 a new minor release may break the configuration, so this is the default `mago init` writes.
-- **Exact pin** (`version = "0.6.25"`): any drift warns; drift across majors is still fatal.
+- **Exact pin** (`version = "0.6.26"`): any drift warns; drift across majors is still fatal.
 
 The warning can be silenced with `--no-version-check`, the `MAGO_NO_VERSION_CHECK` environment variable, or `no-version-check = true` in the config. None of those affect major-version drift, which is the entire point of pinning.
 
@@ -176,6 +176,8 @@ Mago distinguishes between your code, third-party code, patches to third-party c
 - **`includes`** are dependencies (typically `vendor`). Mago parses them so it can resolve symbols and types, but never analyses, lints, or rewrites them.
 - **`patches`** are PHP files that override type information for vendored or built-in code. Mago honours their type declarations and PHPDoc — which take precedence over `includes` and built-ins — but never analyses, lints, or formats them. See [Patching vendor types](#patching-vendor-types) for what a patch may change.
 - **`excludes`** are paths or globs Mago ignores entirely. They apply to every tool.
+
+When an `includes` entry is Composer's vendor folder (`composer.json`'s `config.vendor-dir`, else `vendor`) and Composer wrote its autoload maps there, `mago analyze`, `mago compile` and `mago convert` read the folder's plain PHP files as PHP's autoloader does: a file once the code reaches a class it declares, through `autoload_classmap.php`, `autoload_psr4.php` and `autoload_namespaces.php`, and each file `autoload_files.php` lists up front. A class reaches the classes its parents, interfaces, traits and types name, and your code reaches every class it names, docblock `@var` tags included. So a vendor function or constant declared outside `autoload_files.php` is unknown, as it is to PHP. The folder's `.sharp` files, `vendor/composer` itself, and a package that holds a `paths`, `includes` or `patches` entry are read whole, as is a vendor folder without the maps. `mago guard` reads the folder whole.
 
 If a file matches both `paths` and `includes`, the more specific pattern wins. Exact file paths are most specific, then deeper directory paths, then shallow ones, then glob patterns. When patterns are equally specific, `includes` wins, which lets you explicitly mark a path as a dependency.
 

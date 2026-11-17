@@ -49,9 +49,12 @@ use notify::RecursiveMode;
 use mago_analyzer::code::IssueCode;
 use mago_codex::metadata::CodebaseMetadata;
 use mago_codex::reference::SymbolReferences;
+use mago_composer::autoload::MAPS;
+use mago_composer::autoload::vendor_folder;
 use mago_database::Database;
 use mago_database::DatabaseConfiguration;
 use mago_database::DatabaseReader;
+use mago_database::file::File;
 use mago_database::file::FileType;
 use mago_database::membership::WorkspaceMatcher;
 use mago_database::watcher::DatabaseWatcher;
@@ -293,6 +296,7 @@ impl AnalyzeCommand {
         } else if !self.path.is_empty() {
             scope = Some(scope_to(&mut orchestrator, workspace, &self.path, &substitutions)?);
         }
+        orchestrator.autoload_vendor(workspace)?;
 
         let orchestrator_init_duration = orchestrator_init_start.map(|s| s.elapsed());
         let load_inputs_start = trace_enabled.then(Instant::now);
@@ -342,7 +346,7 @@ impl AnalyzeCommand {
             server = server.scan_only();
         }
         if let Some(scope) = scope {
-            server = server.scoped_to(scope);
+            server = server.scoped_to(named_by(scope));
         }
         let mut issues = server.analyze()?.issues;
         let service_run_duration = service_run_start.map(|s| s.elapsed());
@@ -461,6 +465,7 @@ impl AnalyzeCommand {
         } else {
             Some(scope_to(&mut orchestrator, &configuration.source.workspace, &self.path, &[])?)
         };
+        orchestrator.autoload_vendor(&configuration.source.workspace)?;
 
         // The watcher reports each change from here on before the hosts' compile or the analysis reads a file, so
         // an edit made after a file is read reaches it, and one made before is in what was read.
@@ -504,7 +509,7 @@ impl AnalyzeCommand {
     ) -> Result<WatchOutcome, Error> {
         let mut server = Server::new(watcher.database().clone(), self.prelude(), server_settings(&orchestrator));
         if let Some(scope) = scope {
-            server = server.scoped_to(scope);
+            server = server.scoped_to(named_by(scope));
         }
 
         tracing::info!("Watching {} for changes...", configuration.source.workspace.display());
@@ -576,6 +581,7 @@ pub(crate) fn server_settings(orchestrator: &Orchestrator<'_>) -> ServerSettings
         analyzer: orchestrator.config.analyzer_settings.clone(),
         plugin_registry: orchestrator.get_analyzer_plugin_registry(),
         use_progress_bars: orchestrator.config.use_progress_bars,
+        autoloader: orchestrator.autoloader(),
     }
 }
 
@@ -627,6 +633,11 @@ fn scope_to(
     orchestrator.config.paths.extend(named.iter().map(|path| path.to_string_lossy().into_owned()));
 
     Ok(scope)
+}
+
+/// Whether `scope`, the paths `mago analyze` names, names `file`.
+fn named_by(scope: WorkspaceMatcher) -> impl Fn(&File) -> bool + Send + Sync + 'static {
+    move |file| file.path.as_deref().is_some_and(|path| scope.contains(path))
 }
 
 /// Decodes the embedded prelude's codebase and symbol references.
@@ -687,6 +698,7 @@ fn session_thread_pool(configuration: &Configuration) -> Result<rayon::ThreadPoo
 /// - Configuration files (`mago.toml`, `mago.dist.toml`, etc.)
 /// - Baseline file (if configured)
 /// - `composer.json` and `composer.lock` (if present)
+/// - Composer's autoload maps in the vendor folder, which serve the analysis the folder's plain PHP files
 fn restart_files(configuration: &Configuration) -> Vec<(PathBuf, &'static str)> {
     let workspace = configuration.source.workspace.as_path();
     let mut watch_files: Vec<(PathBuf, &'static str)> = Vec::new();
@@ -710,6 +722,8 @@ fn restart_files(configuration: &Configuration) -> Vec<(PathBuf, &'static str)> 
 
     watch_files.push((workspace.join("composer.json"), "composer.json"));
     watch_files.push((workspace.join("composer.lock"), "composer.lock"));
+    let composer = vendor_folder(workspace).unwrap_or_else(|_| workspace.join("vendor")).join("composer");
+    watch_files.extend(MAPS.map(|map| (composer.join(map), "Composer's autoload map")));
 
     watch_files
         .into_iter()
