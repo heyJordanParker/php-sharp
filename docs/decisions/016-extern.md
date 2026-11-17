@@ -66,10 +66,6 @@ import Stripe.StripeClient uses Database;   // not PHP#: in another file, which 
 
 The effect is repeated in every file that imports the library, and nothing keeps the copies in agreement.
 
-## Precedent
-
-- **Chosen:** C#'s `extern`, TypeScript's `.d.ts` files, Hack's `.hhi` files and Koka's `extern`.
-
 ## Spec
 
 [Section 29, Effects](../spec.md#29-effects)

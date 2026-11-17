@@ -32,7 +32,7 @@ This was decision 89's way. The allow-list was a value the code repeated at each
 
 ## Precedent
 
-- **Chosen:** Swift's and Rust's string-backed enums as the closed set of a query's columns, as jOOQ's generated `Field` constants and Diesel's column types are, and PHPStan and Psalm, which read a backed enum case's `value` as a literal.
+- **Chosen:** PHPStan and Psalm, which read a backed enum case's `value` as a literal.
 
 ## Spec
 

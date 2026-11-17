@@ -33,7 +33,7 @@ query.orderBy("total");                     // compiles
 
 The compiler never sees a property in a string, so a rename of `total` breaks this call when it runs, and no error says so.
 
-### Rejected: Kotlin's `Order::total`
+### Rejected: `Order::total`
 
 ```csharp
 query.orderBy(Order::total);                // parse error
@@ -43,9 +43,7 @@ PHP# removed `::`, and every member access uses `.` (section 4).
 
 ## Precedent
 
-- **Chosen:** C#'s `nameof`.
 - **Rejected, a string:** Laravel's `orderBy('total')`.
-- **Rejected, `::`:** Kotlin's property references.
 
 ## Spec
 

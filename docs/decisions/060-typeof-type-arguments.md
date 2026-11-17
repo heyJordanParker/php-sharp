@@ -34,11 +34,6 @@ public void log<TItem>(TItem value) { Log.info("type", ["class": typeof(TItem)])
 
 Generic code over any type, such as a cache or a logger, could not name the type it holds, though the running program knows it.
 
-## Precedent
-
-- **Chosen:** C#, where `typeof(T)` works for every `T`, and `new T()` needs the `new()` constraint.
-- **Rejected:** Hack's `classname<T>`, which names classes only.
-
 ## Spec
 
 - [Section 25, Referring to classes](../spec.md#25-referring-to-classes)

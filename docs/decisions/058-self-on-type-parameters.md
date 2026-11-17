@@ -27,12 +27,7 @@ public TBox refill<TBox : Box<int>>(TBox box) => box.withValue(5);              
 public TBox refill<TBox : Box<int>>(TBox box) => box.withValue(5) as TBox ?? throw new LogicException();   // would compile
 ```
 
-Java resolves the call against the bound, so the result is `Box<int>`. Correct code then converts the value it already has, with a check that can never fail.
-
-## Precedent
-
-- **Chosen:** Rust, where `t.clone()` on a `T: Clone` returns a `T`.
-- **Rejected:** Java, where a method declared on the bound returns the bound's type.
+The call resolves against the bound, so the result is `Box<int>`. Correct code then converts the value it already has, with a check that can never fail.
 
 ## Spec
 

@@ -25,10 +25,6 @@ legacy.register(typeof(Order));      // compile error: plain PHP takes the strin
 
 Every place that passes a class to plain PHP must pick the right form, and the two forms name the same class.
 
-## Precedent
-
-- **Rejected:** Hack, which splits a class into a class pointer and `nameof`.
-
 ## Spec
 
 [Section 25, Referring to classes](../spec.md#25-referring-to-classes)

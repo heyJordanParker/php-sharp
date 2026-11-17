@@ -18,8 +18,8 @@ Building the statics found one more gap of the same kind. A generic class's prop
 
 team-lead settled each from its spec line, and each spec line now states the rule.
 
-1. **Line 750, a generic call inside a generic call: it compiles.** `List<Order> f = this.keep(this.get("kk"));` fixes `keep`'s `TValue` from the declared type, and `get`'s result goes into that parameter, so its `T` is `List<Order>` too, as Rust, Swift, Kotlin and TypeScript infer nested calls.
-2. **Line 809, a bound that is a bare type parameter: allowed.** `public void add<TSub : T>(TSub item)` compiles, as C#'s `where TSub : T`, Java, Kotlin and TypeScript's `<U extends T>` do. A type parameter is a bound alone, never joined with `&`, and a bound that leads back to its own type parameter is an error.
+1. **Line 750, a generic call inside a generic call: it compiles.** `List<Order> f = this.keep(this.get("kk"));` fixes `keep`'s `TValue` from the declared type, and `get`'s result goes into that parameter, so its `T` is `List<Order>` too.
+2. **Line 809, a bound that is a bare type parameter: allowed.** `public void add<TSub : T>(TSub item)` compiles. A type parameter is a bound alone, never joined with `&`, and a bound that leads back to its own type parameter is an error.
 3. **Lines 749 and 751, a plain PHP `@template` class without type arguments: a compile error.** `Shelf shelf` is "`Shelf` needs its type argument.", with the help "Write a type for its type parameter: `Shelf<TItem>`." A type parameter with a default needs none. A type test reads no type arguments of a plain PHP class, so `value is Shelf` tests the class alone, and `Class<Shelf>` names the class itself.
 
 ## Decisions team-lead approved

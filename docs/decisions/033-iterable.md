@@ -39,13 +39,6 @@ orders.filter(o => o.paid);                   // compile error: an Iterable has 
 
 Every `filter`, `map` and `take` over a lazy source becomes a loop written by hand, or a copy into a `List` that reads every row first.
 
-## Precedent
-
-- **Chosen:** C#'s `IEnumerable<T>` with LINQ, and Kotlin's `Sequence<T>`, whose operations run only when a terminal operation reads them.
-- **Chosen, a `Map` as the `Iterable` of its entries:** C#'s `Dictionary<TKey, TValue>`, an `IEnumerable<KeyValuePair<TKey, TValue>>`, and Swift's `Dictionary`, a `Sequence` of `(key, value)` tuples.
-- **Chosen, a carried element type:** C#'s reified `is IEnumerable<Order>`, which reads no element.
-- **Rejected, loop only:** Java's `Iterable<T>`, TypeScript's `Iterable<T>` and Hack's `Traversable<T>`, which a loop reads and which carry no lazy operations of their own.
-
 ## Spec
 
 - [Section 12, Collections](../spec.md#12-collections)

@@ -63,8 +63,7 @@ public class PureRater : Rater
 
 ## Precedent
 
-- **Effects in a function's type:** Swift's `throws`, Kotlin's `suspend` and Rust's `Fn`, each of which a function type without it can't do.
-- **An override takes every argument the method it overrides takes:** Java, C#, Kotlin and Swift require the same parameter types, and PHP allows wider ones.
+- **An override takes every argument the method it overrides takes:** PHP, which allows wider parameter types on an override.
 
 ## Spec
 

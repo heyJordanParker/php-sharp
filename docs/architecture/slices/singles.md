@@ -38,7 +38,7 @@ Each decides what a user writes. Each has its proposal and its answer. Where the
 1. **`@` before a name, and the standard library's `@` error control.** Approved 16:40: "`@` before any keyword makes it a name", `@` works for every keyword, `global` included. The standard library writes PHP's error control 11 times on master and 23 times on #151, as `@global.unpack(format, data)`. Under the approved rule, that line reads a local named `global`.
    - **Proposed:** `@` directly before a letter is always a name. Error control is written `@(global.unpack(format, data))`, and the 11 library lines (23 after #151) move to that form. User code keeps its refusal of error control.
    - `@global` stays error control, so a local can't be named `global`. That breaks "every keyword".
-   - **Answered: `@` before a name is always the keyword escape, as in C#, and PHP# has no `@` error control,** because it exists only for PHP's warnings. Each library line that used it reads its failure as a PHP# value instead: an `extern` declared to return `false` or `null` on failure, read with a type test. #151's lines move the same way after it merges.
+   - **Answered: `@` before a name is always the keyword escape, and PHP# has no `@` error control,** because it exists only for PHP's warnings. Each library line that used it reads its failure as a PHP# value instead: an `extern` declared to return `false` or `null` on failure, read with a type test. #151's lines move the same way after it merges.
 2. **`@this`.** The checker refuses a local named `this` because "PHP forbids `$this`" (`check_local_name`). `@this` is a keyword's name like any other.
    - **Proposed:** `@this` names a local, a `catch` variable or a pattern variable, and the bridge lowers it to a hidden PHP name. A parameter named `@this` is refused, because a named argument `this:` must reach a PHP parameter of that name, and PHP has none. No plain PHP method has a `$this` parameter, so no override needs one.
    - Refuse `@this` everywhere, with the reason "`this` is the object the method runs on."
@@ -62,7 +62,7 @@ Each decides what a user writes. Each has its proposal and its answer. Where the
      - **Computed bodies, `lazy` and `static`:** stay compile errors, each with the reason the checker gives today. A computed body and `lazy` compute their own value, and a parameter receives one. A parameter belongs to one object.
      - **`readonly`:** stays refused, as it is on a body property (spec line 1463). The two already match.
    - Only the approved list: `via` and the observers stay refused on a parameter, with spec line 395's reason.
-   - **Answered: as proposed,** with the behaviors field on `FunctionLikeParameter`. A method parameter's default may also call a method or `new` an object, as in C# and Kotlin, and the bridge computes it when the call leaves the argument out.
+   - **Answered: as proposed,** with the behaviors field on `FunctionLikeParameter`. A method parameter's default may also call a method or `new` an object, and the bridge computes it when the call leaves the argument out.
 6. **How §19's example gets an `Order` that calls `: super(id)`.** The harness `DatabaseEntity` has no constructor, the harness `Page` extends it with none either, and examples in sections 21 and 22 call `new Page()`.
    - **Proposed:** the `operators` statements block declares its own `Order` in its hidden setup, `public class Order : DatabaseEntity { public Order(int id) : super(id) { } }`. The example then states every class it assumes, and the harness stays as it is.
    - The harness `DatabaseEntity` gains `public DatabaseEntity(int id = 1) { this.id = id; }`, and the harness `Order` writes `: super(id)`. Every example that extends the harness `DatabaseEntity` with a constructor then needs `: super(…)`.
@@ -70,7 +70,7 @@ Each decides what a user writes. Each has its proposal and its answer. Where the
 7. **Where a class that declares `toString()` becomes text.** Spec line 1995 covers a template. Plain PHP converts an object to a string through `__toString()`, as Blade's `{{ $sku }}` and `(string) $sku` do. The engine already calls a PHP# `toString()` for a JSON key (`sharp_table_json_key`, `sharp.c:7476`).
    - **Proposed:** a template calls `toString()` directly. Plain PHP's conversion is left for after v1, under "found, not fixed".
    - The compiled class also gets PHP's `__toString()`, calling `toString()`, so plain PHP converts it as a PHP# template does.
-   - **Answered: plain PHP's string conversion calls `toString()` too,** so `(string) $sku` and `{{ $sku }}` give the template's text, as Java's and Kotlin's string conversion does.
+   - **Answered: plain PHP's string conversion calls `toString()` too,** so `(string) $sku` and `{{ $sku }}` give the template's text.
 8. **Deleting the default-name list.** Approved: "Bind every public `Sharp` class from the library itself, and delete the list." On master the list is `sharp/mago/crates/names/src/sharp_classes.rs`, generated by `just regen-sharp-classes` from the library and the prelude, and `the_default_class_likes_are_generated_from_the_standard_library_and_the_prelude` fails when it is stale. #151 changes the same code: it deletes `NAMED_EFFECTS`, regenerates the list with the ten effect classes, and adds `STANDARD_EXCEPTIONS`, 47 PHP exception classes a bare name reaches.
    - **Proposed:** after #151 lands, delete `sharp_classes.rs`, `STANDARD_EXCEPTIONS`, `scripts/regen-sharp-classes.php`, the `regen-sharp-classes` recipe and its test. `NamespaceClasses`, which the orchestrator already builds from every class-like the project scan finds and passes to `NameResolver::resolve_in`, also keeps every class-like directly in `Sharp` and every exception class `Builtins.sharp` declares, and `default_class` reads them from it. That changes what `NamespaceClasses` holds, a public type of `mago_names`. The prelude's engine classes, such as `Sharp\List` and `Sharp\Position`, need the same: the codex prelude already holds them.
    - Keep the generated list: the Capability holds, and its test already fails when the library gains a class.
@@ -80,7 +80,7 @@ The spec sweep below was answered too: every Problem is fixed in this PR but lin
 
 ## Edge cases the spec leaves open
 
-1. **`obj.@event`** reads the member `event`, since a member takes a keyword with no mark. It compiles and means the same as `obj.event`, as C#'s `obj.@event` does.
+1. **`obj.@event`** reads the member `event`, since a member takes a keyword with no mark. It compiles and means the same as `obj.event`.
 2. **The `incompatible-parameter-name` help names `@event`** when the parent's name is a keyword: "Name it `@event`, as the parent does."
 3. **A `never` method that can return** is reported at its closing brace: "`Errors.stop` is `never`, and it reaches its closing brace when no `throw` runs before it." The spec's example puts the annotation on the `}` line.
 4. **A `never` abstract method and an interface method** compile, and every implementation must be `never`, as the covariance check already says.
@@ -165,9 +165,9 @@ A plain PHP property is a `List` for writes too: a write through it, as `users.n
 The spec's opening paragraph, line 3, gains the rule. The sweep it asks for has its own section below, "The spec sweep".
 
 ```diff
- PHP# is a language that runs on PHP's engine and calls plain PHP freely, as Kotlin runs on the JVM and calls Java. This file is the single source of truth for PHP# syntax and rules.
+ PHP# is a language that runs on PHP's engine and calls plain PHP freely. This file is the single source of truth for PHP# syntax and rules.
 +
-+**No PHP# rule makes code write around how PHP# runs on PHP's engine.** A PHP# developer never needs to know what a PHP# construct compiles to. Plain PHP libraries are called as libraries, as Kotlin calls Java libraries.
++**No PHP# rule makes code write around how PHP# runs on PHP's engine.** A PHP# developer never needs to know what a PHP# construct compiles to. Plain PHP libraries are called as libraries.
 ```
 
 ## 3. `@` before any keyword makes it a name (approved 10-16 ~16:40)
@@ -259,7 +259,7 @@ public string o => "computed"                           parse error: A parameter
 - **The spec.** Line 548 and the `parameter-member-limits` example change with question 5, and line 395 loses its last sentence:
 
 ```diff
--**A member declared on a parameter takes access levels and attributes only,** as TypeScript's and Kotlin's parameter properties do: an access modifier, an accessor list whose `set` or `init` may take a narrower access level, such as `{ get; private set; }`, and attributes. Accessor bodies, `willSet`, `didSet`, `via`, `lazy`, computed properties and `static` go on a member in the class body:
+-**A member declared on a parameter takes access levels and attributes only:** an access modifier, an accessor list whose `set` or `init` may take a narrower access level, such as `{ get; private set; }`, and attributes. Accessor bodies, `willSet`, `didSet`, `via`, `lazy`, computed properties and `static` go on a member in the class body:
 +**A member declared on a parameter is a property like one declared in the class body,** with its access levels, accessors, accessor bodies, observers, behaviors and attributes, and a default after its accessors, which the call may leave out. The argument is a write while the constructor runs, so a `set` body runs on it. A computed property and `lazy` compute their own value, and `static` belongs to no one object, so each goes on a member in the class body:
 
  <!-- example parameter-member-limits: members in Ledger -->

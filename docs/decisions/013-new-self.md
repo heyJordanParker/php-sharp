@@ -59,9 +59,7 @@ Every class repeats a factory that only calls its constructor.
 
 ## Precedent
 
-- **Chosen:** Swift's `required init`.
 - **Rejected, fail at runtime:** PHP's `new static`.
-- **Rejected, a static factory per class:** C#'s static abstract interface members.
 
 ## Spec
 

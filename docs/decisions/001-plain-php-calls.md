@@ -41,7 +41,6 @@ Most libraries are plain PHP. Under this option, every Laravel facade, helper an
 
 ## Precedent
 
-- **Chosen:** Hack. A Hack function with no context list has the `defaults` context, which may call any code.
 - **Rejected:** PHP#'s own spec before this decision.
 
 ## Spec

@@ -45,7 +45,6 @@ public static void report(int pruned) { printf("Pruned %d carts" + PHP_EOL, prun
 
 ## Precedent
 
-- **Chosen:** Koka's `console` effect.
 - **Rejected:** decision 34's interim rule.
 
 ## Spec

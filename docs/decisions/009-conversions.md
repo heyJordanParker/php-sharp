@@ -41,9 +41,7 @@ Every `(int)` between numbers that PHP code already writes is rewritten, though 
 
 ## Precedent
 
-- **Chosen:** C#'s casts between numbers, `int.Parse`, `int.TryParse` and `as`. Kotlin's `toIntOrNull` and `as?`.
 - **Rejected, PHP's casts:** PHP.
-- **Rejected, conversion methods only:** Kotlin's `toInt()` and Swift's `Int(…)`.
 
 ## Spec
 

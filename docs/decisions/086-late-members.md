@@ -32,7 +32,7 @@ $number->isInitialized($order);      // true
 
 A PHPUnit test's field set in `setUp()` and an ORM row filled through reflection after `new` declare their members without a dummy initial value, so a save writes only the columns the row loaded.
 
-### Rejected: `required`, as C#'s `required` with `SetsRequiredMembers`
+### Rejected: `required`
 
 ```csharp
 public required string number { get; set; }             // every creation must set it in an object initializer
@@ -41,16 +41,11 @@ new Order { number = "A-12" };                          // the framework creates
 
 `required` makes every creation set the member in an object initializer, while the framework creates the object first and fills it later.
 
-## Precedent
-
-- **Chosen:** Kotlin's `lateinit`, Hack's `<<__LateInit>>` and Dart's `late`, whose early read is a runtime error.
-- **Rejected:** C#'s `required` with `[SetsRequiredMembers]`.
-
 ## Name
 
-`late`, Dart's keyword for a member initialized after its declaration, which collides with no PHP# word.
+`late`, which says the member is initialized after its declaration, and collides with no PHP# word.
 
-- **Rejected:** Kotlin's `lateinit`, since PHP#'s `init` accessor means "set only while the object is created", the opposite.
+- **Rejected:** `lateinit`, since PHP#'s `init` accessor means "set only while the object is created", the opposite.
 - **Rejected:** `deferred`, which reads as deferred loading.
 
 ## Spec

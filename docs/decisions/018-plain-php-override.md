@@ -44,7 +44,7 @@ public class BillingServiceProvider : ServiceProvider
 }
 ```
 
-This applies C#'s closed-by-default rule to a parent that could never opt in. Frameworks offer extension points as ordinary methods with a default body, such as Eloquent's `casts()` and a service provider's `register()`, and no PHP# class could fill them in.
+This applies a closed-by-default rule to a parent that could never opt in. Frameworks offer extension points as ordinary methods with a default body, such as Eloquent's `casts()` and a service provider's `register()`, and no PHP# class could fill them in.
 
 ### Rejected: a library's `extern virtual` declaration opens a method
 
@@ -65,12 +65,6 @@ public class BillingServiceProvider : ServiceProvider
 ```
 
 Every library needs a declaration for each method it expects subclasses to replace before PHP# code can extend it.
-
-## Precedent
-
-- **Chosen:** Kotlin extending Java classes, Swift extending Objective-C classes, and Scala extending Java classes.
-- **Rejected, only `abstract` methods:** C#'s closed-by-default methods.
-- **Rejected, `extern virtual`:** TypeScript's `.d.ts` files.
 
 ## Spec
 

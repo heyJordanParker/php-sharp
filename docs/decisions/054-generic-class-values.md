@@ -39,12 +39,7 @@ This is an interim state. Generics are reified, so the class value already knows
 Class<PaginatedList> pages = typeof(PaginatedList<Order>);                         // the type argument is dropped
 ```
 
-Java's `List.class` works this way. No `PaginatedList<Order>` class value exists, so `new` through it creates an object with no type argument.
-
-## Precedent
-
-- **Chosen:** C#'s `typeof(List<int>)` for a closed generic type and `typeof(List<>)` for an open one.
-- **Rejected, erased:** Java's `List.class`.
+No `PaginatedList<Order>` class value exists, so `new` through it creates an object with no type argument.
 
 ## Spec
 

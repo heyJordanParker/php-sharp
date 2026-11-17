@@ -151,7 +151,7 @@ pub struct GenericClass<'arena> {
 
 ## R4: each type argument's own statics (Queue 23, Option B; Queue 36)
 
-C# gives every closed generic type its own statics, so `Counter<Order>.count` and `Counter<Customer>.count` are two values. Option B keeps them in PHP's own static storage. It adds no opcode, and neither JIT changes: both run the VM handlers it changes.
+Every set of type arguments gives a generic class its own statics, so `Counter<Order>.count` and `Counter<Customer>.count` are two values. Option B keeps them in PHP's own static storage. It adds no opcode, and neither JIT changes: both run the VM handlers it changes.
 
 ### A static method takes its class's type arguments (part 1)
 
@@ -165,7 +165,7 @@ A static method of a generic class has no object to read its class's type argume
 - **One hidden static property per generic class:** `"\0<sharp>\0statics"`, flagged `ZEND_ACC_SHARP_HIDDEN`, as the instance slot `"\0<sharp>\0types"` is. The class declares no other static property for its static fields.
 - **Its value is an array keyed by the type argument text:** `"App.Order"`, `"List<App.Order>"`, `"App.Order, int"`, nested type arguments included. Each entry maps a static field's name to its value.
 - **The defaults live under the key `""`:** each static field's constant initial value, or null for a `T?` field with none.
-- **The first use of a key copies the `""` entry,** collections included, as C# runs a closed type's static initializer on its first use. PHP separates an array on its first change, so two keys never share a collection after a change to either.
+- **The first use of a key copies the `""` entry,** collections included, so each set of type arguments starts from the initial values. PHP separates an array on its first change, so two keys never share a collection after a change to either.
 
 ### `\Sharp\Internal\statics`
 
@@ -213,7 +213,7 @@ Each row reads back a value that only the write it tests puts there:
 ## How long a run-time type lives
 
 - **The process's tables keep each type code spells,** which its source bounds: `sharp_types`, `sharp_type_lists` and `sharp_class_values`, under `SHARP_TYPES_LOCK`. They are the engine's one process-wide mutable state, by design. Per-thread tables would intern each code type once per thread and lose the pointer equality `sharp_type_equals` takes for two persistent types.
-- **The request's tables keep each type first read from input or made by a substitution,** as `unserialize` reads one and `Node<List<T>>` makes one: `SHARP_G(request_types)`, `SHARP_G(request_type_lists)` and `SHARP_G(request_class_values)`. They live as long as the PHP request, which is the app: one HTTP request under php-fpm, the whole worker under FrankenPHP's worker mode or Octane. C# keeps each generic instantiation its runtime makes for the process's life the same way. The program bounds them, and a worker reuses them on its next request.
+- **The request's tables keep each type first read from input or made by a substitution,** as `unserialize` reads one and `Node<List<T>>` makes one: `SHARP_G(request_types)`, `SHARP_G(request_type_lists)` and `SHARP_G(request_class_values)`. They live as long as the PHP request, which is the app: one HTTP request under php-fpm, the whole worker under FrankenPHP's worker mode or Octane. The program bounds them, and a worker reuses them on its next request.
 - **Only input that invents new type texts could grow them without limit, so the first two hold at most 65,536 types read from input,** `SHARP_TYPE_INPUT_LIMIT`, which `SHARP_G(request_input_types)` counts. The third indexes the class values among them. Past it, a new type text fails in `unserialize` as other bad input does, and each type they hold keeps working. A type code or a substitution spells always interns, since the source and the program bound those. `sharp_type_intern` takes which of the three made the text, as a `sharp_type_source`. `type_arguments_limit.phpt` and the `/flood` and `/words` requests of `sharp/bin/hosts` show it.
 
 ## R5: a class value that carries its type arguments

@@ -34,11 +34,6 @@ items[id];                        // would compile when id is int|string, and th
 
 The code type-checks, then fails on a key a `List` can never hold. The checker knows the index type, so the error belongs at compile time.
 
-## Precedent
-
-- **Chosen:** Kotlin, whose `List` takes an `Int` index, throws on a negative one, and has `last()`.
-- **Rejected, negative index:** Python.
-
 ## Spec
 
 - [Section 12, Collections](../spec.md#12-collections)

@@ -52,17 +52,14 @@ A `Map` is an engine object the engine tells apart from a `List`, so an empty `M
 ### Rejected: anonymous objects
 
 ```csharp
-const payload = new { id: 1, email: email };            // not PHP#: C#'s anonymous type
+const payload = new { id: 1, email: email };            // not PHP#: an anonymous type
 ```
 
 It adds a new kind of type, one with no name, beside classes, structs and `Map`s.
 
 ## Precedent
 
-- **Chosen, `parse` reads an object:** Pydantic's `model_validate(obj, from_attributes=True)` and Jackson's `convertValue`.
-- **Chosen, `List.wrap`:** Laravel's `Arr::wrap` and Lodash's `castArray`.
-- **Chosen, encoding by type:** kotlinx.serialization and C# records.
-- **Rejected, anonymous objects:** C#'s `new { … }`.
+- **Chosen, `List.wrap`:** Laravel's `Arr::wrap`.
 
 ## Spec
 

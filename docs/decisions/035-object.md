@@ -21,15 +21,10 @@ It names the set PHP already checks when the code runs, so a signature tells pla
 ### Rejected: `AnyObject`
 
 ```csharp
-public static int identity(AnyObject value) => global.spl_object_id(value);   // not PHP#: Swift's name
+public static int identity(AnyObject value) => global.spl_object_id(value);   // not PHP#: a new word for object
 ```
 
 PHP developers already write `object`, and `AnyObject` is a new word for the same set.
-
-## Precedent
-
-- **Chosen:** TypeScript's `object` beside `unknown`.
-- **Rejected:** Swift's `AnyObject` beside `Any`.
 
 ## Spec
 

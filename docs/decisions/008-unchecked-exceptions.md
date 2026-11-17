@@ -32,11 +32,6 @@ const order = this.orders.load(id);   // compile error: catch OrderMissing or de
 
 Every caller up the stack repeats the clause or wraps the exception. A function passed to `map` cannot throw at all unless `map` has a second copy ([decision 6](006-function-argument-effects.md)).
 
-## Precedent
-
-- **Chosen:** C# and Kotlin. Swift's `throws` names no exception type unless the code opts in.
-- **Rejected:** Java's checked exceptions.
-
 ## Spec
 
 [Section 31, Expected failures as values](../spec.md#31-expected-failures-as-values)

@@ -54,9 +54,8 @@ php-src PR #13800 proposes this form. Struct methods would split into two kinds,
 
 ## Precedent
 
-- **Chosen:** Kotlin's data class `copy`.
-- **Rejected, copy-on-write properties:** php-src PR #13800's structs, and Swift's structs.
-- **Rejected, `mutating` methods:** Swift's `mutating` methods, and php-src PR #13800's `mutating` methods with `!` call syntax.
+- **Rejected, copy-on-write properties:** php-src PR #13800's structs.
+- **Rejected, `mutating` methods:** php-src PR #13800's `mutating` methods with `!` call syntax.
 
 ## Spec
 

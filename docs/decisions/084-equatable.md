@@ -40,19 +40,13 @@ Generic.same(cartA, cartB);                       // compiles; runs: false unles
 
 A type parameter would compare a class that declares no `operator ==` by identity, which is the forgotten override decision 12 refuses.
 
-## Precedent
-
-- **Chosen:** Go's `comparable` and F#'s `equality`, which every type with `==` satisfies.
-- **Rejected, declared:** Swift's `Equatable`, Rust's `PartialEq`, Haskell's `Eq` and C# 11's `IEqualityOperators`, which each type declares.
-- **Rejected, identity:** Java, Kotlin, C#'s `where T : class` and TypeScript, which compare a type parameter's values by identity.
-
 ## Name
 
-`Equatable`, after C#'s `IEquatable<T>` and Swift's `Equatable`, the names C# and PHP developers already read as "has `==`".
+`Equatable`, which reads as "has `==`".
 
 - **Rejected:** `Eq`, an abbreviation, and `EqualityComparable`, which is long.
-- **Rejected:** Go's `comparable` and F#'s `equality`, which PHP# would write capitalized, and which read as an ordering and as an operation.
-- **Rejected:** `CanEqual`, Scala's, which reads as a method.
+- **Rejected:** `Comparable` and `Equality`, which read as an ordering and as an operation.
+- **Rejected:** `CanEqual`, which reads as a method.
 
 ## Spec
 

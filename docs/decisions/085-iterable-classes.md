@@ -6,7 +6,7 @@ Jordan's ruling of 11-11.
 
 A class is an `Iterable<T>` when its header names `Iterable<T>` and it declares `Iterable<T> elements()`, whose body returns an `Iterable` or uses `yield`. A loop, `toList()` and the lazy operations read `elements()`, and the object is an `Iterable<T>` everywhere one is taken. A class that names `Iterable<T>` and declares no `elements()` is a compile error that names the member. Plain PHP receives the object as a `Traversable` whose `foreach` reads `elements()`: an element that is a `[key, value]` tuple arrives as that key and value, as a `Map` reaches plain PHP as the array of its entries, and any other element arrives under the keys 0, 1, 2 and on.
 
-A class, a struct or an interface names `Iterable<T>` in its header (the spec refusal audit's ruling of 11-14, after Swift's `Sequence`, C#'s `IEnumerable<T>` and Rust's `IntoIterator`). An interface that names it asks each class that implements it for `elements()`. The engine links the type as PHP's `IteratorAggregate`, whose `getIterator()` PHP# writes, so the type declares no `getIterator()` of its own.
+A class, a struct or an interface names `Iterable<T>` in its header (the spec refusal audit's ruling of 11-14). An interface that names it asks each class that implements it for `elements()`. The engine links the type as PHP's `IteratorAggregate`, whose `getIterator()` PHP# writes, so the type declares no `getIterator()` of its own.
 
 ## Options
 
@@ -48,8 +48,7 @@ public class Bag : IteratorAggregate
 
 ## Precedent
 
-- **Chosen:** C#'s `IEnumerable<T>` with `GetEnumerator()` and `yield return`, Java's `Iterable<T>.iterator()`, Swift's `Sequence.makeIterator()` and Rust's `IntoIterator`.
-- **Rejected:** Hack's `HH\Iterable`, PHP's `IteratorAggregate` given an element type.
+- **Rejected:** PHP's `IteratorAggregate` given an element type.
 
 ## Spec
 

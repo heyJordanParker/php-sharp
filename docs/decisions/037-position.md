@@ -25,7 +25,7 @@ const stubs = __DIR__ + "/stubs";                                       // not P
 
 Six constants say where the code itself sits, and none can report where a caller sits.
 
-### Rejected: Swift's `#file` tokens
+### Rejected: `#file` tokens
 
 ```csharp
 public static void logSlow(string message, string file = #file, int line = #line) { … }   // not PHP#
@@ -33,7 +33,7 @@ public static void logSlow(string message, string file = #file, int line = #line
 
 `#` starts a comment in PHP, so `#file` would read as one.
 
-### Rejected: C#'s caller attributes
+### Rejected: caller attributes
 
 ```csharp
 public static void logSlow(string message, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0) { … }   // not PHP#
@@ -50,8 +50,7 @@ Each fact needs its own attribute and parameter, and each default states a value
 
 ## Precedent
 
-- **Chosen:** Go's `token.Position`, for the name. C++20's `std::source_location::current()` and Swift's `#file` defaults, for the caller's position.
-- **Rejected:** PHP's magic constants, Swift's `#file` tokens, and C#'s `[CallerFilePath]`, `[CallerLineNumber]` and `[CallerMemberName]`.
+- **Rejected:** PHP's magic constants.
 
 ## Spec
 

@@ -54,11 +54,6 @@ carts.map(c => c.total);                  // compiles; counts as having every ef
 
 No code that calls a collection method is ever pure, so laws cannot reason about list code.
 
-## Precedent
-
-- **Chosen:** Swift's `rethrows`, Kotlin's inline lambdas, and Hack's `ctx $f`.
-- **Rejected, two copies:** Java. `Stream.map` takes a `Function` that cannot throw a checked exception, so throwing code needs a second interface or a wrapper.
-
 ## Spec
 
 [Section 29, Effects](../spec.md#29-effects)

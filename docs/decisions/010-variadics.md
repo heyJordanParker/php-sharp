@@ -19,12 +19,12 @@ Money.sum(prices);        // compile error: a List<int> is not an int
 
 The `...` at the call shows whether a list is one argument or many.
 
-### Rejected: C#'s `params`
+### Rejected: a `params` modifier
 
 ```csharp
-public static void write(params List<Any?> values) { … }   // not PHP#: C#'s params
+public static void write(params List<Any?> values) { … }   // not PHP#: a params modifier
 
-Log.write(items);           // compiles; runs: C# spreads items into the values, though the call reads as one value
+Log.write(items);           // compiles; runs: params spreads items into the values, though the call reads as one value
 Log.write(items, total);    // compiles; runs: two values, the first of them a list
 ```
 
@@ -58,16 +58,13 @@ The checker can't know which parameters a list of unknown length fills, so it ca
 ### Rejected: a spread of any length into any parameter
 
 ```csharp
-Pairs.pair(...numbers);       // not PHP#: PHP and Python accept it, and throw where it runs if numbers holds too few values
+Pairs.pair(...numbers);       // not PHP#: PHP accepts it, and throws where it runs if numbers holds too few values
 ```
 
 ## Precedent
 
-- **Chosen:** PHP, TypeScript, Go and Java.
-- **Chosen, a spread of unknown length only into a `...` parameter:** Kotlin, TypeScript, Go, C# and Java.
-- **Rejected, `params`:** C#.
-- **Rejected, no variadics:** Rust.
-- **Rejected, a spread of any length into any parameter:** PHP and Python, which throw at run time.
+- **Chosen:** PHP.
+- **Rejected, a spread of any length into any parameter:** PHP, which throws at run time.
 
 ## Spec
 

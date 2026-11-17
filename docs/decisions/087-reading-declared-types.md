@@ -27,7 +27,7 @@ tags.attributes<Field>().count();                // 1
 
 A schema, a serializer or a validator reads a property's declared type as the same value `typeof` gives, so it compares and takes it apart with `==` and `typeArguments()`, as it reads any other type.
 
-### Rejected: the type as text, as Hack's `getTypeText()`
+### Rejected: the type as text
 
 ```csharp
 tags.typeText;                                   // would be "List<string>"
@@ -36,19 +36,13 @@ tags.typeText == "List<string>";                 // agents compare strings, and 
 
 Code that reads the text compares strings, so it breaks on how a type is written and never learns a type's arguments.
 
-### Rejected: property references, as Kotlin's `Product::tags`
+### Rejected: property references, as `Product::tags`
 
 ```csharp
 Product::tags.type;                              // would be a second way to name a property beside nameof(Product.tags)
 ```
 
 A reference is a second form that names a property, beside `nameof` (section 6.3).
-
-## Precedent
-
-- **Chosen:** C#'s `Type.GetProperties()`, `PropertyInfo.PropertyType` and `Type.GetGenericArguments()`, Kotlin's `KClass.memberProperties`, `KProperty.returnType` and `KType.isMarkedNullable`, and Java's `Field.getGenericType()`.
-- **Rejected, text:** Hack's `ReflectionProperty::getTypeText()`.
-- **Rejected, references:** Kotlin's property references.
 
 ## Spec
 

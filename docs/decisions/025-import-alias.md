@@ -29,16 +29,14 @@ One line imports the class and names it. The names in `Sharp` are imported by de
 ### Rejected: a separate alias declaration
 
 ```csharp
-using CacheKey = Cache.Key;                                      // not PHP#: C#'s using alias, a second statement beside import
+using CacheKey = Cache.Key;                                      // not PHP#: a using alias, a second statement beside import
 ```
 
 A file then has two statements that bring in a name, and a full name appears outside the `namespace` and `import` lines that section 23 reserves for them.
 
 ## Precedent
 
-- **Chosen:** PHP's `use Cache\Key as CacheKey`, Kotlin's `import cache.Key as CacheKey`, TypeScript's `import { Key as CacheKey }` and Python's `import … as …`.
-- **Chosen, default imports:** Kotlin, which imports `kotlin.*` into every file.
-- **Rejected:** C#'s `using CacheKey = Cache.Key;`.
+- **Chosen:** PHP's `use Cache\Key as CacheKey`.
 
 ## Spec
 

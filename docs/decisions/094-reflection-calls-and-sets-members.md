@@ -45,8 +45,6 @@ Every framework that maps names to members would keep a plain PHP file for it, a
 
 ## Precedent
 
-- **Chosen:** .NET's `MethodInfo.Invoke`, `PropertyInfo.GetValue` and `PropertyInfo.SetValue`, and Kotlin's `KCallable.call`, `KProperty1.get` and `KMutableProperty1.set`. Each checks its arguments when the code runs and runs the getter and setter.
-- **Rejected, `get` with no effect:** none. .NET and Kotlin both run the getter.
 - **Rejected, plain PHP:** PHP's variable members `$object->$name` and `$object->$name()`.
 
 ## Spec

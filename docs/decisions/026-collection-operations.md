@@ -9,7 +9,7 @@ Each collection kind does the natural thing with an operation. The checker's typ
 - A `List` read, `x[i]`, throws `OutOfRangeException` on a missing index, and `x.getOrNull(i)` is the safe read, so `x[i] ?? fallback` is a compile error that names `getOrNull`. A `Map` read, `x[key]`, gives `TValue?`, null when the key is missing, so it is handled where it is read, with `??`, `?.`, `is`, `as`, `match` or `get`, and a `Map` read used as a `TValue` is a compile error that names `??` and `get`.
 - `x[i] = v` replaces a `List` element and throws `OutOfRangeException` past the end. `x[key] = v` inserts or replaces a `Map` key.
 - A loop over a `Map` gives each entry as a `[key, value]` tuple, and `values()` gives the values.
-- Two imported extensions with one name, one on a `List` and one on a `Map`, are allowed. The engine knows each collection's kind, so the receiver's type picks the extension, as in C# and Kotlin.
+- Two imported extensions with one name, one on a `List` and one on a `Map`, are allowed. The engine knows each collection's kind, so the receiver's type picks the extension.
 
 A key read back out of a `Map<string, TValue>` is a `string`. PHP stores an all-digit string key such as `"5"` as the int `5`, and the engine hands it back as `"5"` because it knows the key type. Plain PHP reading the same array still sees `5`. This covers the key of `for (const [key, value] of map)` and of `keys()`. A backed enum or a struct key arrives as its key type in a loop, with the type written or not (decision 27).
 
@@ -34,7 +34,7 @@ for (const [name, plan] of plans) { … }       // compiles; runs: each entry as
 for (const plan of plans.values()) { … }      // compiles; runs: a Map's values
 ```
 
-A method does what its name means on that kind of collection, as in C#, Java, Kotlin and Swift. The engine knows each collection's kind from the checker's types (decision 29).
+A method does what its name means on that kind of collection. The engine knows each collection's kind from the checker's types (decision 29).
 
 ### Rejected: one name per meaning on every collection
 
@@ -97,15 +97,7 @@ Plain PHP looks up `"5"` as the int `5`, so it cannot read back a key the engine
 
 ## Precedent
 
-- **Chosen, each kind does the natural thing:** C#'s `List.Remove(item)` and `Dictionary.Remove(key)`, Java's and Kotlin's `list.remove(element)` and `map.remove(key)`, and Swift's `Dictionary.filter`, which returns a `Dictionary`.
-- **Chosen, a `List` read that throws, and `getOrNull`:** Kotlin's `list[i]` and `list.getOrNull(i)`, and the throwing index of Swift's `Array` and C#'s `List<T>`.
-- **Chosen, the index write:** Kotlin's and C#'s `list[i] = x`, which throws past the end.
-- **Chosen, a `Map` read giving `TValue?`:** Kotlin's `map[key]`, which gives `V?`, and Swift's `dict[key]`, which gives an optional.
-- **Chosen, a loop over a `Map` gives its entries:** the loops of Swift, Kotlin, Rust and C# over a dictionary.
-- **Chosen, a string key read back as a `string`:** C#, Java and Kotlin, whose string-keyed maps hand back the key they stored.
-- **Rejected, one name per meaning:** Python and TypeScript.
 - **Rejected, the `int|string` key:** PHP's own arrays, which store an all-digit string key as an int.
-- **Rejected, a hidden mark:** HHVM's `vec` and `dict`.
 - **Rejected, deciding by shape:** PHP's `array_is_list`.
 
 ## Spec

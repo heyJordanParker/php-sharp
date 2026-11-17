@@ -34,10 +34,6 @@ email.__toString();                // a PHP name in PHP# code, and a second name
 
 PHP# refuses a member name that starts with `__`, and the call names PHP's magic method beside the `toString()` every PHP# type has.
 
-## Precedent
-
-- **Chosen:** Kotlin, which calls a Java class's `toString()` as its own, and Swift, where an Objective-C class's `description` is its `CustomStringConvertible.description`, which string interpolation reads.
-
 ## Spec
 
 - [Section 18, Strings](../spec.md#18-strings)

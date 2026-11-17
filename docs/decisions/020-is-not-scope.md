@@ -2,7 +2,7 @@
 
 ## Decision
 
-A variable created by `is not` stays in scope after an `if` whose block always exits, as in C#. A block always exits when every path through it ends in `return`, `throw`, `break` or `continue`. No new syntax.
+A variable created by `is not` stays in scope after an `if` whose block always exits. A block always exits when every path through it ends in `return`, `throw`, `break` or `continue`. No new syntax.
 
 ## Options
 
@@ -35,10 +35,6 @@ public Receipt checkout(Map<string, Any?> payload, string plan)
 ```
 
 Each check nests the rest of the method one level deeper, and each failure is handled far from its check.
-
-## Precedent
-
-- **Chosen:** C#'s `is not` with definite assignment. Swift's `guard let` and Rust's `let … else` give the same result with a statement of their own.
 
 ## Spec
 

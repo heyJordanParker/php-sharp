@@ -139,17 +139,6 @@ public void deliver(Order.Paid e) { … }
 
 Attributes are for consumers, such as an app's own `[Retry]`, not for the core language.
 
-## Precedent
-
-- **Chosen, the event type:** C#'s positional records and Kotlin's data classes, whose parameters become properties.
-- **Chosen, the trailing clause:** VB.NET's `Handles a.Click, b.Click`, which lists events after a method's signature.
-- **Chosen, listing events and allowing no parameter:** Spring's `@EventListener({A.class, B.class})`.
-- **Chosen, the scoped handle:** Rust's `tokio` broadcast receiver, which stops when it is dropped, and C#'s `using var`.
-- **Chosen, `emit` as an effect:** Koka's `effect fun emit(msg : string) : ()` and Unison's `Stream` ability, where emitting shows in a function's type.
-- **Rejected, runtime-only subscription:** C#'s `+=` on an event.
-- **Rejected, `emit` as no effect:** C#, where raising an event shows nowhere in a method's signature.
-- **Rejected, the class-level interface:** MediatR's `INotificationHandler<OrderPaid>` and actix's `Handler<OrderPaid>`.
-
 ## Spec
 
 - [Section 15, Events](../spec.md#15-events)

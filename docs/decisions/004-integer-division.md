@@ -37,9 +37,7 @@ Every integer division then needs a cast back, and large integers lose precision
 
 ## Precedent
 
-- **Chosen:** C#.
-- **Rejected, int-or-float:** PHP. Hack types the result as `num`.
-- **Rejected, always a float:** Python 3 and JavaScript.
+- **Rejected, int-or-float:** PHP.
 
 ## Spec
 

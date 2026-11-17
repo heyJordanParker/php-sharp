@@ -44,11 +44,11 @@ Each one uses the real path, so a symbolic link resolves to the `.sharp` file an
 
 ## Discovery: the Solutions
 
-Kotlin's classes reach Java's scanners because both compile to `.class` files and the scanners read the output folders on the classpath. PHP's scanners read source folders, where the class name comes from the path. So the general answer puts a real `<Name>.php` file where the source is, or makes PHP believe one is there.
+PHP's scanners read source folders, where the class name comes from the path. So the general answer puts a real `<Name>.php` file where the source is, or makes PHP believe one is there.
 
 ### A. `mago compile` writes `<Name>.php` beside each `.sharp` file (recommended)
 
-The `tsc` model: the compiler emits a file beside each source, where every tool already looks. Today's compiled output is not PHP, so the file loads the source through the engine instead of holding compiled PHP:
+The compiler emits a file beside each source, where every tool already looks. Today's compiled output is not PHP, so the file loads the source through the engine instead of holding compiled PHP:
 
 ```php
 <?php
@@ -87,11 +87,11 @@ Composer's own loader tries `.php` first, so it loads this file, which loads the
 
 - **Folders:** one `<Name>.php` beside each project `.sharp` file that declares a type. A `Module.sharp`, an environment module and an `extern` file get none. Nothing is written into `vendor/`, so decision 29's "nothing is written into `vendor/`" holds. `.sharp/` does not change.
 - **Version control:** the files are generated, so the project should not commit them. Git cannot ignore "a `.php` beside a `.sharp`" with a pattern, and `*.php` would ignore the user's own PHP. So `mago compile` has to keep the ignore list itself. That is a question below.
-- **Tooling:** every listing sees a real file: Finder, `glob()`, `scandir()`, `find`, and Composer's PSR-4. Editors show the files unless the PHP# editor setup hides them, as VS Code's `files.exclude` with `"when": "$(basename).sharp"` and PhpStorm's file nesting hide `tsc`'s `.js` files.
-- **Analysis:** the file's one declaration sits in an `if (false)` that never runs, so PHP declares the type once, from the `.sharp` file. `mago` reads the `.sharp` file and never the `.php` file beside it, as `tsc` reads `Order.ts` and never the `Order.d.ts` beside it. The prototype compiled clean with it in place. A deploy already runs `mago compile` (section 27), so the files exist wherever the code runs.
+- **Tooling:** every listing sees a real file: Finder, `glob()`, `scandir()`, `find`, and Composer's PSR-4. Editors show the files unless the PHP# editor setup hides them, as VS Code's `files.exclude` with `"when": "$(basename).sharp"` and PhpStorm's file nesting hide them.
+- **Analysis:** the file's one declaration sits in an `if (false)` that never runs, so PHP declares the type once, from the `.sharp` file. `mago` reads the `.sharp` file and never the `.php` file beside it. The prototype compiled clean with it in place. A deploy already runs `mago compile` (section 27), so the files exist wherever the code runs.
 - **Cost:** `compile.rs` writes, refreshes and deletes the files, and refuses a hand-written `<Name>.php` beside a `<Name>.sharp`. One extra small include per PHP# class. No engine change.
 
-The literal `tsc` variant, the unit itself written as `<Name>.php` inside a PHP envelope, is rejected. The engine would have to recognize a compiled `.php` file and check it against its `.sharp` source. Vendor units would stay in `.sharp/` or move into `vendor/`, so compiled output would live in two places or reverse decision 29. It gains no Capability over A.
+The variant that writes the unit itself as `<Name>.php` inside a PHP envelope is rejected. The engine would have to recognize a compiled `.php` file and check it against its `.sharp` source. Vendor units would stay in `.sharp/` or move into `vendor/`, so compiled output would live in two places or reverse decision 29. It gains no Capability over A.
 
 ### B. The engine shows PHP a `<Name>.php` that is not on disk
 
@@ -219,7 +219,7 @@ The extension-host probe's worker exits with status 1 after it loads `vendor/aut
 
 Each one decides what appears in a user's project. The note recommends and decides none.
 
-1. **Is a generated `<Name>.php` beside each `.sharp` file acceptable in a user's folders?** It is the only Solution that every `*.php` scanner sees, and the user sees it too. Recommended: yes, hidden by the PHP# editor setup, as `tsc`'s `.js` files are. The alternative is B, which hides it from users but misses every scanner that uses `glob()`.
+1. **Is a generated `<Name>.php` beside each `.sharp` file acceptable in a user's folders?** It is the only Solution that every `*.php` scanner sees, and the user sees it too. Recommended: yes, hidden by the PHP# editor setup. The alternative is B, which hides it from users but misses every scanner that uses `glob()`.
 2. **How does version control skip the generated files?** A pattern can't. Recommended then: `mago compile` keeps their paths in `.git/info/exclude`, which belongs to the clone, is never committed, and is rebuilt by each clone's first compile. The alternatives were a block `mago compile` rewrites in the project's `.gitignore`, which commits a list that changes with every new class, or committing the files. Since #273, `mago compile` writes a `.gitignore` of its own in each folder that holds the files, which lists itself and each file, so it is never committed either. Every worktree of a repository shares `.git/info/exclude`, so a block there hid one worktree's files in every other.
 3. **Should a package's PHP# classes get the file too?** A package that discovers its own classes, as one that loads its console commands from a folder, needs it. Recommended: not now, because it writes into `vendor/`, which decision 29 rules out, and no case has come up.
 4. **Should `mago compile` work when an extension host boots the project's own PHP# code?** After the fix, the library loads, but a host that runs project PHP# code still fails until a first compile without it. Recommended: leave it, because a host's facts can change what compiles. The alternative is a first pass without hosts.

@@ -31,23 +31,23 @@ When the Slice lands, 6 of section 12's 10 entries leave `sharp/baseline/spec`: 
 
 Each is a proposal with its precedent. team-lead rules. The note writes the proposal everywhere below.
 
-1. **`indexOf` with no match gives `null`, and its type is `int?`.** Precedent: Swift's `firstIndex(of:)` and Rust's `position` give an optional. PHP#'s own `List.get(i)` gives `T?`, and a missing `Map` key reads as null. A `-1` would reach `items[-1]`, which section 12 says throws. The other choice is Kotlin's, C#'s and Java's `-1`, with type `int`.
-2. **`last()` of an empty `List` throws `OutOfRangeException` with "The list is empty."** Precedent: Kotlin's `last()` throws `NoSuchElementException("List is empty.")`, and C#'s `Last()` throws. PHP#'s `first(predicate)` and a bare index read already throw `OutOfRangeException`. The other choice is Swift's `last`, which gives `T?`.
-3. **A `Map`'s `remove(key)` returns `bool`: true when the key was there.** Precedent: C#'s `Dictionary.Remove`. PHP#'s `List.remove` and `Set.remove` already return `bool` with that meaning, so one name has one result type. The other choice is Kotlin's and Swift's, which return the removed value as `V?`, and that cannot tell a missing key from a stored null in a `Map<string, int?>`.
-4. **`insert(i, v)` takes `0 <= i <= count()`.** `i == count()` appends. Outside the range it throws `OutOfRangeException` "Undefined array key N", the message `set` throws past the end. Precedent: Kotlin's `add(index, element)`, C#'s `Insert` and Java's `add(int, E)` all throw outside `0..size`.
+1. **`indexOf` with no match gives `null`, and its type is `int?`.** PHP#'s own `List.get(i)` gives `T?`, and a missing `Map` key reads as null. A `-1` would reach `items[-1]`, which section 12 says throws. The other choice is `-1`, with type `int`.
+2. **`last()` of an empty `List` throws `OutOfRangeException` with "The list is empty."** PHP#'s `first(predicate)` and a bare index read already throw `OutOfRangeException`. The other choice is a `last` that gives `T?`.
+3. **A `Map`'s `remove(key)` returns `bool`: true when the key was there.** PHP#'s `List.remove` and `Set.remove` already return `bool` with that meaning, so one name has one result type. The other choice is to return the removed value as `V?`, and that cannot tell a missing key from a stored null in a `Map<string, int?>`.
+4. **`insert(i, v)` takes `0 <= i <= count()`.** `i == count()` appends. Outside the range it throws `OutOfRangeException` "Undefined array key N", the message `set` throws past the end.
 5. **A `List`'s `remove(value)` of a value it does not hold returns false and changes nothing.** The spec fixes this (`tags.remove("z"); // false, and tags is unchanged`). Nothing is written back, so a property's `set` does not run.
 
 ## Ruling 7: a `List` index is a place
 
-Section 12 says "A `List` index is a place, as a Rust `Vec` index and a Go slice index are, so a change through it changes the element the list stores", and "A change through a `Map` index is a compile error". The Slice builds each rule this way:
+Section 12 says "A `List` index is a place, so a change through it changes the element the list stores", and "A change through a `Map` index is a compile error". The Slice builds each rule this way:
 
 1. **A change through a `List` index changes the stored element.** `grid[0].add(5)`, `grid[0].insert(0, 7)`, `grid[0].remove(1)`, `grid[0].set(0, 8)` and `cube[1][0].add(3)` lower to the method on the index, `$grid[0]->add(5)`. `zend_compile_sharp_receiver` reads an index receiver through the collection of what it indexes. `sharp_collection_read_dimension` then gives an element collection that holds its container and index. A change separates every array the element is in, through `sharp_collection_place`, and writes back through the container. So a property's `set` hook runs once per change, and a copy that shares the list stays as it was.
 2. **A write into a `Map` element of a `List` is a `put`.** `maps[0]["c"] = 3` lowers to `$maps[0]->put('c', 3)`, and `maps[0]["d"] ??= 4` puts only for a missing key. A `Set`'s `add` on an index is a `put` too. `Sharp\Collection::put(key, value)` inserts or replaces the element and gives the value.
 3. **A write into a `Map` a hooked property holds is a `put` on the property.** PHP gives no reference to a hooked property, so `this.totals["c"] = 3` lowers to `$this->totals->put('c', 3)`, and its `set` hook runs. A property without hooks keeps PHP's write, so its opcodes match the PHP twin's.
 4. **`clear` on a `List` element is `Sharp\Collection::clear`.** `grid[0].clear()` lowers to `$grid[0]->clear()`, which empties the element and writes it back. A `clear` on a local, a field or a property stays `$place = []`.
 5. **A missing index throws `OutOfRangeException`,** as a bare read does, and leaves no gap. That covers a method through the index (`grid[5].add(1)`), a `clear`, a write into a `Map` element (`maps[2]["c"] = 3`), and a property written through the index (`points[5].x = 5`, `+=` and `++`). `zend_delayed_compile_prop` reads a PHP# index whose property is written, so `FETCH_DIM_R` with `ZEND_SHARP_OPERATOR` throws, where PHP's `FETCH_DIM_W` would add null at the key.
-6. **After `?.`, a change through a `List` index reaches the stored element, and a null element or a missing index skips the call.** Spec line 840 says "A `Map` read is handled where it is read, with `??`, `?.`, `is`, `as`, `match` or `get`", and line 854 says "The same holds for a `List` index". So a `List` index read with `?.` treats a missing index as null, and only a bare read throws (rule 5). Only the index directly before `?.` reads quietly: `cube[9][0]?.clear()` throws on `cube[9]`, as C# does. `rows[0]?.add(5)` lowers to `$rows[0]?->add(5)`, the index itself, not a copy. The bridge marks the `List` index directly before `?.` with `ZEND_DIM_IS`, the mark php-src gives an index `??` reads, on every path a method takes: a change, any other method, a property read, and the test an inlined method such as `rows[9]?.clear()` runs first, `($rows[9] === null) ? null : …`. The engine reads the marked index quietly and its container as a bare read. `zend_compile_sharp_receiver` and `zend_delayed_compile_dim` emit `FETCH_DIM_IS` for it, and `sharp_collection_read_dimension` gives null for a missing index under `BP_VAR_IS`, which the call's `JMP_NULL` skips. `?? null`, which reads every index in a chain quietly, stays only on a `Map` read. The checker types the `List` index directly before `?.` nullable, as it types a `Map` read, so `rows[9]?.count()` is `int?`.
-7. **A change through a `Map` index is a compile error,** as Go refuses `m[k].x = 5`, because a `Map` read is a copy. Section 12's `index-changes` example annotates `stock["sku-1"]?.add(5);` as a compile error, and the checker refuses it.
+6. **After `?.`, a change through a `List` index reaches the stored element, and a null element or a missing index skips the call.** Spec line 840 says "A `Map` read is handled where it is read, with `??`, `?.`, `is`, `as`, `match` or `get`", and line 854 says "The same holds for a `List` index". So a `List` index read with `?.` treats a missing index as null, and only a bare read throws (rule 5). Only the index directly before `?.` reads quietly: `cube[9][0]?.clear()` throws on `cube[9]`. `rows[0]?.add(5)` lowers to `$rows[0]?->add(5)`, the index itself, not a copy. The bridge marks the `List` index directly before `?.` with `ZEND_DIM_IS`, the mark php-src gives an index `??` reads, on every path a method takes: a change, any other method, a property read, and the test an inlined method such as `rows[9]?.clear()` runs first, `($rows[9] === null) ? null : …`. The engine reads the marked index quietly and its container as a bare read. `zend_compile_sharp_receiver` and `zend_delayed_compile_dim` emit `FETCH_DIM_IS` for it, and `sharp_collection_read_dimension` gives null for a missing index under `BP_VAR_IS`, which the call's `JMP_NULL` skips. `?? null`, which reads every index in a chain quietly, stays only on a `Map` read. The checker types the `List` index directly before `?.` nullable, as it types a `Map` read, so `rows[9]?.count()` is `int?`.
+7. **A change through a `Map` index is a compile error,** because a `Map` read is a copy. Section 12's `index-changes` example annotates `stock["sku-1"]?.add(5);` as a compile error, and the checker refuses it.
 8. **An element a plain PHP `ArrayAccess` object gives is a collection of its own.** `rows[0].map(…)` on such an object casts the array `offsetGet` gives to a `Sharp\Collection`, as master does. The change does not reach the object, which owns its own storage.
 
 ## Rulings needed outside this Slice
@@ -267,7 +267,7 @@ Missing (`WriteMethods.sharp:15` above).
 
 ## `last`
 
-"the last item is `items.last()`, as in Kotlin."
+"the last item is `items.last()`."
 
 Missing. `app/Tail.sharp`, `public int last(List<int> items) => items.last();`, printed
 
@@ -292,7 +292,7 @@ Lines 15 and 19 are `lines[0] = line;` and `items[id];`, which the spec annotate
 
 ## `has`
 
-"`map.has(key)` tells them apart, as Kotlin's `containsKey` does."
+"`map.has(key)` tells them apart."
 
 Missing. `app/NullableMapValues.sharp` holds `nullable-map-values`:
 
@@ -499,8 +499,8 @@ Not added: no `sharp_kind`, no CST node, no parse error, no issue code, no crate
 
 The names, each with the slate it was picked from:
 
-- `$tags->removeAt($index)`, the engine method: Kotlin's `removeAt`. Also considered: `$tags->deleteIndex($index)` (beside the engine's `delete`, which keeps the keys), `$tags->splice($index)` (PHP's renumbering function, but it also takes a length), `$tags->unsetPosition($index)` (PHP's `unset` does not renumber), `$tags->takeOut($index)`, `$tags->shiftDown($index)` (names the effect on later elements).
-- `check_element_equality(context, call, element_type)`: the shape of `check_sorted_by_key`. Also considered: `refuse_incomparable_elements` (after `refuse_non_int_operands`), `check_search_by_value`, `check_searched_element`, `check_equatable_list` (Swift's word, not PHP#'s).
+- `$tags->removeAt($index)`, the engine method: it removes the element at an index. Also considered: `$tags->deleteIndex($index)` (beside the engine's `delete`, which keeps the keys), `$tags->splice($index)` (PHP's renumbering function, but it also takes a length), `$tags->unsetPosition($index)` (PHP's `unset` does not renumber), `$tags->takeOut($index)`, `$tags->shiftDown($index)` (names the effect on later elements).
+- `check_element_equality(context, call, element_type)`: the shape of `check_sorted_by_key`. Also considered: `refuse_incomparable_elements` (after `refuse_non_int_operands`), `check_search_by_value`, `check_searched_element`, `check_equatable_list` (not PHP#'s word at the time).
 - `self.element_search(call, receiver, value)`: what the three methods share. Also considered: `self.index_of(…)` (repeats one PHP# method's name), `self.equal_element(…)`, `self.find_position(…)`, `self.matching_key(…)`.
 
 # The PRs, in order

@@ -53,7 +53,6 @@ A function missing from the list passes as pure, and nothing reports it. Laws (s
 
 ## Precedent
 
-- **Chosen:** Haskell's foreign functions, which run in `IO` unless declared pure, and Rust's foreign functions, which are `unsafe` to call.
 - **Rejected:** Psalm's list of impure built-in functions, which reads every function missing from it as pure.
 
 ## Spec

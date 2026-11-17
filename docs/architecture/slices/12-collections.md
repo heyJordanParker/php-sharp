@@ -47,16 +47,16 @@ Each decides what a user writes. Each has its proposal and its answer, which the
    - **Answered: as proposed.**
 3. **`items[i] ?? fallback` where the element type is nullable.** Spec line "`x[i] ?? fallback` is a compile error that names `getOrNull`".
    - **Proposed:** a compile error for every element type, because the `??` reads as a guard against a missing index, which it never is. The help writes `items.getOrNull(i) ?? fallback`, which covers a missing index and a stored null alike.
-   - Allowed on a `List<T?>`, where `??` handles a stored null, as Kotlin's `list[i] ?: 0` compiles on a `List<Int?>` and still throws on a missing index.
+   - Allowed on a `List<T?>`, where `??` handles a stored null, and a missing index still throws.
    - **Answered: as proposed,** since the spec line covers every element type.
 4. **`?? continue` in a loop's own condition.** Spec line "`a ?? throw …`, `a ?? return`, `a ?? continue` and `a ?? break`: leave when `a` is null." Answer 2 of #131 lets it stand wherever `?? throw` stands. Observed: `while (this.next() ?? continue) { … }`, `do { … } while (this.next() ?? continue);` and `for (let i = 0; this.next() ?? continue; i++) { … }` each called `next()` 5 times for 2 passes, while `next()` gave null 3 times. So a source that stays null spins forever. `while (this.next() ?? break)` ended the loop at the first null.
-   - **Proposed:** a compile error in the condition of the loop it would continue: "`?? continue` in a loop's condition runs the condition again until the value is not null: use `?? break` to end the loop, or test the value in the body." Section 17 gains that line. Rust refuses an unlabeled `continue` in a `while` condition (E0590). `?? break` there stays allowed.
+   - **Proposed:** a compile error in the condition of the loop it would continue: "`?? continue` in a loop's condition runs the condition again until the value is not null: use `?? break` to end the loop, or test the value in the body." Section 17 gains that line. `?? break` there stays allowed.
    - Keep it, and section 17 gains a line that says it runs the condition again.
    - **Answered: keep it.** Section 14.4 lets `?? continue` stand wherever `?? throw` stands, and it skips to the loop's next check, as `continue` does anywhere in the loop. Section 17 gains that line and the `continue-in-condition` example, with a row for `while`, `do` and `for`.
 5. **`is`, `as` and `match` on an `Iterable<T>`.** Spec lines "`as` to a collection type checks every element too" (section 12) and section 21's type tests. A lazy source can be checked only by reading it, and the engine's `sharp_type_holds` holds any `Traversable` for `Iterable<Order>` without reading it.
    - **Proposed:** `value is Iterable<Any?>` tests that the value is iterable. A test of `Iterable<T>` for any other `T` is a compile error: "`is Iterable<Order>` would read the source to check its elements: test `is Iterable<Any?>`, or hold it as an `Iterable<Order>`, which checks each element as it is read."
    - True for any `Traversable`, with an array's elements checked, as the engine does today.
-   - **Answered: a PHP# `Iterable` carries its element type,** as every PHP# generic does, following #131's "a plain PHP closure is never a `Function<…>`". `is Iterable<Order>` reads the carried type and no element, as C#'s reified `is IEnumerable<Order>` does: a PHP# generator's `Iterable<T>`, a check stage's `T`, a map stage's lambda return type, and every other stage its source's. A plain PHP `Traversable` is only an `Iterable<Any?>`. A collection is checked whole.
+   - **Answered: a PHP# `Iterable` carries its element type,** as every PHP# generic does, following #131's "a plain PHP closure is never a `Function<…>`". `is Iterable<Order>` reads the carried type and no element: a PHP# generator's `Iterable<T>`, a check stage's `T`, a map stage's lambda return type, and every other stage its source's. A plain PHP `Traversable` is only an `Iterable<Any?>`. A collection is checked whole.
 6. **`string.parseCsv()`, which the `yield` example calls.** Spec line "`yield line.parseCsv(); // compiles: each row is a List<string>`" and "The complete method list is specified with the standard library."
    - **Proposed:** the standard library gains `public List<string> parseCsv()` in `Sharp.Text.Text`'s `extension(string text)` block, beside `trim()`. It runs `global.str_getcsv(text, ",", "\"", "")`, and a blank line gives `[""]`, because PHP gives `[null]` there.
    - A harness extension only, so the standard library gains no name the spec does not list.
@@ -94,7 +94,7 @@ One new engine class, `Sharp\Sequence`. No new issue code, no new crate.
 Each is a proposal with its precedent. team-lead rules. The note writes the proposal everywhere below.
 
 1. **`items[i] ??= v` on a `List` is the compile error of question 3,** because it reads `items[i] ?? …` first.
-2. **A method that yields cannot `return value;`** and ends with `return;`, as C#'s CS1622 says. The ported `check_iterator_returns` refuses it.
+2. **A method that yields cannot `return value;`** and ends with `return;`, since its values are what it yields. The ported `check_iterator_returns` refuses it.
 3. **`toList()` numbers from 0,** whatever keys the source gives, as `Sharp\Sequence` does.
 4. **A lazy element that is wrong throws** `TypeError: …: Return value must be of type Iterable<App.Order>, …: [3] expected App.Order, got string 'x'` at the read, worded by `sharp_first_problem` as every crossing is.
 5. **`yield ...other` over a `Map` yields its entries,** as a loop over it does (question 1).
@@ -373,14 +373,14 @@ team-lead approves these. Everything not here is tactical.
 
 The slate for the engine class, called as `\Sharp\Sequence::from($orders)->filter($f)->take(100)->toList()`:
 
-- `Sharp\Sequence` — Kotlin's lazy collection; "the sequence of the orders"; the lazy branch's name, with its tests
-- `Sharp\LazyIterable` — what the caller gets; "a lazy iterable of the orders"; long, and repeats the PHP# type's name
-- `Sharp\Stream` — Java's word; "the stream of the orders"; PHP calls files and sockets streams
-- `Sharp\Enumerable` — C#'s word; "the enumerable of the orders"; an adjective as a noun
-- `Sharp\Pipeline` — the stages a chain builds; "the pipeline of the orders"; Laravel's `Pipeline` means middleware
+- `Sharp\Sequence`: a lazy collection. "The sequence of the orders." The lazy branch's name, with its tests.
+- `Sharp\LazyIterable`: what the caller gets. "A lazy iterable of the orders." Long, and repeats the PHP# type's name.
+- `Sharp\Stream`: a lazy chain. "The stream of the orders." PHP calls files and sockets streams.
+- `Sharp\Enumerable`: what can be read in order. "The enumerable of the orders." An adjective as a noun.
+- `Sharp\Pipeline`: the stages a chain builds. "The pipeline of the orders." Laravel's `Pipeline` means middleware.
 
-Recommended: `Sharp\Sequence` — Kotlin's `Sequence` is the precedent decision 033 cites, and the branch's tests already use it.
-Runner-up: `Sharp\Stream` — Java's lazy chain, at the cost of PHP's own stream meaning.
+Recommended: `Sharp\Sequence`. It names a lazy run of values in order, and the branch's tests already use it.
+Runner-up: `Sharp\Stream`. It names a lazy chain, at the cost of PHP's own stream meaning.
 
 # The tests
 

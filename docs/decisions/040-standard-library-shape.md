@@ -65,7 +65,7 @@ The author marks each method by hand, and a mark can be missing or wrong. The co
 ### Rejected: a second keyword for native bodies
 
 ```csharp
-public static native Map<string, Any?> decode(string json);   // not PHP#: Java's native
+public static native Map<string, Any?> decode(string json);   // not PHP#: a native keyword
 extern Mailchimp uses Http;                                    // plain PHP keeps extern
 ```
 
@@ -74,7 +74,7 @@ Two keywords name one idea: the body lives outside PHP#.
 ### Rejected for now: per-package native libraries through FFI
 
 ```csharp
-[DllImport("libslug")]                               // not PHP#: C#'s DllImport
+[DllImport("libslug")]                               // not PHP#: a library import attribute
 public static extern string slug(string title);
 ```
 
@@ -82,11 +82,7 @@ A call through PHP's FFI is slower than a call to a built-in function. PHP disab
 
 ## Precedent
 
-- **Chosen, namespaces:** .NET's `System.*`, Kotlin's `kotlin.*` with `kotlin.text` and `kotlin.collections` imported by default, and Rust's `std::*`.
-- **Chosen, inlining:** the .NET and JVM JITs and rustc, which inline small methods with no keyword.
-- **Chosen, `extern`:** C#'s `extern`.
-- **Chosen, native bodies:** .NET's `InternalCall`, the JDK's `native` methods and PHP's own built-in functions.
-- **Rejected:** Swift, which imports every standard-library name. Kotlin's `inline` keyword. Java's `native` and Kotlin's `external`. C#'s `DllImport`.
+- **Chosen, native bodies:** PHP's own built-in functions.
 
 ## Spec
 

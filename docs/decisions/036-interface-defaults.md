@@ -41,9 +41,7 @@ Each class that uses the trait gains state its own body never shows, and the tra
 
 ## Precedent
 
-- **Chosen:** C# 8's default interface methods, Java 8's default methods, Kotlin's interface bodies and Swift's protocol extensions.
-- **Chosen, the trait's name:** Kotlin's `DefaultImpls`, the class its compiler nests in an interface to hold the default bodies for Java.
-- **Rejected:** PHP's and Scala's traits, and Hack's `require extends`.
+- **Rejected:** PHP's traits.
 
 ## Spec
 

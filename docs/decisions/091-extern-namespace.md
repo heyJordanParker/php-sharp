@@ -45,10 +45,6 @@ import WpIncludes;                                   // the folder wp-includes, 
 
 A folder's name is no namespace the library declares (decision 83), and one library moves its files between folders.
 
-## Precedent
-
-- **Chosen:** C#'s `extern alias`, which gives an assembly a root namespace the code imports, Rust's `extern crate … as …`, and TypeScript's `declare module`, which gives a library without types the module name code imports.
-
 ## Spec
 
 - [Section 23, Namespaces and imports](../spec.md#23-namespaces-and-imports)

@@ -31,12 +31,7 @@ $page = new PaginatedList($rows);                       // would throw: Paginate
 app(PaginatedList::class);                              // would throw for the same reason
 ```
 
-Hack has this rule. It would break every plain PHP `new` of a generic PHP# class, and every container lookup of one, because PHP has no syntax for type arguments.
-
-## Precedent
-
-- **Chosen:** Java's raw types, but checked at entry instead of trusted.
-- **Rejected:** Hack's rule that `new` names the type arguments of a reified generic class.
+This rule would break every plain PHP `new` of a generic PHP# class, and every container lookup of one, because PHP has no syntax for type arguments.
 
 ## Spec
 

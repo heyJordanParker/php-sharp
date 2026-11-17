@@ -24,11 +24,6 @@ tags.remove("a");                     // not PHP#: removes both "a" elements, an
 
 Code that means to drop one of two equal elements, such as one of two identical cart lines, has no way to say so.
 
-## Precedent
-
-- **Chosen:** Kotlin's `MutableList.remove(element)`, C#'s `List<T>.Remove(item)` and Java's `List.remove(Object)`, which each remove the first equal element and return a boolean.
-- **Rejected:** Swift's `removeAll(where:)`, which removes every matching element.
-
 ## Spec
 
 - [Section 12, Collections](../spec.md#12-collections)

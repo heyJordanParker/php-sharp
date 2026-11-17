@@ -32,7 +32,7 @@ A struct is a value already (section 10), and `==` already compares it field by 
 
 ### Chosen: a struct holding a class instance can't key a `Map`
 
-Rust's `HashMap` needs every field of a key to be `Hash`, and Swift's `Dictionary` needs every field to be `Hashable`. Section 19's `Set`, which hashes an object by its class's `hash()`, decides any later extension.
+A struct keys by its whole value, so every field it holds needs `==` and `hash()` by value, and a class instance has neither. Section 19's `Set`, which hashes an object by its class's `hash()`, decides any later extension.
 
 ### Chosen: JSON key text comes only from `toString()`
 
@@ -125,7 +125,7 @@ for (const [status, group] of byStatus) { … }        // runs: status is the st
 
 A `Map` built by `groupBy` or any other inferred call would hand back its keys as plain values.
 
-### Rejected: a user-defined conversion operator, as in C#
+### Rejected: a user-defined conversion operator
 
 ```csharp
 public static implicit operator string(Username u) => u.value;   // not PHP#: a conversion the call never shows
@@ -147,12 +147,6 @@ Every read and write converts by hand, and a key read back loses its type.
 
 ## Precedent
 
-- **Chosen, a struct keys by its whole value:** Swift's `Hashable` structs, Rust's `#[derive(Hash, Eq)]`, C#'s record structs, Java's records, Kotlin's data classes and Go's comparable structs.
-- **Chosen, a class instance can't key by value:** Rust's `HashMap`, which needs every field to be `Hash`, and Swift's `Dictionary`, which needs every field to be `Hashable`.
-- **Chosen, JSON key text from `toString()`:** Jackson, which writes a map key through `toString()`. serde and Go's `encoding/json` refuse a key that is not text.
-- **Chosen, a key is stored as itself:** Swift's `Dictionary`, Kotlin's and Java's `HashMap`, and Rust's `HashMap`, which each keep a key as the value it is and find it by its equality and hash.
-- **Chosen, no conversion operators:** Kotlin, Swift and Rust, which have none.
-- **Rejected, a user-defined conversion operator:** C#'s `implicit operator`.
 - **Rejected, keys limited to `int|string`:** PHP's own arrays, which refuse an enum or an object as a key.
 
 ## Spec

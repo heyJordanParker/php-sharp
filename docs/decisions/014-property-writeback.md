@@ -43,8 +43,6 @@ The checker accepts a change that always fails when it runs.
 
 ## Precedent
 
-- **Chosen:** Swift.
-- **Rejected, a compile error:** C#'s error CS1612, which C# reports for a value type held in a property.
 - **Rejected, a runtime error:** PHP 8.5's hooked properties. `$order->lines[] = $line` on a hooked array property throws `Error: Indirect modification of Order::$lines is not allowed`.
 
 ## Spec

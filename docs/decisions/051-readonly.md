@@ -2,7 +2,7 @@
 
 ## Decision
 
-`readonly` before a type means the value can only be read. `readonly` after a method's parameters means the method doesn't change `this`, and it is the method's last clause, after `on` and `uses`. Operators, `hash()` and `toString()` are readonly by definition. `readonly` holds only types PHP# checks, so a plain PHP class under it is a compile error, and so is a call of a plain PHP method through a readonly value. `readonly` on a field, a promoted constructor parameter or a class is a compile error that names `{ get; }`, so `private readonly Money total` is one. `readonly struct` is a compile error too, because every struct is already read-only (decision 64).
+`readonly` before a type means the value can only be read. `readonly` after a method's parameters means the method doesn't change `this`, and it is the method's last clause, after `on` and `uses`. Operators, `hash()` and `toString()` are readonly by definition. `readonly` holds only types PHP# checks, so a plain PHP class under it is a compile error, and so is a call of a plain PHP method through a readonly value. `readonly` on a field, a promoted constructor parameter or a class is a compile error that names `{ get; }`, so `private readonly Money total` is one. `readonly struct` is a compile error too, because every struct is already read-only (decision 64). The compiler checks `readonly`, and PHP# erases the mark for the engine.
 
 ## Options
 
@@ -63,8 +63,6 @@ One keyword would mean two things: a value that can only be read, and a field th
 
 ## Precedent
 
-- **Chosen:** C++'s `const` member functions, marked after the parameters, and `const` references, through which only those run. Rust's `&` references, through which nothing is changed. TypeScript's `readonly`, checked by the compiler and gone at runtime, as PHP# erases its mark for the engine.
-- **Rejected, plain PHP callable:** Kotlin's platform types, which leave Java code unchecked.
 - **Rejected, write-once fields:** PHP 8.1's `readonly` properties and PHP 8.2's `readonly` classes.
 
 ## Spec

@@ -32,11 +32,6 @@ public string target() => …;                                                  
 
 A script has no typed way to read its arguments, and environment reads stay invisible in signatures.
 
-## Precedent
-
-- **Chosen:** C#'s `Environment`, Rust's `std::env`, and Go's `os.Getenv` and `os.Args`.
-- **Rejected:** ASP.NET Core's `HttpContext` and Go's `http.Request` alone, which carry the request with no environment object beside them.
-
 ## Spec
 
 - [Section 2, Variables](../spec.md#2-variables)

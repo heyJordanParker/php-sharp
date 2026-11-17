@@ -2,8 +2,6 @@
 
 A module tells the container how to build the app's objects. PHP# creates the classes a module binds and the classes that declare an `on` method, and nothing else. The checker proves at compile time that each of them can be built: every service it takes has a binding, no service takes one of a shorter lifetime, and no service needs itself. The engine resolves the same bindings at run time from tables the compiler writes, with no reflection scanning.
 
-Precedents: .NET's `IServiceCollection` and `IServiceProvider` for lifetimes, scopes and resolution, Dagger and Hilt for the compile-time check, NestJS for a module per folder, and Guice's `requireExplicitBindings()` for creating only bound classes.
-
 ## Checker
 
 ### Syntax
@@ -56,7 +54,7 @@ A class gets each service from the modules of its own namespace, then from each 
 The checker walks the graph from each binding through bindings only, since every class the container builds is bound, and reports, at the binding:
 
 - a cycle, naming each class on it;
-- a `scoped` service a `singleton` holds, which .NET's scope validation calls a captive dependency.
+- a `scoped` service a `singleton` holds, which would outlive its scope.
 
 It walks the graph once for the base modules. It walks it again for each environment, as one set: the base modules under every `Module.<Environment>.sharp` of that environment, as the engine reads them all at once. It walks it again for each test module, over the base modules alone. Each environment or test module file reports, at one of its own bindings, only what its bindings take part in.
 
@@ -122,7 +120,7 @@ final class ContainerError extends \Error { }                  // a failure of t
 public static T run<T>(Function<T()> body) => Internal.runScoped(body);
 ```
 
-**Tests.** A test file's module applies while a test of a class the file declares runs, as Spring applies a test class's own `@TestConfiguration`. The test needs no code, and `phpunit.xml` only lists the PHP# test files, as `<directory suffix="Test.sharp">tests</directory>` (spec section 27). The class's `__sharpStartTest` calls `Sharp\Internal\startTest($class)` before PHPUnit sets a test up, and its `__sharpEndTest` calls `Sharp\Internal\endTest()` after the test finishes, in PHPUnit's own process and in the child process of `#[RunInSeparateProcess]` or `processIsolation`. While a test runs, its module comes before the base modules and the environment modules don't apply, even with `SHARP_ENV` set, so a test runs exactly the set of services the checker checks. Each test builds its services again. `sharp/phpunit/` is a Composer project whose PHP# test class runs under the PHPUnit version its `composer.lock` pins, and CI runs it with `sharp/bin/test --phpunit`. That check compiles the project from nothing compiled, through a mago extension host that loads `vendor/autoload.php` on the engine.
+**Tests.** A test file's module applies while a test of a class the file declares runs. The test needs no code, and `phpunit.xml` only lists the PHP# test files, as `<directory suffix="Test.sharp">tests</directory>` (spec section 27). The class's `__sharpStartTest` calls `Sharp\Internal\startTest($class)` before PHPUnit sets a test up, and its `__sharpEndTest` calls `Sharp\Internal\endTest()` after the test finishes, in PHPUnit's own process and in the child process of `#[RunInSeparateProcess]` or `processIsolation`. While a test runs, its module comes before the base modules and the environment modules don't apply, even with `SHARP_ENV` set, so a test runs exactly the set of services the checker checks. Each test builds its services again. `sharp/phpunit/` is a Composer project whose PHP# test class runs under the PHPUnit version its `composer.lock` pins, and CI runs it with `sharp/bin/test --phpunit`. That check compiles the project from nothing compiled, through a mago extension host that loads `vendor/autoload.php` on the engine.
 
 **PSR-11.** `Sharp\Psr\Container` implements `Psr\Container\ContainerInterface` over `Sharp\Container`. It throws `Sharp\Psr\NotFoundException` for an id no module binds, and `Sharp\Psr\ContainerException`, with the engine's `Sharp\ContainerError` as its previous, for a service the container can't build. A constructor's own exception passes through unchanged. The engine can't implement an interface Composer loads after it starts, so the adapter is PHP, and the Composer package requires `psr/container`.
 

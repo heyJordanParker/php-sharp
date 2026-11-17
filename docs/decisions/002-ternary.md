@@ -25,7 +25,6 @@ const shown = user.isAdmin ?: user.isOwner;   // compiles; runs: the same as use
 
 ## Precedent
 
-- **Chosen:** C#, which has `c ? a : b` and `??` and no `?:`.
 - **Rejected:** PHP.
 
 ## Spec

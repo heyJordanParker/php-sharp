@@ -30,7 +30,7 @@ Each decides what a user writes or what a running program shows. Each has a prop
 
 Spec lines 1512 and 1594: a function type is a type like any other, and `f?.(x)` "calls `f` only when it is not null". No line shows a plain call of an expression that is not a name.
 
-- **Proposed:** any expression whose type is a function type is called by writing its arguments after it: `steps[0](1)`, `this.make()(1)`, `(flag ? a : b)(1)`. C#, TypeScript, Kotlin and Swift all allow it, and `?.(…)` already takes any expression on master. Section 14.1 gains one line and one example, `function-calls`, with a list element, a call result and a conditional.
+- **Proposed:** any expression whose type is a function type is called by writing its arguments after it: `steps[0](1)`, `this.make()(1)`, `(flag ? a : b)(1)`. `?.(…)` already takes any expression on master. Section 14.1 gains one line and one example, `function-calls`, with a list element, a call result and a conditional.
 - Keep the restriction. A stored function is copied into a local before it is called, and the refusal names that instead of "not supported yet".
 
 ### Q2. PHP's `Closure` as a type
@@ -49,9 +49,9 @@ Function<int(int, int)> tooFew = (int a) => a;             // compiles: the lamb
 Function<void(int)> voidGivenValue = (int a) => a + 1;     // compiles: a value nobody reads
 ```
 
-- **Proposed:** both are compile errors. A lambda takes exactly the function type's parameters, as in C#, Kotlin and Swift: "`Function<int(int, int)>` takes 2 parameters, and this lambda takes 1." A `void` lambda's expression body must be a call or an assignment, as C#'s CS0201 requires and as PHP# already refuses a statement with no effect.
-- **Built, with the review's additions:** the count message names a method value as written, "`Function<int(int, int)>` takes 2 parameters, and `Report.one` takes 1.", in a field, a local, an argument, a return and a property write. A `void` lambda's block body returns no value, as C#'s CS8030 refuses, while a lambda inside it returns for itself: "This lambda gives a value, and `Function<void(int)>` returns nothing: remove the value, or give the function type a return type." A conditional of two calls is "A conditional gives a value, and `Function<void(int)>` returns nothing: choose with `if` in a block body, as in `{ if (…) { … } else { … } }`." The result of a call that returns `void` is no value anywhere code uses it, as in C# and Java: "`this.add(1)` returns nothing, so it has no value to use: call it as a statement of its own."
-- TypeScript's fit: fewer parameters pass, and a `void` type takes any body.
+- **Proposed:** both are compile errors. A lambda takes exactly the function type's parameters: "`Function<int(int, int)>` takes 2 parameters, and this lambda takes 1." A `void` lambda's expression body must be a call or an assignment, as PHP# already refuses a statement with no effect.
+- **Built, with the review's additions:** the count message names a method value as written, "`Function<int(int, int)>` takes 2 parameters, and `Report.one` takes 1.", in a field, a local, an argument, a return and a property write. A `void` lambda's block body returns no value, while a lambda inside it returns for itself: "This lambda gives a value, and `Function<void(int)>` returns nothing: remove the value, or give the function type a return type." A conditional of two calls is "A conditional gives a value, and `Function<void(int)>` returns nothing: choose with `if` in a block body, as in `{ if (…) { … } else { … } }`." The result of a call that returns `void` is no value anywhere code uses it: "`this.add(1)` returns nothing, so it has no value to use: call it as a statement of its own."
+- A loose fit: fewer parameters pass, and a `void` type takes any body.
 
 ### Q4. How far "one name, one member" reaches
 
@@ -70,7 +70,7 @@ allowed.add(5);
 has(5);                // ?
 ```
 
-- **Proposed:** `false`. The method value holds the collection as it was when it was named, as C# copies a struct into a delegate made from its method, and as a `const` copy of the list would. An object's method value keeps binding the object, as it does on master.
+- **Proposed:** `false`. The method value holds the collection as it was when it was named, as a `const` copy of the list would. An object's method value keeps binding the object, as it does on master.
 - `true`: the value reads the variable each call, as a lambda `x => allowed.contains(x)` does. Then a method value of a collection is a lambda, and of an object it is not.
 
 ### Q6. A plain PHP function as a value
@@ -91,7 +91,7 @@ Spec line 1565 names methods only. `names.map(global.strtoupper)` is "`global.st
 "A nullable return type on a method that never returns null" is a compile error. Commit `40924ab804` exempts abstract, interface and overridable methods, "so a private or final method is checked", because an override may need the `?`. `NullableOverride.find`, an `override` that returns `new Item()` with a return type `Item?`, compiles.
 
 - **Proposed:** line 1616 reads "a nullable return type on a method no subclass can override that never returns null". The code stays.
-- Check overridable methods too. An override that keeps its parent's `?` is then an error, and C# lets it narrow the return type only since C# 9.
+- Check overridable methods too. An override that keeps its parent's `?` is then an error.
 
 ### Q9. PHP's `&` on a lambda parameter
 
@@ -103,8 +103,8 @@ No spec line. `(&value) => value` is "A by-reference parameter is not supported 
 
 Found while building Q5. Q5's copy means `numbers.forEach(seen.add)` would add to a copy of `seen` and leave `seen` empty, with no error.
 
-- **Built:** refused, as Swift refuses the value of a `mutating` method and Rust has no value of a method that takes `&mut self` without a closure: "`seen.add` changes the collection, and a function value holds a copy of it: write a lambda that calls it, as in `value => seen.add(value)`." A refusal can be lifted later without breaking code that compiles.
-- Allow it, as C# allows a delegate of a struct's method, which changes the boxed copy. The value then changes only its copy. TypeScript reads `seen.push` too, and its call throws, because the value lost its `this`.
+- **Built:** refused, because the value would change only its own copy: "`seen.add` changes the collection, and a function value holds a copy of it: write a lambda that calls it, as in `value => seen.add(value)`." A refusal can be lifted later without breaking code that compiles.
+- Allow it. The value then changes only its copy.
 
 ## Existing work, and how the Slice reuses it
 
@@ -115,7 +115,7 @@ Found while building Q5. Q5's copy means `numbers.forEach(seen.add)` would add t
 - **Method values:** `resolve_method_value` in `crates/analyzer/src/resolver/property.rs`, and the bridge's `method_value`, which writes PHP's first-class callable or, for a generic method, `(function ($receiver) { return function (...$arguments) use ($receiver) { … }; })($object)` with `returning_closure`. Gap 5 reuses that closure for a receiver PHP can't bind.
 - **A fresh `let` in each loop pass:** the bridge unsets a `let` that a lambda captures by reference before its assignment (`a_let_in_a_loop_captured_by_reference_is_unset_before_its_assignment`). Gap 6 reuses it for a loop variable.
 - **The null operators and leave forms:** decisions 19, 21, 23 and 46, Slice 21's `ZEND_SHARP_LEAVE`, and commit `40924ab804`, which made every needless null check and `?` an error. Reused unchanged.
-- **A generic method value nothing types is refused** (`a_generic_method_value_without_a_function_type_is_refused`), as C#'s CS0411. Gap 4 is the same rule for a lambda's parameter.
+- **A generic method value nothing types is refused** (`a_generic_method_value_without_a_function_type_is_refused`). Gap 4 is the same rule for a lambda's parameter.
 
 ## How the states were observed
 
@@ -191,7 +191,7 @@ Section 4's line 149 points here: `Class.y` without a call reads a static method
 
 `analyze` in `expression/arrow_function.rs` and `expression/closure.rs` takes the parameter types from `closure_parameter_types` of the expected type, and a parameter with neither a written type nor an inferred one becomes `Any?`.
 
-- In a `.sharp` file, a parameter with no written type whose expected type gives none is `missing-parameter-type`, an error from `report_untyped_lambda_parameters` in `statement/function_like/mod.rs`: "Nothing gives the parameter `x` a type here: write it, as in `(int x) => …`, or give the lambda a function type." It is the rule `a_generic_method_value_without_a_function_type_is_refused` applies to a generic method value, and C#'s CS8917.
+- In a `.sharp` file, a parameter with no written type whose expected type gives none is `missing-parameter-type`, an error from `report_untyped_lambda_parameters` in `statement/function_like/mod.rs`: "Nothing gives the parameter `x` a type here: write it, as in `(int x) => …`, or give the lambda a function type." It is the rule `a_generic_method_value_without_a_function_type_is_refused` applies to a generic method value.
 - A field's or property's initial value takes the declared type through `expect_type`, as a typed local's value does. Before, `private Function<int(int)> step = n => n + 1;` gave `n` the type `Any?`.
 - A lambda passed to plain PHP takes its parameter types from the plain PHP signature (`a_lambda_passed_to_php_takes_its_parameter_types_from_the_php_signature_as_in_php`). A plain PHP parameter typed `callable` or `\Closure` with no docblock gives each parameter `Any?`, as its signature says and as section 24 gives an untyped plain PHP value. Of the existing tests, only `yield_is_a_yield_statement_and_yield_spread_is_a_loop_that_yields_each_element` relied on a parameter nothing typed, and it now writes `(int x) => x`.
 
@@ -202,14 +202,14 @@ PHP's first-class callable binds an object's method only. A collection runs as a
 - **Analyzer:** a read that reaches no computed property gives `resolve_extension`'s `Extension::Value`, the extension method the receiver picks as a call picks it, and `resolve_extension_value` in `resolver/property.rs` types it as the static method's closure without its first parameter, with the block's type parameters the receiver gives and the method's own from the function type. A read of a `List`, `Map`, `Set` or `Iterable` goes to `resolve_collection_method_value`, which resolves on every collection `get_receiver_collections` finds, the declared ones included, as a call does (`get_receiver_atomics` now holds that rule for both), and types it with `resolve_method_value`. A tuple keeps its named elements. `global.strtoupper` and `Pdf.render` are `resolve_function_value`'s closure of the function (Q6). Each read records what it runs with `record_call_target` at its span, and such a read is never memoized, so every read records it. A call of an extension method's value is checked against the value's own signature, not the static method's.
 - **Bridge:** `receiver_closure` writes `(function ($receiver) { return function (string $key) use ($receiver) { return <call>; }; })($target)`, the shape `method_value` writes for a generic method. The inner closure takes the method's parameters by name, from `value_parameters`, with the PHP types the value's function type gives them, so a plain PHP library that reads a callback's parameters by reflection finds them. From the first optional or variadic parameter on, it takes `...$arguments`, so a default stays the method's own. An extension method's value calls `\Class::member($receiver, $separator)`. A collection method the lowering writes as PHP runs that PHP from `inlined_collection_method`, split out of `collection_call`, on `CollectionReceiver::Hidden`, as `\in_array($value, $receiver, true)`. Any other collection method runs `$receiver->has($key)` on `Sharp\Collection`, and an `Iterable`'s on `\Sharp\Sequence::from($receiver)`. A function value is `\strtoupper(...)`. The receiver is read once, where the value is named, so Q5's answer holds: a `List`, `Map` or `Set` is copied there, and `has(5)` after `allowed.add(5)` is `false` in the engine, a `Map` included.
 - **Effects:** #136's `method_value` in `effects/summary.rs` records an extension method's value as a call with the receiver as its first argument, and `function_value_runs` gives a function's value the effects its `extern` declares, as a call of it has, wherever it is passed. `function_values_must_fit_their_types` names it `global.strtolower`.
-- **Q10, a method that changes the collection:** its value would change only the copy Q5 gives it, so `seen.add` is refused, as Swift refuses the value of a `mutating` method: "`seen.add` changes the collection, and a function value holds a copy of it: write a lambda that calls it, as in `value => seen.add(value)`." A method without `@mutation-free` in the prelude's `ListMethods`, `MapMethods` and `SetMethods` changes it. The spec's `changing-method-values` example shows it.
+- **Q10, a method that changes the collection:** its value would change only the copy Q5 gives it, so `seen.add` is refused: "`seen.add` changes the collection, and a function value holds a copy of it: write a lambda that calls it, as in `value => seen.add(value)`." A method without `@mutation-free` in the prelude's `ListMethods`, `MapMethods` and `SetMethods` changes it. The spec's `changing-method-values` example shows it.
 
 ## Gap 6: a lambda that captures a loop variable that changes
 
 Spec section 3 gives each loop pass a fresh binding, and line 1538 has the lambda capture the variable itself. PHP reuses one variable across passes.
 
 - **Semantics:** `check_lambda_captures` and `is_loop_variable` are deleted.
-- **Bridge:** a `for … of` variable that a lambda captures by reference is read into a hidden variable, then unset and assigned at the top of each pass, as a captured `let` in a loop body already is. A `for (let i = …; …; i++)` counter that a lambda captures by reference is moved into a fresh PHP variable at the end of each pass, before the increments run, as JavaScript copies a `let` counter into the next pass. PHP's increments take expressions only, and `unset` is a statement, so the body lowers inside `do { … } while (false)` with the move after it: a `continue` in the body ends the `do` and reaches the move, and a `break` that leaves the `for` becomes `break 2`. A step that rebinds by reference, `$step#1 = $step, $step = &$step#1`, fails from the second pass on, because `$step#1` is then the slot the second lambda holds. Both shapes ran as plain PHP on master's engine (`/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-functions/loop_move.php`): the planned one gives `0,12` for a loop whose pass 1 continues and whose pass 2 adds 10 after its lambda is made, and the rebinding step gives `0,3,3` where each pass should keep `0,1,2`.
+- **Bridge:** a `for … of` variable that a lambda captures by reference is read into a hidden variable, then unset and assigned at the top of each pass, as a captured `let` in a loop body already is. A `for (let i = …; …; i++)` counter that a lambda captures by reference is moved into a fresh PHP variable at the end of each pass, before the increments run, so each pass's lambda keeps that pass's counter. PHP's increments take expressions only, and `unset` is a statement, so the body lowers inside `do { … } while (false)` with the move after it: a `continue` in the body ends the `do` and reaches the move, and a `break` that leaves the `for` becomes `break 2`. A step that rebinds by reference, `$step#1 = $step, $step = &$step#1`, fails from the second pass on, because `$step#1` is then the slot the second lambda holds. Both shapes ran as plain PHP on master's engine (`/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-functions/loop_move.php`): the planned one gives `0,12` for a loop whose pass 1 continues and whose pass 2 adds 10 after its lambda is made, and the rebinding step gives `0,3,3` where each pass should keep `0,1,2`.
 - What a user sees, by spec section 3: `for (let step = 0; step < 3; step++) { reads.add(() => step); }` gives `0`, `1` and `2`, and a lambda made in a pass sees a change the same pass makes after it.
 
 ## Gap 7: PHP forms named in section 14's words

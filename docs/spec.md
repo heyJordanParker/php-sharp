@@ -1,8 +1,8 @@
 # PHP# language specification
 
-PHP# is a language that runs on PHP's engine and calls plain PHP freely, as Kotlin runs on the JVM and calls Java. This file is the single source of truth for PHP# syntax and rules.
+PHP# is a language that runs on PHP's engine and calls plain PHP freely. This file is the single source of truth for PHP# syntax and rules.
 
-**No PHP# rule makes code write around how PHP# runs on PHP's engine.** A PHP# developer never needs to know what a PHP# construct compiles to. Plain PHP libraries are called as libraries, as Kotlin calls Java libraries.
+**No PHP# rule makes code write around how PHP# runs on PHP's engine.** A PHP# developer never needs to know what a PHP# construct compiles to. Plain PHP libraries are called as libraries.
 
 **The correct architecture is the only way to write a PHP# program.** Agents write most code, and they repeat whatever the language allows. So PHP# leaves no shortcut to a worse codebase, such as a service locator, a dependency cycle or a check the compiler can't see. A feature exists only where PHP# has no correct way to do the job already. Plain PHP libraries and frameworks stay usable through one correct way at their boundary.
 
@@ -14,17 +14,17 @@ PHP# is a language that runs on PHP's engine and calls plain PHP freely, as Kotl
 
 ## 1. Attributes
 
-Attributes use square brackets and follow C#'s rules:
+Attributes use square brackets, with these rules:
 
 - several attributes in one bracket: `[Field("Name"), Searchable]`
 - several brackets on one declaration
 - positional and named arguments
-- an argument is built from constants, as a constant's value is (section 2), or is a `new` of a class whose arguments are constants too, as PHP and Java's nested annotations take; PHP creates the object each time it reads the attribute, and an argument that runs code is a compile error
+- an argument is built from constants, as a constant's value is (section 2), or is a `new` of a class whose arguments are constants too, as PHP takes; PHP creates the object each time it reads the attribute, and an argument that runs code is a compile error
 - no parentheses when there are no arguments: `[Searchable]`
-- explicit targets, which name the part of the declaration a bracket goes on, as in C#: `type:` on a type, `type:` or `event:` on an event, `method:` on a method, an operator, a named constructor, a lambda, an accessor or an observer, `param:` on a parameter and on the value `set` or `init` takes, `field:` on a field, a constant or an enum case, `property:` and `field:` on a property, and `param:`, `property:` and `field:` on a parameter that declares a property, a constructor's, an event's or a data case's, where an untargeted bracket goes on both the parameter and the property
+- explicit targets, which name the part of the declaration a bracket goes on: `type:` on a type, `type:` or `event:` on an event, `method:` on a method, an operator, a named constructor, a lambda, an accessor or an observer, `param:` on a parameter and on the value `set` or `init` takes, `field:` on a field, a constant or an enum case, `property:` and `field:` on a property, and `param:`, `property:` and `field:` on a parameter that declares a property, a constructor's, an event's or a data case's, where an untargeted bracket goes on both the parameter and the property
 - an attribute always describes a declaration, so a return value takes none, and `[return: NotNull]` is a parse error
-- an attribute is data, as .NET's takes only constants, so the constructor a PHP# attribute class runs, its own or one it inherits, and the initial values of the class and of each class it extends have no effect, a plain PHP call no `extern` declares included, and one that has an effect is a compile error that names it; so reading the attributes of a PHP# class with `attributes<T>()` is pure (section 25)
-- on every declaration C# takes one on: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, an operator, a named constructor, a parameter, a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`, and an accessor, as in `[Searchable] get;`, a static or get-only auto-property's included
+- an attribute is data, built only from constants, so the constructor a PHP# attribute class runs, its own or one it inherits, and the initial values of the class and of each class it extends have no effect, a plain PHP call no `extern` declares included, and one that has an effect is a compile error that names it; so reading the attributes of a PHP# class with `attributes<T>()` is pure (section 25)
+- on every declaration: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, an operator, a named constructor, a parameter, a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`, and an accessor, as in `[Searchable] get;`, a static or get-only auto-property's included
 - on an `extern` line, whose attributes the plain PHP class, method or function it declares carries as its own, `type:` the one target of a class's line and `method:` of a method's or a function's (section 29)
 - on `willSet` and `didSet`, whose attributes go on the `set` they run inside, after its own
 - a type parameter takes no attributes, so `<[Marker] T>` is a parse error
@@ -146,11 +146,11 @@ public class Shuffled
 }
 ```
 
-Named arguments use `label: "Name"`, the same "name: value" form used everywhere in the language (section 16). C#'s `Label = "Name"` is not allowed.
+Named arguments use `label: "Name"`, the same "name: value" form used everywhere in the language (section 16). `Label = "Name"` is not allowed.
 
 ## 2. Variables
 
-Variables have no `$`. A local is declared with `let`, which can be reassigned, or `const`, which cannot. The meanings match TypeScript.
+Variables have no `$`. A local is declared with `let`, which can be reassigned, or `const`, which cannot.
 
 <!-- example inferred-locals: statements
 private Account account = new Account();
@@ -160,7 +160,7 @@ const currency = this.account.currency;
 let total = 0;
 ```
 
-**A local can also be declared with its type written,** as in C#, when the right side cannot say it, such as `null`. A typed local can be reassigned like `let`, and `const` can carry a type too.
+**A local can also be declared with its type written,** when the right side cannot say it, such as `null`. A typed local can be reassigned like `let`, and `const` can carry a type too.
 
 <!-- example typed-locals: statements alone
 private Plan plan() => new Plan();
@@ -172,7 +172,7 @@ const plan = this.plan();   // type inferred, cannot be reassigned
 const Plan plan = …;        // type written, cannot be reassigned
 ```
 
-**A PHP# keyword, such as `let`, `match` or `emit`, names a local only with `@` before it,** as C#'s `@class` does. Every other word names one as it is, such as `empty`, `list` and `print`:
+**A PHP# keyword, such as `let`, `match` or `emit`, names a local only with `@` before it.** Every other word names one as it is, such as `empty`, `list` and `print`:
 
 <!-- example keyword-names: statements -->
 ```csharp
@@ -185,7 +185,7 @@ const match = 1;            // compile error: match is a keyword; write @match
 
 **`@this` is a name like any other,** and a bare `this` stays the object the method runs on. A name before `:` is never the object, so the named argument `this:` passes the parameter `@this`, as `class:` passes `@class`. PHP# has no other `@`: a call's failure is the value it returns (section 23).
 
-**Any word, PHP# keywords included, names a method or a property with no mark,** as in JavaScript and TypeScript, because a member's name is written only after `.` or where it is declared. Locals, parameters, `catch` variables and pattern variables take a keyword's name with `@`, so a plain PHP method's `$event` parameter is `@event` in PHP#:
+**Any word, PHP# keywords included, names a method or a property with no mark,** because a member's name is written only after `.` or where it is declared. Locals, parameters, `catch` variables and pattern variables take a keyword's name with `@`, so a plain PHP method's `$event` parameter is `@event` in PHP#:
 
 <!-- example keyword-members -->
 ```csharp
@@ -209,7 +209,7 @@ const match = "paid";                               // compile error: match is a
 const @event = "paid";                              // compiles
 ```
 
-**PHP# keywords are lowercase only,** as in C#, Java, Kotlin, Swift, TypeScript, Go and Rust. `Self` (section 25) is the one capitalized keyword, as it is in Rust and Swift. A capitalized keyword is an ordinary name, so `class Event` and `class Struct` are valid. Where no such name exists, as for `TRUE` or `Return`, the error suggests the lowercase keyword:
+**PHP# keywords are lowercase only.** `Self` (section 25) is the one capitalized keyword. A capitalized keyword is an ordinary name, so `class Event` and `class Struct` are valid. Where no such name exists, as for `TRUE` or `Return`, the error suggests the lowercase keyword:
 
 <!-- example keyword-case -->
 ```csharp
@@ -336,7 +336,7 @@ A name lives from its declaration to the `}` that closes its block.
 
 - Each loop pass gets a fresh binding.
 - A closure captures the variable itself, not a copy.
-- An inner block cannot redeclare a name an outer block declares. This is C#'s rule CS0136, and the checker rejects it before the code runs.
+- An inner block cannot redeclare a name an outer block declares, and the checker rejects it before the code runs.
 - A variable that `is not` creates stays in scope after an `if` whose block always exits (section 21).
 
 ## 4. Member access
@@ -352,9 +352,9 @@ user.name
 Str.slug(name)
 ```
 
-A class cannot declare a static member and an instance member with the same name, so `Link.name` always has exactly one meaning. C# has the same rule.
+A class cannot declare a static member and an instance member with the same name, so `Link.name` always has exactly one meaning.
 
-**A member of the same object is always written with `this.`**, as in TypeScript, Python and Swift. That holds for fields, properties and methods alike. A bare name is always a local, a parameter, a class or a constant, so any line read on its own shows whether it touches the object. Static members are written with the class name.
+**A member of the same object is always written with `this.`** That holds for fields, properties and methods alike. A bare name is always a local, a parameter, a class or a constant, so any line read on its own shows whether it touches the object. Static members are written with the class name.
 
 <!-- example this-members: statements in Checkout
 public static int maximum { get; set; } = 10;
@@ -385,12 +385,12 @@ Checkout.maximum;
 - **Visibility is checked both ways.**
   - Too narrow is a compile error at the caller.
   - Too wide is a compile error in an application, for example a `public` member that nothing outside its namespace uses: "`Cart.recount` is public, and nothing outside `App.Shop` uses it." It runs in a project, a package whose `composer.json` says `"type": "project"`. A library's members are used by the projects that install it, which the checker never sees, so it never runs there. A constructor is exempt: `new` calls it, so it reaches as far as its class.
-  - A use from plain PHP counts as one from PHP#, a callable array such as `[Carts::class, 'show']` included. A member counts as used when it carries an attribute whose class is marked `[DynamicallyAccessed]`, and every public member of a class counts as used when the class carries one: the framework that reads the attribute reaches the member through reflection, as a router reaches a `[Route]` method, which the checker never sees. The mark says what .NET's `[DynamicallyAccessedMembers]` says. It goes on an attribute class, in its declaration, as `#[\Sharp\DynamicallyAccessed]` in a plain PHP library's source, or on an `extern` line (section 29), and on a member it is a compile error. An `[Export]` method is exempt too, since plain PHP calls it through the global function it declares (section 23). Any other attribute, as PHP's `[Deprecated]`, `[Import]` or `[Key]`, says nothing about who uses the member, so the member is checked as one without it is. A public member only a view template uses is `internal`, since the checker never reads a template.
+  - A use from plain PHP counts as one from PHP#, a callable array such as `[Carts::class, 'show']` included. A member counts as used when it carries an attribute whose class is marked `[DynamicallyAccessed]`, and every public member of a class counts as used when the class carries one: the framework that reads the attribute reaches the member through reflection, as a router reaches a `[Route]` method, which the checker never sees. The mark says that reflection reaches the members it covers. It goes on an attribute class, in its declaration, as `#[\Sharp\DynamicallyAccessed]` in a plain PHP library's source, or on an `extern` line (section 29), and on a member it is a compile error. An `[Export]` method is exempt too, since plain PHP calls it through the global function it declares (section 23). Any other attribute, as PHP's `[Deprecated]`, `[Import]` or `[Key]`, says nothing about who uses the member, so the member is checked as one without it is. A public member only a view template uses is `internal`, since the checker never reads a template.
 - **A class of an application that nothing uses is a compile error,** as a plugin nothing wires in never runs: "Nothing uses `Ghost`, so it never runs." A class is used when code outside it creates it, binds it in a module, names it as a type, extends or implements it, or names it in `typeof` or an attribute, and a use from plain PHP counts. It runs in a project, as the too-wide error does, so a library's classes are exempt. A class that carries an attribute whose class is marked `[DynamicallyAccessed]`, or has a member that carries one, counts as used, as does a class with a listener, a method written with `on` (section 15), which runs when its event is emitted with nothing wired by hand, and a class with an `[Export]` method, which plain PHP calls through the global function it declares (section 23). A class in a test folder counts as used, since its test runner creates it, as PHPUnit creates a test class. A class a framework finds by scanning folders does not: the application binds it or names it. A module and an enum's case are exempt.
-- **A public member of an application names its types.** In a project, the types of a `public` member's property, parameters and result hold no `Any`, `Any?` or `Object` at any depth, as TypeScript's `noImplicitAny` keeps `any` out of an app's API: `public Map<string, Any> checkoutPayload()` is a compile error, "`Store.checkoutPayload` is public, and a public member of an application names its types: `Any` in `Map<string, Any>`." A type parameter is a named type, so `public T first<T>(List<T> items)` compiles. An interface's members count. An `internal` or private member, an `internal` class's members and a library's are exempt, and an override keeps its parent's types, so an override of a plain PHP method that takes `mixed` takes `Any?`. A value of an unknown shape is named by a struct that parses it (section 10).
+- **A public member of an application names its types.** In a project, the types of a `public` member's property, parameters and result hold no `Any`, `Any?` or `Object` at any depth, so an app's API states every type it takes and gives: `public Map<string, Any> checkoutPayload()` is a compile error, "`Store.checkoutPayload` is public, and a public member of an application names its types: `Any` in `Map<string, Any>`." A type parameter is a named type, so `public T first<T>(List<T> items)` compiles. An interface's members count. An `internal` or private member, an `internal` class's members and a library's are exempt, and an override keeps its parent's types, so an override of a plain PHP method that takes `mixed` takes `Any?`. A value of an unknown shape is named by a struct that parses it (section 10).
 - **There is no named reach,** such as `internal(App\Tenant)`. A helper shared by sibling namespaces moves to their parent namespace.
 
-**An interface member is always public, so it takes no access modifier.** Writing one, `public` included, is a compile error, as in TypeScript, Swift and Go:
+**An interface member is always public, so it takes no access modifier.** Writing one, `public` included, is a compile error:
 
 <!-- example interface-members -->
 ```csharp
@@ -405,7 +405,7 @@ public interface Notifier
 }
 ```
 
-- **An interface member is as visible as its interface,** so an `internal` interface's members reach only what the interface reaches, as C#'s effective accessibility does.
+- **An interface member is as visible as its interface,** so an `internal` interface's members reach only what the interface reaches.
 - **Interface members are exempt from the too-wide error,** because they have no narrower form.
 
 ## 6. Fields and properties
@@ -414,7 +414,7 @@ Fields and properties are separate concepts.
 
 - **A field is storage.** It can only be `private` or `protected`. A field with no modifier is `private`. There are no public fields.
 - **A property is the API.** It has `get` and `set` accessors. `get` reads at the property's access level, and `set` reaches the property's namespace at most (section 6.1).
-- **A field or a constant declares one name.** `private int first, second;` is a compile error that says to declare each on its own line, so a member's type, initial value and attributes stay in one place, as in Rust and TypeScript.
+- **A field or a constant declares one name.** `private int first, second;` is a compile error that says to declare each on its own line, so a member's type, initial value and attributes stay in one place.
 
 <!-- example field-and-property: members -->
 ```csharp
@@ -424,7 +424,7 @@ public string name { get; internal set => field = value.trim(); } = "";
 public string slug => Str.slug(this.name);                      // computed
 ```
 
-**A field or an auto-property can have an initial value,** written after its declaration as in C#:
+**A field or an auto-property can have an initial value,** written after its declaration:
 
 <!-- example initial-values: members -->
 ```csharp
@@ -433,7 +433,7 @@ public int views { get; private set; } = 0;                     // auto-property
 public List<Tag> tags { get; set; } = [];
 ```
 
-Initial values run before the parent's constructor, in the order the members are declared, and can't read `this`, as in C#.
+Initial values run before the parent's constructor, in the order the members are declared, and can't read `this`.
 
 **No code that can read the object runs before the object is built.** An initial value can't read `this`, it fills the storage without running a `set` body, constant or not, and observers wait until the constructor returns (section 6.2). Only a behavior's `set` processes an instance property's initial value, because a behavior never sees the object (section 6.4). A static's initial value fills its storage whatever its accessors and behaviors.
 
@@ -443,9 +443,9 @@ public string code { get; set => field = value.trim(); } = "  a  ";            /
 public string label { get; set => field = value.trim(); } = " b ".uppercase();  // compiles: a computed initial value fills the storage too
 ```
 
-**A member has no implicit starting value, `null` included.** A `T?` member writes `= null` like any other starting value, and PHP# has no default filler such as C#'s `default(T)`.
+**A member has no implicit starting value, `null` included.** A `T?` member writes `= null` like any other starting value, and PHP# has no default filler, such as a zero or an empty value of the type.
 
-**A field or a property with storage and no initial value must be set on every path through the main constructor,** as Swift's and Kotlin's stored properties must be. This holds for every one, settable or get-only, nullable or not, as it does for a struct. Otherwise it is a compile error that names both fixes: an initial value, or setting it in the constructor.
+**A field or a property with storage and no initial value must be set on every path through the main constructor.** This holds for every one, settable or get-only, nullable or not, as it does for a struct. Otherwise it is a compile error that names both fixes: an initial value, or setting it in the constructor.
 
 <!-- example nullable-members -->
 ```csharp
@@ -472,7 +472,7 @@ public class Profile
 }
 ```
 
-**A `late` member may stay unset after the constructor,** as Kotlin's `lateinit` and Hack's `__LateInit` may. It is an instance field or an instance property with storage and no initial value, and the constructor need not set it. A read before its first write throws an `Error` that names it as PHP# writes it, and plain PHP's `ReflectionProperty::isInitialized()` gives false until that write, so a framework that fills it after construction tells a value it loaded from one it never loaded, as a PHPUnit test fills a field in `setUp()` and an ORM fills a row after `new`. A `late` static, a `late` member with an initial value, and a `late` computed or `lazy` property are compile errors.
+**A `late` member may stay unset after the constructor.** It is an instance field or an instance property with storage and no initial value, and the constructor need not set it. A read before its first write throws an `Error` that names it as PHP# writes it, and plain PHP's `ReflectionProperty::isInitialized()` gives false until that write, so a framework that fills it after construction tells a value it loaded from one it never loaded, as a PHPUnit test fills a field in `setUp()` and an ORM fills a row after `new`. A `late` static, a `late` member with an initial value, and a `late` computed or `lazy` property are compile errors.
 
 <!-- example late-members -->
 ```csharp
@@ -524,7 +524,7 @@ public class CartTest : TestCase
 
 **A static field or property with storage needs an initial value, whatever its type,** so it holds a value of its type before any code reads it, the static constructor included.
 
-**A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under FrankenPHP outside worker mode the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value and by its class's static constructor. In a class without a static constructor, a throw in an initial value reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
+**A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression. Under FrankenPHP outside worker mode the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left. A host that runs several workers runs one app in each. A get-only static is set only by its initial value and by its class's static constructor. In a class without a static constructor, a throw in an initial value reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
 
 **Plain PHP reaches a static with an accessor body, a computed body or an observer only through a method,** because PHP has no hooks on a static property. Reading or writing it directly from plain PHP is PHP's access error.
 
@@ -538,7 +538,7 @@ private static List<int> sizes = [10, 25].map(size => size * 2);   // compiles: 
 public static int limit { get; } = 10;           // compiles: get-only, set only by its initial value and the static constructor
 ```
 
-**A static constructor, `static Rates() { … }`, sets up its class's statics,** as C#'s does. It runs once, right after the statics' initial values, in the same first use of the class's statics, so it never runs while no code uses one, as Swift's static properties and Rust's `LazyLock` start at their first use: `new` and a constant read use no static. A use of a derived class's statics, its base class's included, runs the base class's static constructor first, then its own. It may fill several statics, and it may run setup that fills none. It writes its class's get-only statics too, as C#'s assigns a `static readonly` field, and a lambda in it does not. The app runs it and no code calls it, so it takes no modifier but `static` and no parameters, and a class has one, as in C#. Each type argument of a generic class runs it once, for its own statics (section 11). A long-running host keeps the statics between requests, so it runs the static constructor once for the app.
+**A static constructor, `static Rates() { … }`, sets up its class's statics.** It runs once, right after the statics' initial values, in the same first use of the class's statics, so it never runs while no code uses one: `new` and a constant read use no static. A use of a derived class's statics, its base class's included, runs the base class's static constructor first, then its own. It may fill several statics, and it may run setup that fills none. It writes its class's get-only statics too, and a lambda in it does not. The app runs it and no code calls it, so it takes no modifier but `static` and no parameters, and a class has at most one. Each type argument of a generic class runs it once, for its own statics (section 11). A long-running host keeps the statics between requests, so it runs the static constructor once for the app.
 
 <!-- example static-constructor -->
 ```csharp
@@ -574,7 +574,7 @@ public static Ledger() { }       // compile error: a static constructor takes no
 static Ledger(int start) { }     // compile error: a static constructor takes no parameters, and a class has one
 ```
 
-**A throw in a static constructor makes every later use of its class's statics throw,** as C#'s `TypeInitializationException` does. With a static constructor, the statics' initial values run as its first part, as C#'s type initializer runs them, so a throw in either reaches the code that first used the statics. Every later use, a read or a write, through the class or a class derived from it, throws an `Error` that names the class and the failure, and carries the failure as its previous throwable:
+**A throw in a static constructor makes every later use of its class's statics throw.** With a static constructor, the statics' initial values run as its first part, so a throw in either reaches the code that first used the statics. Every later use, a read or a write, through the class or a class derived from it, throws an `Error` that names the class and the failure, and carries the failure as its previous throwable:
 
 <!-- example static-constructor-failure -->
 ```csharp
@@ -602,7 +602,7 @@ Feed.poll();   // throws: "The static constructor of App.Feeds.Feed threw Runtim
 
 ### 6.1 Property features
 
-PHP# has all of C#'s property features:
+A PHP# property has these features:
 
 - auto-properties
 - a separate, narrower access level for `set` and `init`
@@ -614,7 +614,7 @@ PHP# has all of C#'s property features:
 - properties in interfaces, abstract properties, and overrides
 - Reflection that tells fields from properties
 
-**Only `set` and `init` take an access level of their own,** narrower than the property's, as Swift's `private(set)` is. `get` reads at the property's level, so an access level on it is a compile error. A property read only inside its class is read through a method there.
+**Only `set` and `init` take an access level of their own,** narrower than the property's. `get` reads at the property's level, so an access level on it is a compile error. A property read only inside its class is read through a method there.
 
 <!-- example access-on-get: members -->
 ```csharp
@@ -622,7 +622,7 @@ public int views { get; private set; } = 0;     // compiles: set is narrower tha
 public int score { protected get; set; } = 0;   // compile error: only set and init take an access level; read score inside the class through a method
 ```
 
-**A `set` reaches its own namespace at most,** so code outside a namespace never changes the state of its classes. A `set` with no access level reaches the namespace and every namespace below it, or the property's own level where that is narrower, and `private set` narrows it to the class. `public set` and `protected set` are compile errors. Reads stay at the property's level, and a static property follows the same rule. A write from another namespace is a compile error at the write, which names the namespace, in plain PHP files too, since plain PHP that uses PHP# code follows PHP#'s rules. `init` keeps the property's level, so `new` with an object initializer and `with` set it from anywhere (section 16). The `set` runs as PHP's public set, so reflection's `ReflectionProperty::setValue` still writes it, and the checker holds code to the namespace, as Kotlin's `internal set` and Swift's `internal(set)` are held at compile time:
+**A `set` reaches its own namespace at most,** so code outside a namespace never changes the state of its classes. A `set` with no access level reaches the namespace and every namespace below it, or the property's own level where that is narrower, and `private set` narrows it to the class. `public set` and `protected set` are compile errors. Reads stay at the property's level, and a static property follows the same rule. A write from another namespace is a compile error at the write, which names the namespace, in plain PHP files too, since plain PHP that uses PHP# code follows PHP#'s rules. `init` keeps the property's level, so `new` with an object initializer and `with` set it from anywhere (section 16). The `set` runs as PHP's public set, so reflection's `ReflectionProperty::setValue` still writes it, and the checker holds code to the namespace at compile time:
 
 <!-- example set-reach -->
 ```csharp
@@ -695,7 +695,7 @@ public class Order : Model
 ```
 
 - **The written type must fit the parent's.** When PHP declares the parent's property with no type, the written type must be assignable to the parent's `@var` type, or to anything when there is no `@var`. The engine drops the written type when the class links, because PHP refuses a typed redeclaration there. When PHP declares the parent's property with a type, the written type must be assignable to it, as `string` is to `string?`. The property keeps the parent's type when the class links, and each write is checked against the written type, so a `null` the parent's code writes to a `string` override is a `TypeError`.
-- **The access level is written, and is the parent's or wider,** as Java, Kotlin, Swift, TypeScript and PHP let an override widen it: `protected` in `Model` may be `public`, as `with` is above, and `public` stays `public`, as `timestamps` does. The override's `set` keeps the parent's, since PHP refuses to narrow it, so code of any namespace writes it, and `timestamps { get; private set; }` is an error.
+- **The access level is written, and is the parent's or wider,** as PHP lets an override widen it: `protected` in `Model` may be `public`, as `with` is above, and `public` stays `public`, as `timestamps` does. The override's `set` keeps the parent's, since PHP refuses to narrow it, so code of any namespace writes it, and `timestamps { get; private set; }` is an error.
 - **The override has `set`.** The parent's own code writes the property at any time, as Eloquent's `setTable` writes `table`, so a get-only override or one with `init` is an error. The override may give `get` and `set` bodies.
 - **The initial value runs before the parent's constructor and can't read `this`** (section 6), so a parent's constructor that reads the property, as Eloquent's does, sees it.
 - **A PHP# parent's `protected` field is overridden the same way,** by a property measured against that field. A PHP# property is closed unless it is `virtual` or `abstract`, as a method is (section 22), and a field has no `virtual`, so a `protected` field is always open.
@@ -706,7 +706,7 @@ public class Order : Model
 
 **Observers run only once the object is built,** on every write after its constructor and any object initializer have finished, and also when the value is unchanged. The initial value runs none, and neither does a write while a constructor, a named constructor or an object initializer runs, a method it calls included. `set` and `init` bodies still run for those writes. A `with` copy is a new object being built, so the values it is written with run none either. A static's initial value runs none, and every later write does. Both observers see `value`, the written value, and `field`, the stored one: `willSet` reads the value the write replaces, and `didSet` the value it stored. Beside a `set` body, the order is `willSet`, the `set` body, then `didSet`. An observer runs inside `set`, so a property with one needs `set`.
 
-**`willSet` cannot change or stop the write.** A `return` in it ends `willSet`, as in Swift, and the write still runs, so it returns no value, and a `return` that would leave a `finally` block is a compile error, as C# refuses each jump out of one. Writing `value` in it is a compile error, and so is returning in a `set` body before `didSet`:
+**`willSet` cannot change or stop the write.** A `return` in it ends `willSet`, and the write still runs, so it returns no value, and a `return` that would leave a `finally` block is a compile error, as is each jump out of one. Writing `value` in it is a compile error, and so is returning in a `set` body before `didSet`:
 
 <!-- example change-observers: members
 private void touch() { }
@@ -721,7 +721,7 @@ public int count { get; didSet => this.touch(); } = 0;            // compile err
 
 ### 6.3 Typed property references
 
-`nameof(Order.total)` names a property, a field or a method that `Order` declares or inherits, instance or static, readable where `nameof` is written, and gives its name as a string, as C#'s `nameof` names a method. The reference is typed, and the checker rejects a misspelled or removed member wherever it is used. It sits beside `typeof(Order)` (section 25).
+`nameof(Order.total)` names a property, a field or a method that `Order` declares or inherits, instance or static, readable where `nameof` is written, and gives its name as a string. The reference is typed, and the checker rejects a misspelled or removed member wherever it is used. It sits beside `typeof(Order)` (section 25).
 
 **`nameof(Order.total)` has the type `keyof Order`,** the names of `Order`'s readable members (section 11). A `keyof Order` is a `string`, so it goes wherever a string goes: a `string` parameter, a template, a `Map` key and `==`. A `keyof Order` parameter takes only a member name, so a raw string is refused, and a typo fails the build where the name is written:
 
@@ -793,7 +793,7 @@ public class Trimmed : Behavior<string>
 - A behavior is a class that implements `Behavior<T>` for the property's type, and its constructor takes no arguments. A behavior for another type, an interface, an abstract class, or a constructor that needs an argument is a compile error.
 - `via` names a type, so a generic behavior takes its type arguments as every type does (section 11): `via Logged<string>` creates each behavior as `new Logged<string>()`.
 - A behavior's `get` and `set` are the property's accessors. Each may have any effect, and a read or write of the property carries it (section 29). `set` may write the behavior's own fields, and `get` writes none, as no `get` body writes `this` (section 6.1).
-- `via` goes on an auto-property with `get; set;`, an instance or a static one, as Kotlin delegates a `companion object`'s property and Swift wraps a `static var`. A property in an interface or an `abstract` one has no storage to run around, and one with an accessor body already says how it reads and writes, so each is a compile error.
+- `via` goes on an auto-property with `get; set;`, an instance or a static one. A property in an interface or an `abstract` one has no storage to run around, and one with an accessor body already says how it reads and writes, so each is a compile error.
 - Each object creates its own behaviors with `new` when it is constructed, before any initial value, and keeps each one in a hidden slot. A copy made with `with`, or with plain PHP's `clone`, creates its own too, so two objects never share a behavior's state. A static property's behaviors belong to its class, which creates them on the property's first read or write and keeps them for the host's app lifetime, as a `static lazy` value is kept (section 6.5). A generic class keeps them for each type argument, as it keeps each static. A static's initial value fills its storage without running `set`, as section 6.2 says, so its behaviors' `set` runs on each later write.
 - A write runs each behavior's `set` in the order they are written, then stores the result. A read runs each behavior's `get` the other way, so the first behavior wraps the rest. An instance property's initial value is a write, so it runs through each `set`, which never sees the object (section 6).
 
@@ -809,14 +809,14 @@ private int id = 1;
 public lazy Plan plan => this.planner.plan(this.id);
 ```
 
-A `lazy` body may have any effect, such as a database query, and reading the property carries the body's effects (section 29). Like every `get` body, it never writes `this` (section 6.1). It may read properties that can change later. The value is computed once and kept, even if those inputs change, as in Swift and Kotlin. A value that must follow its inputs is a plain computed property (`=> expr`).
+A `lazy` body may have any effect, such as a database query, and reading the property carries the body's effects (section 29). Like every `get` body, it never writes `this` (section 6.1). It may read properties that can change later. The value is computed once and kept, even if those inputs change. A value that must follow its inputs is a plain computed property (`=> expr`).
 
-- **A body that throws keeps nothing,** so the next read runs it again, as Kotlin's `lazy` does.
-- **A copy made with `with` keeps no `lazy` value,** because it is a new value whose inputs may differ. Its first read computes each `lazy` property again, as Kotlin's `copy()` does.
+- **A body that throws keeps nothing,** so the next read runs it again.
+- **A copy made with `with` keeps no `lazy` value,** because it is a new value whose inputs may differ. Its first read computes each `lazy` property again.
 
 ### 6.6 Indexers
 
-An indexer is a property that takes a parameter, as C#'s is: `cart[0]` runs its `get`, and `cart[0] = line` its `set`, whose `value` is the value written. `cart[0] ?? fallback` and `cart[0] += 1` go through `get` and `set` as they do for a property:
+An indexer is a property that takes a parameter: `cart[0]` runs its `get`, and `cart[0] = line` its `set`, whose `value` is the value written. `cart[0] ?? fallback` and `cart[0] += 1` go through `get` and `set` as they do for a property:
 
 <!-- example indexers: members
 private List<Line> lines = [];
@@ -829,9 +829,9 @@ public Line this[int index]
 }
 ```
 
-- **It follows a property's rules, as in C#.** `get` alone is read-only, so writing it is a compile error, an interface declares one with `get;` and `set;`, and a struct's has no `set`, because a struct never changes (section 10).
+- **It follows a property's rules.** `get` alone is read-only, so writing it is a compile error, an interface declares one with `get;` and `set;`, and a struct's has no `set`, because a struct never changes (section 10).
 - **It takes one parameter,** of any type. An indexer is never `static`, and only a class's `set` takes a modifier, `private`.
-- **It runs as PHP's `ArrayAccess`,** so plain PHP's `$cart[0]`, `isset($cart[0])` and `$cart[0] = $line` reach it, each checked against its types. `isset` is true when `get` gives a value that is not null, and `unset($cart[0])` throws `LogicException`, as a C# indexer has no unset.
+- **It runs as PHP's `ArrayAccess`,** so plain PHP's `$cart[0]`, `isset($cart[0])` and `$cart[0] = $line` reach it, each checked against its types. `isset` is true when `get` gives a value that is not null, and `unset($cart[0])` throws `LogicException`, since an indexer has no unset.
 
 ## 7. Methods
 
@@ -863,9 +863,9 @@ Math.max(0, ...prices);  // into the standard library too. The 0 gives max a val
 - `...` is allowed only on the last parameter.
 - A spread works the same into PHP# methods and into plain PHP.
 - Only a `List` spreads into a call. Spreading a `Map` into a call is a compile error (section 12).
-- An override of a method declared with `...` writes that parameter as `string ...parts`, or as the `List` it arrives as, `List<string> parts`, as a C# override may leave out `params` and write the array type. Either way it is the variadic parameter, so a call passes it any number of arguments, and the PHP the override compiles to keeps the `...` PHP requires.
+- An override of a method declared with `...` writes that parameter as `string ...parts`, or as the `List` it arrives as, `List<string> parts`. Either way it is the variadic parameter, so a call passes it any number of arguments, and the PHP the override compiles to keeps the `...` PHP requires.
 
-**A spread of unknown length fills only a `...` parameter,** as Kotlin spreads only into a `vararg`, TypeScript spreads a list that is no tuple only into a rest parameter, and Go, C# and Java spread only into their variadic parameter. A list literal's length is known, so its spread fills parameters as its elements written out do. Any other list's spread may start only at the `...` parameter. Anywhere else, a parameter with a default included, it is a compile error that names the parameters it may not fill:
+**A spread of unknown length fills only a `...` parameter,** because the checker can't know which other parameters a list of unknown length fills. A list literal's length is known, so its spread fills parameters as its elements written out do. Any other list's spread may start only at the `...` parameter. Anywhere else, a parameter with a default included, it is a compile error that names the parameters it may not fill:
 
 <!-- example spread-of-unknown-length: statements in Pairs
 List<int> numbers = [900, 2900];
@@ -895,7 +895,7 @@ public void grant(User user) { … }
 public void grant(Page page) { … }                    // compile error: grant is declared twice. Name each by what it takes, as in grantPageAccess
 ```
 
-**A statement that can never run is a compile error,** as Java's "unreachable statement" and Zig's "unreachable code" are. A statement after `return`, `throw`, `break`, `continue` or a call that never returns in the same block never runs, and neither does one after an `if` whose every branch ends the block, or after a loop that never ends, such as a `do` whose body ends the block. A loop's condition alone never ends it only when it is the constant `true`, as in `while (true)` and `for (let i = 0; true; i++)`, judged from what it says and not from what a pass narrows it to, as TypeScript and Kotlin judge it, so a `do … while (again)` on a `bool` local ends once `again` is false. The error names the line that ends the block, and says to delete the statement or move it above that line. The block of an `if` or a `for … of` whose condition never finishes, as `if (throw new ValueError("empty"))`, never runs either, and the error says to write the condition as its own statement in place of the `if` or the `for`.
+**A statement that can never run is a compile error.** A statement after `return`, `throw`, `break`, `continue` or a call that never returns in the same block never runs, and neither does one after an `if` whose every branch ends the block, or after a loop that never ends, such as a `do` whose body ends the block. A loop's condition alone never ends it only when it is the constant `true`, as in `while (true)` and `for (let i = 0; true; i++)`, judged from what it says and not from what a pass narrows it to, so a `do … while (again)` on a `bool` local ends once `again` is false. The error names the line that ends the block, and says to delete the statement or move it above that line. The block of an `if` or a `for … of` whose condition never finishes, as `if (throw new ValueError("empty"))`, never runs either, and the error says to write the condition as its own statement in place of the `if` or the `for`.
 
 <!-- example unreachable-statements: members -->
 ```csharp
@@ -930,7 +930,7 @@ public int firstStep()
 }                                             // compiles: the loop never ends on its condition, so no return follows it
 ```
 
-**A method that never returns declares the return type `never`,** as TypeScript's `never`, Kotlin's `Nothing` and Rust's `!` do. Every path through its body ends in a `throw` or in a call of another `never` method, and a path that reaches the closing brace is a compile error. A call of one ends the block it is in, as `throw` does, so a statement after it never runs, and `input ?? fail(…)` has the type of `input`. An override of a `never` method returns `never` too. `never` is a whole type, as Swift's `Never`, Kotlin's `Nothing` and TypeScript's `never` are: no value has it, so it is also a type argument, as in `Result<int, never>`, the result of work that cannot fail, and the type of a parameter, a property or a local, which then holds no value, as `List<never>` holds no element. An expression body returns its value, so a `never` method with one, as `never stop() => 1;`, is a compile error unless the expression never finishes, as `=> throw new ValueError("stopped")` does.
+**A method that never returns declares the return type `never`.** Every path through its body ends in a `throw` or in a call of another `never` method, and a path that reaches the closing brace is a compile error. A call of one ends the block it is in, as `throw` does, so a statement after it never runs, and `input ?? fail(…)` has the type of `input`. An override of a `never` method returns `never` too. `never` is a whole type: no value has it, so it is also a type argument, as in `Result<int, never>`, the result of work that cannot fail, and the type of a parameter, a property or a local, which then holds no value, as `List<never>` holds no element. An expression body returns its value, so a `never` method with one, as `never stop() => 1;`, is a compile error unless the expression never finishes, as `=> throw new ValueError("stopped")` does.
 
 <!-- example never-methods: members -->
 ```csharp
@@ -948,7 +948,7 @@ public static never stop(bool urgent)
 }                                                                            // compile error: stop is never, and it reaches its closing brace when no throw runs before it
 ```
 
-**A parameter's default is any expression,** as in Kotlin, Swift and TypeScript, and it runs each time a call leaves the argument out, from PHP# and from plain PHP alike, so `new` gives each call its own object. It runs before the method, so a default that reads `this` or another parameter is a compile error.
+**A parameter's default is any expression,** and it runs each time a call leaves the argument out, from PHP# and from plain PHP alike, so `new` gives each call its own object. It runs before the method, so a default that reads `this` or another parameter is a compile error.
 
 <!-- example parameter-defaults -->
 ```csharp
@@ -992,8 +992,8 @@ public class Receipt
 }
 ```
 
-- **PHP is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation. A bare call names a local or nothing, so calling a built-in function by its bare name from `.sharp` code is the compile error a misspelled name gets. The twelve effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
-- **A built-in the standard library has no member for is declared with `[Import]`,** a static method without a body whose PHP# types check each argument and the result, as C#'s `[DllImport]` declares a native function (section 23).
+- **PHP is reached only through the standard library.** A bare call names a local or nothing, so calling a built-in function by its bare name from `.sharp` code is the compile error a misspelled name gets. The twelve effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
+- **A built-in the standard library has no member for is declared with `[Import]`,** a static method without a body whose PHP# types check each argument and the result (section 23).
 - **PHP's constants are reached the same way,** as `Int.MAX` gives the largest `int`. A bare `CURLOPT_TIMEOUT` is a compile error, because a bare uppercase name is always the code's own constant.
 
 **Output and exit go through the standard library.** `echo` and `print` are removed, and output goes through `Console` (section 29). `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. Exiting goes through `Process`.
@@ -1024,8 +1024,8 @@ public void stop() { exit(1); }                              // compile error: n
 public void fail() { die("Prune failed"); }                  // compile error: no function die exists
 ```
 
-- Exiting skips every `finally` block, as Java's `System.exit` and C#'s `Environment.Exit` do.
-- Printing has the effect `Console`, and exiting has the effect `Process` (section 29), as Koka's `console` effect marks printing.
+- Exiting skips every `finally` block, as PHP's `exit` does.
+- Printing has the effect `Console`, and exiting has the effect `Process` (section 29).
 
 ## 9. Constructors
 
@@ -1045,7 +1045,7 @@ public StoreService(
 }
 ```
 
-**A member declared on a parameter is a property like one declared in the class body,** as Kotlin's parameter properties are: its access levels, accessors, accessor bodies, observers, behaviors and attributes, and a default after its accessors and behaviors, which the call may leave out. A default before the accessors, as PHP orders a promoted property, is a compile error that says to write it after them. The argument is a write while the constructor runs, so a `set` body and the behaviors run on it, and on the default too, while the observers wait until the object is built, as section 6.2 says. A parameter without a default is required by every call, so `required` on one is a compile error. A computed property and `lazy` compute their own value, and a parameter receives one, and `static` belongs to no one object, so each goes on a member in the class body:
+**A member declared on a parameter is a property like one declared in the class body:** its access levels, accessors, accessor bodies, observers, behaviors and attributes, and a default after its accessors and behaviors, which the call may leave out. A default before the accessors, as PHP orders a promoted property, is a compile error that says to write it after them. The argument is a write while the constructor runs, so a `set` body and the behaviors run on it, and on the default too, while the observers wait until the object is built, as section 6.2 says. A parameter without a default is required by every call, so `required` on one is a compile error. A computed property and `lazy` compute their own value, and a parameter receives one, and `static` belongs to no one object, so each goes on a member in the class body:
 
 <!-- example parameter-member-limits: members in Ledger -->
 ```csharp
@@ -1090,9 +1090,9 @@ let artifact = new Artifact.fromJson(json);
 - A class has one main constructor, as it has one method per name (section 7).
 - A static method that looks up an existing object, such as `Journey.forUuid`, stays a static method.
 - A named constructor marked `required`, as in `public required Artifact.fromJson(string json)`, is one every subclass declares, so `new TItem.fromJson(…)` and `new Self.fromJson(…)` can call it (sections 11 and 25).
-- An abstract class has no objects of its own, so a named constructor it declares is `required`, the one each subclass declares, as Swift's abstract base declares a `required init`.
+- An abstract class has no objects of its own, so a named constructor it declares is `required`, the one each subclass declares.
 
-**A subclass's constructor always calls its parent's with `: super(…)`,** as in `public Order(Row row) : super(row) { }`, even when the parent's takes no arguments, as Kotlin always writes `: Document()`. A constructor without the call is a compile error:
+**A subclass's constructor always calls its parent's with `: super(…)`,** as in `public Order(Row row) : super(row) { }`, even when the parent's takes no arguments. A constructor without the call is a compile error:
 
 <!-- example super-call -->
 ```csharp
@@ -1127,7 +1127,7 @@ public class CreditNote : Document
 }
 ```
 
-**`this` is refused in the arguments of `: super(…)` and `: this(…)`,** as in C#, Java, Kotlin, Swift and TypeScript, because the object doesn't exist until the constructor runs:
+**`this` is refused in the arguments of `: super(…)` and `: this(…)`,** because the object doesn't exist until the constructor runs:
 
 <!-- example constructor-call-this: members in Artifact -->
 ```csharp
@@ -1149,13 +1149,13 @@ public Money.free(string currency) : this(1, currency) { this.amount = 0; }     
 
 A `struct` is a value type.
 
-- **A struct never changes.** A method returns a changed copy, usually built with `with`, as Kotlin's data class `copy` does. `point.x = 5` is a compile error that names a method returning a changed copy.
+- **A struct never changes.** A method returns a changed copy, usually built with `with`. `point.x = 5` is a compile error that names a method returning a changed copy.
 - **A struct has no effects** (section 29). Its methods, `get` bodies and operators reach no database, network, file, clock or event, as a value is the same wherever it is read, so `public int inEuros(Http http) => http.get(url).status;` is a compile error: "`Money.inEuros` has the effect `Http`, and a struct has no effects." A class that takes the value does the work.
 - **`readonly struct` is a compile error,** because every struct is already read-only.
-- **A struct takes every visibility a class takes,** `public` and `internal` (section 5), as C#'s `internal struct` does, and is `internal` when it names neither. An `internal struct` reaches its namespace and every namespace below it, so a module keeps a value type of its own private. Any other modifier, as `abstract` or `final`, is a compile error.
+- **A struct takes every visibility a class takes,** `public` and `internal` (section 5), and is `internal` when it names neither. An `internal struct` reaches its namespace and every namespace below it, so a module keeps a value type of its own private. Any other modifier, as `abstract` or `final`, is a compile error.
 - **`==` compares values.** `===` works on classes only (section 19).
 - **A struct cannot inherit or be inherited,** but it can implement interfaces.
-- **A struct has no default value.** Every property or field without an initial value must be set when the struct is created, and `= null` makes a nullable one optional, as in Rust, Swift, Kotlin and TypeScript.
+- **A struct has no default value.** Every property or field without an initial value must be set when the struct is created, and `= null` makes a nullable one optional.
 - **A struct can be generic,** as in `public struct Pair<TFirst, TSecond>`, with the type parameters of section 11.
 
 <!-- example struct-changes -->
@@ -1231,7 +1231,7 @@ new Checkout().total(2500);   // 2999
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
 
-**A struct keys a `Map` when every field has `==`, by its whole value with nothing declared, or when it declares `==` with `hash()`, by that pair,** as Swift's `Hashable` structs, Rust's `Hash` derive, C#'s record structs, Java's records, Kotlin's data classes and Go's structs are. It is the general rule for keys (section 12): a struct whose every field has `==` has `==` and `hash()`, and a struct with a field that has none, such as a function, declares both (section 19). Two structs are one key when they are `==`. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, as Jackson writes a key through `toString` and serde and Go refuse a key that is not text.
+**A struct keys a `Map` when every field has `==`, by its whole value with nothing declared, or when it declares `==` with `hash()`, by that pair.** It is the general rule for keys (section 12): a struct whose every field has `==` has `==` and `hash()`, and a struct with a field that has none, such as a function, declares both (section 19). Two structs are one key when they are `==`. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, because a JSON object key is text.
 
 **Every struct has a static `parse`,** which takes a `Map<string, Any?>|Object`, reads the `Map`'s keys or the object's public properties and throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Every class gets both the same way, and `methods()` (section 25) gives each with that parameter type.
 
@@ -1252,7 +1252,7 @@ RenewRequest request = RenewRequest.parse(payload);     // throws: "customerId: 
 RenewRequest? maybe = RenewRequest.tryParse(payload);   // null on any bad field
 ```
 
-- The keys are the parameter names of the main constructor (section 9.1), then every property an object initializer may set, as C#'s `System.Text.Json` reads a record.
+- The keys are the parameter names of the main constructor (section 9.1), then every property an object initializer may set.
 - `[Key("plan_code")]` renames the key a parameter reads.
 - A nested struct parses the same way.
 - A `List` checks each element.
@@ -1349,7 +1349,7 @@ Json.encode(new Payment("https://shop.test/done", Decimal.parse("1.50"), null, n
 - `page is PaginatedList<Order>` is checked while the code runs.
 - A value of the wrong type throws a `TypeError` where it enters PHP# from plain PHP. Section 12 lists where a value enters. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24).
 
-**Each type argument of a generic class has its own static members,** as in C#. `Counter<Order>.count` is separate from `Counter<User>.count`, and a static member may use the class's type parameters:
+**Each type argument of a generic class has its own static members.** `Counter<Order>.count` is separate from `Counter<User>.count`, and a static member may use the class's type parameters:
 
 <!-- example generic-statics: statements -->
 ```csharp
@@ -1368,11 +1368,11 @@ A static field names its type arguments: `Counter<Order>.count`. A bare `Counter
 
 **Writing type arguments:**
 
-- **`new` names them, or takes them as a generic method call does,** from its arguments or from the declared type its object goes into, as Kotlin, Swift, Rust and Java's diamond infer them: `new PaginatedList<Order>(…)`, `PaginatedList<Order> page = new PaginatedList(rows)` and `new Box(5)`, a `Box<int>`, all compile, and a `new` that nothing fixes a type argument of is a compile error that says to write them. A class value that carries them gives them too, as in `new (pages)()` (section 25). `new Self(…)` names none, because `Self` is the class with its own type parameters.
+- **`new` names them, or takes them as a generic method call does,** from its arguments or from the declared type its object goes into: `new PaginatedList<Order>(…)`, `PaginatedList<Order> page = new PaginatedList(rows)` and `new Box(5)`, a `Box<int>`, all compile, and a `new` that nothing fixes a type argument of is a compile error that says to write them. A class value that carries them gives them too, as in `new (pages)()` (section 25). `new Self(…)` names none, because `Self` is the class with its own type parameters.
 - **A type names them too:** `PaginatedList<Order> page`. `Class<PaginatedList>` is the one exception: a class type names the class itself.
-- **A generic method call fixes them** from the arguments it receives, or from the declared type its result goes into. The declared type reaches the call through each arm of a `match`, through the result of a lambda written for a function type, and through the parameter of an outer generic call that the declared type fixed, as Swift and TypeScript infer nested calls. An argument fixes a type PHP# writes: `int` for `5`, `List<int>` for `[1, 2]` and the enum for its case, as C# and Kotlin have no literal types and TypeScript widens the literal it infers. A type argument that none of these fixes is a compile error, as in C#'s error CS0411 and in Swift.
+- **A generic method call fixes them** from the arguments it receives, or from the declared type its result goes into. The declared type reaches the call through each arm of a `match`, through the result of a lambda written for a function type, and through the parameter of an outer generic call that the declared type fixed. An argument fixes a type PHP# writes: `int` for `5`, `List<int>` for `[1, 2]` and the enum for its case, never the literal's own type. A type argument that none of these fixes is a compile error.
 - **A static method call of a generic class fixes the class's type arguments the same way,** or names them on the class: `Holder<int> holder = Holder.of(5);`, `const holder = Holder.of(5);` and `Holder<int>.of(5)` all compile, and a bare `Holder.empty()` with no declared type, which nothing fixes, is a compile error.
-- **A plain PHP generic class,** declared with PHPDoc's `@template`, names its type arguments in a PHP# type, as in `Collection<Order>`, as TypeScript and Kotlin require, and `new` names them or takes them as it does for a PHP# class. A bare `Collection items`, or a `new Collection()` that nothing fixes them for, is a compile error that names the type parameters to write. A type parameter with a default may be left out. The checker checks the type arguments, but the object carries none while the code runs, as Java's erased generics do. So a type test tests the class alone: `x is Collection` compiles, and `x is Collection<Order>` is a compile error that says the type argument is unknown while the code runs (section 21).
+- **A plain PHP generic class,** declared with PHPDoc's `@template`, names its type arguments in a PHP# type, as in `Collection<Order>`, and `new` names them or takes them as it does for a PHP# class. A bare `Collection items`, or a `new Collection()` that nothing fixes them for, is a compile error that names the type parameters to write. A type parameter with a default may be left out. The checker checks the type arguments, but the object carries none while the code runs, since PHPDoc's types never reach the engine. So a type test tests the class alone: `x is Collection` compiles, and `x is Collection<Order>` is a compile error that says the type argument is unknown while the code runs (section 21).
 
 <!-- example plain-php-generic-types: members -->
 ```csharp
@@ -1416,7 +1416,7 @@ Shelf<string> shelf = new Shelf();                      // compiles: the declare
 const empty = new Shelf();                              // compile error: nothing fixes T; write new Shelf<string>()
 ```
 
-**A generic object that plain PHP creates without type arguments** (`new PaginatedList($rows)`, or Laravel's container) has its bounds as its type arguments, as Java's raw types do, but checked where it enters PHP# instead of trusted. Under `PaginatedList<TItem : DatabaseEntity>`, a raw page is a `PaginatedList<DatabaseEntity>`. A parameter that needs `PaginatedList<Order>` throws `TypeError`. A method that takes any page is generic. PHP# code never creates a raw object, because a type argument it can't fix or infer is a compile error.
+**A generic object that plain PHP creates without type arguments** (`new PaginatedList($rows)`, or Laravel's container) has its bounds as its type arguments, checked where it enters PHP# instead of trusted. Under `PaginatedList<TItem : DatabaseEntity>`, a raw page is a `PaginatedList<DatabaseEntity>`. A parameter that needs `PaginatedList<Order>` throws `TypeError`. A method that takes any page is generic. PHP# code never creates a raw object, because a type argument it can't fix or infer is a compile error.
 
 <!-- example raw-generic-objects: statements
 use App\PaginatedList;
@@ -1463,11 +1463,11 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **Names start with `T`:** `TItem`, `TKey`. Another capitalized name is a naming warning, as a name out of its case is (section 24).
 - **The bound is written inline:** `<TItem : DatabaseEntity>`.
 - **Several bounds use `&`:** `<TItem : DatabaseEntity & Shareable>`.
-- **`Object` bounds a type parameter to any object,** `<TValue : Object>`, as C#'s `where T : class` and TypeScript's `T extends object` do. It joins other bounds with `&`, as in `<TValue : Object & Shareable>`, as C#'s `where T : class, IShareable` and TypeScript's `T extends object & Shareable` do.
-- **A bound may name another type parameter,** `<TPart : TItem>`, as C#'s `where TPart : TItem` and Java's and TypeScript's `<U extends T>` do. A `TPart` then goes wherever a `TItem` goes. It is a bound alone, as in Java, and a bound that leads back to its own type parameter, such as `<TItem : TItem>`, is a compile error, as in C#.
+- **`Object` bounds a type parameter to any object,** `<TValue : Object>`. It joins other bounds with `&`, as in `<TValue : Object & Shareable>`.
+- **A bound may name another type parameter,** `<TPart : TItem>`. A `TPart` then goes wherever a `TItem` goes. It is a bound alone, and a bound that leads back to its own type parameter, such as `<TItem : TItem>`, is a compile error.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
-- **A generic class may be PHP's `Serializable`** through a plain PHP library's interface or parent class, as Java and C# serialize a generic object. The engine keeps its type arguments ahead of the text its `serialize` writes, and `unserialize` gets that text alone, so the copy is a `PaginatedList<Order>` exactly when the original is.
-- **A class value keys a `Map` and joins a `Set`,** through the `==` and the hash of its whole type (section 12), as C#, Java and Kotlin key a map by a type, so it satisfies `Equatable` too. `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` are two keys, though both run as the plain class name.
+- **A generic class may be PHP's `Serializable`** through a plain PHP library's interface or parent class. The engine keeps its type arguments ahead of the text its `serialize` writes, and `unserialize` gets that text alone, so the copy is a `PaginatedList<Order>` exactly when the original is.
+- **A class value keys a `Map` and joins a `Set`,** through the `==` and the hash of its whole type (section 12), so it satisfies `Equatable` too. `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` are two keys, though both run as the plain class name.
 
 <!-- example type-parameter-bounds: members -->
 ```csharp
@@ -1480,7 +1480,7 @@ public void joined<TItem, TPart : TItem & Shareable>() { }                      
 public void looped<TItem : TItem>() { }                                                         // compile error: the bound of TItem leads back to TItem
 ```
 
-**`Equatable` bounds a type parameter to the types that have `==`** (section 19), as Go's `comparable` and F#'s `equality` do. Every such type satisfies it with no declaration: a number, a string, `bool`, an enum whose cases' fields all have `==`, a collection whose elements have `==`, a struct whose fields have `==`, and a class that declares or inherits `operator ==`. A class value does too. A function, `Object`, `Any` and a class without `operator ==` don't. A type parameter has `==` only through its bound, so `==`, `!=`, `contains`, `indexOf` and `remove` on a `List`, a `Map` key, a `Set` element and a value pattern each need `Equatable` or a class or interface bound that declares or inherits `operator ==`. `Equatable` is a bound and never a value's type, so `List<Equatable>` is a compile error. It joins other bounds with `&`, as in `<TItem : Shareable & Equatable>`, and adds no type the running code checks.
+**`Equatable` bounds a type parameter to the types that have `==`** (section 19). Every such type satisfies it with no declaration: a number, a string, `bool`, an enum whose cases' fields all have `==`, a collection whose elements have `==`, a struct whose fields have `==`, and a class that declares or inherits `operator ==`. A class value does too. A function, `Object`, `Any` and a class without `operator ==` don't. A type parameter has `==` only through its bound, so `==`, `!=`, `contains`, `indexOf` and `remove` on a `List`, a `Map` key, a `Set` element and a value pattern each need `Equatable` or a class or interface bound that declares or inherits `operator ==`. `Equatable` is a bound and never a value's type, so `List<Equatable>` is a compile error. It joins other bounds with `&`, as in `<TItem : Shareable & Equatable>`, and adds no type the running code checks.
 
 <!-- example equatable-bound: statements in Generic
 public struct Point { public Point(public int x { get; }) { } }
@@ -1497,7 +1497,7 @@ Generic.same(point, samePoint);       // compiles; runs: true, structs compare b
 Generic.same(cartA, cartB);           // compile error: Cart is outside T's bound Equatable, since Cart declares no ==
 ```
 
-**A class that implements or extends a generic type takes its type argument's type,** as in C#, Java, Kotlin, TypeScript and Rust: `OrderHandler : Handler<Order>` writes `handle(Order item)`. A call from plain PHP still checks `item` against `Order` under the caller's `strict_types`, as every typed parameter is checked, and reflection reports `Order` as its type:
+**A class that implements or extends a generic type takes its type argument's type:** `OrderHandler : Handler<Order>` writes `handle(Order item)`. A call from plain PHP still checks `item` against `Order` under the caller's `strict_types`, as every typed parameter is checked, and reflection reports `Order` as its type:
 
 <!-- example generic-implementation -->
 ```csharp
@@ -1523,7 +1523,7 @@ $handler = new App\Handlers\OrderHandler();
 $handler->handle("x");   // throws TypeError: handle takes an Order
 ```
 
-**`Self` on a receiver typed by a type parameter is that type parameter** (section 25). In `TBox refill<TBox : Box<int>>(TBox box)`, `box.withValue(5)` returns a `TBox`, not `Box<int>`, as Rust's `t.clone()` on a `T: Clone` returns a `T`:
+**`Self` on a receiver typed by a type parameter is that type parameter** (section 25). In `TBox refill<TBox : Box<int>>(TBox box)`, `box.withValue(5)` returns a `TBox`, not `Box<int>`:
 
 <!-- example self-on-type-parameters: members -->
 ```csharp
@@ -1536,9 +1536,9 @@ public class Box<T>
 public TBox refill<TBox : Box<int>>(TBox box) => box.withValue(5);   // compiles: withValue returns a TBox
 ```
 
-**`new TItem.fromJson(…)` calls a named constructor (section 9.1) through a type parameter,** on the type argument the code runs with, as Swift's `T(json:)` calls a `required init`. The bound marks that named constructor `required`, as it marks the main constructor for `new Self(…)` (section 25). A named constructor is not inherited, so every subclass with objects of its own declares each `required` one above it, which keeps its parameters, and leaving one out is a compile error.
+**`new TItem.fromJson(…)` calls a named constructor (section 9.1) through a type parameter,** on the type argument the code runs with. The bound marks that named constructor `required`, as it marks the main constructor for `new Self(…)` (section 25). A named constructor is not inherited, so every subclass with objects of its own declares each `required` one above it, which keeps its parameters, and leaving one out is a compile error.
 
-- **`required` passes down,** as Swift's `required init` does. A bound anywhere below the class that marks it `required` accepts the call, and an abstract class in between declares none of its own.
+- **`required` passes down.** A bound anywhere below the class that marks it `required` accepts the call, and an abstract class in between declares none of its own.
 - **`new Self.fromJson(…)` calls the `required` one of the class the code was called on** (section 25).
 - **A plain PHP class declares no named constructor,** so a plain PHP class as the type argument of a type parameter the code calls one through is a compile error that names the class and the constructor.
 - **Calling a named constructor that is not `required` through a type parameter** is a compile error that names it:
@@ -1674,7 +1674,7 @@ public abstract class Posting
 }
 ```
 
-**`TItem.make()` and `TItem.size` reach the static members of the type argument the code runs with,** as C# 11's static abstract members, Swift's static requirements and Rust's associated functions do. The bound declares them, and a type argument that redeclares one runs its own:
+**`TItem.make()` and `TItem.size` reach the static members of the type argument the code runs with.** The bound declares them, and a type argument that redeclares one runs its own:
 
 <!-- example type-parameter-statics -->
 ```csharp
@@ -1736,7 +1736,7 @@ PaginatedList<Order> cannot be used as PaginatedList<DatabaseEntity>.
 TItem is only returned by PaginatedList, so declare it `out TItem`.
 ```
 
-There is no variance at the point of use, such as Java's `? extends T`.
+There is no variance at the point of use, such as a wildcard that takes any subtype of `T`.
 
 ### 11.2 Member names
 
@@ -1764,7 +1764,7 @@ A class inherits its parent's members, so a name of `DatabaseEntity`'s member is
 
 PHP# has three collection types: `List<T>`, `Map<TKey, TValue>` and `Set<T>`.
 
-- They are values, as structs (section 10) and Swift's `Array`, `Dictionary` and `Set` are. Assigning or passing a collection copies it only when one side later writes to it.
+- They are values, as structs (section 10) and PHP's arrays are. Assigning or passing a collection copies it only when one side later writes to it.
 - A `Map`'s key is any type with `==` and `hash()` (see **Map keys** below).
 
 <!-- example copy-on-write: statements
@@ -1836,9 +1836,9 @@ $number->setValue($order, 'A-12');
 $order->number;                      // "A-12"
 ```
 
-**Plain PHP's write into a PHP# collection is checked too.** A `Map` or a `Set` PHP# code makes carries its type from when it is made, as `new` of a generic class does: a literal takes the type of where it lands, `entries()`, `groupBy()`, `associateBy()` and `toSet()` the type of their result, `filter()` its receiver's, and a PHP array that crosses into a typed place the type of that place. One plain PHP makes, as `new \Sharp\Map()`, takes its type at the first typed place that holds it, a property, a parameter or a return. Each keeps its type, as a C# object keeps its one type. A property's initial value that makes one whose type names a type parameter, as `Map<string, T> index = [:]`, runs in the constructor, and a static's for each type argument, so it has the object's or the type argument's type. A literal in a generic method whose place names the method's own type parameter, as `Map<string, TItem> made = [:]` in `build<TItem>()`, has the type argument of the call. So does a literal in a lambda written in that method, as a C# closure sees its method's type arguments. A parameter's default runs with neither, so a `Map` or a `Set` it makes whose type names a type parameter has no type, and plain PHP's writes into it are not checked. A key and a value plain PHP writes into a `Map`, as `$larder->stock["k"] = "x"`, and an element it adds to a `Set` cross as a PHP array's entry does, and a wrong one throws the `TypeError` at the write, as C# throws on a wrong element written into an array. A write into a `List` property, as `$order->counts[] = "z"`, a write into a `Map`'s value, as `$larder->shelves["k"][] = "x"`, an index write, a nested write, a write through a reference, `sort()`, `array_push()` and `foreach` by reference, writes plain PHP's value. The next PHP# read of the property or of the `Map`'s entries, by an index, a loop, a method such as `values()` or `filter()`, `json_encode` or `serialize`, throws the `TypeError` that names its type and the element, as Kotlin's read of a Java list does. So PHP# code never reads an element its type doesn't hold.
+**Plain PHP's write into a PHP# collection is checked too.** A `Map` or a `Set` PHP# code makes carries its type from when it is made, as `new` of a generic class does: a literal takes the type of where it lands, `entries()`, `groupBy()`, `associateBy()` and `toSet()` the type of their result, `filter()` its receiver's, and a PHP array that crosses into a typed place the type of that place. One plain PHP makes, as `new \Sharp\Map()`, takes its type at the first typed place that holds it, a property, a parameter or a return. Each keeps its one type from then on. A property's initial value that makes one whose type names a type parameter, as `Map<string, T> index = [:]`, runs in the constructor, and a static's for each type argument, so it has the object's or the type argument's type. A literal in a generic method whose place names the method's own type parameter, as `Map<string, TItem> made = [:]` in `build<TItem>()`, has the type argument of the call. So does a literal in a lambda written in that method, since the lambda sees its method's type arguments. A parameter's default runs with neither, so a `Map` or a `Set` it makes whose type names a type parameter has no type, and plain PHP's writes into it are not checked. A key and a value plain PHP writes into a `Map`, as `$larder->stock["k"] = "x"`, and an element it adds to a `Set` cross as a PHP array's entry does, and a wrong one throws the `TypeError` at the write. A write into a `List` property, as `$order->counts[] = "z"`, a write into a `Map`'s value, as `$larder->shelves["k"][] = "x"`, an index write, a nested write, a write through a reference, `sort()`, `array_push()` and `foreach` by reference, writes plain PHP's value. The next PHP# read of the property or of the `Map`'s entries, by an index, a loop, a method such as `values()` or `filter()`, `json_encode` or `serialize`, throws the `TypeError` that names its type and the element. So PHP# code never reads an element its type doesn't hold.
 
-**A plain PHP array keyed by `int` alone arrives as a `List`, renumbered,** as Kotlin reads a Java `List`. PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. A shape whose keys are all `int`, as `list{int, int}` or `array{0: int, 1: int}`, is a `List` too, of its elements in order, and so is each array keyed by `int` alone that a shape's field, a `Map`'s value or a `List`'s element holds. An array keyed by `string` or by `int|string` stays a `Map`, and a value plain PHP types as a list or a map, as `list<int>|array<string, int>`, keeps the keys it holds, so no `string` key is ever lost. A call of a plain PHP function whose declared result is conditional, as `array_slice`'s `($preserve_keys is true ? array<int, V> : list<V>)`, gives the type of the branch its arguments pick, so `array_slice(list, 1, null, true)` arrives as a `List` whose first element is at `0`, and one whose arguments pick no branch gives both. A PHP array that crosses into a `Map` keyed by `string` gives each `int` key back as its `string`, so `"5"` stays `"5"`.
+**A plain PHP array keyed by `int` alone arrives as a `List`, renumbered.** PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. A shape whose keys are all `int`, as `list{int, int}` or `array{0: int, 1: int}`, is a `List` too, of its elements in order, and so is each array keyed by `int` alone that a shape's field, a `Map`'s value or a `List`'s element holds. An array keyed by `string` or by `int|string` stays a `Map`, and a value plain PHP types as a list or a map, as `list<int>|array<string, int>`, keeps the keys it holds, so no `string` key is ever lost. A call of a plain PHP function whose declared result is conditional, as `array_slice`'s `($preserve_keys is true ? array<int, V> : list<V>)`, gives the type of the branch its arguments pick, so `array_slice(list, 1, null, true)` arrives as a `List` whose first element is at `0`, and one whose arguments pick no branch gives both. A PHP array that crosses into a `Map` keyed by `string` gives each `int` key back as its `string`, so `"5"` stays `"5"`.
 
 <!-- example plain-list-arrival -->
 ```php
@@ -1911,7 +1911,7 @@ Set<string> tags = ["vip"];                    // the declared type makes it a S
 
 PHP's `["key" => value]` is not used, because `=>` is the lambda arrow.
 
-**An empty literal, `[]` or `[:]`, with no declared type is a compile error,** as in Swift, because nothing says what it holds:
+**An empty literal, `[]` or `[:]`, with no declared type is a compile error,** because nothing says what it holds:
 
 <!-- example empty-literals: statements alone -->
 ```csharp
@@ -1957,11 +1957,11 @@ image.resize(...options);                                 // compile error: only
 
 **Indexing:**
 
-- A `List` read, `x[i]`, throws `OutOfRangeException` when the index is missing, whatever follows it, as in Kotlin, Swift and C#. `x.getOrNull(i)` is the safe read, as in Kotlin, so `x[i] ?? fallback` is a compile error that names `getOrNull`.
-- A `Map` read, `x[key]`, gives `TValue?`, null when the key is missing, as in Kotlin and Swift.
+- A `List` read, `x[i]`, throws `OutOfRangeException` when the index is missing, whatever follows it. `x.getOrNull(i)` is the safe read, so `x[i] ?? fallback` is a compile error that names `getOrNull`.
+- A `Map` read, `x[key]`, gives `TValue?`, null when the key is missing.
 - `x[i] = v` on a `List` replaces the element at `i`, and throws `OutOfRangeException` past the end. Appending is `add`.
 - `x[key] = v` on a `Map` inserts or replaces the key.
-- A `List` index is an `int`. Any wider index, such as `int|string` or `Any`, is a compile error. A negative index is never in a `List`, so `items[-1]` throws `OutOfRangeException`, and the last item is `items.last()`, as in Kotlin.
+- A `List` index is an `int`. Any wider index, such as `int|string` or `Any`, is a compile error. A negative index is never in a `List`, so `items[-1]` throws `OutOfRangeException`, and the last item is `items.last()`.
 
 <!-- example index-rules: statements
 List<Line> lines = [];
@@ -1982,7 +1982,7 @@ items[5] ?? 0;                // compile error: a List read throws when the inde
 items[id];                    // compile error when id is int|string: a List index is an int
 ```
 
-**A `List` index is a place,** as a Rust `Vec` index and a Go slice index are, so a changing method called through it changes the element the list stores: `grid[0].add(5)` adds to the list at index 0. A struct's fields never change (section 10), so `points[0].x = 5` stays a compile error. **A change through a `Map` index is a compile error,** as Go refuses `m[k].x = 5`, because a `Map` read is a copy:
+**A `List` index is a place,** so a changing method called through it changes the element the list stores: `grid[0].add(5)` adds to the list at index 0. A struct's fields never change (section 10), so `points[0].x = 5` stays a compile error. **A change through a `Map` index is a compile error,** because a `Map` read is a copy:
 
 <!-- example index-changes: statements
 List<List<int>> grid = [[1, 2], [3]];
@@ -2014,7 +2014,7 @@ int? maybe = prices.get(plan);                              // compiles: null wh
 
 Data with fixed keys is a class, so a `Map` holds keys that come from outside, where a missing key is normal.
 
-**A `Map` with nullable values reads as Kotlin's does:** a read from `Map<string, int?>` gives `int?`, so a missing key and a stored null read the same. `map.has(key)` tells them apart, as Kotlin's `containsKey` does.
+**A `Map` with nullable values reads as any `Map` does:** a read from `Map<string, int?>` gives `int?`, so a missing key and a stored null read the same. `map.has(key)` tells them apart.
 
 <!-- example nullable-map-values: statements -->
 ```csharp
@@ -2038,7 +2038,7 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 }
 ```
 
-**Map keys:** anything with `==` and `hash()` (section 19) keys a `Map` and joins a `Set`, as in Swift, Rust, Java and Kotlin. Two keys are one key when they are equal as C#'s `Dictionary` finds them with `Equals`, which is `==` but for two numbers: every NaN is one key, though `NaN == NaN` stays false, and an `int` and a `float` are one key only when the `float` is exactly that whole number, though `==` converts the `int` to a `float` first, as C#'s `==` on a `long` and a `double` does. So `-0.0` and `0.0` are one key, and `2 ** 53 + 1` and `2.0 ** 53` are two. In a `Map<float, V>` an `int` key becomes a `float` where it enters, so the two differ only for a key type that holds both. A class value is one key per whole type, as C#'s `Type`, Java's `Class` and Kotlin's `KClass` key a map, so `typeof(Box<Order>)` and `typeof(Box<Invoice>)` are two keys.
+**Map keys:** anything with `==` and `hash()` (section 19) keys a `Map` and joins a `Set`. Two keys are one key when they are `==`, but for two numbers: every NaN is one key, though `NaN == NaN` stays false, and an `int` and a `float` are one key only when the `float` is exactly that whole number, though `==` converts the `int` to a `float` first. So `-0.0` and `0.0` are one key, and `2 ** 53 + 1` and `2.0 ** 53` are two. In a `Map<float, V>` an `int` key becomes a `float` where it enters, so the two differ only for a key type that holds both. A class value is one key per whole type, so `typeof(Box<Order>)` and `typeof(Box<Invoice>)` are two keys.
 
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way.
 - Plain PHP receives a `Map` or a `Set` as a PHP array wherever it gets one: a result, a value a generator yields, an argument, a property it reads, a value PHP# writes into a property plain PHP declares or an element of one, a constant and an attribute's argument, and so does each `Map` and `Set` a `List` or a `Map` holds, at every depth. A value crosses by what it is when the code runs, so that holds where the declared type is `Any`, `Any?`, a type parameter, an `Iterable` or a union that holds a `Map` too, at an `[Import]` call's argument as at plain PHP's. A `Map` is the array of its entries and a `Set` the list of its elements. A property it reads through `get_object_vars`, `get_mangled_object_vars`, `get_class_vars`, an `(array)` cast, `foreach`, `array_walk` or an `ArrayIterator` over the object, `ReflectionProperty::getValue` and `getRawValue`, after an `isInitialized()` or a `setValue()` too, and `ReflectionClass`'s static property reads is the array too, `empty()` tests that array, `var_export` prints it, and reflection gives each such property, parameter and result the type `array`. A reference plain PHP takes to an instance property whose type names each `Map` and `Set` it can hold, as `Map<string, Set<int>>` does and `Map<string, Any>` does not, is a reference to that array, as `ksort`, `$r = &$order->tags` and `foreach` by reference take one, and each array assigned through it must fit the property's type. PHP# code reading its own property still gets the `Map`, and a PHP array plain PHP writes there, directly or through a reference, becomes one again. A lazy `Iterable` reaches plain PHP as a `Traversable`, unread, and each element crosses as plain PHP reads it.
@@ -2118,7 +2118,7 @@ public static void apply(Set<string> tags) { … }
 Tags.apply(picked);                              // compile error: a List is not a Set; write picked.toSet()
 ```
 
-**Methods** follow Kotlin's collection names:
+**Methods** of a collection:
 
 <!-- example collection-read-methods: statements
 List<Line> lines = [new Line()];
@@ -2152,7 +2152,7 @@ lines.windowed(2);
 - Methods that read return a new collection.
 - `first` throws `OutOfRangeException` when nothing matches, as a bare index read does, and so does a `slice` range outside the list. `firstOrNull` gives null instead. `minBy` and `maxBy` throw `OutOfRangeException` on an empty list, as `max()` does. A `chunked` or `windowed` size below 1 throws `ValueError`.
 - A `sortedBy` key of type `T` or `T?` compiles exactly when `<` compiles on two non-null `T` values. The nullable part is allowed, and it sorts first. So does a key of `minBy`, `maxBy` and `sortedByDescending`. Every sort is stable, so equal keys keep their order.
-- **A tuple key orders element by element,** as Rust orders tuples and Kotlin's `compareBy(a, b)` does: `[l.product.id, l.amount]` sorts by the product, then by the amount. It compiles exactly when each element's type is a key, and a null element sorts first. A `List` that is no tuple has no order. `sortedWith` takes a comparison of two elements, below 0 when the first goes first, for any other order.
+- **A tuple key orders element by element:** `[l.product.id, l.amount]` sorts by the product, then by the amount. It compiles exactly when each element's type is a key, and a null element sorts first. A `List` that is no tuple has no order. `sortedWith` takes a comparison of two elements, below 0 when the first goes first, for any other order.
 - A method takes on the effects of each function it is given (section 29), so `lines.map(l => l.name)` is pure.
 - Methods that change a collection change it in place:
 
@@ -2193,7 +2193,7 @@ plans.filter(p => p.active);          // Map<string, Plan>, keys kept
 
 `contains`, a `List`'s `remove`, `indexOf` and `Set<T>` need `==` on the element type (section 19). Without it, they are a compile error.
 
-**`flatMap` and `toList()`:** a `List`'s `flatMap` gives, in order, the elements of each `Iterable` its function gives, as Kotlin's does. `toList()` gives the elements of any `Iterable` as a `List` of their own. A `Map` is an `Iterable` of its `[key, value]` entries, so both give a `Map`'s entries, as Kotlin's `Map.toList()` gives its pairs:
+**`flatMap` and `toList()`:** a `List`'s `flatMap` gives, in order, the elements of each `Iterable` its function gives. `toList()` gives the elements of any `Iterable` as a `List` of their own. A `Map` is an `Iterable` of its `[key, value]` entries, so both give a `Map`'s entries:
 
 <!-- example flat-map-to-list: statements
 List<List<int>> rows = [[1, 2], [], [3]];
@@ -2213,7 +2213,7 @@ rows.flatMap(row => row.count());      // compile error: an int is no Iterable
 List<int> counts = shelves.flatMap(shelf => shelf);   // compile error: the entries are [string, int]
 ```
 
-**`join` puts a separator between the strings of a `List<string>`,** as Rust's `[String].join`, JavaScript's `join` and Swift's `joined(separator:)` do. Only a list of strings has it, so a list of anything else maps its elements to text first:
+**`join` puts a separator between the strings of a `List<string>`.** Only a list of strings has it, so a list of anything else maps its elements to text first:
 
 <!-- example list-join: statements
 List<string> tags = ["vip", "new"];
@@ -2234,9 +2234,9 @@ record.parseCsv();                          // ["A-1", "Mug, large", "12.50"]
 record.length();                            // 22: A-1,"Mug, large",12.50
 ```
 
-**`SortedMap<TKey, TValue>` and `SortedSet<T>`, in `Sharp.Collections`, keep their keys in order,** as Rust's `BTreeMap` and `BTreeSet` do. Each has every member a `Map` or a `Set` has, and a loop reads it in key order. `first()` and `last()` give the value of the smallest and the largest key, or the smallest and the largest element, and throw `OutOfRangeException` on an empty one. `floor(key)` and `ceiling(key)` give the nearest key at or below `key` and at or above it, or null. `range(from, to)` gives the entries from `from` up to `to`, with `to` left out, as Rust's `range(from..to)`. They order by the key's `operator <=>`, as `<` orders two keys (section 19), or by a `Function<int(T, T)>` the constructor takes, which gives below 0 when its first key goes first. Two keys that order at 0 are one key. Without a comparison, a key whose class declares no `<=>` throws `ValueError` at its first comparison.
+**`SortedMap<TKey, TValue>` and `SortedSet<T>`, in `Sharp.Collections`, keep their keys in order.** Each has every member a `Map` or a `Set` has, and a loop reads it in key order. `first()` and `last()` give the value of the smallest and the largest key, or the smallest and the largest element, and throw `OutOfRangeException` on an empty one. `floor(key)` and `ceiling(key)` give the nearest key at or below `key` and at or above it, or null. `range(from, to)` gives the entries from `from` up to `to`, with `to` left out. They order by the key's `operator <=>`, as `<` orders two keys (section 19), or by a `Function<int(T, T)>` the constructor takes, which gives below 0 when its first key goes first. Two keys that order at 0 are one key. Without a comparison, a key whose class declares no `<=>` throws `ValueError` at its first comparison.
 
-**`PriorityQueue<TElement, TPriority>`, in `Sharp.Collections`, gives the element of the lowest priority first,** as .NET's does: `enqueue(element, priority)`, `dequeue()`, `peek()`, `count()` and `isEmpty()`. It orders its priorities as a `SortedMap` orders its keys, and gives elements of one priority in no set order. `dequeue()` and `peek()` throw `UnderflowException` on an empty queue:
+**`PriorityQueue<TElement, TPriority>`, in `Sharp.Collections`, gives the element of the lowest priority first:** `enqueue(element, priority)`, `dequeue()`, `peek()`, `count()` and `isEmpty()`. It orders its priorities as a `SortedMap` orders its keys, and gives elements of one priority in no set order. `dequeue()` and `peek()` throw `UnderflowException` on an empty queue:
 
 <!-- example sorted-collections: statements
 import Sharp.Collections.PriorityQueue;
@@ -2301,9 +2301,9 @@ rows[0];                                    // compile error: an Iterable has no
 
 - **Lazy operations,** such as `filter`, `map` and `take`, return an `Iterable<T>`. They run only when `toList()` or a loop reads the result.
 - **A lazy plain PHP source,** such as a generator or Laravel's `LazyCollection`, is checked element by element as it is read, so each element is checked where it enters PHP# (section 11).
-- **The lazy operations apply to every `Iterable<T>` implementation,** as C#'s LINQ reaches every `IEnumerable<T>` and Kotlin's operations every `Iterable<T>`: a PHP# class that names `Iterable<T>` and a plain PHP `Traversable`, such as Laravel's `LazyCollection`. The class's own member of the same name wins, so `Order.query().cursor().filter(…)` runs `LazyCollection`'s own `filter`, and `toList()`, which it doesn't declare, is the lazy operation. Held as an `Iterable<T>`, as `orders` is above, the value has only the lazy operations.
+- **The lazy operations apply to every `Iterable<T>` implementation:** a PHP# class that names `Iterable<T>` and a plain PHP `Traversable`, such as Laravel's `LazyCollection`. The class's own member of the same name wins, so `Order.query().cursor().filter(…)` runs `LazyCollection`'s own `filter`, and `toList()`, which it doesn't declare, is the lazy operation. Held as an `Iterable<T>`, as `orders` is above, the value has only the lazy operations.
 
-**A class is an `Iterable<T>` when its header names `Iterable<T>` and it declares `Iterable<T> elements()`,** as Java's `Iterable` asks for `iterator()` and C#'s `IEnumerable<T>` for `GetEnumerator()`. `elements()` returns an `Iterable` or uses `yield`. A loop, `toList()` and the lazy operations read `elements()`, and the object is an `Iterable<T>` everywhere one is taken, carrying its element type as every PHP# generic does. A class that names `Iterable<T>` and declares no `elements()` is a compile error that names the member:
+**A class is an `Iterable<T>` when its header names `Iterable<T>` and it declares `Iterable<T> elements()`.** `elements()` returns an `Iterable` or uses `yield`. A loop, `toList()` and the lazy operations read `elements()`, and the object is an `Iterable<T>` everywhere one is taken, carrying its element type as every PHP# generic does. A class that names `Iterable<T>` and declares no `elements()` is a compile error that names the member:
 
 <!-- example iterable-classes -->
 ```csharp
@@ -2341,7 +2341,7 @@ namespace App;
 public class Crate : Iterable<int> { }                     // compile error: Crate is an Iterable<int> and declares or inherits no elements()
 ```
 
-A struct names `Iterable<T>` as a class does, and an interface that names it asks each class that implements it for `elements()`, as Swift's `Sequence`, C#'s `IEnumerable<T>` and Rust's `IntoIterator` take each kind. Plain PHP reads the object through the `getIterator()` PHP# writes for it, so the type declares no `getIterator()` of its own.
+A struct names `Iterable<T>` as a class does, and an interface that names it asks each class that implements it for `elements()`. Plain PHP reads the object through the `getIterator()` PHP# writes for it, so the type declares no `getIterator()` of its own.
 
 <!-- example iterable-classes -->
 ```csharp
@@ -2392,7 +2392,7 @@ $i;                                         // 0
 iterator_to_array(new App\Tally());         // ["tea" => 3, "pie" => 7]
 ```
 
-**`yield` produces an `Iterable<T>` lazily,** as C#'s `yield return` does. A method that returns `Iterable<T>` produces its next value with `yield value;`, and every element of another `Iterable<T>` with `yield ...other;`:
+**`yield` produces an `Iterable<T>` lazily.** A method that returns `Iterable<T>` produces its next value with `yield value;`, and every element of another `Iterable<T>` with `yield ...other;`:
 
 <!-- example yield: statements
 OrderImport importer = new OrderImport([], new Order());
@@ -2513,7 +2513,7 @@ public class Square : Shape
 }
 ```
 
-**A `readonly` that can't matter warns,** as a `?` that can't matter does and Rust's `unused_mut` does, and the code compiles: before a type whose value never changes, an `int`, a `string`, an enum, a struct, a function type or a collection of them, in `is` or `as`, and after the parameters of a method with no `this` to keep:
+**A `readonly` that can't matter warns,** as a `?` that can't matter does, and the code compiles: before a type whose value never changes, an `int`, a `string`, an enum, a struct, a function type or a collection of them, in `is` or `as`, and after the parameters of a method with no `this` to keep:
 
 <!-- example readonly-cannot-matter: members -->
 ```csharp
@@ -2623,7 +2623,7 @@ Function<void(Order)>? onPaid = null
 public Function<bool(Order)> eligibleFor(Account account)
 ```
 
-**A function fits a function type when it takes every parameter the type passes,** as in C#, Kotlin, Swift and Java. A function for a type that returns `void` gives no value, and the result of a call that returns `void` is no value to use:
+**A function fits a function type when it takes every parameter the type passes.** A function for a type that returns `void` gives no value, and the result of a call that returns `void` is no value to use:
 
 <!-- example function-fit: statements
 List<int> seen = [];
@@ -2635,7 +2635,7 @@ Function<void(int)> record = (int n) => seen.add(n);
 const kept = seen.clear();                          // compile error: seen.clear() returns nothing
 ```
 
-**Any expression that gives a function is called the same way,** with the arguments in parentheses after it, as in C#, TypeScript, Kotlin and Swift: a list element, a call's result, a conditional or a lambda.
+**Any expression that gives a function is called the same way,** with the arguments in parentheses after it: a list element, a call's result, a conditional or a lambda.
 
 <!-- example function-calls: statements
 List<Function<int(int)>> steps = [(int n) => n + 1, (int n) => n * 2];
@@ -2670,7 +2670,7 @@ const price = (readonly Line line, string currency) => {
 };
 ```
 
-A lambda captures the variables it uses from around it, with no `use` list. It captures the variable itself, not a copy, as C# does:
+A lambda captures the variables it uses from around it, with no `use` list. It captures the variable itself, not a copy:
 
 <!-- example capture-by-reference: statements -->
 ```csharp
@@ -2707,7 +2707,7 @@ List<string> names = ["Spring Sale"];
 names.map(Str.slug);
 ```
 
-A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `Pdf.render` (section 23). A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
+A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `Pdf.render` (section 23). A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made:
 
 <!-- example method-value-kinds: statements
 List<int> allowed = [1, 3];
@@ -2722,7 +2722,7 @@ has(5);        // false
 kept;          // [1, 5]
 -->
 
-**A method that changes a collection is no function value**, since it would change only that copy, as Swift refuses the value of a `mutating` method. A lambda that calls it changes the collection itself:
+**A method that changes a collection is no function value**, since it would change only that copy. A lambda that calls it changes the collection itself:
 
 <!-- example changing-method-values: statements
 List<int> seen = [];
@@ -2786,7 +2786,7 @@ load().name;                 // "Ada"
 loaded.name;                 // "Ada"
 -->
 
-A read typed `Any?` this way compiles with no warning, as C#'s `dynamic` and TypeScript's `any` do, and an `as`, an `is` or a `match` states its type, as in `Contact? owner = subscription.owner as Contact;`. A write to such a property takes any value. A read after a write is still what `__get` gives back, so `row.count = "7"; return row.count;` reads `Any?`, not `string`.
+A read typed `Any?` this way compiles with no warning, and an `as`, an `is` or a `match` states its type, as in `Contact? owner = subscription.owner as Contact;`. A write to such a property takes any value. A read after a write is still what `__get` gives back, so `row.count = "7"; return row.count;` reads `Any?`, not `string`.
 
 A declared property the code can't read, such as an Eloquent model's protected `table` or `hidden`, is the property `__get` reads, as plain PHP reads it from outside the class.
 
@@ -2885,13 +2885,13 @@ private Function<int(int)> discount = (int amount) => amount - 100;
 int paid = this.discount(price);       // calls the function in discount, since there is no discount method
 ```
 
-The field or property is read before the arguments run, as in Java, C#, TypeScript and Rust. An argument that replaces `discount` doesn't change which function runs.
+The field or property is read before the arguments run. An argument that replaces `discount` doesn't change which function runs.
 
 ### 14.4 Null operators
 
 - **`a ?? b`:** `b` when `a` is null.
 - **`a ??= b`:** assigns `b` only when `a` is null.
-- **`a?.b`:** reads `b`, or gives null when `a` is null. PHP writes this as `?->`. A null `a` skips the rest of the chain, as in C#, Kotlin and Swift, so in `a?.items[0].name` only `a` may be null, and a second `?.` on a link that is never null warns, as Kotlin's "unnecessary safe call" does.
+- **`a?.b`:** reads `b`, or gives null when `a` is null. PHP writes this as `?->`. A null `a` skips the rest of the chain, so in `a?.items[0].name` only `a` may be null, and a second `?.` on a link that is never null warns.
 - **`a?.b = c`:** writes `b` only when `a` is not null, as `=`, every compound assignment, `++`, `--` and an index write such as `a?.tags["vip"] = true` do.
 - **`f?.(x)`:** calls `f` only when it is not null.
 - **`a ?? throw …`, `a ?? return`, `a ?? continue` and `a ?? break`:** leave when `a` is null. `return` takes a value when the method returns one.
@@ -2912,7 +2912,7 @@ public void renewAll(List<int> customerIds, string plan)
 }
 ```
 
-**The rest of the chain reads a `?.` receiver as not null,** because it runs only when the receiver is not null, as C#'s null checks read it. An argument, an index, or the value a write stores after `step?.` uses `step` with no second `?.`. After the chain, `step` may be null again, whatever the skipped part tested or assigned.
+**The rest of the chain reads a `?.` receiver as not null,** because it runs only when the receiver is not null. An argument, an index, or the value a write stores after `step?.` uses `step` with no second `?.`. After the chain, `step` may be null again, whatever the skipped part tested or assigned.
 
 <!-- example null-safe-rest-of-chain: statements
 public class Router { public string route(string label) => label; }
@@ -2942,7 +2942,7 @@ Step? step = this.current;                                 // one read, into a l
 string? routed = step?.route(step.label());                // compiles: step is not null in the arguments
 ```
 
-**A write through `?.` happens only when every `?.` receiver on its left is not null,** as in C# 14, Kotlin and Swift. When one is null, nothing is written, and neither the right side nor a `set` body runs. Each receiver runs once, and the write goes to the object it tested, so `this.orders.find(id)?.note = "gift"` calls `find` once.
+**A write through `?.` happens only when every `?.` receiver on its left is not null.** When one is null, nothing is written, and neither the right side nor a `set` body runs. Each receiver runs once, and the write goes to the object it tested, so `this.orders.find(id)?.note = "gift"` calls `find` once.
 
 **An index into a collection that may be null is an error,** read or written, as a member read on a value that may be null is. Test the collection first, as in `if (tags != null)`.
 
@@ -2964,7 +2964,7 @@ order?.total += this.fee();                          // compiles: fee() runs onl
 order?.customer.name = "Ada";                        // compiles: skips when order is null; customer is not nullable
 ```
 
-**A `?` or a null check that cannot matter warns,** as C#'s CS0472, Kotlin's "unnecessary safe call" and Swift's unused `??` side do, and the code compiles: a null check, `?.` or `??` on a value whose type has no `?`. Section 24 gives the rule for `?`. A nullable return type on a method that never returns null compiles with no warning, as in Kotlin and C#.
+**A `?` or a null check that cannot matter warns,** and the code compiles: a null check, `?.` or `??` on a value whose type has no `?`. Section 24 gives the rule for `?`. A nullable return type on a method that never returns null compiles with no warning.
 
 <!-- example needless-null-checks: members
 private Customer customer = new Customer();
@@ -3034,7 +3034,7 @@ public class Receipts
 }
 ```
 
-**Declaring:** `event` declares an event type. `public event OrderPaid(int orderId, Money amount);` declares `OrderPaid`, a class whose parameters become get-only properties, as C#'s positional records and Kotlin's data classes do.
+**Declaring:** `event` declares an event type. `public event OrderPaid(int orderId, Money amount);` declares `OrderPaid`, a class whose parameters become get-only properties.
 
 **A parameter takes any type,** a collection too. A list literal passed for a `Set` parameter becomes a `Set`, as it does for a method's parameter (section 12):
 
@@ -3130,7 +3130,7 @@ public void refresh() on OrderPayed { … }                               // com
 public void log(OrderPaid e, Logger logger) on OrderPaid { … }          // compile error: a listener takes only the event
 ```
 
-**A generic event declares type parameters as a class does,** as C#'s `EventHandler<TEventArgs>` takes its event's type. `emit new Saved<Order>(order)` raises a `Saved<Order>`, and an `on` clause names the type arguments it hears, as every type names them (section 11):
+**A generic event declares type parameters as a class does.** `emit new Saved<Order>(order)` raises a `Saved<Order>`, and an `on` clause names the type arguments it hears, as every type names them (section 11):
 
 - **`on Saved<Order>` hears only a `Saved<Order>`,** never a `Saved<Invoice>`. `Events.on<Saved<Order>>` hears the same.
 - **A bare `on Saved` is a compile error** that says to name the type arguments.
@@ -3357,7 +3357,7 @@ An object initializer runs after the constructor. It sets properties through the
 
 ## 17. Loops
 
-`for … of` loops over a collection or any `Iterable<T>` (section 12), as in TypeScript. The loop variable is declared with `const` or `let`, and each pass gets a fresh variable (section 3).
+`for … of` loops over a collection or any `Iterable<T>` (section 12). The loop variable is declared with `const` or `let`, and each pass gets a fresh variable (section 3).
 
 <!-- example for-of: statements
 List<Line> lines = [new Line()];
@@ -3377,7 +3377,7 @@ Map<string, Plan> plans = ["pro": new Plan()];
 for (const plan of plans.values()) { … }         // a Map's values
 ```
 
-**A loop over a `Map` gives each entry as a `[key, value]` tuple, and `values()` gives the values,** as Swift's, Kotlin's, Rust's and C#'s loops over a dictionary do. The key arrives as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type stays allowed (section 12).
+**A loop over a `Map` gives each entry as a `[key, value]` tuple, and `values()` gives the values.** The key arrives as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type stays allowed (section 12).
 
 **A `const` loop variable can have its type written,** as in `for (const [Status status, int n] of counts)`. `let` with a written type is a parse error, because a typed local is written without `let` (section 2). A written `string` key over a `Map<string, TValue>` reads back as a `string`.
 
@@ -3391,7 +3391,7 @@ for (const Line line of lines) { … }                 // compiles
 for (let [Status status, int n] of counts) { … }     // parse error: let takes no written type
 ```
 
-**A loop reads an `Iterable<T>` alone,** so a loop over any other value is a compile error that names its type, as Kotlin's and C#'s are. That holds for an object of a class that is no `Iterable` (section 12), where PHP would loop over its public properties:
+**A loop reads an `Iterable<T>` alone,** so a loop over any other value is a compile error that names its type. That holds for an object of a class that is no `Iterable` (section 12), where PHP would loop over its public properties:
 
 <!-- example loop-over-object -->
 ```csharp
@@ -3422,7 +3422,7 @@ These keep their C and PHP form:
 
 PHP's `foreach` is removed.
 
-**A loop can take a name, as `orders: for (…)`, which only `break` and `continue` read,** as in Java, Kotlin, Swift, Rust and TypeScript. `break orders;` leaves the loop named `orders` from a loop inside it, and `continue orders;` goes on with that loop's next pass. The name is optional, and a plain `break` or `continue` means the innermost loop. A loop name that no `break` or `continue` names is a compile error, as an unused label is in Go. So is a name a loop around it already has, and a `break` or `continue` that names no loop around it, as in Java. A count after `break` or `continue`, as `break 2`, is a parse error, as in Java, Kotlin, Swift and TypeScript, since the name says which loop it leaves.
+**A loop can take a name, as `orders: for (…)`, which only `break` and `continue` read.** `break orders;` leaves the loop named `orders` from a loop inside it, and `continue orders;` goes on with that loop's next pass. The name is optional, and a plain `break` or `continue` means the innermost loop. A loop name that no `break` or `continue` names is a compile error. So is a name a loop around it already has, and a `break` or `continue` that names no loop around it. A count after `break` or `continue`, as `break 2`, is a parse error, since the name says which loop it leaves.
 
 <!-- example loop-names: statements
 List<List<int>> orders = [[1, 2], [3, 0, 4], [5, -1, 6], [7, 99]];
@@ -3462,7 +3462,7 @@ for (let i = 0; this.next() ?? continue; i++) { passes += 1; }  // a null runs i
 passes;                                                          // 5
 ```
 
-**The body of every `if`, `else`, `while`, `do` and `for` is written in braces,** as in Go, Rust and Swift, and as PSR-12 requires of PHP. A body without braces is a compile error:
+**The body of every `if`, `else`, `while`, `do` and `for` is written in braces,** as PSR-12 requires of PHP. A body without braces is a compile error:
 
 <!-- example braces: statements
 bool done = false;
@@ -3477,7 +3477,7 @@ while (!done) done = true;      // compile error: write the body in braces, as i
 
 **Joining:** `+` joins strings. Joining a string with a number is a compile error, so `"1" + 1` cannot produce `"11"`. `+` in plain PHP files keeps its PHP meaning.
 
-What `+` does is chosen from the operand types the checker sees, as C# and Kotlin resolve operators. Two strings join, two numbers add, and an object with `operator +` (section 19) calls it.
+What `+` does is chosen from the operand types the checker sees. Two strings join, two numbers add, and an object with `operator +` (section 19) calls it.
 
 <!-- example string-joining: statements
 Order order = new Order();
@@ -3486,7 +3486,7 @@ Order order = new Order();
 const label = "Order " + order.number;
 ```
 
-**Interpolation:** backtick templates with `${expr}` interpolate, as in TypeScript. They can span several lines, so they replace heredoc and nowdoc.
+**Interpolation:** backtick templates with `${expr}` interpolate. They can span several lines, so they replace heredoc and nowdoc.
 
 <!-- example templates: statements
 Order order = new Order();
@@ -3499,7 +3499,7 @@ const html = `
 `;
 ```
 
-A template's `${expr}` accepts `int`, `float`, `string`, `bool`, and any type that declares `string toString()`, as Rust's `format!` takes any `Display` type. A `bool` prints `true` or `false`, and any other type prints what its `toString()` returns. Every other type is a compile error, "A template shows `int`, `float`, `string`, `bool` or a type that declares `toString()`, and `Status` is none of them.", with the offending type's name in place of `Status`. A literal or narrowed type counts as its base type, so `1|2` is an `int`. A union of `int`, `float`, `string` and `bool`, such as `int|string`, is taken, and each value prints as its own type does. A nullable value such as `int?` is refused until it is checked (section 24), and the same error names `int?`.
+A template's `${expr}` accepts `int`, `float`, `string`, `bool`, and any type that declares `string toString()`. A `bool` prints `true` or `false`, and any other type prints what its `toString()` returns. Every other type is a compile error, "A template shows `int`, `float`, `string`, `bool` or a type that declares `toString()`, and `Status` is none of them.", with the offending type's name in place of `Status`. A literal or narrowed type counts as its base type, so `1|2` is an `int`. A union of `int`, `float`, `string` and `bool`, such as `int|string`, is taken, and each value prints as its own type does. A nullable value such as `int?` is refused until it is checked (section 24), and the same error names `int?`.
 
 <!-- example template-types: statements
 int count = 3;
@@ -3534,9 +3534,9 @@ const sku = new Sku("A-12");
 const label = `Sku: ${sku}`;   // Sku declares toString(): "Sku: A-12"
 ```
 
-A plain PHP file keeps PHP's own interpolation. It converts an object of a class that declares `toString()`, or takes it from an interface's default body (section 22), to the text a template shows, as `(string) $sku` and `"Sku: {$sku}"` do, as Java's and Kotlin's string conversion calls `toString()`.
+A plain PHP file keeps PHP's own interpolation. It converts an object of a class that declares `toString()`, or takes it from an interface's default body (section 22), to the text a template shows, as `(string) $sku` and `"Sku: {$sku}"` do.
 
-**A plain PHP class's `__toString()` is its `toString()` in PHP# code,** its own or inherited, when it declares and inherits no `toString()`, as Kotlin calls a Java class's `toString()` as its own. A template shows it and `email.toString()` calls it, and both run PHP's `__toString()`. PHP# code never names `__toString`, and a plain PHP class with neither method stays a template's compile error:
+**A plain PHP class's `__toString()` is its `toString()` in PHP# code,** its own or inherited, when it declares and inherits no `toString()`. A template shows it and `email.toString()` calls it, and both run PHP's `__toString()`. PHP# code never names `__toString`, and a plain PHP class with neither method stays a template's compile error:
 
 <!-- example plain-to-string -->
 ```php
@@ -3560,11 +3560,11 @@ email.toString();                      // "ada@example.com"
 `Row: ${row}`;                         // compile error: Row declares neither toString() nor __toString()
 ```
 
-**A `toString()` is always `string toString()`:** an instance method with no required parameter that returns `string`, as Java's and Kotlin's `toString()` override `Object`'s and `Any`'s. A template and every conversion to text call it with no arguments, so any other `toString()` a type declares is a compile error that names the signature to write, "`Sku.toString()` returns `int`, and PHP# shows a value as text by the `string` its `toString()` returns.", and so is a template of a plain PHP class whose `toString()` is not that one.
+**A `toString()` is always `string toString()`:** an instance method with no required parameter that returns `string`. A template and every conversion to text call it with no arguments, so any other `toString()` a type declares is a compile error that names the signature to write, "`Sku.toString()` returns `int`, and PHP# shows a value as text by the `string` its `toString()` returns.", and so is a template of a plain PHP class whose `toString()` is not that one.
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
-**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so `length` counts characters and a case change reaches every letter. `substring`, `indexOf` and `lastIndexOf` count in characters, a search that finds nothing gives `null`, and a range or a start outside the text throws `OutOfRangeException`. `trim`, `trimStart` and `trimEnd` remove whitespace, or each character of the text they are given, and `removePrefix` and `removeSuffix` remove their text once when the text starts or ends with it. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. `lines` splits at `"\r\n"`, `"\n"` and `"\r"`. Empty text to replace and an empty delimiter give Kotlin's results: they match before each character and after the last. A negative limit, empty padding and a negative count each throw `ValueError`, as in Kotlin. `isEmpty()` and `isNotEmpty()` tell whether the text holds a character, as they tell whether a collection holds an element (section 12), so `"0"` is not empty:
+**Text methods:** a `string` has text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so `length` counts characters and a case change reaches every letter. `substring`, `indexOf` and `lastIndexOf` count in characters, a search that finds nothing gives `null`, and a range or a start outside the text throws `OutOfRangeException`. `trim`, `trimStart` and `trimEnd` remove whitespace, or each character of the text they are given, and `removePrefix` and `removeSuffix` remove their text once when the text starts or ends with it. `replace` replaces every match. `split` keeps the empty text after a trailing delimiter, and takes a `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. `lines` splits at `"\r\n"`, `"\n"` and `"\r"`. Empty text to replace and an empty delimiter match before each character and after the last. A negative limit, empty padding and a negative count each throw `ValueError`. `isEmpty()` and `isNotEmpty()` tell whether the text holds a character, as they tell whether a collection holds an element (section 12), so `"0"` is not empty:
 
 <!-- example text-methods: statements -->
 ```csharp
@@ -3601,7 +3601,7 @@ email.toString();                      // "ada@example.com"
 str_contains("hello", "ell");             // compile error: no function str_contains exists
 ```
 
-**Ignoring case:** `compareTo`, `equals`, `indexOf`, `lastIndexOf`, `contains`, `startsWith` and `endsWith` take `ignoreCase`, `false` by default, as Kotlin's do. It compares each character folded by Unicode's simple case folding, so an index stays an index into the text. `titlecase()` capitalizes each word, `replace` takes a `limit` of how many matches it replaces, a code point's `toCharacter()` gives its character, a `List<int>`'s `toByteString()` gives the text of its bytes, and `normalized()` gives the text in a Unicode normalization form, `NormalizationForm.C` by default. `isLetter()`, `isDigit()`, `isLetterOrDigit()`, `isWhitespace()`, `isUppercase()` and `isLowercase()` are true when the text holds a character and each one is in the class, as Kotlin's and Rust's `char` members are for one. A code point that is no Unicode scalar value, a byte outside 0 to 255, and text that is not UTF-8 throw `ValueError`:
+**Ignoring case:** `compareTo`, `equals`, `indexOf`, `lastIndexOf`, `contains`, `startsWith` and `endsWith` take `ignoreCase`, `false` by default. It compares each character folded by Unicode's simple case folding, so an index stays an index into the text. `titlecase()` capitalizes each word, `replace` takes a `limit` of how many matches it replaces, a code point's `toCharacter()` gives its character, a `List<int>`'s `toByteString()` gives the text of its bytes, and `normalized()` gives the text in a Unicode normalization form, `NormalizationForm.C` by default. `isLetter()`, `isDigit()`, `isLetterOrDigit()`, `isWhitespace()`, `isUppercase()` and `isLowercase()` are true when the text holds a character and each one is in the class. A code point that is no Unicode scalar value, a byte outside 0 to 255, and text that is not UTF-8 throw `ValueError`:
 
 <!-- example text-case-and-classes: statements
 import Sharp.Text.NormalizationForm;
@@ -3645,7 +3645,7 @@ PHP's backtick shell execution is removed, and so is `shell_exec()`. A program r
 **`==` exists only where the type has it:**
 
 - **Strings, numbers, enums and class values** (section 25) compare by value with `==`, with no code.
-- **A struct or a collection gets `==` with no code when every field or element has `==`,** and it compares each field or element with that one's own `==`, as Swift, Rust and Go do. A struct with a field that has no `==` has no `==` either.
+- **A struct or a collection gets `==` with no code when every field or element has `==`,** and it compares each field or element with that one's own `==`. A struct with a field that has no `==` has no `==` either.
 - **Any type may declare `operator ==` with `hash()`,** a struct as well as a class, and the declared one replaces the one a struct gets with no code.
 - **A class** compares with `==` only if it or a parent declares `operator ==`. Otherwise `==` on it is a compile error.
 - **A function has no `==`,** so `==` between two function values is a compile error.
@@ -3654,7 +3654,7 @@ PHP's backtick shell execution is removed, and so is `shell_exec()`. A program r
 - **`===`** is true only for the same object. It works on classes only, and cannot be overridden.
 - **`Set`** hashes a struct, enum, string, number or collection by its value, and an object by its class's `hash()`. A struct that declares `hash()` is hashed by it.
 
-**Two sets are `==` when they hold the same elements, in any order,** as in Kotlin, Java, Swift and Python. Two equal sets hash alike whatever their order, so a `Set` keys a `Map` and joins a `Set`. A literal takes its collection type from where it lands (section 12), so a list literal compared with a set is a set, as in Swift:
+**Two sets are `==` when they hold the same elements, in any order.** Two equal sets hash alike whatever their order, so a `Set` keys a `Map` and joins a `Set`. A literal takes its collection type from where it lands (section 12), so a list literal compared with a set is a set:
 
 <!-- example set-equality: statements -->
 ```csharp
@@ -3749,10 +3749,10 @@ twice == twice;                  // compile error: a function has no ==
 
 - **Overloadable operators:** `+ - * / % **`, unary `-`, `==` and `<=>`, and indexing through an indexer (section 6.6).
 - **A class, a struct, an enum and an interface declare operators** by the same rules. An interface writes `static` alone, as it writes every member bare, and its operator applies to every implementer (section 22).
-- **An operator is chosen from the types of both sides,** as in C#. Of the operators the two types and their interfaces declare, the most specific one that takes both sides runs, whichever side comes first. Two that take both, where neither is more specific, are a compile error at the use. `sortedBy` orders as `<` on two of its keys does.
+- **An operator is chosen from the types of both sides.** Of the operators the two types and their interfaces declare, the most specific one that takes both sides runs, whichever side comes first. Two that take both, where neither is more specific, are a compile error at the use. `sortedBy` orders as `<` on two of its keys does.
 - **`!=`** is derived from `==`.
 - **`< > <= >=` and sorting** are derived from `<=>`.
-- **Strings compare byte by byte,** as in Go. `<`, `>` and `sort` put `"10"` before `"9"` and capitals before lowercase, so `"10" < "9"` is true and `"Zebra" < "apple"` is true. The order agrees with `==`. `compareTo` gives -1, 0 or 1 in the same order, so `"b".compareTo("a")` is 1.
+- **Strings compare byte by byte.** `<`, `>` and `sort` put `"10"` before `"9"` and capitals before lowercase, so `"10" < "9"` is true and `"Zebra" < "apple"` is true. The order agrees with `==`. `compareTo` gives -1, 0 or 1 in the same order, so `"b".compareTo("a")` is 1.
 - **`==` and `hash()` go together:** declaring `==` without `hash()` is a compile error, because `Set` needs both.
 
 An enum orders its cases only when it declares `<=>`:
@@ -3829,7 +3829,7 @@ lightWeight == heavy;                   // false: only Weighed's == takes a Weig
 
 Declaring `public static bool operator ==(Parcel a, Parcel b)` in `Parcel` gives two `Parcel`s their own `==`, which is more specific than either interface's.
 
-**`==` and `!=` on a nullable type are lifted,** as C#'s operators on nullable values and Kotlin's `==` are. Null equals only null. Two non-null values use the type's own `==`, including a declared `operator ==`, so an `operator ==` takes two non-null values and never sees a null. `x != null` is the normal null check, and it never runs user code. `x is null` and `x is not null` stay valid as ordinary patterns (section 21).
+**`==` and `!=` on a nullable type are lifted.** Null equals only null. Two non-null values use the type's own `==`, including a declared `operator ==`, so an `operator ==` takes two non-null values and never sees a null. `x != null` is the normal null check, and it never runs user code. `x is null` and `x is not null` stay valid as ordinary patterns (section 21).
 
 <!-- example lifted-equality: statements
 Money total = new Money(500, "USD");
@@ -3866,7 +3866,7 @@ const mask = 1 << count;                      // throws ArithmeticError when cou
 - A condition is a `bool` (section 21), so `if (permissions & WRITE)` is a compile error.
 - `|` between two `bool`s is a compile error that names `||`.
 - A shift by a negative count throws `ArithmeticError`.
-- The bitwise operators bind tighter than comparisons, as in Go, Rust and Swift. PHP and C# bind them looser, so there `permissions & WRITE != 0` reads as `permissions & (WRITE != 0)`.
+- The bitwise operators bind tighter than comparisons. PHP binds them looser, so there `permissions & WRITE != 0` reads as `permissions & (WRITE != 0)`.
 - In a type, `|` and `&` keep their meaning as unions and bounds (sections 11 and 24).
 
 **Precedence**, from the tightest to the loosest. Operators in one row bind equally.
@@ -3876,7 +3876,7 @@ const mask = 1 << count;                      // throws ArithmeticError when cou
 | `.`, `?.`, calls, indexing `[]`, `new`, `match` | left | PHP writes `->`, `?->` and `::` |
 | `**` | right | same |
 | unary `-`, `~`, `++`, `--`, casts `(int)`, `(float)`, `(string)` | right | same, with fewer casts (section 24) |
-| `with` | left | PHP# only, in C#'s place |
+| `with` | left | PHP# only |
 | `!` | right | same |
 | `*`, `/`, `%` | left | same |
 | `+`, `-` | left | `+` also joins strings. PHP's `.` binds looser, below `<<` and `>>` |
@@ -3884,7 +3884,7 @@ const mask = 1 << count;                      // throws ArithmeticError when cou
 | `&` | left | **differs:** PHP binds `&` looser than every comparison |
 | `^` | left | **differs:** as `&` |
 | `\|` | left | **differs:** as `&` |
-| `<`, `<=`, `>`, `>=`, `is`, `as` | none | **differs:** `is` binds looser than PHP's `instanceof`, in C#'s place. `as` is PHP# only |
+| `<`, `<=`, `>`, `>=`, `is`, `as` | none | **differs:** `is` binds looser than PHP's `instanceof`, with the comparisons. `as` is PHP# only |
 | `==`, `!=`, `===`, `<=>` | none | same |
 | `&&` | left | same |
 | `\|\|` | left | same |
@@ -3901,7 +3901,7 @@ PHP's `and`, `xor` and `or` do not exist (section 21).
 
 **An enum has no effects,** as a struct has none (section 10): its methods, `get` bodies and operators, a data case's included, reach no database, network, file, clock or event, so an `emit` in one is a compile error that names the member and the effect: "`Status.announce` has the effect `Events`, and an enum has no effects."
 
-An enum can give each case a raw value, as Swift's raw-value enums do:
+An enum can give each case a raw value:
 
 <!-- example backed-enum -->
 ```csharp
@@ -3959,7 +3959,7 @@ public enum CheckoutState
 }
 ```
 
-A case with a value and a case with data in one enum is a compile error. Swift enforces the same rule.
+A case with a value and a case with data in one enum is a compile error.
 
 - **Each case is its own type,** so a method can take `PaymentResult.Paid` alone.
 - **Two cases are `==`** when they are the same case and each field is `==`, as two structs are (section 19). A case with a field that has no `==` gives its enum no `==`. An enum that declares its own `==` compares its cases by it instead, as a struct does.
@@ -3984,7 +3984,7 @@ bool same = badge == Badge.Marked(["new", "vip"]);                              
 int count = match (badge) { Badge.Marked(Set<string> tags) => tags.count(), Badge.Blank => 0 };   // compiles
 ```
 
-**A field is a member of its case, and a case has every member of its enum,** so a field named like a property or a method of its enum is a compile error that names both, as Kotlin refuses a subclass property that hides its parent's and C# refuses two members of one name. One name means one member (section 4):
+**A field is a member of its case, and a case has every member of its enum,** so a field named like a property or a method of its enum is a compile error that names both. One name means one member (section 4):
 
 <!-- example case-field-names -->
 ```csharp
@@ -4075,13 +4075,13 @@ match (result) {
 }
 ```
 
-**Arms** are written `pattern => value,`, and a block arm is written `pattern => { … },`. Arms are tried from top to bottom. A `match` used as a statement takes block arms and expression arms, as Rust's and Kotlin's do.
+**Arms** are written `pattern => value,`, and a block arm is written `pattern => { … },`. Arms are tried from top to bottom. A `match` used as a statement takes block arms and expression arms.
 
 **Covering every case:**
 
 - **On an enum,** arms that handle every case need no `default`. A missed case is a compile error that names it.
 - **On a sealed interface,** the same holds for its implementers (section 20.1).
-- **On a List,** arms that handle every list need no `default`. A list pattern without a rest handles lists of its number of items, and one with a rest every longer list too. Each element is covered by the same rules as a `match` on one value of the element type, as in Rust, so `[Circle c, ...]` and `[Square s, ...]` together handle every list of a sealed `Shape` with a first item. A typed rest must take any `List` of the element type, as `...List<Shape> rest` does. A missed list is a compile error that names it in plain words.
+- **On a List,** arms that handle every list need no `default`. A list pattern without a rest handles lists of its number of items, and one with a rest every longer list too. Each element is covered by the same rules as a `match` on one value of the element type, so `[Circle c, ...]` and `[Square s, ...]` together handle every list of a sealed `Shape` with a first item. A typed rest must take any `List` of the element type, as `...List<Shape> rest` does. A missed list is a compile error that names it in plain words.
 - **On a nullable enum, sealed interface or List,** such as a `Status?` or a `List<Money>?`, the arms handle `null` too.
 - **On any other value,** `match` must have a `default` arm.
 - **An arm with `when`** does not count toward covering a case.
@@ -4210,7 +4210,7 @@ public class Drawing
 | properties | `{ status: 200, body: string body } =>` |
 | list | `[] =>`, `[Line only] =>`, `[Line first, ...List<Line> rest] =>`, `[...List<Line> before, Line last] =>`, `[Line first, ..., Line last] =>` |
 
-- **A pattern takes types and constants only,** such as `Circle`, `200` or `Status.Paid`, as in C#. A local's value is compared in `when`.
+- **A pattern takes types and constants only,** such as `Circle`, `200` or `Status.Paid`. A local's value is compared in `when`.
 - **A list pattern has at most one rest,** anywhere among its elements. `...List<Line> rest` takes the elements the other patterns leave, and a bare `...` skips them. A second rest is a compile error.
 - **A pattern creates a variable** only through a typed declaration, such as `string transactionId`.
 - **`and`, `or` and `not`** combine patterns. They exist only inside patterns.
@@ -4239,7 +4239,7 @@ const label = match (value) {
 };
 ```
 
-**A property pattern matches only the properties it lists,** as in C#. It can nest, and it can test the type at the same time:
+**A property pattern matches only the properties it lists.** It can nest, and it can test the type at the same time:
 
 <!-- example property-patterns: statements
 Response response = new Response();
@@ -4264,7 +4264,7 @@ const paid = result as PaymentResult.Paid ?? throw new NotPaid(result);
 ```
 
 - **`is`** tests a value against any pattern, and creates the pattern's variables when it matches.
-- **Narrowing:** after `is` without a name, a local variable or parameter counts as the tested type for the rest of the block. Assigning to it inside the block ends the narrowing. A local or parameter that a lambda assigns is never narrowed, because the lambda may run between the test and the use, as Kotlin decides a smart cast. A lambda keeps the narrowing of a local it reads only when no assignment can run after the lambda is created, as TypeScript decides. A property never narrows, a stored one included, as Kotlin refuses a smart cast on a mutable property, because each read may give another value. To use the tested value of a property, or of such a local, bind it to a name, as in `is int t`.
+- **Narrowing:** after `is` without a name, a local variable or parameter counts as the tested type for the rest of the block. Assigning to it inside the block ends the narrowing. A local or parameter that a lambda assigns is never narrowed, because the lambda may run between the test and the use. A lambda keeps the narrowing of a local it reads only when no assignment can run after the lambda is created. A property never narrows, a stored one included, because each read may give another value. To use the tested value of a property, or of such a local, bind it to a name, as in `is int t`.
 
 <!-- example narrowing: statements
 Any? entity = new Page();
@@ -4285,7 +4285,7 @@ if (order.total is int) { let next = order.total + 1; }              // compile 
 if (order.total is int t) { this.save(); let next = t + 1; }         // compiles: t holds the value that was tested
 ```
 
-- **A variable that `is` creates exists only where the test held:** inside the `if` for `is`, and after an `if` whose block always exits for `is not`, as in C#. A block always exits when every path through it ends in `return`, `throw`, `break` or `continue`.
+- **A variable that `is` creates exists only where the test held:** inside the `if` for `is`, and after an `if` whose block always exits for `is not`. A block always exits when every path through it ends in `return`, `throw`, `break` or `continue`.
 
 <!-- example pattern-scope: statements
 Any? shape = new Circle();
@@ -4311,7 +4311,7 @@ public Receipt checkout(Map<string, Any?> payload, string plan)
 }
 ```
 
-- **A negative test is written `is not`.** `is` binds with the comparisons, as in C# (section 19), so `!entity is HasDesign` reads as `(!entity) is HasDesign`. That is a compile error, because `!` takes a `bool`.
+- **A negative test is written `is not`.** `is` binds with the comparisons (section 19), so `!entity is HasDesign` reads as `(!entity) is HasDesign`. That is a compile error, because `!` takes a `bool`.
 
 <!-- example negative-tests: statements
 Any? entity = new Page();
@@ -4321,7 +4321,7 @@ if (entity is not HasDesign) { … }       // compiles
 if (!entity is HasDesign) { … }          // compile error: write entity is not HasDesign
 ```
 
-- **In a pattern, `not` binds tighter than `or` and `and`,** in `is` and in `match` arms alike, as in C#, so `not Paid or Refunded` reads `(not Paid) or Refunded`, and parentheses put `not` over the whole `or`.
+- **In a pattern, `not` binds tighter than `or` and `and`,** in `is` and in `match` arms alike, so `not Paid or Refunded` reads `(not Paid) or Refunded`, and parentheses put `not` over the whole `or`.
 
 <!-- example not-or-parentheses: statements
 Payment result = new Paid();
@@ -4335,7 +4335,7 @@ if (code is not null and not "") { … }         // compiles: (not null) and (no
 
 - **`as`** converts a value to a type, or gives null.
 - **`as` to a collection type checks every element,** wherever the value came from, and gives null if any element is wrong. So `as List<string> ?? throw …` throws on a wrong element.
-- **`x is int?` matches an `int` or null,** as Kotlin's `x is Int?` and Swift's `x is Int?` do.
+- **`x is int?` matches an `int` or null.**
 - **A pattern that can never match is a compile error.**
 
 <!-- example impossible-patterns: statements
@@ -4348,7 +4348,7 @@ Circle circle = this.next();
 if (circle is Square) { … }            // compile error: This pattern never matches the value it tests.
 ```
 
-**Every type answers `is`, `as` and `match` the same way, function types included,** as in C#, Swift and Go. `value is Function<int(int)>` tests the function's parameter and result types while the code runs, as `value is List<int>` tests the list's elements. A test whose type the value's source never declares is a compile error that says the type is unknown, such as a function-type test on a `Closure` that a plain PHP library returns with no parameter or result types:
+**Every type answers `is`, `as` and `match` the same way, function types included.** `value is Function<int(int)>` tests the function's parameter and result types while the code runs, as `value is List<int>` tests the list's elements. A test whose type the value's source never declares is a compile error that says the type is unknown, such as a function-type test on a `Closure` that a plain PHP library returns with no parameter or result types:
 
 <!-- example type-tests -->
 ```php
@@ -4452,11 +4452,11 @@ if (items.count() > 0) { … }
 **The ternary** `c ? a : b` gives `a` when `c` is true, and `b` otherwise.
 
 - PHP's two-operand `a ?: b` does not exist. `??` covers null (section 14.4).
-- `a ? b : c ? d : e` means `a ? b : (c ? d : e)`, as in C#, Java, TypeScript, Swift and Dart.
+- `a ? b : c ? d : e` means `a ? b : (c ? d : e)`.
 
 ## 22. Inheritance
 
-The class header lists the base class and interfaces after `:`. The checker knows which name is the class. A class or an interface that inherits from itself, through its own header or a chain of headers, is a compile error that names the chain, as C#'s CS0146 and Java's cyclic inheritance error are.
+The class header lists the base class and interfaces after `:`. The checker knows which name is the class. A class or an interface that inherits from itself, through its own header or a chain of headers, is a compile error that names the chain.
 
 <!-- example class-header -->
 ```csharp
@@ -4521,7 +4521,7 @@ These are compile errors, whether the parent is PHP# or plain PHP:
 
 - a missing `override`
 - `override` when the parent has no such method
-- overriding a PHP# method that is not `virtual` or `abstract`, in PHP# or in a plain PHP class: the checker refuses every replacement written in the project, and a subclass a library generates while the app runs, as a test double or a lazy-loading proxy, may replace the method, as MockK, and the proxies Kotlin's `all-open` plugin allows, replace a Kotlin member that is not `open`
+- overriding a PHP# method that is not `virtual` or `abstract`, in PHP# or in a plain PHP class: the checker refuses every replacement written in the project, and a subclass a library generates while the app runs, as a test double or a lazy-loading proxy, may replace the method
 - overriding a plain PHP method marked `final`
 - an override that renames a parameter of the method it overrides. The error names both names.
 
@@ -4601,9 +4601,9 @@ page.designLabel;                                           // "design design", 
 - A default body sees only the interface's own members.
 - Every field is declared in the class that owns it. An interface holds no fields.
 - A computed property's default body runs on each read, so it takes no `static` and no `lazy`. An enum declares no stored property; a computed property is allowed, static or not, and an enum takes an interface's computed default as a class does. Every enum already has `name`, and a backed enum `value`, so no computed property takes either name.
-- A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait named `<Interface>\Defaults` that holds the default bodies, as Kotlin nests `DefaultImpls` in an interface. A plain PHP class that implements it must also `use` that trait to get the defaults. PHP# code never names the trait, so section 23's rule that a class cannot share its full name with a namespace does not apply to it.
+- A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait named `<Interface>\Defaults` that holds the default bodies. A plain PHP class that implements it must also `use` that trait to get the defaults. PHP# code never names the trait, so section 23's rule that a class cannot share its full name with a namespace does not apply to it.
 
-**An interface property states `get` or `init`, never `set`,** since an interface's members are public and a `set` reaches its own namespace at most (section 6.1). `string name { get; }` lets each class give it any `set` of its own, and `string kind { get; init; }` states `init`, as C# 9 lets an interface state it. A class or a struct gives it with `init`, as C# requires (CS8853), and an event gives it through its parameter, which `new` sets once. Code sets it only while its object is created, and reads it through the interface. Any other accessor list an interface property states gets what that list gets on a class property:
+**An interface property states `get` or `init`, never `set`,** since an interface's members are public and a `set` reaches its own namespace at most (section 6.1). `string name { get; }` lets each class give it any `set` of its own, and `string kind { get; init; }` states `init`. A class or a struct gives it with `init`, and an event gives it through its parameter, which `new` sets once. Code sets it only while its object is created, and reads it through the interface. Any other accessor list an interface property states gets what that list gets on a class property:
 
 <!-- example interface-init -->
 ```csharp
@@ -4638,7 +4638,7 @@ tagged.kind;                                                // "sale"
 tagged.kind = "new";                                        // compile error: kind is set only while its object is created
 ```
 
-**A class has one method per name, whatever it inherits** (section 7). When two places give a class a body for the same method, the class writes the method itself, as Kotlin requires. The places are two interfaces' default bodies, a default body and a plain PHP trait, two header traits, or a default body and the base class. Until the class writes it, the class is a compile error that names both places. Inside its own methods, the class runs one interface's default body with `super<Interface>`:
+**A class has one method per name, whatever it inherits** (section 7). When two places give a class a body for the same method, the class writes the method itself. The places are two interfaces' default bodies, a default body and a plain PHP trait, two header traits, or a default body and the base class. Until the class writes it, the class is a compile error that names both places. Inside its own methods, the class runs one interface's default body with `super<Interface>`:
 
 <!-- example one-body-per-method -->
 ```csharp
@@ -4699,7 +4699,7 @@ new Sticker().label();   // "label/title"
 - Replacing a default body takes `override`, as replacing a base class's method does. Implementing an interface method that has no default body takes none.
 - A header trait replaces the base class's method, as PHP's `use` does, so the two count as one place.
 
-A sub-interface replaces its parent's default body with `override`, and the most specific interface's body wins, as in Java, C# and Kotlin:
+A sub-interface replaces its parent's default body with `override`, and the most specific interface's body wins:
 
 <!-- example sub-interface-defaults -->
 ```csharp
@@ -4852,9 +4852,9 @@ App\Priced::CURRENCY;                  // "USD"
 - An interface states no law: a law is proved against the code of a class or an enum, and any class may implement an interface later.
 - An interface's operator applies to every implementer, a plain PHP class included, as section 19 chooses every operator: from the types of both sides, the most specific one runs.
 - A plain PHP class that implements an interface with default bodies uses `<Interface>\Defaults`, or it is a compile error that names the trait.
-- A plain PHP class that extends or implements a PHP# type satisfies it as PHP links it: each method it declares or inherits, from the project or a package, fits the PHP declaration of the member it implements or overrides, by PHP's rules and without docblocks, or `mago compile` refuses the class's file. The next rule names the one exception: a method with no return type under an interface's member. That declaration erases the PHP# types, so `Self` is `static`, a `List` is `array`, a `Map` or a `Set` parameter, and such a result a plain PHP caller gets as its array, is `\Sharp\Map|array` or `\Sharp\Set|array`, and `Any`, `Any?` and a type parameter without a bound declare no type. `mago compile` checks a plain PHP file only there, as `kotlinc` checks a Java class only where it meets a Kotlin declaration, and every other error in the file stays `mago analyze`'s, as in a plain PHP project.
-- Each PHP# call of an interface's member checks the result, so a plain PHP method that declares no return type implements the member, whether the class declares it or inherits it from a package, as Eloquent's `Model` declares `getMorphClass()`. The member keeps the type it states, and a result of another type throws a `TypeError` that names the member and the type it states as PHP# writes them, as Kotlin checks a Java method's result where Kotlin code takes it as non-null. A `void` or `never` member has no result to check. A call of such a method on the class, or on `this` in a PHP# subclass, is a call of the member: it has the member's type and checks its result. The class takes one type for the method, so members of its interfaces that state different results are a compile error, as Kotlin refuses a class that inherits conflicting members. The check reads each collection in the result, a tuple's included, but none of its elements, so a call costs the same however many the result holds, unless the type holds a `float`, an `Any` or an `Object`, which section 24 checks wherever a value enters from plain PHP. A method that declares a return type still fits the member's PHP declaration, and a plain PHP method that overrides a PHP# class's method still declares one, since a call of a class's method checks nothing.
-- A check inside a generic method reads the method's type parameter as any type, and one inside a generic class's static method reads the class's so too. So a call that gives a generic method, or a generic class's static method, the type argument its result names checks the result against that type, as Java checks the result of an erased generic method where its caller gives the type: `Repository.first<Order>(source)` checks for an `Order`, and the error names the call, `App.Repository.first()`. A call that gives such a method a type parameter of its own leaves the check to the call that gives that one.
+- A plain PHP class that extends or implements a PHP# type satisfies it as PHP links it: each method it declares or inherits, from the project or a package, fits the PHP declaration of the member it implements or overrides, by PHP's rules and without docblocks, or `mago compile` refuses the class's file. The next rule names the one exception: a method with no return type under an interface's member. That declaration erases the PHP# types, so `Self` is `static`, a `List` is `array`, a `Map` or a `Set` parameter, and such a result a plain PHP caller gets as its array, is `\Sharp\Map|array` or `\Sharp\Set|array`, and `Any`, `Any?` and a type parameter without a bound declare no type. `mago compile` checks a plain PHP file only there, where it meets a PHP# declaration, and every other error in the file stays `mago analyze`'s, as in a plain PHP project.
+- Each PHP# call of an interface's member checks the result, so a plain PHP method that declares no return type implements the member, whether the class declares it or inherits it from a package, as Eloquent's `Model` declares `getMorphClass()`. The member keeps the type it states, and a result of another type throws a `TypeError` that names the member and the type it states as PHP# writes them. A `void` or `never` member has no result to check. A call of such a method on the class, or on `this` in a PHP# subclass, is a call of the member: it has the member's type and checks its result. The class takes one type for the method, so members of its interfaces that state different results are a compile error. The check reads each collection in the result, a tuple's included, but none of its elements, so a call costs the same however many the result holds, unless the type holds a `float`, an `Any` or an `Object`, which section 24 checks wherever a value enters from plain PHP. A method that declares a return type still fits the member's PHP declaration, and a plain PHP method that overrides a PHP# class's method still declares one, since a call of a class's method checks nothing.
+- A check inside a generic method reads the method's type parameter as any type, and one inside a generic class's static method reads the class's so too. So a call that gives a generic method, or a generic class's static method, the type argument its result names checks the result against that type: `Repository.first<Order>(source)` checks for an `Order`, and the error names the call, `App.Repository.first()`. A call that gives such a method a type parameter of its own leaves the check to the call that gives that one.
 
 <!-- example interface-member-untyped-implementer -->
 ```csharp
@@ -4942,7 +4942,7 @@ import App.Shop.Records.Entities.DatabaseEntity;
 
 **Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or the namespace of a plain PHP library's functions and constants. A full class name inside code is a compile error that names the import to add. A module header names a namespace, as the `namespace` line does, so `module : App.Shop` compiles (section 32).
 
-**No two namespaces import each other,** directly or through other namespaces, a parent and its child among them, as Go refuses every import cycle between packages. The namespace is the folder, so the files of one namespace import each other freely. Each `import` that closes a cycle is a compile error that names the namespaces, the other file's import, and the two ways out: move the code, or declare an interface in one namespace that the other implements. An import one way compiles, from a parent to its child or from a child to its parent. A library's imports and the standard library's take part in no cycle, as they never reach the project's code.
+**No two namespaces import each other,** directly or through other namespaces, a parent and its child among them. The namespace is the folder, so the files of one namespace import each other freely. Each `import` that closes a cycle is a compile error that names the namespaces, the other file's import, and the two ways out: move the code, or declare an interface in one namespace that the other implements. An import one way compiles, from a parent to its child or from a child to its parent. A library's imports and the standard library's take part in no cycle, as they never reach the project's code.
 
 <!-- example namespace-cycle -->
 ```csharp
@@ -4964,7 +4964,7 @@ import App.Tenant.Store.CartService;      // compile error: `App.Tenant.Store.En
 public class Cart { … }
 ```
 
-**A plain PHP library's function is called through its namespace, as a member,** as Go calls a package's functions, as Python does after `import pdf`, as Java calls Kotlin's top-level functions and as C# calls F# modules. After `import Vendor.Pdf;`, the call is `Pdf.render(html)`. Importing a single function, or calling a function by its bare name, is a compile error, so every call outside the current class reads `Name.member(…)`:
+**A plain PHP library's function is called through its namespace, as a member.** After `import Vendor.Pdf;`, the call is `Pdf.render(html)`. Importing a single function, or calling a function by its bare name, is a compile error, so every call outside the current class reads `Name.member(…)`:
 
 <!-- example library-functions -->
 ```php
@@ -4997,7 +4997,7 @@ import Vendor.Pdf.render;                                     // compile error: 
 public class Draft { }
 ```
 
-**A function or constant a library declares outside any namespace has the namespace an `extern namespace` line gives its folder,** as C#'s `extern alias` gives an assembly a root namespace. `extern namespace Illuminate.Foundation for abort;` in a `.sharp` file of `extern` declarations gives the folder of Laravel's `abort()`, with every function and constant of PHP's root namespace in it, the namespace `Illuminate\Foundation`. After `import Illuminate.Foundation;`, the call is `Foundation.abort(404)`, the value is `Foundation.abort`, and `extern Foundation.now uses Clock;` declares the effect of the `now()` beside it (section 29). The call runs PHP's `\abort(404)`. The line writes its namespace in full, or through the file's import of it, as `Foundation` after `import Illuminate.Foundation;`:
+**A function or constant a library declares outside any namespace has the namespace an `extern namespace` line gives its folder.** `extern namespace Illuminate.Foundation for abort;` in a `.sharp` file of `extern` declarations gives the folder of Laravel's `abort()`, with every function and constant of PHP's root namespace in it, the namespace `Illuminate\Foundation`. After `import Illuminate.Foundation;`, the call is `Foundation.abort(404)`, the value is `Foundation.abort`, and `extern Foundation.now uses Clock;` declares the effect of the `now()` beside it (section 29). The call runs PHP's `\abort(404)`. The line writes its namespace in full, or through the file's import of it, as `Foundation` after `import Illuminate.Foundation;`:
 
 <!-- example library-root-functions -->
 ```php
@@ -5038,7 +5038,7 @@ public class CartsController
 - **An import of that namespace is an import like any other,** so a module's `imports` list holds it to the list (section 32).
 - **`global` is an ordinary name.** `global.levenshtein(a, b)` is a compile error that says `global` names no class, and no namespace the file imports, as `gadget.levenshtein(a, b)` is.
 
-**`extern namespace WordPress for WP_Post;` gives a library whose classes have no namespace the PHP# namespace `WordPress`,** as C#'s `extern alias` gives an assembly a root namespace and TypeScript's `declare module` names a library without types. The line stands in a `.sharp` file of `extern` declarations, and names a class of the library, which must be a plain PHP class outside any namespace, or it is a compile error. Its folder's namespace-less classes and functions are then `import WordPress;` and `WordPress.add_action(…)`, `import WordPress.WP_Post;` and `WP_Post`, and run PHP's `\add_action` and `\WP_Post`. A root class of another folder of the library takes no namespace from it. `extern WordPress.get_post uses Database;` declares an effect as any `extern` does (section 29), after `import WordPress;`. Two lines that name one folder and one namespace given to two folders are compile errors:
+**`extern namespace WordPress for WP_Post;` gives a library whose classes have no namespace the PHP# namespace `WordPress`.** The line stands in a `.sharp` file of `extern` declarations, and names a class of the library, which must be a plain PHP class outside any namespace, or it is a compile error. Its folder's namespace-less classes and functions are then `import WordPress;` and `WordPress.add_action(…)`, `import WordPress.WP_Post;` and `WP_Post`, and run PHP's `\add_action` and `\WP_Post`. A root class of another folder of the library takes no namespace from it. `extern WordPress.get_post uses Database;` declares an effect as any `extern` does (section 29), after `import WordPress;`. Two lines that name one folder and one namespace given to two folders are compile errors:
 
 <!-- example extern-namespace -->
 ```php
@@ -5073,7 +5073,7 @@ public class Feed
 }
 ```
 
-**An `extern` line states a plain PHP method's or function's signature,** as C#'s `extern` method and TypeScript's `declare function` type code another language wrote. The line is written in PHP# method order: the return type, the class and its type parameters, as in `Builder<TModel>`, the method, and the parameters. A PHP# call is checked against the signature the line states, never against the library's docblock, and `uses` follows it as on any `extern` line (section 29):
+**An `extern` line states a plain PHP method's or function's signature,** so PHP# code calls it by types PHP# checks. The line is written in PHP# method order: the return type, the class and its type parameters, as in `Builder<TModel>`, the method, and the parameters. A PHP# call is checked against the signature the line states, never against the library's docblock, and `uses` follows it as on any `extern` line (section 29):
 
 <!-- example typed-extern -->
 ```php
@@ -5136,7 +5136,7 @@ public class Links
 - **The line states types alone.** A default is a compile error, since the library's own fills each parameter after the stated ones. A call names an argument by the line's name only when the library's parameter at its place has that name, since PHP reads a named argument by the library's name.
 - **A generic class writes its type parameters as it declares them,** as `Builder<TModel>` for Eloquent's `@template TModel`, and other names are a compile error.
 
-**PHP itself is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation (section 8). A built-in the standard library has no member for is declared with `[Import]`, as C#'s `[DllImport]` declares a native function: `import Sharp.Interop.Import;`, then the attribute on a static method without a body makes each call run the PHP function it names. The signature is written in PHP# types, so each argument and the result cross as any plain PHP value does and are checked there, a `Map` argument passing as a PHP array and an array result arriving as the declared `List` or `Map`. The declaration states its effects with `uses`, as any body-less declaration does. A function PHP doesn't declare throws PHP's `Error` that names it at the first call. `[Import]` on an instance method or a method with a body is a compile error, and so is a second `[Import]` of one function in the project, since PHP ignores the case of a function's name:
+**PHP itself is reached only through the standard library** (section 8). A built-in the standard library has no member for is declared with `[Import]`: `import Sharp.Interop.Import;`, then the attribute on a static method without a body makes each call run the PHP function it names. The signature is written in PHP# types, so each argument and the result cross as any plain PHP value does and are checked there, a `Map` argument passing as a PHP array and an array result arriving as the declared `List` or `Map`. The declaration states its effects with `uses`, as any body-less declaration does. A function PHP doesn't declare throws PHP's `Error` that names it at the first call. `[Import]` on an instance method or a method with a body is a compile error, and so is a second `[Import]` of one function in the project, since PHP ignores the case of a function's name:
 
 <!-- example built-in-through-import -->
 ```csharp
@@ -5172,7 +5172,7 @@ search.closeness("cart", "carts");   // 1
 search.tags(["a", "b", "a"]);        // ["a", "b"]
 -->
 
-**`[Export("name")]` on a static method makes PHP see the global function `name`, which calls the method,** as Rust's `#[no_mangle]` and C#'s `[UnmanagedCallersOnly(EntryPoint = …)]` name a function foreign code calls. `import Sharp.Interop.Export;` names the attribute. The function passes its arguments, named ones included, to the method, whose PHP# types check each one, and returns the method's result. Every exported function is declared when Composer's autoloader loads PHP#'s package, before the app's code and before a library that requires PHP#, so a library that declares its own only when none exists, as WordPress's pluggable functions do, finds the project's first and skips its own. PHP# code still calls the method by its own name. `[Export]` on an instance method is a compile error, and so is a second export of one name in the project, which names both methods:
+**`[Export("name")]` on a static method makes PHP see the global function `name`, which calls the method.** `import Sharp.Interop.Export;` names the attribute. The function passes its arguments, named ones included, to the method, whose PHP# types check each one, and returns the method's result. Every exported function is declared when Composer's autoloader loads PHP#'s package, before the app's code and before a library that requires PHP#, so a library that declares its own only when none exists, as WordPress's pluggable functions do, finds the project's first and skips its own. PHP# code still calls the method by its own name. `[Export]` on an instance method is a compile error, and so is a second export of one name in the project, which names both methods:
 
 <!-- example exported-function -->
 ```csharp
@@ -5217,7 +5217,7 @@ public class Layout
 
 **An import never carries `uses`,** because a library's effect lives in its one `extern` declaration (section 29).
 
-**The standard library lives under one root, `Sharp`,** with one standard library namespace per domain, as .NET has `System.*` and Rust has `std::*`:
+**The standard library lives under one root, `Sharp`,** with one standard library namespace per domain:
 
 - `Sharp.Text` holds the members of `string`, `Regex` and `Html`.
 - `Sharp.Time` holds `Clock`, `Instant`, `Duration`, `Date`, `DateTime`, `TimeZone`, `Weekday` and `Month`, and the members of a plain PHP date in `DateTimeInterfaceMembers`.
@@ -5230,7 +5230,7 @@ public class Layout
 - `Sharp.Security` holds `Hash`, `Hmac` and `Password`.
 - `Sharp.Interop` holds `PhpGlobals` and `Superglobal`.
 
-**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Math` is `Sharp.Math`, a bare `Decimal` is `Sharp.Decimal`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. `Sharp` holds the number types and their enums: `Int`, `Float`, `Math`, `Decimal`, `BigInteger`, `RoundingMode` and `ByteOrder`. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin and Java, `Error` included (section 31):
+**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`. A bare `Int` is `Sharp.Int`, a bare `Math` is `Sharp.Math`, a bare `Decimal` is `Sharp.Decimal`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. `Sharp` holds the number types and their enums: `Int`, `Float`, `Math`, `Decimal`, `BigInteger`, `RoundingMode` and `ByteOrder`. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, `Error` included (section 31):
 
 <!-- example own-namespace-shadows -->
 ```csharp
@@ -5255,7 +5255,7 @@ public class Release
 }
 ```
 
-**PHP's standard exception classes need no import either,** as Java's `java.lang` exceptions and Kotlin's need none. A bare `ValueError`, `OutOfRangeException` or any other exception class in PHP's root namespace names PHP's own. So do `Throwable`, which every exception is, `Attribute`, which makes a class an attribute, and `Countable` and `JsonSerializable`, which a plain PHP library asks a class to implement. A class of the same name that the file declares or imports, or one in the file's own namespace, shadows it by the same rule:
+**PHP's standard exception classes need no import either.** A bare `ValueError`, `OutOfRangeException` or any other exception class in PHP's root namespace names PHP's own. So do `Throwable`, which every exception is, `Attribute`, which makes a class an attribute, and `Countable` and `JsonSerializable`, which a plain PHP library asks a class to implement. A class of the same name that the file declares or imports, or one in the file's own namespace, shadows it by the same rule:
 
 <!-- example standard-exceptions -->
 ```csharp
@@ -5270,7 +5270,7 @@ public class Gauge : Countable                                                  
 }
 ```
 
-**PHP's other classes are names only the standard library uses,** as Rust and Swift reach the platform only through their standard libraries. A class, interface or enum PHP or one of its extensions builds in, such as `PDO`, `DateTimeImmutable` or `Random.Randomizer`, is the name a misspelling is in a `.sharp` file outside the standard library: its import is an import of no class, and its bare name names no type. The standard library has a type for each job: `Database` for a database, the types of `Sharp.Time` for a date, `Random` for random numbers, and `Files` for a file. A plain PHP library that reaches one is called as any library:
+**PHP's other classes are names only the standard library uses.** A class, interface or enum PHP or one of its extensions builds in, such as `PDO`, `DateTimeImmutable` or `Random.Randomizer`, is the name a misspelling is in a `.sharp` file outside the standard library: its import is an import of no class, and its bare name names no type. The standard library has a type for each job: `Database` for a database, the types of `Sharp.Time` for a date, `Random` for random numbers, and `Files` for a file. A plain PHP library that reaches one is called as any library:
 
 <!-- example built-in-classes -->
 ```csharp
@@ -5285,7 +5285,7 @@ public class Stamp
 }
 ```
 
-**PHP 8.4's DOM is the standard library's way to read and write markup, an HTML page or an XML document, so a `.sharp` file names its classes,** as .NET names a platform type through its namespace. The standard library names `Dom.HTMLDocument`, `Dom.XMLDocument`, `Dom.Element`, `Dom.Node`, `Dom.NodeList`, `Dom.HTMLCollection`, `Dom.Text`, `Dom.Attr` and the rest of PHP's `Dom` namespace that reads and writes markup, and a file imports each by its full name, as `import Dom.HTMLDocument;`. `createFromString` and `createFromFile` read a document, `saveHtml` and `saveXml` write one, and an element's `innerHTML` and `outerHTML` give its markup. They run as PHP's own classes. PHP's older `DOMDocument` is one of PHP's other classes, so its import is still an import of no class:
+**PHP 8.4's DOM is the standard library's way to read and write markup, an HTML page or an XML document, so a `.sharp` file names its classes through their namespace.** The standard library names `Dom.HTMLDocument`, `Dom.XMLDocument`, `Dom.Element`, `Dom.Node`, `Dom.NodeList`, `Dom.HTMLCollection`, `Dom.Text`, `Dom.Attr` and the rest of PHP's `Dom` namespace that reads and writes markup, and a file imports each by its full name, as `import Dom.HTMLDocument;`. `createFromString` and `createFromFile` read a document, `saveHtml` and `saveXml` write one, and an element's `innerHTML` and `outerHTML` give its markup. They run as PHP's own classes. PHP's older `DOMDocument` is one of PHP's other classes, so its import is still an import of no class:
 
 <!-- example html-dom -->
 ```csharp
@@ -5333,13 +5333,13 @@ public struct Entry
 - **An imported name is used once per file.** Two `import` lines with the same name are a compile error, and so is an import named like a class the file declares. Renaming one of them fixes it.
 - **A rename changes the name, not what is imported.** Other files keep the original name, and an `extern` written with the new name declares the same function, so section 29's one-declaration rule still counts it once.
 
-**A class cannot share its full name with a namespace.** `Store.sharp` beside a `Store/` folder is a compile error, because both would be `App.Tenant.Store`. Java's language specification has the same rule. `Store/Store.sharp` is allowed, because it is `App.Tenant.Store.Store`. The rule also covers plain PHP classes the checker sees.
+**A class cannot share its full name with a namespace.** `Store.sharp` beside a `Store/` folder is a compile error, because both would be `App.Tenant.Store`. `Store/Store.sharp` is allowed, because it is `App.Tenant.Store.Store`. The rule also covers plain PHP classes the checker sees.
 
 ## 24. Built-in types and `Any`
 
 Built-in types are lowercase: `int`, `float`, `bool`, `string`, `void`, `null`. Every other type is capitalized: `List`, `Money`, `Any`.
 
-**Names** follow TypeScript's casing:
+**Names** take one casing per kind:
 
 - **PascalCase:** namespaces, types, type parameters, events and enum cases.
 - **camelCase:** methods, properties, fields, parameters and locals.
@@ -5382,7 +5382,7 @@ public event InvoicePaid(int invoiceId, Money amount);         // event
 
 A name that breaks the rule is a warning, as in "Method name `TotalIn` should be in camel case."
 
-**Names are case-sensitive,** as in C#, Java and Kotlin, so names that differ only in case are two names: `total()` and `Total()` are two methods, and `Order` and `order` are two classes. Code reaches a declaration only by the name it declares, plain PHP code that calls PHP# code included. PHP's own classes and functions keep PHP's rule. A call written in another case reaches nothing, and the error names the declaration, as PHP# code's compile error "`App\Billing\Invoice` has no member `TotalIn`; did you mean `totalIn`?" and plain PHP's `Error` "Call to undefined method App\Billing\Invoice::TotalIn(); did you mean totalIn()?" do. A type written in another case names nothing either, as the compile error "Cannot find type `INVOICE`; did you mean `Invoice`?" says, and plain PHP's `new`, `instanceof`, `class_exists`, reflection, `unserialize` and autoloader find no class by it. A method that differs from an inherited one only in case is a second method, and an override names its parent's method exactly:
+**Names are case-sensitive,** so names that differ only in case are two names: `total()` and `Total()` are two methods, and `Order` and `order` are two classes. Code reaches a declaration only by the name it declares, plain PHP code that calls PHP# code included. PHP's own classes and functions keep PHP's rule. A call written in another case reaches nothing, and the error names the declaration, as PHP# code's compile error "`App\Billing\Invoice` has no member `TotalIn`; did you mean `totalIn`?" and plain PHP's `Error` "Call to undefined method App\Billing\Invoice::TotalIn(); did you mean totalIn()?" do. A type written in another case names nothing either, as the compile error "Cannot find type `INVOICE`; did you mean `Invoice`?" says, and plain PHP's `new`, `instanceof`, `class_exists`, reflection, `unserialize` and autoloader find no class by it. A method that differs from an inherited one only in case is a second method, and an override names its parent's method exactly:
 
 <!-- example exact-names: statements
 public int totalIn(string currency) => 1;
@@ -5417,7 +5417,7 @@ public User find(int|string id)
 ```
 
 - `is` narrows a union (section 21). After a branch that tested one type and returned, the code below it sees the types left.
-- `List`, `Map` and `Set` share a union as every other type does, as in TypeScript, and `is` tells them apart.
+- `List`, `Map` and `Set` share a union as every other type does, and `is` tells them apart.
 - Alternatives that belong to the domain stay enums (section 20) and sealed interfaces (section 20.1).
 
 **A union that holds null is written `(int|string)?`,** with the same `?` as any other type. `int|string|null` is a compile error that names `(int|string)?`, and `int|null` one that names `int?`.
@@ -5431,13 +5431,13 @@ public (int|string)? find((int|string)? id)   // compiles
 public int|string|null find2()                 // compile error: write (int|string)?
 ```
 
-**An intersection type joins classes and interfaces with `&`,** such as `Shippable & Billable`, anywhere a type goes: a property, a parameter, a return type, a local and a pattern (section 21). A value is of it only when it is of every type it joins, as in TypeScript's intersections and Swift's protocol compositions. A call from plain PHP that passes a value of only some of the types throws `TypeError`.
+**An intersection type joins classes and interfaces with `&`,** such as `Shippable & Billable`, anywhere a type goes: a property, a parameter, a return type, a local and a pattern (section 21). A value is of it only when it is of every type it joins. A call from plain PHP that passes a value of only some of the types throws `TypeError`.
 
 - **`&` joins classes and interfaces only.** `int & string` is a compile error at each member that is neither.
-- **`&` joins at most one class,** with any number of interfaces, as Swift's `Order & Shareable` and Java's `<T extends Order & Shareable>` do. `Parcel & Box`, two classes, is a compile error.
+- **`&` joins at most one class,** with any number of interfaces, because an object extends one class chain. `Parcel & Box`, two classes, is a compile error.
 - **A type written twice in one `&` is a compile error,** as it is in a union.
-- **`&` binds tighter than `|`,** as in TypeScript, so `Shippable & Billable | Box` is the union of the intersection and `Box`. Parentheses, as in `(Shippable & Billable) | Box`, change nothing.
-- **An intersection that holds null is written `(Shippable & Billable)?`,** as Swift writes `(A & B)?`. `Shippable & Billable?` is a compile error that names it.
+- **`&` binds tighter than `|`,** so `Shippable & Billable | Box` is the union of the intersection and `Box`. Parentheses, as in `(Shippable & Billable) | Box`, change nothing.
+- **An intersection that holds null is written `(Shippable & Billable)?`.** `Shippable & Billable?` is a compile error that names it.
 
 <!-- example intersection-types -->
 ```csharp
@@ -5505,9 +5505,9 @@ public class Desk
 (new App\Shipping\Desk())->sort(new App\Shipping\Box());      // "box"
 ```
 
-**Integer overflow throws `ArithmeticError`** at the operation that overflows, as in Swift and C#'s `checked`. PHP's silent change to `float` does not happen in PHP# code. A shift is not an overflow: `<<` drops the bits it shifts out, and a shift by a negative count throws `ArithmeticError` (section 19).
+**Integer overflow throws `ArithmeticError`** at the operation that overflows. PHP's silent change to `float` does not happen in PHP# code. A shift is not an overflow: `<<` drops the bits it shifts out, and a shift by a negative count throws `ArithmeticError` (section 19).
 
-- `int ** int` is an `int`. A negative exponent throws `ArithmeticError`, as in Rust, where `i64::pow` takes no negative exponent, and C#'s `BigInteger.Pow`. A `float` on either side gives a `float`: `2.0 ** -1` is `0.5`.
+- `int ** int` is an `int`. A negative exponent throws `ArithmeticError`, because its result is no `int`. A `float` on either side gives a `float`: `2.0 ** -1` is `0.5`.
 
 <!-- example int-power: statements
 int side = 3;
@@ -5521,7 +5521,7 @@ a ** b                       // int. Throws ArithmeticError at runtime when b < 
 2.0 ** -1                    // 0.5
 ```
 
-**`/` on two integers truncates toward zero,** as in C#. `/` with a `float` operand stays float division.
+**`/` on two integers truncates toward zero.** `/` with a `float` operand stays float division.
 
 <!-- example integer-division: statements -->
 ```csharp
@@ -5553,7 +5553,7 @@ cell.put((float) n);                 // compiles
 bool same = cell.get() == 2.0;       // true
 ```
 
-- A literal `0` is an `int`, as in Kotlin.
+- A literal `0` is an `int`, whatever type the place expects.
 - Arithmetic that mixes an `int` and a `float`, such as `count * 1.5`, gives a `float` and compiles.
 - An `int` from plain PHP becomes a `float` wherever PHP# expects a `float`, such as a parameter, a generic `T` that is `float`, the elements of a `List<float>` or a `Set<float>`, and the values of a `Map<K, float>`. PHP# code then sees what its type says, so `cell.get() == 2.0` is true.
 
@@ -5589,18 +5589,18 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 
 - `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number to a `string`.
 - `(int)` truncates a `float` toward zero. A `float` too large for an `int`, or NaN, throws `ArithmeticError`.
-- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, as C#'s `int.Parse(string)` and Kotlin's `String.toInt()` do, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. Spaces around the number count too, as in Rust and Kotlin: `Int.parse(" 12 ")` throws, and its error says to call `trim()` first. An `Any?` is checked with `as string` first.
+- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. Spaces around the number count too: `Int.parse(" 12 ")` throws, and its error says to call `trim()` first. An `Any?` is checked with `as string` first.
 - `Int.tryParse(s)` and `Float.tryParse(s)` take a `string` too, and give null where `parse` throws.
-- `Int.parse(s, radix)` and `Int.tryParse(s, radix)` read a number in a base from 2 to 36, with the letters `a` to `z` in either case past 9, as Kotlin's `toInt(radix)`: `Int.parse("ff", 16)` is 255. A base outside 2 to 36 throws `ValueError` from both.
-- An `int` and a `float` have Kotlin's and Rust's number methods, from the standard library's extensions: `abs()`, `clamp(min, max)` and `format()`, which groups the digits in thousands. An `int` has `toHex()`, and `floorDiv(divisor)` and `mod(divisor)`, which round down where `/` and `%` round toward zero, so `(-7).floorDiv(2)` is -4 and `(-7).mod(2)` is 1. A `float` has `round(decimals)`, `floor()`, `ceil()`, `isFinite()` and `isNaN()`, as in `price.round(2)` and `total.format()`. `abs()` of the smallest `int` throws `ArithmeticError`, and a `clamp` whose minimum is above its maximum throws `ValueError`.
-- `+`, `-` and `*` throw `ArithmeticError` past `Int.MAX` and `Int.MIN`. An `int`'s `checkedAdd`, `checkedSubtract` and `checkedMultiply` give null there instead, and `saturatingAdd`, `saturatingSubtract` and `saturatingMultiply` give `Int.MAX` or `Int.MIN`, as Rust's `checked_add` and `saturating_add` do: `Int.MAX.checkedAdd(1)` is null, and `Int.MAX.saturatingAdd(1)` is `Int.MAX`.
-- `Math` has `sqrt`, `pow`, `log`, `log10`, `exp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan` and `atan2`, which take radians, and the constants `Math.PI` and `Math.E`. Outside its domain a function gives NaN, as `Math.asin(2.0)` does, as Kotlin's and Rust's do.
+- `Int.parse(s, radix)` and `Int.tryParse(s, radix)` read a number in a base from 2 to 36, with the letters `a` to `z` in either case past 9: `Int.parse("ff", 16)` is 255. A base outside 2 to 36 throws `ValueError` from both.
+- An `int` and a `float` have number methods, from the standard library's extensions: `abs()`, `clamp(min, max)` and `format()`, which groups the digits in thousands. An `int` has `toHex()`, and `floorDiv(divisor)` and `mod(divisor)`, which round down where `/` and `%` round toward zero, so `(-7).floorDiv(2)` is -4 and `(-7).mod(2)` is 1. A `float` has `round(decimals)`, `floor()`, `ceil()`, `isFinite()` and `isNaN()`, as in `price.round(2)` and `total.format()`. `abs()` of the smallest `int` throws `ArithmeticError`, and a `clamp` whose minimum is above its maximum throws `ValueError`.
+- `+`, `-` and `*` throw `ArithmeticError` past `Int.MAX` and `Int.MIN`. An `int`'s `checkedAdd`, `checkedSubtract` and `checkedMultiply` give null there instead, and `saturatingAdd`, `saturatingSubtract` and `saturatingMultiply` give `Int.MAX` or `Int.MIN`: `Int.MAX.checkedAdd(1)` is null, and `Int.MAX.saturatingAdd(1)` is `Int.MAX`.
+- `Math` has `sqrt`, `pow`, `log`, `log10`, `exp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan` and `atan2`, which take radians, and the constants `Math.PI` and `Math.E`. Outside its domain a function gives NaN, as `Math.asin(2.0)` does.
 - A class or an interface narrows only with `as`, which gives null, or with `as … ?? throw` (section 21).
-- PHP# has no user-defined conversion operators, such as C#'s `implicit operator`. A type converts only through a property or method it declares, such as `username.value`.
+- PHP# has no user-defined conversion operators, which would convert a value with no call written. A type converts only through a property or method it declares, such as `username.value`.
 - `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`. `(array)` and `(object)` are parse errors, as any form outside PHP# is (section 1), and the code below replaces them.
 - PHP's cast aliases `(integer)`, `(double)`, `(boolean)` and `(binary)` do not exist.
-- An `int` writes its 8 bytes with `toBytes(order)`, in the `ByteOrder` `Big` by default or `Little`, and `Int.fromBytes(bytes, order)` reads them back, as Rust's `to_be_bytes` and `from_be_bytes` do. The bytes are a `string`, as `Ip.toBinary` gives, and a negative `int` writes its two's complement. `Int.fromBytes` of any length but 8 throws `ValueError`.
-- `Base64.encode(data, urlSafe: true)` writes the URL-safe alphabet of RFC 4648, with `-` and `_` for `+` and `/`, and no padding, as .NET's `Base64Url` does. `Base64.decode(text, urlSafe: true)` reads it with or without padding, and throws `ValueError` on a `+` or a `/`.
+- An `int` writes its 8 bytes with `toBytes(order)`, in the `ByteOrder` `Big` by default or `Little`, and `Int.fromBytes(bytes, order)` reads them back. The bytes are a `string`, as `Ip.toBinary` gives, and a negative `int` writes its two's complement. `Int.fromBytes` of any length but 8 throws `ValueError`.
+- `Base64.encode(data, urlSafe: true)` writes the URL-safe alphabet of RFC 4648, with `-` and `_` for `+` and `/`, and no padding. `Base64.decode(text, urlSafe: true)` reads it with or without padding, and throws `ValueError` on a `+` or a `/`.
 
 <!-- example int-bytes: statements
 import Sharp.Encoding.Base64;
@@ -5615,11 +5615,11 @@ Base64.decode("-_8", urlSafe: true).bytes();        // [251, 255]
 Int.fromBytes("short");                             // throws ValueError
 ```
 
-**`Decimal` is an exact decimal number, and `BigInteger` an integer of any size,** as Java's `BigDecimal` and .NET's `BigInteger` are. Both are structs in `Sharp`, so they need no import, and run on PHP's bcmath, which every engine builds:
+**`Decimal` is an exact decimal number, and `BigInteger` an integer of any size.** Both are structs in `Sharp`, so they need no import, and run on PHP's bcmath, which every engine builds:
 
 - `Decimal.parse(text)` and `Decimal.tryParse(text)` read digits with an optional sign and point, as `"-12.50"`, and `Decimal.of(n)` takes an `int`. The digits after the point are its `scale`, so `"1.50"` has a scale of 2 and writes itself back as `"1.50"`.
-- `+`, `-` and `*` give the exact result: a sum's scale is the larger of both, and a product's their sum. There is no `/`, because an exact quotient can have no end. `divide(divisor, scale, mode)` gives the quotient with `scale` digits after the point, and `round(scale, mode)` rounds the number to `scale` digits, both by a `RoundingMode`, `HalfEven` by default, as banks round. The modes are Java's: `HalfEven`, `HalfUp`, `HalfDown`, `Up` and `Down`, away from 0 and toward it, and `Ceiling` and `Floor`. A divisor of 0 throws `DivisionByZeroError`.
-- `==` and `<=>` compare the number, so `1.5 == 1.50` is true, as .NET's `decimal` compares, and each keeps its scale.
+- `+`, `-` and `*` give the exact result: a sum's scale is the larger of both, and a product's their sum. There is no `/`, because an exact quotient can have no end. `divide(divisor, scale, mode)` gives the quotient with `scale` digits after the point, and `round(scale, mode)` rounds the number to `scale` digits, both by a `RoundingMode`, `HalfEven` by default, as banks round. The modes are `HalfEven`, `HalfUp`, `HalfDown`, `Up` and `Down`, away from 0 and toward it, and `Ceiling` and `Floor`. A divisor of 0 throws `DivisionByZeroError`.
+- `==` and `<=>` compare the number, so `1.5 == 1.50` is true, and each keeps its scale.
 - `BigInteger.parse(text)`, `BigInteger.tryParse(text)` and `BigInteger.of(n)` make one, `+`, `-` and `*` never overflow, and `/` and `%` round toward 0, as an `int`'s do. `pow(n)` raises it, and a negative exponent throws `ArithmeticError`, as `**` on an `int` does. `toString(radix)` writes it in a base from 2 to 36, and `toIntOrNull()` gives it as an `int`, or null past `Int.MAX` and `Int.MIN`.
 
 <!-- example exact-numbers: statements -->
@@ -5637,12 +5637,12 @@ BigInteger.of(255).toString(16);                                       // "ff"
 Decimal.parse("1") / Decimal.parse("3");                               // compile error: Decimal has no /, so call divide with a scale
 ```
 
-**Time is values,** as in Kotlin's `kotlinx.datetime`, Java's `java.time` and JavaScript's Temporal, never an `int` of seconds or a format of PHP's letters. `Sharp.Time` holds them:
+**Time is values,** never an `int` of seconds or a format of PHP's letters. `Sharp.Time` holds them:
 
 - An `Instant` is a point on the time line, which `Clock.now()` gives (section 29).
 - A `Duration` is a length of time in nanoseconds.
 - A `Date` is a day of the calendar, with no time and no time zone.
-- A `TimeOfDay` is a time on a clock, with no date and no time zone, as Kotlin's `LocalTime` and .NET's `TimeOnly`, which writes itself as `"21:30:00"`. A `DateTime`'s `timeOfDay` gives its own.
+- A `TimeOfDay` is a time on a clock, with no date and no time zone, which writes itself as `"21:30:00"`. A `DateTime`'s `timeOfDay` gives its own.
 - A `TimeZone` is a zone of the IANA time zone database, such as `Europe/Sofia`, or a fixed offset from UTC, such as `+03:00`.
 - A `DateTime` is an `Instant` as the clocks of a `TimeZone` show it.
 
@@ -5666,7 +5666,7 @@ Instant.tryParse("yesterday");                            // null
 new Date(2026, 2, 29);                                    // throws ValueError
 ```
 
-Two `Date`s, `Instant`s, `Duration`s or `DateTime`s order with `<`, `<=`, `>` and `>=`. A `DateTime` orders by its instant and then by its zone's name, so its `<=>` is 0 exactly when `==` is true. A zone's name is spelled exactly as the time zone database spells it, so `EEST` and `europe/sofia` name no zone. A name of the database names a zone only when PHP runs it with the database's rules, so `CET`, `GMT` and `EST`, which PHP reads as a fixed abbreviation, name no zone, and `TimeZone.names()` leaves them out: name the region, as `Europe/Brussels`. A fixed offset from `-18:00` to `+18:00`, written as `+03:00`, names a zone, as in Java and Kotlin. A test module binds `new Clock.fixed(instant)` in place of the real `Clock`, and its `now()` is always that instant. After `import Sharp.Time.DateTimeInterfaceMembers;`, a plain PHP date, such as a Carbon, becomes an `Instant` with `toInstant()` or a `DateTime` with `toDateTime()`. `toPhpDateTime()` turns an `Instant` or a `DateTime` back into a plain PHP date. None of these four reads the clock.
+Two `Date`s, `Instant`s, `Duration`s or `DateTime`s order with `<`, `<=`, `>` and `>=`. A `DateTime` orders by its instant and then by its zone's name, so its `<=>` is 0 exactly when `==` is true. A zone's name is spelled exactly as the time zone database spells it, so `EEST` and `europe/sofia` name no zone. A name of the database names a zone only when PHP runs it with the database's rules, so `CET`, `GMT` and `EST`, which PHP reads as a fixed abbreviation, name no zone, and `TimeZone.names()` leaves them out: name the region, as `Europe/Brussels`. A fixed offset from `-18:00` to `+18:00`, written as `+03:00`, names a zone. A test module binds `new Clock.fixed(instant)` in place of the real `Clock`, and its `now()` is always that instant. After `import Sharp.Time.DateTimeInterfaceMembers;`, a plain PHP date, such as a Carbon, becomes an `Instant` with `toInstant()` or a `DateTime` with `toDateTime()`. `toPhpDateTime()` turns an `Instant` or a `DateTime` back into a plain PHP date. None of these four reads the clock.
 
 A zone's `fixedOffset` is the offset of a zone whose clocks never change, read from the zone's rules and never from its name: a fixed offset, as `+03:00`, `UTC` and `Etc/GMT-3` each have one. A zone the database gives any change of offset, as `Europe/Sofia`, has none. A type that takes only a zone whose clocks follow a region's daylight saving refuses any zone that never changes its clocks in its constructor:
 
@@ -5779,7 +5779,7 @@ bool d = raw == other;             // compile error: other is an unchecked Any? 
 string a = `plan: ${raw}`;         // compile error: check raw with is, as or match first
 ```
 
-PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path: it reads any type a field `parse` reads can hold, as `List<Payment>`, the way a struct's `parse` reads that field (section 10), so a bad part throws the one error that lists every bad part, and a type `parse` can't read is a compile error. A number or a bool must be one in the JSON, so `"2"` is no `int`. `Query.decode<Search>("q=shoes&page=2")` reads a query string the same way, and since a query holds only text, it reads a number or a bool from its text, so `page` is `2` and `page=x` is the one problem "page: expected int, got string 'x'". `Json.parse(body)` gives any JSON value as a `JsonValue`, whose `value` is the `Any?` it holds, and two `JsonValue`s are `==` when their values are, at every depth, as kotlinx's `JsonElement` and Rust's `serde_json::Value` compare:
+PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path: it reads any type a field `parse` reads can hold, as `List<Payment>`, the way a struct's `parse` reads that field (section 10), so a bad part throws the one error that lists every bad part, and a type `parse` can't read is a compile error. A number or a bool must be one in the JSON, so `"2"` is no `int`. `Query.decode<Search>("q=shoes&page=2")` reads a query string the same way, and since a query holds only text, it reads a number or a bool from its text, so `page` is `2` and `page=x` is the one problem "page: expected int, got string 'x'". `Json.parse(body)` gives any JSON value as a `JsonValue`, whose `value` is the `Any?` it holds, and two `JsonValue`s are `==` when their values are, at every depth:
 
 <!-- example json-values: statements
 import Sharp.Encoding.Json;
@@ -5790,7 +5790,7 @@ Json.parse("{\"a\":[1,2]}") != Json.parse("{\"a\":[2,1]}");       // true
 Json.parse("{\"a\":1,\"b\":2}") == Json.parse("{\"b\":2,\"a\":1}"); // true: an object's keys in any order
 ```
 
-**`Json.encode` takes `escapeSlashes`, `escapeUnicode`, `keepZeroFraction`, `indent` and `escapeHtml`,** which default to `false`, `false`, `true`, `0` and `true`, its output without them. `escapeSlashes` writes `/` as `\/`, `escapeUnicode` writes each character outside ASCII as `\u` and its code, and `keepZeroFraction: false` writes `1.0` as `1`, so a payload can match the bytes another system signs. `escapeHtml` writes `<`, `>`, `&`, `'` and `"` inside a string as `\u003C`, `\u003E`, `\u0026`, `\u0027` and `\u0022`, so JSON put inside a `<script>` can't close it, as Go's `json.Marshal` and .NET's default `JavaScriptEncoder` do, and `escapeHtml: false` writes them as themselves, `"` as `\"`. `indent` writes each nested value on its own line, `indent` spaces deeper than its parent, with `": "` after a key and `[]` and `{}` for an empty value, as JavaScript's `JSON.stringify(value, null, 2)`, Python's `json.dumps(value, indent=2)` and Go's `json.MarshalIndent` do, so `indent: 4` writes the bytes of PHP's `JSON_PRETTY_PRINT`. A negative `indent` throws a `ValueError`:
+**`Json.encode` takes `escapeSlashes`, `escapeUnicode`, `keepZeroFraction`, `indent` and `escapeHtml`,** which default to `false`, `false`, `true`, `0` and `true`, its output without them. `escapeSlashes` writes `/` as `\/`, `escapeUnicode` writes each character outside ASCII as `\u` and its code, and `keepZeroFraction: false` writes `1.0` as `1`, so a payload can match the bytes another system signs. `escapeHtml` writes `<`, `>`, `&`, `'` and `"` inside a string as `\u003C`, `\u003E`, `\u0026`, `\u0027` and `\u0022`, so JSON put inside a `<script>` can't close it, and `escapeHtml: false` writes them as themselves, `"` as `\"`. `indent` writes each nested value on its own line, `indent` spaces deeper than its parent, with `": "` after a key and `[]` and `{}` for an empty value, so `indent: 4` writes the bytes of PHP's `JSON_PRETTY_PRINT`. A negative `indent` throws a `ValueError`:
 
 <!-- example json-switches: statements
 import Sharp.Encoding.Json;
@@ -5894,7 +5894,7 @@ Ids.identity(5);                                // compile error: 5 is not an ob
 
 ## 25. Referring to classes
 
-**`typeof(X)`** is typed `Class<X>`, for any one type `X`, as C#'s `typeof` is. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
+**`typeof(X)`** is typed `Class<X>`, for any one type `X`. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
 
 <!-- example typeof-types
 public class Example
@@ -5916,7 +5916,7 @@ typeof(Map<string, int>);
 typeof(Self);                   // the class run was called on
 ```
 
-**`typeof(TItem)` works for any type argument, including `int`,** as C#'s `typeof(T)` does. It is a `Class<TItem>`, which can create objects, only when `TItem`'s bound is a class:
+**`typeof(TItem)` works for any type argument, including `int`.** It is a `Class<TItem>`, which can create objects, only when `TItem`'s bound is a class:
 
 <!-- example typeof-type-parameters: members
 import Illuminate.Support.Facades.Log;
@@ -5937,7 +5937,7 @@ public TItem blank<TItem>()
 }
 ```
 
-**`typeof` takes a type only. `Class.of(value)` gives an object's class,** as Swift's `type(of:)` and Python's `type()` do. For a value of type `T`, it is typed `Class<T>` and holds the object's runtime class, which may be a subclass of `T`.
+**`typeof` takes a type only. `Class.of(value)` gives an object's class.** For a value of type `T`, it is typed `Class<T>` and holds the object's runtime class, which may be a subclass of `T`.
 
 <!-- example typeof-values: statements
 import Illuminate.Support.Facades.Log;
@@ -5951,7 +5951,7 @@ Log.info("saved", ["class": Class.of(order)]);  // compiles
 typeof(order);                                  // compile error: typeof takes a type; write Class.of(order)
 ```
 
-**`nameof(Counted)` gives a class's own name, and `name()` its full name with PHP#'s dots,** as C#'s `nameof` and `Type.FullName` do, so a message names a class as PHP# code writes it:
+**`nameof(Counted)` gives a class's own name, and `name()` its full name with PHP#'s dots,** so a message names a class as PHP# code writes it:
 
 <!-- example class-names -->
 ```csharp
@@ -5971,7 +5971,7 @@ Class.of(row).name();              // "App.Orders.Counted"
 typeof(Counted).name();            // "App.Orders.Counted"
 ```
 
-**`properties()` reads the properties a class declares, `fields()` what its objects store, and `typeArguments()` a type's type arguments,** as .NET's `Type.GetProperties()`, `GetFields()` and `GetGenericArguments()` do, so an ORM, a serializer or a form builder reads a class's declared types without plain PHP reflection. A property is the class's API and a field is storage, so a form builder reads `properties()` and a storage layer reads `fields()`. `properties()` gives a `List<Property>` of every property, at every visibility, its statics included, an auto-property, a computed one and one with accessors, whose `get` and `set` run its accessors, and no field, the class's own first and then those it inherits, in the order they are declared. `fields()` gives a `List<Field>` of every value the class's objects and the class store, in the same order: each field, and the storage of each auto-property that is neither `virtual` nor `abstract` (section 6.1), which has no accessor body, as `{ get; set; }`, `{ get; private set; }`, `{ get; init; }` and a constructor-promoted one, as .NET's `GetFields()` reaches an auto-property's backing field. A computed property, one with an accessor body and a `virtual` or `abstract` one store nothing a `Field` reads, so they have none. The class value of a type that is no class, as `typeof(Object)`, `typeof(int)` or `typeof(List<int>)`, has no properties, methods or attributes, as .NET's `typeof(object).GetProperties()` gives none. A `Property` has its `name`, its `type`, the declared type whole as a `Class<Any?>`, the `declaringClass` that declares it, its `visibility`, its `setVisibility`, the access modifier that reaches its `set` or `init`, or null for a get-only one, as .NET's `SetMethod` gives it, `isInitOnly`, which holds for one with an `init`, `isStatic`, `isVirtual`, which holds when a subclass may replace it, `isAbstract`, `isOverride`, `hasDefaultValue`, which holds for a declared initial value, constant or not, and `defaultValue()`, which evaluates it on each read, as `Parameter.defaultValue()` does, so `= new Draft()` gives a new `Draft` each time, and throws `OutOfRangeException` for a property without one, and `attributes<TAttribute : Object>()`, as `Class<T>`'s own. A `Field` has its `name`, `type`, `declaringClass`, `visibility`, `isStatic`, `hasDefaultValue`, `defaultValue()` and `attributes<TAttribute : Object>()`, as a `Property` has them, an auto-property's those of the property, and `isInitialized(receiver)`, `get(receiver)` and `set(receiver, value)`, which read and write the storage. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member (section 5), as Kotlin's `KVisibility` gives it, so an `internal` member reads `Internal` though plain PHP reaches it as a public one:
+**`properties()` reads the properties a class declares, `fields()` what its objects store, and `typeArguments()` a type's type arguments,** so an ORM, a serializer or a form builder reads a class's declared types without plain PHP reflection. A property is the class's API and a field is storage, so a form builder reads `properties()` and a storage layer reads `fields()`. `properties()` gives a `List<Property>` of every property, at every visibility, its statics included, an auto-property, a computed one and one with accessors, whose `get` and `set` run its accessors, and no field, the class's own first and then those it inherits, in the order they are declared. `fields()` gives a `List<Field>` of every value the class's objects and the class store, in the same order: each field, and the storage of each auto-property that is neither `virtual` nor `abstract` (section 6.1), which has no accessor body, as `{ get; set; }`, `{ get; private set; }`, `{ get; init; }` and a constructor-promoted one. A computed property, one with an accessor body and a `virtual` or `abstract` one store nothing a `Field` reads, so they have none. The class value of a type that is no class, as `typeof(Object)`, `typeof(int)` or `typeof(List<int>)`, has no properties, methods or attributes. A `Property` has its `name`, its `type`, the declared type whole as a `Class<Any?>`, the `declaringClass` that declares it, its `visibility`, its `setVisibility`, the access modifier that reaches its `set` or `init`, or null for a get-only one, `isInitOnly`, which holds for one with an `init`, `isStatic`, `isVirtual`, which holds when a subclass may replace it, `isAbstract`, `isOverride`, `hasDefaultValue`, which holds for a declared initial value, constant or not, and `defaultValue()`, which evaluates it on each read, as `Parameter.defaultValue()` does, so `= new Draft()` gives a new `Draft` each time, and throws `OutOfRangeException` for a property without one, and `attributes<TAttribute : Object>()`, as `Class<T>`'s own. A `Field` has its `name`, `type`, `declaringClass`, `visibility`, `isStatic`, `hasDefaultValue`, `defaultValue()` and `attributes<TAttribute : Object>()`, as a `Property` has them, an auto-property's those of the property, and `isInitialized(receiver)`, `get(receiver)` and `set(receiver, value)`, which read and write the storage. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member (section 5), so an `internal` member reads `Internal` though plain PHP reaches it as a public one:
 
 <!-- example declared-types -->
 ```csharp
@@ -6010,7 +6010,7 @@ fields[1].visibility == Visibility.Private;                 // true
 typeof(Map<string, int>).typeArguments() == [typeof(string), typeof(int)];   // true
 ```
 
-**`methods()` reads the methods a class declares,** as .NET's `Type.GetMethods()` does. It gives a `List<Method>` of every instance and static method, at every visibility, the class's own first and then those it inherits, in the order they are declared, without the constructor, as .NET keeps `GetConstructors()` apart. It gives no method the compile makes for the engine, whose name holds `#`, as a class's `#fields`, and plain PHP's reflection, `get_class_methods()` and `method_exists()` find none either, since no PHP code can declare such a name. A `Method` has its `name`, its result `type` whole, `typeof(void)` for a `void` method and `typeof(never)` for a `never` one, which a `Class<void>` and a `Class<never>` hold, compare and key a `Map` as any class value, though no local is `void`, `isStatic`, `isVirtual`, `isAbstract`, `isOverride`, its `declaringClass` and `visibility`, as a `Property` has them, `attributes<TAttribute : Object>()`, and `parameters()`, a `List<Parameter>`, as .NET's `MethodInfo` and Kotlin's `KFunction` give them. A `Parameter` has its `name`, `type`, `isOptional`, which holds when a call may leave it out, `isVariadic`, `defaultValue()`, and `attributes<TAttribute : Object>()`, as .NET's `ParameterInfo` and Kotlin's `KParameter` give them. `defaultValue()` evaluates the default each time, so a `new` in it creates a new object on each read, and a parameter without one throws `OutOfRangeException`, as `first` does when nothing matches. The type arguments of the class value stand for the class's type parameters, a class value without them reads each as the type parameter itself, and a plain PHP method gives its PHP types as PHP# writes them, as `properties()` does:
+**`methods()` reads the methods a class declares.** It gives a `List<Method>` of every instance and static method, at every visibility, the class's own first and then those it inherits, in the order they are declared, without the constructor, which `constructor()` gives. It gives no method the compile makes for the engine, whose name holds `#`, as a class's `#fields`, and plain PHP's reflection, `get_class_methods()` and `method_exists()` find none either, since no PHP code can declare such a name. A `Method` has its `name`, its result `type` whole, `typeof(void)` for a `void` method and `typeof(never)` for a `never` one, which a `Class<void>` and a `Class<never>` hold, compare and key a `Map` as any class value, though no local is `void`, `isStatic`, `isVirtual`, `isAbstract`, `isOverride`, its `declaringClass` and `visibility`, as a `Property` has them, `attributes<TAttribute : Object>()`, and `parameters()`, a `List<Parameter>`. A `Parameter` has its `name`, `type`, `isOptional`, which holds when a call may leave it out, `isVariadic`, `defaultValue()`, and `attributes<TAttribute : Object>()`. `defaultValue()` evaluates the default each time, so a `new` in it creates a new object on each read, and a parameter without one throws `OutOfRangeException`, as `first` does when nothing matches. The type arguments of the class value stand for the class's type parameters, a class value without them reads each as the type parameter itself, and a plain PHP method gives its PHP types as PHP# writes them, as `properties()` does:
 
 <!-- example declared-methods -->
 ```csharp
@@ -6041,7 +6041,7 @@ methods[0].parameters()[1].isVariadic;                        // false
 methods[0].parameters()[1].defaultValue();                    // 1
 ```
 
-**A class value takes any type apart,** as C#'s `System.Type` does, so the type a member declares reads whole, as `typeof` gives it, and never as a text to parse. `kind()` gives its `TypeKind`: `Named` for a type with a name and its arguments, as `int`, `List<int>` and `Crate<Mark>`, `Union`, `Intersection`, `Tuple`, `Function` or `TypeParameter`. `isNullable()` holds for `T?` and a union that holds null, and `nonNullable()` gives the type without it, as C#'s `Nullable.GetUnderlyingType` does. Each other member reads the type without its `?`: `typeArguments()`, each whole, and `genericDefinition()`, as C#'s `GetGenericTypeDefinition`, for a named type; `unionMembers()` for a union, which never holds null; `intersectionMembers()` for an intersection, as `[typeof(Billable), typeof(Shippable)]` for `Shippable & Billable`, in the order PHP# spells the type, as TypeScript's `IntersectionType.types` gives them; `tupleElements()`, each a `TupleElement` with its `name`, null for an element written without one, and its `type`; `parameterTypes()` and `returnType()` for a function type; and `bound()` for a type parameter, `Any?` where none is written, since such a type parameter takes `int` too (section 11). `typeParameters()` gives a generic type's type parameters, and a type parameter's `name()` is its own. A member of another kind gives `[]`, or throws `OutOfRangeException` where it gives one value. `makeGenericType(arguments)` gives the type with its type arguments, as C#'s `MakeGenericType` does, and throws `InvalidArgumentException` on a count or a bound they break:
+**A class value takes any type apart,** so the type a member declares reads whole, as `typeof` gives it, and never as a text to parse. `kind()` gives its `TypeKind`: `Named` for a type with a name and its arguments, as `int`, `List<int>` and `Crate<Mark>`, `Union`, `Intersection`, `Tuple`, `Function` or `TypeParameter`. `isNullable()` holds for `T?` and a union that holds null, and `nonNullable()` gives the type without it. Each other member reads the type without its `?`: `typeArguments()`, each whole, and `genericDefinition()`, the generic type with no type arguments, for a named type; `unionMembers()` for a union, which never holds null; `intersectionMembers()` for an intersection, as `[typeof(Billable), typeof(Shippable)]` for `Shippable & Billable`, in the order PHP# spells the type; `tupleElements()`, each a `TupleElement` with its `name`, null for an element written without one, and its `type`; `parameterTypes()` and `returnType()` for a function type; and `bound()` for a type parameter, `Any?` where none is written, since such a type parameter takes `int` too (section 11). `typeParameters()` gives a generic type's type parameters, and a type parameter's `name()` is its own. A member of another kind gives `[]`, or throws `OutOfRangeException` where it gives one value. `makeGenericType(arguments)` gives the type with its type arguments, and throws `InvalidArgumentException` on a count or a bound they break:
 
 <!-- example taking-types-apart -->
 ```csharp
@@ -6072,7 +6072,7 @@ typeof(List).makeGenericType([typeof(int)]) == typeof(List<int>);  // true
 typeof(int?).nonNullable() == typeof(int);                         // true
 ```
 
-**A class value reads every fact its class's declaration states,** as C#'s `Type` does: `baseType()`, the class it extends with the type arguments it gives it, or null; `interfaces()`, each with its type arguments; `isAbstract()`, `isInterface()`, `isStruct()` and `isEnum()`; and an enum's `enumBackingType()`, null for a pure enum, and `enumCases()`, each an `EnumCase` with its `name`, its `value`, the case itself, as C#'s `FieldInfo.GetValue` gives an enum's, its `backingValue`, null for a pure enum's, and `attributes<TAttribute : Object>()`:
+**A class value reads every fact its class's declaration states:** `baseType()`, the class it extends with the type arguments it gives it, or null; `interfaces()`, each with its type arguments; `isAbstract()`, `isInterface()`, `isStruct()` and `isEnum()`; and an enum's `enumBackingType()`, null for a pure enum, and `enumCases()`, each an `EnumCase` with its `name`, its `value`, the case itself, its `backingValue`, null for a pure enum's, and `attributes<TAttribute : Object>()`:
 
 <!-- example declared-facts -->
 ```csharp
@@ -6098,7 +6098,7 @@ typeof(Level).enumCases()[1].value as Level == Level.High;    // true
 typeof(Level).baseType();                                     // null
 ```
 
-**`constants()` reads the constants a class declares,** as .NET's `Type.GetFields()` gives a class's literal fields and Kotlin's reflection a companion's `const val`. It gives a `List<Constant>` of every constant, at every visibility, the class's own first and then those it inherits, in the order they are declared, without an enum's cases, which `enumCases()` gives. A `Constant` has its `name`, its `type`, the declared type whole, `Any?` for one declared without a type, the `declaringClass` that declares it, `value()`, which gives its value as `Any?`, and `attributes<TAttribute : Object>()`. `value()` reads the constant as a direct read from the calling code would, so a private one only from its class, which throws `Error` elsewhere, and a `Map` or `Set` constant gives the object a direct read gives:
+**`constants()` reads the constants a class declares.** It gives a `List<Constant>` of every constant, at every visibility, the class's own first and then those it inherits, in the order they are declared, without an enum's cases, which `enumCases()` gives. A `Constant` has its `name`, its `type`, the declared type whole, `Any?` for one declared without a type, the `declaringClass` that declares it, `value()`, which gives its value as `Any?`, and `attributes<TAttribute : Object>()`. `value()` reads the constant as a direct read from the calling code would, so a private one only from its class, which throws `Error` elsewhere, and a `Map` or `Set` constant gives the object a direct read gives:
 
 <!-- example declared-constants -->
 ```csharp
@@ -6127,10 +6127,10 @@ constants[2].declaringClass == typeof(Limits);                // true
 constants[2].value();                                         // throws Error
 ```
 
-**`constructor()`, `createInstance` and `createLazy` reach a class's constructor through its class value,** as .NET keeps `ConstructorInfo` apart from `MethodInfo` and creates through `Activator.CreateInstance`. `constructor()` gives a `Constructor`, with its `visibility`, `parameters()` and `attributes<TAttribute : Object>()`, or null for a class without one. `createInstance(arguments)` creates an object of the class, with the class value's type arguments, by its constructor with the `List<Any?>` of arguments, which the calling code reaches as a direct `new` would. `createLazy(initialize)` creates one empty, with no constructor run, as PHP 8.4's `newLazyGhost` does, and `initialize` runs on it at its first property read or write, as Doctrine loads an entity. Each throws `InvalidArgumentException` for an abstract class, an interface or an enum, and `createInstance` for arguments the constructor's parameters don't take. A `Property` reads the state of such an object:
+**`constructor()`, `createInstance` and `createLazy` reach a class's constructor through its class value.** `constructor()` gives a `Constructor`, with its `visibility`, `parameters()` and `attributes<TAttribute : Object>()`, or null for a class without one. `createInstance(arguments)` creates an object of the class, with the class value's type arguments, by its constructor with the `List<Any?>` of arguments, which the calling code reaches as a direct `new` would. `createLazy(initialize)` creates one empty, with no constructor run, as PHP 8.4's `newLazyGhost` does, and `initialize` runs on it at its first property read or write, as Doctrine loads an entity. Each throws `InvalidArgumentException` for an abstract class, an interface or an enum, and `createInstance` for arguments the constructor's parameters don't take. A `Property` reads the state of such an object:
 
-- **`isInitialized(receiver)`** holds when the property holds a value, as Kotlin's `::prop.isInitialized` reads a `lateinit`, so it is false for a `late` property no code has set and for a lazy object that has not loaded, which the read does not load. A `late` property is set once, so there is no reset.
-- **`getter()` and `setter()`** give the property's `get` and `set` accessors as a `Method`, as C#'s `GetMethod` and `SetMethod` do, named `$name::get` and `$name::set` as PHP names a property hook, or null for a plain stored property. That is how code tells a property with accessors apart. Their `invoke` reads and writes the property, as `get` and `set` do.
+- **`isInitialized(receiver)`** holds when the property holds a value, so it is false for a `late` property no code has set and for a lazy object that has not loaded, which the read does not load. A `late` property is set once, so there is no reset.
+- **`getter()` and `setter()`** give the property's `get` and `set` accessors as a `Method`, named `$name::get` and `$name::set` as PHP names a property hook, or null for a plain stored property. That is how code tells a property with accessors apart. Their `invoke` reads and writes the property, as `get` and `set` do.
 - **`setBeforeLoad(receiver, value)`** writes a property of a lazy object without loading it, so a read of the property never loads it either, as Doctrine gives an entity its identifier before it loads. The calling code reaches the property as a direct write would, as `set` does, so a `private set` property refuses it from outside its class. On an object that is not lazy, or one already loaded, it writes as `set` does.
 
 <!-- example reflected-creation -->
@@ -6202,7 +6202,7 @@ Shipment.fromRow("letter", "to Bo").label;   // "to Bo"
 Shipment.fromRow("crate", "none");           // throws: "No shipment is of the kind crate."
 -->
 
-**Each reflection value keys a `Map` and joins a `Set` as the member it reflects,** however often reflection read it, as C#'s `MethodInfo`, `PropertyInfo` and `ParameterInfo` compare. Two `Method`s, two `Property`s, two `Field`s, two `Constant`s and two `Constructor`s are equal when one class declares them under one name, two `Parameter`s when they are one position of one method, two `EnumCase`s when they are one case of one enum, and two `TupleElement`s when they have one name, or none, and one type. Equal values share their `hash()`, so `Map<Method, List<Relation>>` compiles:
+**Each reflection value keys a `Map` and joins a `Set` as the member it reflects,** however often reflection read it. Two `Method`s, two `Property`s, two `Field`s, two `Constant`s and two `Constructor`s are equal when one class declares them under one name, two `Parameter`s when they are one position of one method, two `EnumCase`s when they are one case of one enum, and two `TupleElement`s when they have one name, or none, and one type. Equal values share their `hash()`, so `Map<Method, List<Relation>>` compiles:
 
 <!-- example reflection-keys: statements
 public class Ledger { public int total { get; set; } = 0; public int add(int amount) => this.total + amount; }
@@ -6217,7 +6217,7 @@ reads[typeof(Ledger).properties()[0]] ?? 0;                   // 1
 
 **A class value of a built-in generic type answers `is` as a user generic's does,** so `typeof(List<string>)` is a `Class<List>`, a `Class<List<Any?>>` and a `Class<Iterable<Any?>>`, and a `Map`'s and a `Set`'s class values are a `Class<Map>`, a `Class<Set>` and a `Class<Iterable<Any?>>`, as `typeof(Crate<Mark>)` is a `Class<Crate>`.
 
-**`invoke`, `get` and `set` use a member through its reflection,** as .NET's `MethodInfo.Invoke`, `PropertyInfo.GetValue` and `PropertyInfo.SetValue` and Kotlin's `KCallable.call`, `KProperty1.get` and `KMutableProperty1.set` do. They are the one way PHP# names a member by a value (decision 94). `method.invoke(receiver, arguments)` calls the method on `receiver` with the `List<Any?>` of arguments and gives its result as `Any?`, and a method that isn't private runs the receiver's override. A static method takes a null receiver and runs on the class value `methods()` read it from, as a call through that class does, and an instance method given null throws `InvalidArgumentException`, as C#'s `MethodInfo.Invoke(null, arguments)` does. `property.get(receiver)` gives the property's value as `Any?`, running a computed property's `get`, and `property.set(receiver, value)` writes it. Each reaches the member as a direct use from the calling code would: a private member only from its class, a protected one from the class and its subclasses, and an `internal` one from its namespace and those below it, which plain PHP reaches as a public one. A use the calling code can't make throws `Error`, as do a write of a get-only property and a call of a missing method. Each argument and value is checked against its type as a direct PHP# use's is, so a wrong one throws `TypeError`. More arguments than the method takes throw `ArgumentCountError`, and a receiver that isn't of the member's class throws `TypeError`. `property.isInitialized(receiver)` and `property.hasDefaultValue` only read the declaration and the object, so each is pure. `invoke`, `get` and `set` each run code its caller can't see, a method's body, a `get` or a `set`, so each may have every effect (section 29), and code that must keep to its `uses`, as an implementation of a pure interface method, can't call it. A `Field` is how that code reads and writes what an object stores:
+**`invoke`, `get` and `set` use a member through its reflection.** They are the one way PHP# names a member by a value (decision 94). `method.invoke(receiver, arguments)` calls the method on `receiver` with the `List<Any?>` of arguments and gives its result as `Any?`, and a method that isn't private runs the receiver's override. A static method takes a null receiver and runs on the class value `methods()` read it from, as a call through that class does, and an instance method given null throws `InvalidArgumentException`. `property.get(receiver)` gives the property's value as `Any?`, running a computed property's `get`, and `property.set(receiver, value)` writes it. Each reaches the member as a direct use from the calling code would: a private member only from its class, a protected one from the class and its subclasses, and an `internal` one from its namespace and those below it, which plain PHP reaches as a public one. A use the calling code can't make throws `Error`, as do a write of a get-only property and a call of a missing method. Each argument and value is checked against its type as a direct PHP# use's is, so a wrong one throws `TypeError`. More arguments than the method takes throw `ArgumentCountError`, and a receiver that isn't of the member's class throws `TypeError`. `property.isInitialized(receiver)` and `property.hasDefaultValue` only read the declaration and the object, so each is pure. `invoke`, `get` and `set` each run code its caller can't see, a method's body, a `get` or a `set`, so each may have every effect (section 29), and code that must keep to its `uses`, as an implementation of a pure interface method, can't call it. A `Field` is how that code reads and writes what an object stores:
 
 <!-- example reflection-calls -->
 ```csharp
@@ -6249,7 +6249,7 @@ properties[1].get(counter);                                   // 10
 properties[1].set(counter, 4);                                // throws Error
 ```
 
-**A `Field` reads and writes storage, so it runs no code a project wrote,** as .NET's `FieldInfo.GetValue` and `SetValue` run none. `field.get(receiver)` and `field.set(receiver, value)` reach the storage as a direct use from the calling code would, with the access and type checks of `Property.get` and `set`, an auto-property's storage as its `get`, and its `set` or `init`, do. An `init` property's storage takes a write only while it holds no value, as only the object's creation writes it, and a write after that throws `Error`. They run no accessor, not even one a subclass gives the property, so `field.get`, `field.set` and `field.isInitialized` are pure, and a storage layer held to `uses Database` reads and writes a row through `fields()`. A lazy object that has not loaded runs its initializer at its first read, so `get` and `set` on one throw `Error` rather than load it, as do a static's before its class has run its initial values. `field.defaultValue()` runs an initial value that is not constant, so it may have every effect, as `property.defaultValue()` may. Reading the storage never makes a `Property` pure: `property.get` still runs whatever accessor the property has:
+**A `Field` reads and writes storage, so it runs no code a project wrote.** `field.get(receiver)` and `field.set(receiver, value)` reach the storage as a direct use from the calling code would, with the access and type checks of `Property.get` and `set`, an auto-property's storage as its `get`, and its `set` or `init`, do. An `init` property's storage takes a write only while it holds no value, as only the object's creation writes it, and a write after that throws `Error`. They run no accessor, not even one a subclass gives the property, so `field.get`, `field.set` and `field.isInitialized` are pure, and a storage layer held to `uses Database` reads and writes a row through `fields()`. A lazy object that has not loaded runs its initializer at its first read, so `get` and `set` on one throw `Error` rather than load it, as do a static's before its class has run its initial values. `field.defaultValue()` runs an initial value that is not constant, so it may have every effect, as `property.defaultValue()` may. Reading the storage never makes a `Property` pure: `property.get` still runs whatever accessor the property has:
 
 <!-- example reflection-effects -->
 ```csharp
@@ -6331,8 +6331,8 @@ public class FormBuilder
 ```
 
 - **`new (type)(…)`** creates an object from a class value. The parentheses around `type` mark it as an expression, not a class name. It needs a `required` constructor, as `new Self(…)` does. For a plain PHP class, such as `Class<Model>`, the checker checks the call against that class's own constructor.
-- **A class value reflects, and reaches no static,** as `typeof` in C#, `.class` in Java and `::class` in Kotlin only reflect. A static is reached through its class's name, `Element.defaultTag()`, or through a type parameter, `TModel.find(id)` (section 11). The static of a class known only while the code runs is reached through `methods()` and `invoke(null, …)`. `type.defaultTag()` is a compile error.
-- **`Class`'s own members are what a class value reaches,** such as `attributes`. Any code may extend `Class<T>`, as C# and Kotlin let any code extend their class value types, and `Class`'s own members still win over an extension's.
+- **A class value reflects, and reaches no static.** A static is reached through its class's name, `Element.defaultTag()`, or through a type parameter, `TModel.find(id)` (section 11). The static of a class known only while the code runs is reached through `methods()` and `invoke(null, …)`. `type.defaultTag()` is a compile error.
+- **`Class`'s own members are what a class value reaches,** such as `attributes`. Any code may extend `Class<T>`, and `Class`'s own members still win over an extension's.
 - **`attributes<TAttribute : Object>()` reads attributes, which are objects,** so `attributes<int>()` is a compile error.
 - **A class value's type need not be written.** `const type = …` holds a `Class<Element>`.
 - **A property named by a variable has no form.**
@@ -6349,7 +6349,7 @@ type.defaultTag();                               // compile error: a class value
 new (kind)(key);                                 // compile error: kind is a string, not a Class
 ```
 
-**A class value of a generic class can carry its type arguments or leave them out,** as in C#. `typeof(PaginatedList<Order>)` is a `Class<PaginatedList<Order>>`, and `new (pages)()` creates a `PaginatedList<Order>`. A `Class<PaginatedList>` leaves them out, so `new` names them, `new (any)<Order>()`, or takes them from its arguments or the declared type its object goes into, as any `new` does (section 11). `new (any)()` that nothing fixes them for is a compile error.
+**A class value of a generic class can carry its type arguments or leave them out.** `typeof(PaginatedList<Order>)` is a `Class<PaginatedList<Order>>`, and `new (pages)()` creates a `PaginatedList<Order>`. A `Class<PaginatedList>` leaves them out, so `new` names them, `new (any)<Order>()`, or takes them from its arguments or the declared type its object goes into, as any `new` does (section 11). `new (any)()` that nothing fixes them for is a compile error.
 
 <!-- example generic-class-values -->
 ```csharp
@@ -6367,7 +6367,7 @@ public class Pages
 }
 ```
 
-**Two class values are equal when they name the same class with the same type arguments,** as in C#, so `typeof(Box<Order>) == typeof(Box<Invoice>)` is false:
+**Two class values are equal when they name the same class with the same type arguments,** so `typeof(Box<Order>) == typeof(Box<Invoice>)` is false:
 
 <!-- example class-value-equality: statements
 public class Box<T> { }
@@ -6400,7 +6400,7 @@ public abstract class DatabaseEntity
 const order = Order.fromSchema(value, caller);   // typed as Order
 ```
 
-`Self` replaces the C# workaround of passing a class to itself, as in `class Order : Entity<Order>`.
+`Self` replaces the workaround of passing a class to itself, as in `class Order : Entity<Order>`.
 
 `Self` is written only as a return type, and in bodies as `new Self(…)`, `Self.m()`, `Self.name` and `typeof(Self)`, the class value of the class the method was called on, which replaces PHP's `static::class`. A `Self` parameter is a compile error, because a subclass would accept any parent:
 
@@ -6409,7 +6409,7 @@ const order = Order.fromSchema(value, caller);   // typed as Order
 public bool same(Self other) { … }   // compile error: Self is a return type only
 ```
 
-**`Self.name` reads and writes a constant or a static member of the class the code was called on,** as Swift's `Self.name` does, so a subclass's own constant answers a call made on the subclass, and plain PHP calling the method on the subclass gets the same answer.
+**`Self.name` reads and writes a constant or a static member of the class the code was called on,** so a subclass's own constant answers a call made on the subclass, and plain PHP calling the method on the subclass gets the same answer.
 
 - **A parameter's default runs on the class the call ran on,** so `string table = Self.TABLE` gives a call on the subclass the subclass's `TABLE`.
 - **A pattern of `Self.TABLE` tests the value of the class the code was called on,** as `Store.TABLE` tests `Store`'s.
@@ -6497,7 +6497,7 @@ public class Invoice : DatabaseEntity
 
 `required` is optional. A class that never writes `new Self(…)` never writes it.
 
-**A `final` class or a struct needs no `required` constructor for `new Self(…)`,** as Swift asks `required init` only of a class that is not `final`. No class extends it, so `Self` is the class itself, and `new Self(…)` calls its own constructor:
+**A `final` class or a struct needs no `required` constructor for `new Self(…)`.** No class extends it, so `Self` is the class itself, and `new Self(…)` calls its own constructor:
 
 <!-- example final-self -->
 ```csharp
@@ -6525,7 +6525,7 @@ public class Memo
 
 ## 26. Extension methods
 
-An extension adds methods and properties to an existing type from outside it. Extensions are declared in `extension(...)` blocks inside a static class, as in C# 14:
+An extension adds methods and properties to an existing type from outside it. Extensions are declared in `extension(...)` blocks inside a static class:
 
 <!-- example extensions -->
 ```csharp
@@ -6552,11 +6552,11 @@ import App.Shared.Text.TextExtensions;
 
 title.slug();
 title.isBlank;
-TextExtensions.slug(title);         // the same call, written through the class, as in C#
+TextExtensions.slug(title);         // the same call, written through the class
 ```
 
-- **An extension applies only in files that import its class, and in the files of its own namespace,** as Kotlin's do in their package. An extension the file imports, or one its own namespace declares, shadows a default extension of the same name, as a class does (section 23).
-- **An extension member named like a member its type, or a class above it, already declares is a compile error where the extension is written,** because it can never run, as Swift refuses an `invalid redeclaration`. On a union receiver, such as `Order|string`, it is an error only when every type of the union declares the member, because otherwise the extension runs on the rest:
+- **An extension applies only in files that import its class, and in the files of its own namespace.** An extension the file imports, or one its own namespace declares, shadows a default extension of the same name, as a class does (section 23).
+- **An extension member named like a member its type, or a class above it, already declares is a compile error where the extension is written,** because it can never run. On a union receiver, such as `Order|string`, it is an error only when every type of the union declares the member, because otherwise the extension runs on the rest:
 
 <!-- example extension-hidden-member -->
 ```csharp
@@ -6574,7 +6574,7 @@ public static class OrderNames
 }
 ```
 
-- **An extension is chosen from the type the line shows,** as in C# and Kotlin. A member a subclass declares never makes an extension a compile error:
+- **An extension is chosen from the type the line shows.** A member a subclass declares never makes an extension a compile error:
 
 <!-- example extension-static-choice: statements
 namespace App.Checkout;
@@ -6588,8 +6588,8 @@ Order order = new RushOrder();      // RushOrder : Order declares its own captio
 order.caption();                    // compiles: the line shows an Order, so OrderLabels runs
 ```
 
-- **An extension reaches what code in its own namespace reaches,** as in C# and Kotlin, so access rules still hold: a `private` member stays out of reach, and an `internal` member of its namespace is in reach.
-- **The receiver's type picks among the extensions with one name that apply in a file,** as in C# and Kotlin. When several fit, the one whose receiver type is the most specific runs, so an extension on `RushOrder` wins over one on `Order` for a `RushOrder`. Two that fit where neither receiver type is inside the other are a compile error:
+- **An extension reaches what code in its own namespace reaches,** so access rules still hold: a `private` member stays out of reach, and an `internal` member of its namespace is in reach.
+- **The receiver's type picks among the extensions with one name that apply in a file.** When several fit, the one whose receiver type is the most specific runs, so an extension on `RushOrder` wins over one on `Order` for a `RushOrder`. Two that fit where neither receiver type is inside the other are a compile error:
 
 <!-- example extension-overloads: statements
 namespace App.Checkout;
@@ -6606,7 +6606,7 @@ lines.total();                      // compiles: lines is a List<Line>, so LineT
 prices.total();                     // compiles: prices is a Map<string, Money>, so PriceTotals runs
 ```
 
-- **An extension block can declare type parameters, as in C# 14,** so one block serves a receiver of any type argument, `extension<TItem>(List<TItem> items)`, within the type parameters' bounds (section 11). A call infers them from its receiver. A member's own type parameters come after the block's, and a call writes only those:
+- **An extension block can declare type parameters,** so one block serves a receiver of any type argument, `extension<TItem>(List<TItem> items)`, within the type parameters' bounds (section 11). A call infers them from its receiver. A member's own type parameters come after the block's, and a call writes only those:
 
 <!-- example generic-extensions -->
 ```csharp
@@ -6645,7 +6645,7 @@ orders.saved;                           // compiles: an Order is a DatabaseEntit
 names.saved;                            // compile error: string is outside TEntity's bound, so List<string> has no saved
 ```
 
-- **Each type parameter of an extension block appears in its receiver's type,** because the receiver is the only place a call infers it from, as C# requires:
+- **Each type parameter of an extension block appears in its receiver's type,** because the receiver is the only place a call infers it from:
 
 <!-- example extension-unused-type-parameter -->
 ```csharp
@@ -6661,7 +6661,7 @@ public static class Pairs
 }
 ```
 
-- **An extension that changes the collection it is called on takes its receiver by `ref`,** as C# 14 lets any code, as in `extension(ref List<int> counts) { public void bump() => counts.add(1); }`.
+- **An extension that changes the collection it is called on takes its receiver by `ref`,** as in `extension(ref List<int> counts) { public void bump() => counts.add(1); }`.
 
 ## 27. PHP# files
 
@@ -6678,7 +6678,7 @@ import App.Shop.Records.Entities.DatabaseEntity;
 
 The extension is **`.sharp`**, as in `StoreService.sharp`.
 
-**A `.sharp` file that declares a type declares one, named like the file, case included,** as Java allows one public top-level class per file and names the file after it. Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file. A second type in a file is a compile error, and so is C#'s `partial`, because a class lives in one file. An `extern` declaration file (section 29) and a `Module.sharp` file (section 32) hold no type, so the rule doesn't cover them:
+**A `.sharp` file that declares a type declares one, named like the file, case included.** Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file. A second type in a file is a compile error, and so is a `partial` class, because a class lives in one file. An `extern` declaration file (section 29) and a `Module.sharp` file (section 32) hold no type, so the rule doesn't cover them:
 
 <!-- example one-type-per-file -->
 ```csharp
@@ -6689,7 +6689,7 @@ public class StoreService { … }       // compiles: StoreService.sharp declares
 public class StoreHelper { … }        // compile error: move StoreHelper to StoreHelper.sharp
 ```
 
-Plain PHP files keep `.php` and `<?php`, and the two call each other freely. Composer's autoloader tries `.sharp` after `.php`, the same way it already tries `.hh` for Hack.
+Plain PHP files keep `.php` and `<?php`, and the two call each other freely. Composer's autoloader tries `.sharp` after `.php`.
 
 **`Position` says where code sits in its source.** PHP's magic constants `__DIR__`, `__FILE__`, `__LINE__`, `__FUNCTION__`, `__METHOD__`, `__NAMESPACE__` and `__CLASS__` are removed, along with every other `__Something__` form. `Position` is a standard-library type, imported by default (section 23). It has `file`, `directory`, `line`, `column` and `function`. `function` is the fully qualified dotted name, as in `App.Reports.logSlow`, because a short name is ambiguous across namespaces.
 
@@ -6729,11 +6729,11 @@ Log.info("charged", ["class": typeof(Order)]);                   // compiles: re
 ```
 
 - `Position.current()` in a body gives the position where it is written.
-- As a parameter's default, `Position.current()` gives the caller's position, as C++20's `std::source_location::current()` and Swift's `#file` defaults do.
-- A call through a function value gives the position of the parameter's declaration, because C++ and Swift fill the default only at a direct call too.
-- The parameter takes the whole position, or one field of it, as `int line = Position.current().line`, as C#'s `[CallerLineNumber]` and Swift's `#line` take the line alone. A default that computes from it, as `int next = Position.current().line + 1`, is a compile error.
+- As a parameter's default, `Position.current()` gives the caller's position.
+- A call through a function value gives the position of the parameter's declaration, because the compile fills the default with the caller's position only at a direct call, where it sees the function called.
+- The parameter takes the whole position, or one field of it, as `int line = Position.current().line`. A default that computes from it, as `int next = Position.current().line + 1`, is a compile error.
 
-**A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A comment is text in every file Mago reads, `.sharp` and `.php` alike, so no comment hides an issue. A project turns a rule off in its `mago.toml`. `mago.toml`'s `ignore` or the baseline can hide a warning, never one of the language's errors. They can hide an error of an extension host's rule, whose code names its host, as `acme/no-raw-sql`.
+**A `.sharp` file runs only after the checker accepts it.** A type error stops it from running. A comment is text in every file Mago reads, `.sharp` and `.php` alike, so no comment hides an issue. A project turns a rule off in its `mago.toml`. `mago.toml`'s `ignore` or the baseline can hide a warning, never one of the language's errors. They can hide an error of an extension host's rule, whose code names its host, as `acme/no-raw-sql`.
 
 <!-- example a-comment-hides-no-error: members -->
 ```csharp
@@ -6752,8 +6752,8 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 ```
 
 - **A deploy** runs `vendor/bin/mago compile` before the code runs.
-- **A compile with nothing to do returns at once.** A compile keeps `.sharp/inputs.json`, a record of everything it read and wrote and of what it printed: each `.php` and `.sharp` file under the configured paths, includes and patches with its real path, every `composer.json` the loader reads, Composer's `installed.json`, the baseline, each `.gitignore` someone else wrote in a folder of the compile's `.php` files, the configuration, the checker build, and each file it wrote. The next compile checks the record before it analyzes anything, and when nothing in it changed, it prints the same outcome, a refused file's errors included, exits as the compile did, and stops, as cargo and `tsc --incremental` skip a build whose inputs are unchanged. A file whose size, times, inode or device changed is hashed. On a filesystem whose change time records every write, as APFS, ext4 and most others do, that sees a rewrite that keeps the size and sets the time back. On FAT and exFAT, and on a system other than macOS and Linux, the compile hashes every file. A compile that warns keeps no record, so the next one prints the same warnings, and so does one whose law checker refused a file, so the next one runs the checker again. A project with an extension host enabled compiles every time, because a host doesn't say what it reads. The compile for the hosts keeps the same record in its own folder, whatever it logs, since the run that follows it reports what the project's files hold.
-- **In development, the engine compiles a file that isn't current when it loads,** as Phoenix's code reloader compiles before a request. The engine's `sharp.compile_command` setting names the command, in a dev `php.ini`:
+- **A compile with nothing to do returns at once.** A compile keeps `.sharp/inputs.json`, a record of everything it read and wrote and of what it printed: each `.php` and `.sharp` file under the configured paths, includes and patches with its real path, every `composer.json` the loader reads, Composer's `installed.json`, the baseline, each `.gitignore` someone else wrote in a folder of the compile's `.php` files, the configuration, the checker build, and each file it wrote. The next compile checks the record before it analyzes anything, and when nothing in it changed, it prints the same outcome, a refused file's errors included, exits as the compile did, and stops. A file whose size, times, inode or device changed is hashed. On a filesystem whose change time records every write, as APFS, ext4 and most others do, that sees a rewrite that keeps the size and sets the time back. On FAT and exFAT, and on a system other than macOS and Linux, the compile hashes every file. A compile that warns keeps no record, so the next one prints the same warnings, and so does one whose law checker refused a file, so the next one runs the checker again. A project with an extension host enabled compiles every time, because a host doesn't say what it reads. The compile for the hosts keeps the same record in its own folder, whatever it logs, since the run that follows it reports what the project's files hold.
+- **In development, the engine compiles a file that isn't current when it loads,** so a request always runs the code on disk. The engine's `sharp.compile_command` setting names the command, in a dev `php.ini`:
 
 ```text
 sharp.compile_command = "vendor/bin/mago --no-version-check --no-extensions compile"
@@ -6771,7 +6771,7 @@ app/Orders/Order.sharp is out of date (app/Shared/Database/BaseModel.php changed
 ```
 
 - **Production leaves the setting empty,** as the runtime images do. A stale deploy is then refused, and no request waits for a compile.
-- **`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type,** as `StoreService.php` beside `StoreService.sharp`. So PHP code that finds classes by listing `*.php` files and naming each class by its path, as route-attribute and event discovery do, finds PHP# classes too, the way Java's classpath scanners find Kotlin classes. The file loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error. It ends with the type's declaration in an `if (false)` that never runs, naming the type and its kind, so PHP code that reads `*.php` source, as Composer's class map generator and Symfony's attribute routing do, finds the type too, the way tools read a TypeScript `.d.ts` file. A type named after a word PHP reserves, as `Case` or `Match`, gets the file without the declaration, which PHP would refuse, so a tool that reads source never finds it, and Composer's PSR-4 rule still loads it. The engine declares the type once, from the `.sharp` file, and the checker reads the `.sharp` file and never the `.php` file. Once its `.sharp` file is deleted, it declares nothing until the next compile deletes it. Nobody edits it: a `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, and the next compile rewrites or deletes the file with its source.
+- **`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type,** as `StoreService.php` beside `StoreService.sharp`. So PHP code that finds classes by listing `*.php` files and naming each class by its path, as route-attribute and event discovery do, finds PHP# classes too. The file loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error. It ends with the type's declaration in an `if (false)` that never runs, naming the type and its kind, so PHP code that reads `*.php` source, as Composer's class map generator and Symfony's attribute routing do, finds the type too. A type named after a word PHP reserves, as `Case` or `Match`, gets the file without the declaration, which PHP would refuse, so a tool that reads source never finds it, and Composer's PSR-4 rule still loads it. The engine declares the type once, from the `.sharp` file, and the checker reads the `.sharp` file and never the `.php` file. Once its `.sharp` file is deleted, it declares nothing until the next compile deletes it. Nobody edits it: a `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, and the next compile rewrites or deletes the file with its source.
 - **`mago compile` keeps the `.php` files out of git with a `.gitignore` of its own in each folder that holds one.** The file lists itself and each `.php` file the compile wrote there, so git shows neither. Each checkout of a repository, a linked worktree included, has its own working tree, so each ignores its own files and never another checkout's, and the compile needs no `git` program. The compile rewrites the file on every compile, and deletes it with the `.php` files once the folder holds no source, even when no other source brings the compile back to that folder. It is the compile's own only while its first line is this one and each other line names itself or a `.php` file:
 
 ```text
@@ -6792,8 +6792,8 @@ app/Tenant/.gitignore doesn't list /Order.php, so git may show app/Tenant/Order.
 - **Formatters pass the `.php` files as written:** `mago fmt`, Laravel Pint's `laravel`, `per` and `psr12` presets, and PHP-CS-Fixer's `@PER-CS2x0`. PHPCS skips them, because each marks itself `// phpcs:ignoreFile` as generated. Two styles want each global name written in full with no import, as `\is_file`, which no text that also passes Pint's `laravel` preset can do. So a project on PHP-CS-Fixer's `@Symfony` set skips the files with `->notContains('// mago compile writes this file from')` on its Finder, and one on Pint's `symfony` preset lists them under `notPath` in `pint.json`.
 - **A type error stops the file from running, an import its module's `imports` line leaves out included.** So does a law the checker cannot prove, a compile error that names the law and what is still to show.
 - **A plain PHP class that doesn't satisfy a PHP# type it extends or implements stops `mago compile`** (section 22), and `mago compile` still writes every accepted `.sharp` file.
-- **`mago compile` hides exactly what `mago analyze` hides:** the same `ignore` entries and baseline hide a host rule's error from both, as `tsc` and `tsc --noEmit` report the same errors.
-- **An extension host loads the project's own classes, on a fresh or read-only tree and after any change.** Before a command starts its hosts, `mago compile`, `mago analyze` (`--watch` too) and `mago lint` compile the project for the hosts into a folder of mago's cache, outside the project, which only the hosts' engine reads, so the project's `.sharp` folder holds only what `mago compile` accepted. That compile lowers every file that lowers, whatever the checker says of it, as Roslyn hands an analyzer a compilation with errors and `tsc` emits despite type errors: a host that loads a file with a type error gets the error the code raises when it runs, and a host that loads a file that doesn't lower gets the checker's errors. A watch restarts the hosts' workers when a file they load changes, as a dev server restarts a worker when a module it loaded changes.
+- **`mago compile` hides exactly what `mago analyze` hides:** the same `ignore` entries and baseline hide a host rule's error from both, so the two commands report the same errors.
+- **An extension host loads the project's own classes, on a fresh or read-only tree and after any change.** Before a command starts its hosts, `mago compile`, `mago analyze` (`--watch` too) and `mago lint` compile the project for the hosts into a folder of mago's cache, outside the project, which only the hosts' engine reads, so the project's `.sharp` folder holds only what `mago compile` accepted. That compile lowers every file that lowers, whatever the checker says of it, so a host still loads the project while it has type errors: a host that loads a file with a type error gets the error the code raises when it runs, and a host that loads a file that doesn't lower gets the checker's errors. A watch restarts the hosts' workers when a file they load changes, as a dev server restarts a worker when a module it loaded changes.
 - **A rule that reads the whole project's structure can lag in development** until the next full compile. At deploy, `mago compile` checks every rule exactly.
 
 ## 28. Verification
@@ -6801,9 +6801,9 @@ app/Tenant/.gitignore doesn't list /Order.php, so git may show app/Tenant/Order.
 The checker verifies two kinds of facts before code runs:
 
 - **Structure,** meaning what a namespace may import, is a module's `imports` line (section 32), which the checker checks as it checks types.
-- **Values:** facts the code guarantees, written as laws, as in Bend, Lean and Agda.
+- **Values:** facts the code guarantees, written as laws.
 
-**A class states its laws in PHP#,** with `law`. A law is a claim over every value of its parameters, `law name(parameters) => claim;`, and the checker proves it alone. A law the checker cannot prove alone carries a body after its claim, in place of the `;`, and the body is its proof, in ordinary PHP#. Laws and their proofs live in the `.sharp` file, as in Bend, where a law is proven by a definition of the same name in the same file. The checker turns each law into a Lean theorem in `.sharp/`, and Lean's kernel checks every proof. Nobody writes or reads Lean.
+**A class states its laws in PHP#,** with `law`. A law is a claim over every value of its parameters, `law name(parameters) => claim;`, and the checker proves it alone. A law the checker cannot prove alone carries a body after its claim, in place of the `;`, and the body is its proof, in ordinary PHP#. Laws and their proofs live in the `.sharp` file, beside the code they state facts about. The checker turns each law into a Lean theorem in `.sharp/`, and Lean's kernel checks every proof. Nobody writes or reads Lean.
 
 <!-- example class-law -->
 ```csharp
@@ -6981,7 +6981,7 @@ module
 
 A law the checker cannot prove is a compile error that names it (section 27).
 
-**Laws hold only over pure code** (section 29). The checker translates pure PHP# code to Lean, and Lean's kernel checks the proofs. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, work the same way. A law reaches the code it calls, and that code's own calls, and code no law reaches is never translated or refused:
+**Laws hold only over pure code** (section 29). The checker translates pure PHP# code to Lean, and Lean's kernel checks the proofs. A law reaches the code it calls, and that code's own calls, and code no law reaches is never translated or refused:
 
 - **A method may call itself, or a method of its class that calls it back, only on a smaller value:** a list's rest from a list pattern, or `n - 1` or `n + 1` towards a bound an `if`, `?:`, `&&`, `||` or `match` comparison tested. The bound is an int literal, tested with `<`, `<=`, `>` or `>=`, or another int parameter the call passes on unchanged, tested with `<` or `>`.
 - **A `for (… of …)` loop over a List** reaches a law when its body only adds pure int values to int locals with `+=` or `++`, each under an `if` or not, and never reads a local it adds to.
@@ -7071,7 +7071,7 @@ app/
 
 ## 29. Effects
 
-An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use. It also records every call into plain PHP, whose effect an `extern` declaration states, and every `emit`, which raises an event and has the effect `Events` (section 15).
+An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities. It also records every call into plain PHP, whose effect an `extern` declaration states, and every `emit`, which raises an event and has the effect `Events` (section 15).
 
 **Any PHP# code may call plain PHP,** such as a library's classes, facades and models. Most libraries are plain PHP, so this is how PHP# code uses them. PHP's own built-in functions are the exception: the standard library replaces them (section 8).
 
@@ -7161,7 +7161,7 @@ extern AsEventListener;          // compiles: AsEventListener carries [Dynamical
 
 A bare call of a replaced function names no function (section 8), and a PHP built-in class names no class (section 23), so only the standard library reaches them. Inside it, creating a built-in class has the effects its `extern` lists, as creating a `DateTimeImmutable` reads the clock.
 
-**`Dns.addresses(host)` gives every IPv4 and IPv6 address of a host,** each once, as an `IpAddress`, in the order the system resolver gives them, as .NET's `Dns.GetHostAddresses`, Go's `net.LookupHost` and Rust's `ToSocketAddrs` do. The system resolver reads the hosts file before it asks a DNS server, so `localhost` resolves with no network. A name that is no host name throws `ValueError` before any lookup, and a host the resolver can't find throws `RuntimeException`, as .NET throws `SocketException`:
+**`Dns.addresses(host)` gives every IPv4 and IPv6 address of a host,** each once, as an `IpAddress`, in the order the system resolver gives them. The system resolver reads the hosts file before it asks a DNS server, so `localhost` resolves with no network. A name that is no host name throws `ValueError` before any lookup, and a host the resolver can't find throws `RuntimeException`:
 
 <!-- example dns -->
 ```csharp
@@ -7195,7 +7195,7 @@ this.target.isPublic("nothing.invalid");    // throws RuntimeException
 this.target.isPublic("not a host");         // throws ValueError
 -->
 
-**`IpAddress`, in `Sharp.Net`, is an IPv4 or IPv6 address,** as .NET's `IPAddress` is. `IpAddress.parse(text)` and `IpAddress.tryParse(text)` read either family, and `family` gives `IpFamily.V4` or `IpFamily.V6`. `isLoopback()` is true for `127.0.0.0/8` and `::1`, and `isPrivate()` for RFC 1918's `10.0.0.0/8`, `172.16.0.0/12` and `192.168.0.0/16` and IPv6's unique local `fc00::/7`, as Rust's `is_private` and `is_unique_local` are. `toString()` writes RFC 5952's form, and two addresses are `==` when they are one address, however each was written:
+**`IpAddress`, in `Sharp.Net`, is an IPv4 or IPv6 address.** `IpAddress.parse(text)` and `IpAddress.tryParse(text)` read either family, and `family` gives `IpFamily.V4` or `IpFamily.V6`. `isLoopback()` is true for `127.0.0.0/8` and `::1`, and `isPrivate()` for RFC 1918's `10.0.0.0/8`, `172.16.0.0/12` and `192.168.0.0/16` and IPv6's unique local `fc00::/7`. `toString()` writes RFC 5952's form, and two addresses are `==` when they are one address, however each was written:
 
 <!-- example ip-address: statements
 import Sharp.Net.IpAddress;
@@ -7209,7 +7209,7 @@ IpAddress.parse("127.0.0.1").family == IpFamily.V4;            // true
 IpAddress.tryParse("example.com");                             // null
 ```
 
-**`Process.start(program, arguments)` starts a program and returns while it runs,** as .NET's `Process.Start` and Rust's `Command::spawn` do, where `Process.run` waits for it. The `ChildProcess` it gives writes the program's input with `writeInput(text)` and closes it with `closeInput()`. `readOutput()` and `readError()` give everything the program writes to its output and to its error output, once it ends, as .NET's `ReadToEnd` does. `wait()` closes the input, waits for the program to end and gives its exit code, as Rust's `Child::wait` does, and `kill()` ends the program at once. The output goes to temporary files, so a program that writes a lot never waits for a reader. A `ChildProcess` runs through the `Process` that started it, so code that holds one has the effect `Process`:
+**`Process.start(program, arguments)` starts a program and returns while it runs,** where `Process.run` waits for it. The `ChildProcess` it gives writes the program's input with `writeInput(text)` and closes it with `closeInput()`. `readOutput()` and `readError()` give everything the program writes to its output and to its error output, once it ends. `wait()` closes the input, waits for the program to end and gives its exit code, and `kill()` ends the program at once. The output goes to temporary files, so a program that writes a lot never waits for a reader. A `ChildProcess` runs through the `Process` that started it, so code that holds one has the effect `Process`:
 
 <!-- example process-start -->
 ```csharp
@@ -7248,7 +7248,7 @@ public ExampleRun(private Echo echo) { }
 this.echo.back("one line");   // "one line"
 -->
 
-**`ZipArchive`, in `Sharp.IO`, reads and writes a ZIP archive,** as .NET's `ZipArchive` and `ZipFile` do. `ZipArchive.open(path)` opens one to read and to add to, and `ZipArchive.create(path)` makes a new one in place of any file at `path`. `list()` gives each entry's name in the archive's order, and `read(name)` gives an entry's text, or null when the archive has none. `write(name, text)` adds an entry from text and `addFile(file, name)` one from a file, each in place of an entry of that name, and `extractTo(directory)` writes every entry into a folder. The changes reach the file when `close()` runs, as .NET's `Dispose` writes them, and an archive with no entries is written too. Each member reads or writes files, so code that calls one has the effect `Files`. A failure throws `RuntimeException` with the path and libzip's reason, as `ZipArchive.open: "report.csv" cannot be opened: Not a zip archive`:
+**`ZipArchive`, in `Sharp.IO`, reads and writes a ZIP archive.** `ZipArchive.open(path)` opens one to read and to add to, and `ZipArchive.create(path)` makes a new one in place of any file at `path`. `list()` gives each entry's name in the archive's order, and `read(name)` gives an entry's text, or null when the archive has none. `write(name, text)` adds an entry from text and `addFile(file, name)` one from a file, each in place of an entry of that name, and `extractTo(directory)` writes every entry into a folder. The changes reach the file when `close()` runs, and an archive with no entries is written too. Each member reads or writes files, so code that calls one has the effect `Files`. A failure throws `RuntimeException` with the path and libzip's reason, as `ZipArchive.open: "report.csv" cannot be opened: Not a zip archive`:
 
 <!-- example zip-archive -->
 ```csharp
@@ -7331,17 +7331,17 @@ public foreign class RedisStore
 
 The standard library's twelve effect classes, listed above, are `foreign` classes. A project declares its own `foreign` classes the same way.
 
-**`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it. A listener runs inside the `emit` that raised its event, under the standard library's dispatcher, so an exception it throws leaves that `emit`, and the listeners after it don't run, as a C# event's handlers and Symfony's dispatcher behave. Code that must keep going catches it around the `emit`.
+**`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it. A listener runs inside the `emit` that raised its event, under the standard library's dispatcher, so an exception it throws leaves that `emit`, and the listeners after it don't run, as with Symfony's dispatcher. Code that must keep going catches it around the `emit`.
 
 **PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS`, with or without `$`, fail as a typo does. Request data arrives as a parameter, such as a framework's `Request`. The process environment and the command-line arguments arrive as `Environment`, a standard `foreign` class like `Clock` and `Random`:
 
 - `string? variable(string name)` reads an environment variable, or gives null when it is not set.
 - `Map<string, string> variables()` reads every environment variable, by name, on every call.
 - `List<string> arguments { get; }` holds the command-line arguments, starting with the script's name.
-- `string currentDirectory()` reads the directory the process runs in on every call, as Go's `os.Getwd()` and Rust's `env::current_dir()` do.
+- `string currentDirectory()` reads the directory the process runs in on every call.
 - `void changeDirectory(string path)` changes the directory the process runs in.
-- `string require(string name)` reads an environment variable, and throws `ValueError` when it is not set, with the message `Environment.require: the environment variable "NAME" is not set`. A module binding calls it on the `Environment` it takes as a parameter (section 32), as ASP.NET Core's `IConfiguration` is a service.
-- `int processorCount()` gives how many processors the machine has online, at least 1, and `string machineName()` gives its host name, as .NET's `Environment.ProcessorCount` and `Environment.MachineName` do.
+- `string require(string name)` reads an environment variable, and throws `ValueError` when it is not set, with the message `Environment.require: the environment variable "NAME" is not set`. A module binding calls it on the `Environment` it takes as a parameter (section 32).
+- `int processorCount()` gives how many processors the machine has online, at least 1, and `string machineName()` gives its host name.
 
 <!-- example environment -->
 ```csharp
@@ -7453,7 +7453,7 @@ public class Stamp
 
 **Pure code** reaches no `foreign` object, emits no event, and calls no plain PHP unless an `extern` declares it pure. Pure limits only what code reaches outside the program, so a pure method may change its own object and its arguments. `readonly` after the parameters is what promises a method changes nothing, as in `T peek() readonly;`, and it holds every implementation to that (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code that changes nothing it was given, so a law that reaches a change is a compile error naming the method, and a law cannot see inside `foreign` classes or plain PHP.
 
-**A struct and an enum are pure** (sections 10 and 20). Each method, `get` body and operator of one, a data case's included, has no effects, as a value is the same wherever code reads it. A struct method that calls a `foreign` parameter or a plain PHP method an `extern` gives an effect, and an enum method that emits, is a compile error that names the member and the effect: "`Money.inEuros` has the effect `Http`, and a struct has no effects." The work goes in a class that takes the value. Creating and throwing an exception is no effect, as in Rust and Kotlin, and a plain PHP call that no `extern` declares has no effect a `uses` names, so a struct may validate its fields with `filter_var` and throw a `ValueError`.
+**A struct and an enum are pure** (sections 10 and 20). Each method, `get` body and operator of one, a data case's included, has no effects, as a value is the same wherever code reads it. A struct method that calls a `foreign` parameter or a plain PHP method an `extern` gives an effect, and an enum method that emits, is a compile error that names the member and the effect: "`Money.inEuros` has the effect `Http`, and a struct has no effects." The work goes in a class that takes the value. Creating and throwing an exception is no effect, and a plain PHP call that no `extern` declares has no effect a `uses` names, so a struct may validate its fields with `filter_var` and throw a `ValueError`.
 
 **Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types, except the function type of a method's parameter, which takes on what each call passes (below). A declaration that overrides another is held to it: a sub-interface may narrow its parent's `uses`, and a `uses` that widens it is a compile error at the declaration. Every implementation is held to what the declaration allows:
 
@@ -7556,9 +7556,9 @@ public class StoreCheckout : Checkout
 }
 ```
 
-**A method takes on the effects of each function it is given.** A parameter whose function type states no effects, as `f` in `map(Function<TResult(T)> f)`, has at each call the effects of the function that call passes. The method has its body's own effects plus those, and nothing is written, as with Swift's `rethrows` and Kotlin's inline lambdas, and as a call to plain PHP takes on the effects of each lambda passed to it.
+**A method takes on the effects of each function it is given.** A parameter whose function type states no effects, as `f` in `map(Function<TResult(T)> f)`, has at each call the effects of the function that call passes. The method has its body's own effects plus those, and nothing is written, as a call to plain PHP takes on the effects of each lambda passed to it.
 
-**Such a parameter runs only inside the call,** as a Swift closure parameter does without `@escaping`. Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead: the type of the field or parameter that receives it when that type states effects, its own type with `uses none` when that type is pure, and otherwise its own type with `uses none` or with the effects it may have. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
+**Such a parameter runs only inside the call,** because the call's effects cover it only while the call runs. Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead: the type of the field or parameter that receives it when that type states effects, its own type with `uses none` when that type is pure, and otherwise its own type with `uses none` or with the effects it may have. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
 
 <!-- example function-effects: statements in Carts<T>
 List<Cart> carts = [new Cart()];
@@ -7585,7 +7585,7 @@ Take a `Function<string() uses Environment>`, whose type states the effects it m
 
 **A parameter whose function type states its effects keeps them as a cap.** `Function<Charge(Cart) uses Http>` accepts a function with `Http` or no effects, and the method has `Http` from calling it. Such a parameter may be stored, returned and captured, as any function value may.
 
-**`uses none` states that a function type is pure.** It is the empty effect list, and goes wherever a function type's `uses` goes. A parameter of `Function<int(int) uses none>` takes only a pure function, so passing it a function with an effect is a compile error at the call, and the method may store, return and capture it, as one whose type states effects. A function type without `uses` anywhere but a method's parameter is pure already, so `uses none` there says nothing new. `uses none` beside another effect, as in `uses none, Http`, is a compile error. `uses none` on a method, which is pure without `uses`, changes nothing, so it warns, as Swift compiles a method's `throws(Never)`. An override's function parameter takes on each caller's effects wherever the parameter it overrides does, a plain PHP `callable` or `Closure` parameter included, because a call through the overridden method may pass a function with any effect.
+**`uses none` states that a function type is pure.** It is the empty effect list, and goes wherever a function type's `uses` goes. A parameter of `Function<int(int) uses none>` takes only a pure function, so passing it a function with an effect is a compile error at the call, and the method may store, return and capture it, as one whose type states effects. A function type without `uses` anywhere but a method's parameter is pure already, so `uses none` there says nothing new. `uses none` beside another effect, as in `uses none, Http`, is a compile error. `uses none` on a method, which is pure without `uses`, changes nothing, so it warns and compiles. An override's function parameter takes on each caller's effects wherever the parameter it overrides does, a plain PHP `callable` or `Closure` parameter included, because a call through the overridden method may pass a function with any effect.
 
 <!-- example pure-function-parameters: statements
 namespace App.Shop;
@@ -7629,7 +7629,7 @@ The standard library's collection methods (section 12) take on the effects of th
 
 ## 30. Tuples
 
-A tuple groups a fixed number of typed values without declaring a class. It uses TypeScript's brackets. Each element is declared type first, as everywhere in PHP#.
+A tuple groups a fixed number of typed values without declaring a class. It is written in square brackets, as a list literal is. Each element is declared type first, as everywhere in PHP#.
 
 <!-- example tuples: statements in Order
 public class Date { }
@@ -7643,14 +7643,14 @@ public [Money total, int count, Date since] summarize() { return [this.total, th
 
 const [total, count, since] = order.summarize();     // unpack
 const summary = order.summarize();
-summary.total;                                        // read by name, as in C#
+summary.total;                                        // read by name
 
 public [Money, int] totals() { return [this.total, this.count]; }   // compiles: element names are optional
 const [money, items] = order.totals();                              // unpack an unnamed tuple
 ```
 
 - **A tuple can have any number of elements.** The checker suggests a struct past four.
-- **Names are optional in a tuple type,** as in TypeScript, C# and Swift. `[Money, int]` compiles.
+- **Names are optional in a tuple type.** `[Money, int]` compiles.
 - **A list literal becomes a tuple** when the declared type is a tuple, whatever its elements are: an element a lambda gives, as `[data, media.values().map((Media r) => Reference.copy(r))]`, and a literal a lambda returns through a generic method into a declared tuple. A tuple a `Map` holds stays one through `get(k) ?? throw`, so `const [tag, named, value] = tags.get(k) ?? throw …` unpacks it.
 - **Map entries are tuples:** `for (const [key, plan] of plans)`.
 
@@ -7663,7 +7663,7 @@ An expected failure, such as a declined card, is returned as a value. An excepti
 public enum Result<T, TError : Error>
 {
     case Ok(T value);
-    case Err(TError error);                       // Err beside the Error interface, as Rust's Result::Err sits beside its Error trait
+    case Err(TError error);                       // Err, so the case never shares a name with the Error interface
 }
 
 public Result<Order, PaymentError> charge(Cart cart) => Result.Err(PaymentError.Declined("card expired"));
@@ -7673,7 +7673,7 @@ public Result<Order, PaymentError> charge(Cart cart) => Result.Err(PaymentError.
 
 **A case of `Result` is the type `Result<Order, PaymentError>.Ok`.** `Result.Ok(…)` and `Result.Err(…)` take their type arguments from their arguments and from the declared type their result goes into, as `charge` above does. A type argument that neither fixes is written on the enum, as in `Result<int, PaymentError>.Ok(5)`. A pattern names the bare case, as in `Result.Ok(Order order)`, and takes the type arguments of the value it tests.
 
-**`try` passes a failure up to the caller.** If the call returns `Err`, the enclosing method returns an `Err` holding the same error immediately. Otherwise `try` gives the `Ok` value. Zig uses `try` the same way.
+**`try` passes a failure up to the caller.** If the call returns `Err`, the enclosing method returns an `Err` holding the same error immediately. Otherwise `try` gives the `Ok` value.
 
 - **The returned `Err` takes the type arguments of the enclosing method's `Result`,** and it is `==` to the `Err` it holds the error of. An operand whose error type doesn't fit the method's error type is a compile error that names both.
 - **`try` is a prefix operator with `!`'s precedence.** A member read and a call bind tighter, so `try this.gateway.charge(cart)` passes up the call's failure, and parentheses read a member of the `Ok` value.
@@ -7722,12 +7722,12 @@ public enum PaymentError : Error
 }
 ```
 
-**Inside `.sharp` files, a bare `Error` means this interface by default,** and an import or a class of the file's own namespace named `Error` shadows it, as it shadows every default name (section 23), as in Kotlin and Java. PHP's global engine class `Error` is never named in PHP# code, so an import of it is a compile error.
+**Inside `.sharp` files, a bare `Error` means this interface by default,** and an import or a class of the file's own namespace named `Error` shadows it, as it shadows every default name (section 23). PHP's global engine class `Error` is never named in PHP# code, so an import of it is a compile error.
 - **Bugs are caught as `Throwable`,** so `catch (Error failure)` is a compile error that names `Throwable`. Engine subclasses such as `TypeError` keep their names.
 
 ## 32. Modules
 
-A module says how the app builds its objects. Each namespace folder may hold `Module.sharp`, a `module { … }` declaration with no name, because the folder names it. `Module` is a reserved file name. NestJS modules have the same per-folder structure and overrides, and Dagger has the same compile-time check.
+A module says how the app builds its objects. Each namespace folder may hold `Module.sharp`, a `module { … }` declaration with no name, because the folder names it. `Module` is a reserved file name.
 
 **A module declares services** with `singleton`, `scoped` and `transient`:
 
@@ -7756,12 +7756,12 @@ module
 ```
 
 - **A binding's value is a class or one expression.** A class, such as `SmtpMailer`, is built through its main constructor (section 9.1). A class binds to itself to be created, as `SendReceipt` does.
-- **A binding names the services it needs as parameters, and its value is one expression over them,** as Dagger's `@Provides` methods do. The container passes each parameter the service bound to its type, so `RedisStore` above gets the app's `Environment`, which the standard library's module binds for every namespace. An expression is for a value no binding gives, such as `RedisStore`'s URL.
+- **A binding names the services it needs as parameters, and its value is one expression over them.** The container passes each parameter the service bound to its type, so `RedisStore` above gets the app's `Environment`, which the standard library's module binds for every namespace. An expression is for a value no binding gives, such as `RedisStore`'s URL.
 - **A module stays declarative:** one expression per binding, and no statements, loops or methods.
 - **A `foreign` object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and the container passes it to classes through their constructors.
 - **A module also states the laws that span its classes** (section 28), **and lists the namespaces its code imports from** (below).
-- **A class a module binds reaches code only through injection,** a constructor or a method parameter, or a value PHP# code returns, as Dagger and Angular hand a bound class only to what they build. A plain PHP call, a function or a method of a plain PHP class, whose result is such a class, or whose result PHP# code narrows to one with `as` or `is`, is a compile error: "`StoreService` is bound in `App.Shop`'s module, so it reaches code through a constructor or a parameter." So a service locator, as Laravel's `app(StoreService::class)`, never hands PHP# code a bound class, and every one the code holds is the container's. The one exception is the expression of the binding that binds a plain PHP class, where a framework's object enters the container, as C#'s `services.AddScoped<T>(sp => …)` adapts one: `scoped Request = Foundation.request();` compiles, and the same call anywhere else stays an error.
-- **A namespace whose `Module.sharp` binds its children's classes is the app's composition root, so code its children share lives in a child namespace, never in the root,** as Go's `main` package imports every package and no package imports it. The root's module imports each class it binds, and no two namespaces import each other (section 23). So `Flags`, which `App.Mail.FlaggedMailer` takes and `App`'s module binds, is `App.Features.Flags`, never `App.Flags`:
+- **A class a module binds reaches code only through injection,** a constructor or a method parameter, or a value PHP# code returns. A plain PHP call, a function or a method of a plain PHP class, whose result is such a class, or whose result PHP# code narrows to one with `as` or `is`, is a compile error: "`StoreService` is bound in `App.Shop`'s module, so it reaches code through a constructor or a parameter." So a service locator, as Laravel's `app(StoreService::class)`, never hands PHP# code a bound class, and every one the code holds is the container's. The one exception is the expression of the binding that binds a plain PHP class, where a framework's object enters the container: `scoped Request = Foundation.request();` compiles, and the same call anywhere else stays an error.
+- **A namespace whose `Module.sharp` binds its children's classes is the app's composition root, so code its children share lives in a child namespace, never in the root,** because the root imports every child and no namespace may import it back. The root's module imports each class it binds, and no two namespaces import each other (section 23). So `Flags`, which `App.Mail.FlaggedMailer` takes and `App`'s module binds, is `App.Features.Flags`, never `App.Flags`:
 
 <!-- example composition-root -->
 ```csharp
@@ -7803,9 +7803,9 @@ module
 }
 ```
 
-**The host defines each lifetime, as ASP.NET Core's host does.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.
+**The host defines each lifetime.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.
 
-**A host starts and ends each scope with `Scope.run(body)`.** While `body` runs, each `scoped` service it builds lives until `body` returns or throws, and is then dropped. `Scope.run` returns what `body` returns, and has `body`'s effects (section 29). PHP's own request is the default scope, so the CLI and FrankenPHP outside worker mode need no call. A long-running host wraps each unit of work in it, such as an Octane request, a FrankenPHP worker request or a queued job, as ASP.NET Core's `CreateScope()` and Node's `AsyncLocalStorage.run` start one. Plain PHP calls it as `\Sharp\Scope::run(fn () => …)`.
+**A host starts and ends each scope with `Scope.run(body)`.** While `body` runs, each `scoped` service it builds lives until `body` returns or throws, and is then dropped. `Scope.run` returns what `body` returns, and has `body`'s effects (section 29). PHP's own request is the default scope, so the CLI and FrankenPHP outside worker mode need no call. A long-running host wraps each unit of work in it, such as an Octane request, a FrankenPHP worker request or a queued job. Plain PHP calls it as `\Sharp\Scope::run(fn () => …)`.
 
 <!-- example host-scope -->
 ```csharp
@@ -7828,7 +7828,7 @@ public class Worker
 }
 ```
 
-**A scope follows the fiber that runs in it,** as .NET's `AsyncLocal` and Node's `AsyncLocalStorage` flow into the work they start. A fiber started inside `Scope.run` belongs to that scope, and a `Scope.run` inside a fiber is that fiber's own, so code on another fiber never builds from it. A `scoped` service resolved after its scope ended throws `Sharp\ContainerError`, as .NET throws when code uses a disposed scope.
+**A scope follows the fiber that runs in it.** A fiber started inside `Scope.run` belongs to that scope, and a `Scope.run` inside a fiber is that fiber's own, so code on another fiber never builds from it. A `scoped` service resolved after its scope ended throws `Sharp\ContainerError`.
 
 <!-- example scope-fibers -->
 ```csharp
@@ -7898,8 +7898,8 @@ module
 
 **A nested folder's module overrides its parent's services.** A test or environment module overrides with `module : App.Shop { … }`, and the compiler checks every environment's set of services: the base modules under all of that environment's modules at once.
 
-- **An environment module is `Module.<Environment>.sharp`** beside the `Module.sharp` it overrides, such as `Module.Production.sharp`. `SHARP_ENV` picks it, as `ASPNETCORE_ENVIRONMENT` picks ASP.NET Core's `appsettings.Production.json`.
-- **A test module is declared in the test file that uses it,** with the same header, as NestJS's testing module is. While a test of that file runs, its services are the test module's over the base modules, with no environment module, which is the set the compiler checks.
+- **An environment module is `Module.<Environment>.sharp`** beside the `Module.sharp` it overrides, such as `Module.Production.sharp`. `SHARP_ENV` picks it.
+- **A test module is declared in the test file that uses it,** with the same header. While a test of that file runs, its services are the test module's over the base modules, with no environment module, which is the set the compiler checks.
 
 <!-- example environment-module -->
 ```csharp
@@ -7962,7 +7962,7 @@ module
 }
 ```
 
-**A module lists the namespaces its code imports from** on one `imports` line, as Java's `module-info.java` lists the modules it `requires`. An import of any other namespace is a compile error at the import, which names the namespace and its list.
+**A module lists the namespaces its code imports from** on one `imports` line. An import of any other namespace is a compile error at the import, which names the namespace and its list.
 
 <!-- example module-imports -->
 ```csharp

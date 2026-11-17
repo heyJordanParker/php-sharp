@@ -56,7 +56,7 @@ The Slice builds all of section 29 in one php-sharp PR, after #136 merges and af
 
    Approved: A, so a law over list code proves. Built: a `List` is Lean's `List`, a list literal a Lean list, `count()` is `List.length`, and `map` and `filter` of a lambda whose body cannot throw are `List.map` and `List.filter`. Any other `List` method is refused by name, as are a `Map`, a `Set` and any other lambda.
 
-Decisions 4, 5, 6 and 8 are approved as written, with the codes `wrapped-class` and `foreign-outside-module`. Decision 6 builds on #136's mechanism. If Jordan's open answer drops the `uses f` syntax for an inferred one, as Swift's `rethrows`, the declarations change and the mechanism stays.
+Decisions 4, 5, 6 and 8 are approved as written, with the codes `wrapped-class` and `foreign-outside-module`. Decision 6 builds on #136's mechanism. If Jordan's open answer drops the `uses f` syntax for an inferred one, the declarations change and the mechanism stays.
 
 10. **Every built-in exception class comes declared pure** (team-lead's answer to question 4). `Builtins.sharp` declares each class by name, as it declares each function, and a row has pure code throw `new ValueError("empty")`.
 
