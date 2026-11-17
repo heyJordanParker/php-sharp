@@ -1,7 +1,6 @@
 ---
 name: maintain
 description: The maintainer's loop that runs PHP#: triage every reported problem into a GitHub issue, dispatch ready issues to builders, verify what they return, and ship releases. Run by `/loop /maintain`, once per tick and on every builder or CI notification.
-disable-model-invocation: true
 ---
 
 # Maintain
