@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - ci/360-release-merge-test
   pull_request:
     branches:
       - master
@@ -473,7 +474,7 @@ jobs:
           jobs: ${{ toJSON(needs) }}
       # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed run on master
-        if: failure() && github.event_name == 'push'
+        if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: ./.github/actions/red-master-issue
         with:
           title: A push to master failed PHP# CI
@@ -516,6 +517,7 @@ jobs:
           fetch-depth: 0
       # A release's tag here becomes the plugin release of the same version. The split is the same commit on a rerun.
       - name: Push the split, and a release's tag
+        if: github.ref == 'refs/heads/master'
         working-directory: sharp/build/php-sharp-composer
         run: |
           git fetch "$GITHUB_WORKSPACE" refs/heads/composer
@@ -537,6 +539,7 @@ jobs:
       # that history, but it walks all of Mago's history in shell recursion and took more than 8 minutes without
       # finishing.
       - name: Push the split
+        if: github.ref == 'refs/heads/master'
         working-directory: sharp/build/mago-sharp
         run: |
           git fetch "$GITHUB_WORKSPACE" refs/heads/mago
@@ -560,7 +563,7 @@ jobs:
       # The tag pins these SHA-256s for good, so the assets a user downloads from the published release must match
       # them, and so must the sums file install.sh checks a download against.
       - name: The published assets match the SHA-256s the tag pins
-        if: env.VERSION
+        if: env.VERSION && github.ref == 'refs/heads/master'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -578,7 +581,7 @@ jobs:
           fi
       # A rerun finds the tag an earlier attempt pushed, and leaves it.
       - name: Push the release's tag, with the SHA-256 of every release asset
-        if: env.VERSION
+        if: env.VERSION && github.ref == 'refs/heads/master'
         working-directory: sharp/build/mago-sharp
         run: |
           if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null; then
@@ -801,6 +804,7 @@ jobs:
           echo "Every asset of run $RUN_ID matches its SHA-256 and its attestation, and was built from tree $TREE."
       # Publishing the draft creates tag v<version> on this commit.
       - name: Upload every asset to the draft release, check it, then publish it
+        if: github.ref == 'refs/heads/master'
         env:
           NOTES: ${{ runner.temp }}/release-notes.md
         run: |
@@ -842,6 +846,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       # Each digest's file holds the commit IMAGE built it from.
       - name: Tag the platforms' images as one image
+        if: github.ref == 'refs/heads/master'
         id: tag
         working-directory: ${{ runner.temp }}/digests
         env:
@@ -868,6 +873,7 @@ jobs:
           echo "digest=$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_OUTPUT"
       # `gh attestation verify oci://ghcr.io/heyjordanparker/php-sharp:<version> --repo heyJordanParker/php-sharp` checks it.
       - name: Attest the image's provenance
+        if: github.ref == 'refs/heads/master'
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-name: ghcr.io/heyjordanparker/php-sharp
