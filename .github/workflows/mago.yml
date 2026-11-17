@@ -2,7 +2,7 @@ name: Mago
 
 on:
   push:
-    branches: [master]
+    branches: [master, ci/360-rerun-merge-test]
   # Only a pull request into master, as sharp.yml runs, so a run .github/actions/passed-tree finds passed against master.
   pull_request:
     branches: [master]
@@ -484,7 +484,7 @@ jobs:
 
       # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed run on master
-        if: failure() && github.event_name == 'push'
+        if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: ./.github/actions/red-master-issue
         with:
           title: A push to master failed Mago CI
