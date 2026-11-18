@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - ci/360-r6-push
   pull_request:
     branches:
       - master
@@ -201,14 +202,12 @@ jobs:
       # 343 seconds on test pull request #401's run, and 5.8 on #394's. A download-only install fills it and writes no
       # vendor folder.
       - name: Composer cache, saved on master
-        if: github.ref == 'refs/heads/master'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: sharp/build/composer-home/cache
           key: SHARP_COMPOSER-${{ hashFiles('sharp/mago/composer.lock', 'Zend/tests/sharp/composer.lock', 'sharp/phpunit/composer.lock') }}
           restore-keys: SHARP_COMPOSER-
       - name: Download the locked Composer packages into the Composer cache
-        if: github.ref == 'refs/heads/master'
         run: |
           for project in sharp/mago Zend/tests/sharp sharp/phpunit; do
             sharp/docker/run composer install --download-only --no-interaction --no-progress --no-plugins --no-scripts \
@@ -665,7 +664,7 @@ jobs:
   # made the GitHub release public. The pushes never force, so a mistake can't rewind a published package.
   COMPOSER:
     needs: [CHANGES, RELEASE]
-    if: ${{ !failure() && !cancelled() && github.event_name == 'push' }}
+    if: ${{ !failure() && !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-24.04
     concurrency: composer-${{ github.ref }}
     permissions:
@@ -977,7 +976,7 @@ jobs:
       - RELEASE_ASSETS
       - IMAGE
       - IMAGE_ARM64
-    if: ${{ !failure() && !cancelled() && github.event_name == 'push' && needs.CHANGES.outputs.bump == 'true' }}
+    if: ${{ !failure() && !cancelled() && github.event_name == 'push' && needs.CHANGES.outputs.bump == 'true' && github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read

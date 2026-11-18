@@ -3,8 +3,10 @@
 // Checks every csharp, ts and php block of README.md and docs/spec.md against its annotations, as
 // docs/architecture/spec-examples.md describes, and fails when the examples that fail differ from sharp/baseline/spec.
 // sharp/bin/test --spec runs it on the built engine, with sharp/bin/test's mago in TEST_MAGO_EXECUTABLE.
-// With --shard <i>/<n>, it checks only every n-th example from the i-th, and compares only their entries in the list,
-// so n jobs check every example once. The first shard also compares the entries that name no example.
+// With --shard <i>/<n>, it checks only the i-th of n slices of the examples, and compares only their entries in the
+// list, so n jobs check every example once. The first shard also compares the entries that name no example. The slices
+// balance by the seconds sharp/baseline/seconds lists, as sharp/bin/test's slices do, each example under the path
+// <document>#<id>. Each run prints the examples that took 2 seconds or more as the rows of that file.
 //
 // With --base <commit>, it instead compares sharp/baseline/spec and the examples with that commit. The SPEC_GUARD job
 // runs the base commit's copy of this script on the pull request's merge commit, so a pull request's own files never
@@ -21,6 +23,7 @@ declare(strict_types=1);
 
 const DOCUMENTS = ['README.md', 'docs/spec.md'];
 const BASELINE = 'sharp/baseline/spec';
+const SECONDS = 'sharp/baseline/seconds';
 const SELF_TEST = 'sharp/spec-self-test.md';
 const HARNESS = 'sharp/harness';
 // What measures an example: this script. A pull request that changes it changes nothing else that runs, so a feature
@@ -834,7 +837,7 @@ function put(string $path, string $contents): void
  * Runs every command, as many at a time as sharp/bin/jobs prints.
  *
  * @param array<string, array{list<string>, array<string, string>}> $commands the command and its extra environment, by key
- * @return array<string, array{string, string, int}> stdout, stderr and exit status, by key
+ * @return array<string, array{string, string, int, float}> stdout, stderr, exit status and the seconds it ran, by key
  */
 function run_all(array $commands): array
 {
@@ -852,13 +855,13 @@ function run_all(array $commands): array
             [$command, $environment] = $pending[$key];
             unset($pending[$key]);
             $process = proc_open($command, [1 => ['file', "$key.out", 'w'], 2 => ['file', "$key.err", 'w']], $pipes, null, $environment + getenv());
-            $running[$key] = $process;
+            $running[$key] = [$process, hrtime(true)];
         }
-        foreach ($running as $key => $process) {
+        foreach ($running as $key => [$process, $started]) {
             $status = proc_get_status($process);
             if (!$status['running']) {
                 proc_close($process);
-                $results[$key] = [file_get_contents("$key.out"), file_get_contents("$key.err"), $status['exitcode']];
+                $results[$key] = [file_get_contents("$key.out"), file_get_contents("$key.err"), $status['exitcode'], (hrtime(true) - $started) / 1e9];
                 unset($running[$key]);
             }
         }
@@ -1165,13 +1168,24 @@ function check(string $root, int $shard = 1, int $shards = 1): int
 {
     $build = build_folder($root);
     $every = examples($root);
-    $examples = [];
-    foreach (array_keys($every) as $k => $id) {
-        if ($k % $shards === $shard - 1) {
-            $examples[$id] = $every[$id];
+    // Each example, heaviest first, goes to the slice that weighs least so far, so every slice computes the same split.
+    // An example the file doesn't list took under 2 seconds, so it weighs 1.
+    $path_of = static fn (array $example): string => "{$example['blocks'][0]['document']}#$example[id]";
+    $baseline = seconds($root);
+    $weight = static fn (string $id): int => $baseline[$path_of($every[$id])] ?? 1;
+    $order = array_keys($every);
+    usort($order, static fn (string $a, string $b): int => $weight($b) <=> $weight($a) ?: strcmp($a, $b));
+    $loads = array_fill(0, $shards, 0);
+    $chosen = [];
+    foreach ($order as $id) {
+        $lightest = array_keys($loads, min($loads), true)[0];
+        $loads[$lightest] += $weight($id);
+        if ($lightest === $shard - 1) {
+            $chosen[$id] = true;
         }
     }
-    $results = measure($root, "$build/spec", $examples);
+    $examples = array_intersect_key($every, $chosen);
+    [$results, $seconds] = measure($root, "$build/spec", $examples);
 
     $failing = [];
     foreach ($results as $id => $problems) {
@@ -1194,6 +1208,19 @@ function check(string $root, int $shard = 1, int $shards = 1): int
     $checked = count($results);
     $ignored = count($examples) - $checked;
     echo "Checked $checked examples, ignored $ignored, and " . count($failing) . " fail.\n";
+    $slow = [];
+    foreach ($seconds as $id => $taken) {
+        if (round($taken) >= 2) {
+            $slow[$path_of($examples[$id])] = (int) round($taken);
+        }
+    }
+    if ($slow !== []) {
+        uksort($slow, static fn (string $a, string $b): int => $slow[$b] <=> $slow[$a] ?: strcmp($a, $b));
+        echo 'The examples that took 2 seconds or more, as ' . SECONDS . " lists them:\n";
+        foreach ($slow as $path => $taken) {
+            echo "$taken\t$path\n";
+        }
+    }
 
     $listed = array_filter(
         listed($root),
@@ -1244,7 +1271,7 @@ function self_test(string $root): int
     }
 
     $failed = 0;
-    foreach (measure($root, build_folder($root) . '/spec-self-test', $examples) as $id => $problems) {
+    foreach (measure($root, build_folder($root) . '/spec-self-test', $examples)[0] as $id => $problems) {
         $first = $examples[$id]['blocks'][0]['fence'];
         $left = preg_replace_callback('~' . preg_quote(SELF_TEST, '~') . ':(\d+)~', static fn (array $m): string => 'line ' . ($m[1] - $first), $problems);
         $missing = [];
@@ -1300,9 +1327,10 @@ function build_folder(string $root): string
 
 /**
  * Compiles every example that isn't ignored in a project folder under $work, with the harness, and runs those whose
- * lines claim a value or a throw. Returns the problems found for each example, by id.
+ * lines claim a value or a throw. Returns the problems found for each example, by id, and the seconds its compiles, its
+ * `php -l` checks and its runs took together, by id.
  *
- * @return array<string, list<string>>
+ * @return array{array<string, list<string>>, array<string, float>}
  */
 function measure(string $root, string $work, array $examples): array
 {
@@ -1410,7 +1438,8 @@ function measure(string $root, string $work, array $examples): array
             $run_jobs["$folder/run"] = [[PHP_BINARY, '-n', '-d', 'error_reporting=E_ALL', "$folder/run.php"], ['SHARP_SPEC_OUTCOMES' => "$folder/outcomes"]];
         }
     }
-    foreach (run_all($run_jobs) as $key => [$stdout, $stderr, $status]) {
+    $ran = run_all($run_jobs);
+    foreach ($ran as $key => [$stdout, $stderr, $status]) {
         $folder = dirname($key);
         $id = basename(dirname($folder));
         $outcomes = is_file("$folder/outcomes") ? file_get_contents("$folder/outcomes") : '';
@@ -1420,7 +1449,30 @@ function measure(string $root, string $work, array $examples): array
         array_push($results[$id], ...check_run($examples[$id], $reads[$id], $outcomes));
     }
 
-    return $results;
+    // Every job's key is a folder of its example's, $work/<id>/…, and an id holds no slash.
+    $seconds = [];
+    foreach ([...$compiled, ...$run_compiles, ...$ran] as $key => [, , , $taken]) {
+        $id = explode('/', substr($key, strlen($work) + 1), 2)[0];
+        $seconds[$id] = ($seconds[$id] ?? 0.0) + $taken;
+    }
+
+    return [$results, $seconds];
+}
+
+/** @return array<string, int> the seconds SECONDS lists, by path */
+function seconds(string $root): array
+{
+    $rows = file("$root/" . SECONDS, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if ($rows === false) {
+        fail(SECONDS . ' could not be read.');
+    }
+    $seconds = [];
+    foreach ($rows as $row) {
+        [$taken, $path] = explode("\t", $row, 2);
+        $seconds[$path] = (int) $taken;
+    }
+
+    return $seconds;
 }
 
 /**
