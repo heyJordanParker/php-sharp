@@ -11,6 +11,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Fixed
 
+- Two `mago compile` runs of one tree write the same `.sharp/compiled.bin`, byte for byte, on any number of threads. 0.6.29 kept each compiled file's reads of other declarations and the classes of its namespace in the order a hash table gave them, which changed from run to run. Each list the record keeps is now in order. The record starts with the build ID of the `mago` that wrote it and the hash of the configuration, so only the same build under the same configuration writes the same bytes.
 - `mago analyze --watch` gives a class-like it fills again after an edit what `mago analyze` gives it. 0.6.29 filled it again over what its last fill derived and cleared only part of that, so a subclass of a PHP# base class over a plain PHP model whose trait takes type arguments, as Eloquent's `Model` and its `HasCollection` trait, gained another set of the trait's type arguments with each edit of the base class: after one edit, it reached the trait both through `Collection<int, static>` and through a bare `Collection`. The checks of the members a class inherits merge each set they find, so on a subclass the watch had filled again they read other type arguments than `mago analyze` reads. A class-like filled again now starts from its scan, as in a full analysis.
 
 ## [0.6.29] - 2026-11-18
