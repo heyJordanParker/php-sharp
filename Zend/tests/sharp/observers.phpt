@@ -5,7 +5,6 @@ PHP# willSet and didSet run only once the object is built: after its constructor
 
 require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/harness/Witness.inc';
-require __DIR__ . '/harness/Words.inc';
 require __DIR__ . '/vendor/autoload.php';
 
 // The initial values fill the storage without `set` or an observer, a computed one included, and the static's too.

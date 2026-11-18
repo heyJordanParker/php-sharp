@@ -2,7 +2,86 @@
 A List's removeLast, removeFirst and removeAt give the element they remove and change the List where it lives, a property with a set body through its set, isEmpty and isNotEmpty read it, and entries through a member's value makes a Map of the element type, a List<int> property stays checked after repeated changes, a change through an element, one that threw too, leaves nothing a copy of the List shares, and a local plain PHP holds a reference to keeps it after a change
 --FILE--
 <?php
-require __DIR__ . '/list_changes.inc';
+require __DIR__ . '/vendor/autoload.php';
+
+use ListChanges\Journal;
+use ListChanges\Ledger;
+
+// Each round runs every change, so the JIT runs compiled code before the last round, whose output is printed.
+for ($round = 0; $round < 3; $round++) {
+    ob_start();
+    $ledger = new Ledger();
+    $ledger->lines = ['a', 'b', 'c'];
+    echo $ledger->dropLine(), ' ', json_encode($ledger->lines), "\n";
+    echo $ledger->dropLine(), ' ', json_encode($ledger->lines), "\n";
+
+    $journal = new Journal();
+    $journal->audited = ['x', 'y'];
+    echo $journal->dropAudited(), ' ', json_encode($journal->audited), ' ', $journal->writes, "\n";
+
+    Ledger::$archive = ['old', 'new'];
+    echo Ledger::dropArchived(), ' ', json_encode(Ledger::$archive), "\n";
+
+    echo json_encode(Ledger::removedAt(['a', 'b', 'c'], 1)), "\n";
+    echo json_encode(Ledger::left(['a', 'b', 'c'], 0)), "\n";
+    echo Ledger::removedFirst(['only']), "\n";
+    echo json_encode(Ledger::replaced([1, 2])), "\n";
+    echo json_encode(Ledger::emptiness([])), ' ', json_encode(Ledger::emptiness(['a'])), "\n";
+
+    var_dump(Ledger::lastCount(null), Ledger::lastCount([[1, 2], [3]]));
+
+    echo json_encode(Ledger::indexed(['a', 'b'])), "\n";
+
+    echo json_encode(Ledger::filteredAfterThrow()), ' ', json_encode(Ledger::copiedAfterThrow()), "\n";
+    $grid = Ledger::added();
+    $copy = $grid;
+    $copy[0][] = 3;
+    echo json_encode(Ledger::filteredAfterAdd()), ' ', json_encode($grid), "\n";
+
+    // Repeated changes to a List<int> property leave no reference behind, and a bad element plain PHP wrote through a
+    // reference of its own throws at the next change.
+    $counted = new Ledger();
+    for ($count = 1; $count <= 3; $count++) {
+        $counted->count($count);
+    }
+    echo json_encode($counted->counts), "\n";
+    $alias = &$counted->counts;
+    $alias[] = 'z';
+    try {
+        $counted->count(4);
+    } catch (TypeError $error) {
+        echo get_class($error), ': ', $error->getMessage(), "\n";
+    }
+    unset($alias);
+
+    // Plain PHP takes a reference to a local a PHP# lambda captured, and writes through it after a change.
+    $captured = null;
+    echo json_encode(Ledger::shared(
+        function (Closure $counted) use (&$captured): void {
+            $captured = (new ReflectionFunction($counted))->getStaticVariables();
+        },
+        function () use (&$captured): void {
+            $captured['items'][] = 3;
+        },
+    )), "\n";
+    unset($captured);
+
+    foreach ([
+        fn () => Ledger::removedFirst([]),
+        fn () => Ledger::left([], 0),
+        fn () => Ledger::left(['a'], 3),
+        fn () => (new Ledger())->dropLine(),
+    ] as $refused) {
+        try {
+            $refused();
+        } catch (OutOfRangeException $error) {
+            echo get_class($error), ': ', $error->getMessage(), "\n";
+        }
+    }
+    $output = ob_get_clean();
+}
+
+echo $output;
 ?>
 --EXPECT--
 c ["a","b"]

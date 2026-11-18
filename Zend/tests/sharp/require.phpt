@@ -3,7 +3,7 @@ PHP# runs a .sharp class required from PHP, whose / on two ints truncates toward
 --FILE--
 <?php
 
-require __DIR__ . '/Calc.sharp';
+require __DIR__ . '/Demo/Calc.sharp';
 
 $calc = new Demo\Calc;
 echo $calc->run(1), "\n";

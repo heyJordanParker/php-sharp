@@ -6,7 +6,7 @@ PHP# compiles a .sharp file with strict_types=1
 namespace Demo;
 
 require __DIR__ . '/harness/Helper.inc';
-require __DIR__ . '/Strict.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 try {
     var_dump(Strict::run());

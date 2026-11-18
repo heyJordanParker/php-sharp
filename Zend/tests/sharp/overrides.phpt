@@ -3,7 +3,6 @@ PHP# properties open with virtual and abstract, an override is a property, a pro
 --FILE--
 <?php
 require __DIR__ . '/harness/Model.inc';
-require __DIR__ . '/harness/Words.inc';
 require __DIR__ . '/harness/Witness.inc';
 require __DIR__ . '/vendor/autoload.php';
 

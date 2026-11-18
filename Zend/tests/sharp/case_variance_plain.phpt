@@ -4,8 +4,39 @@ Plain PHP names a class in any case, so a child's `foo` in a signature is its pa
 <?php
 
 // Foo is loaded, and the child sits in a file of its own, which opcache binds to its parent once both are cached.
-require __DIR__ . '/case_variance_plain_parent.inc';
-require __DIR__ . '/case_variance_plain_child.inc';
+$folder = sys_get_temp_dir() . '/sharp-case-variance-plain-' . getmypid();
+mkdir($folder);
+file_put_contents("$folder/parent.php", <<<'PHP'
+<?php
+
+class Foo
+{
+}
+
+class ParentWithFoo
+{
+    public function take(Foo $value): Foo
+    {
+        return $value;
+    }
+}
+PHP);
+file_put_contents("$folder/child.php", <<<'PHP'
+<?php
+
+final class ChildWithFoo extends ParentWithFoo
+{
+    public function take(foo $value): FOO
+    {
+        return $value;
+    }
+}
+PHP);
+require "$folder/parent.php";
+require "$folder/child.php";
+unlink("$folder/parent.php");
+unlink("$folder/child.php");
+rmdir($folder);
 var_dump(get_class((new ChildWithFoo())->take(new Foo())));
 
 // Bar is not loaded until the child links.

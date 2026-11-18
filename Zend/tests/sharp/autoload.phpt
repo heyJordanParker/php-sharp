@@ -4,7 +4,7 @@ PHP# autoloads a .sharp class
 <?php
 
 spl_autoload_register(function (string $class): void {
-    require __DIR__ . '/' . substr($class, strlen('Demo\\')) . '.sharp';
+    require __DIR__ . '/' . str_replace('\\', '/', $class) . '.sharp';
 });
 
 echo (new Demo\Calc)->run(1), "\n";

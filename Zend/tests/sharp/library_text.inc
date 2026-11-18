@@ -4,4 +4,4 @@
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Text/StringMembers.sharp';
 require __DIR__ . '/../../../sharp/composer/library/Sharp/ListMembers.sharp';
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
-require __DIR__ . '/TextCalls.sharp';
+require __DIR__ . '/Demo/TextCalls.sharp';

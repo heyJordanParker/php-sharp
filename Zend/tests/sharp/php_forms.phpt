@@ -21,14 +21,14 @@ echo $forms->setting('SHARP_REGION'), ' ', $forms->setting('SHARP_UNSET_REGION')
 echo $forms->target(), "\n";
 var_dump($forms->folder() === getcwd());
 
-var_dump($forms->stubs() === __DIR__ . '/stubs');
+var_dump($forms->stubs() === __DIR__ . '/Demo/stubs');
 [$file, $line, $column, $function] = $forms->here();
-var_dump($file === realpath(__DIR__ . '/PhpForms.sharp'));
+var_dump($file === realpath(__DIR__ . '/Demo/PhpForms.sharp'));
 echo $line, ':', $column, ' ', $function, "\n";
 $origin = $forms->origin;
 echo $origin->line, ':', $origin->column, ' ', $origin->function, "\n";
 $located = $forms->located();
-var_dump($located->file === $file, $located->directory === __DIR__);
+var_dump($located->file === $file, $located->directory === __DIR__ . '/Demo');
 echo $located->line, ':', $located->column, ' ', $located->function, "\n";
 
 echo $forms->kind(), "\n";

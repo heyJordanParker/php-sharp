@@ -1,7 +1,6 @@
 <?php
 
 require_once __DIR__ . '/harness/Callbacks.inc';
-require_once __DIR__ . '/harness/Words.inc';
 require __DIR__ . '/vendor/autoload.php';
 
 /** Each row runs one rule of spec section 14 on the functions its PHP# code made, the second of two runs, so the JIT has compiled the code it runs. */

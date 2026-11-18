@@ -7,7 +7,7 @@ use SetValues\Report;
 use SetValues\Rows;
 use SetValues\Tagged;
 
-/** Binds the standard library's dispatcher, as its module does, and loads each of its classes the first time code names it, as events.inc does. */
+/** Binds the standard library's dispatcher, as its module does, and loads each of its classes the first time code names it, as events.phpt does. */
 function library(): void
 {
     $library = dirname(__DIR__, 3) . '/sharp/composer/library';
