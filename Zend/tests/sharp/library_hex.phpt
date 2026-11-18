@@ -2,8 +2,7 @@
 A PHP# class calls every method of Sharp.Encoding.Hex, and Hex.decode throws ValueError on text that is not hexadecimal, with no warning
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Hex.sharp';
-require __DIR__ . '/HexCalls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\HexCalls;
 

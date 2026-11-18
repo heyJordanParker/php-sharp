@@ -1,7 +1,7 @@
 <?php
 
 require __DIR__ . '/harness/Shapes.inc';
-require __DIR__ . '/Patterns.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\Circle;
 use Demo\Square;

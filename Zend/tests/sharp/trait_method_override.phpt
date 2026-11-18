@@ -3,8 +3,7 @@ A PHP# class replaces a static and an instance method of a plain PHP trait it us
 --FILE--
 <?php
 require __DIR__ . '/harness/Defaulted.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('TraitOverride');
+require __DIR__ . '/vendor/autoload.php';
 
 echo App\TraitOverride\Post::shownStatus(), "\n";
 echo (new App\TraitOverride\Post())->shownLabel(), "\n";

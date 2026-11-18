@@ -3,8 +3,7 @@ A plain PHP class's __toString(), its own or inherited, is its toString(): a tem
 --FILE--
 <?php
 require __DIR__ . '/harness/Mail.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Mailing');
+require __DIR__ . '/vendor/autoload.php';
 
 use Lib\Email;
 use Lib\WorkEmail;

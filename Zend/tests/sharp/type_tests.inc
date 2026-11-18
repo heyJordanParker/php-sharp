@@ -1,7 +1,6 @@
 <?php
 
-require __DIR__ . '/harness/fixture.inc';
-fixture('TypeTests');
+require __DIR__ . '/vendor/autoload.php';
 
 for ($round = 0; $round < 100; $round++) {
     $results = TypeTests\TypeTests::tested();

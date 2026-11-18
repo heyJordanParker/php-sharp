@@ -2,8 +2,7 @@
 Plain PHP reads a PHP# class's Map property as its PHP array, spec section 12: an index read, array_map, and both inside a method of a plain PHP subclass
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('Crossings');
+require __DIR__ . '/vendor/autoload.php';
 
 final class PlainOffers extends Demo\Offers
 {

@@ -4,7 +4,7 @@ PHP# throws ArithmeticError when ++ overflows
 <?php
 
 require __DIR__ . '/attempt.inc';
-require __DIR__ . '/Overflow.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 attempt(fn () => Demo\Overflow::preInc(PHP_INT_MAX - 1));
 attempt(fn () => Demo\Overflow::preInc(PHP_INT_MAX));

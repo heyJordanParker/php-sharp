@@ -2,7 +2,7 @@
 A Map finds a key, and a Set an element, by PHP#'s ==, and keeps the key it first stored
 --FILE--
 <?php
-require __DIR__ . '/Spot.sharp';
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/table_keys.inc';
 echo table_keys_rounds();
 ?>

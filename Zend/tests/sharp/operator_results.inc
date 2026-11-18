@@ -11,8 +11,7 @@ namespace {
 
     require __DIR__ . '/attempt.inc';
     require __DIR__ . '/harness/Billing.inc';
-    require __DIR__ . '/harness/fixture.inc';
-    fixture('Operators');
+    require __DIR__ . '/vendor/autoload.php';
 
     $amount = static fn (Money $money): string => "$money->cents $money->currency";
     $skus = static fn (array $lines): string => implode(' ', array_map(static fn (Line $line): string => $line->sku, $lines));

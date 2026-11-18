@@ -2,8 +2,7 @@
 A PHP# class calls every method of Sharp.Text.Regex, a named group gives both its number and its name, and an invalid pattern throws ValueError with no warning
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Text/Regex.sharp';
-require __DIR__ . '/RegexCalls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\RegexCalls;
 

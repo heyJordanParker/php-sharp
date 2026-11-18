@@ -3,8 +3,7 @@ PHP# collection methods change a static List, Map or Set where it lives
 --FILE--
 <?php
 require __DIR__ . '/attempt.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('StaticCollections');
+require __DIR__ . '/vendor/autoload.php';
 
 // Each round runs every form, so the JIT runs compiled code before the last round, whose output is printed.
 for ($round = 0; $round < 3; $round++) {

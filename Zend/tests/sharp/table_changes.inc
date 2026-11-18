@@ -1,9 +1,6 @@
 <?php
 require __DIR__ . '/harness/Basket.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('TableChanges');
-require __DIR__ . '/LibraryProbe/Stage.sharp';
-require __DIR__ . '/LibraryProbe/Tables.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use TableChanges\Box;
 use TableChanges\Drawer;

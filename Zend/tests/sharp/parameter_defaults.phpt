@@ -2,10 +2,9 @@
 PHP# a parameter's default is any expression, a property of a new object too, which runs each time a call leaves the argument out, from PHP# and plain PHP, by position and by name
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
 require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/harness/Words.inc';
-fixture('ParameterDefaults');
+require __DIR__ . '/vendor/autoload.php';
 
 $ledger = new ParameterDefaults\Ledger();
 var_dump($ledger->made->value);

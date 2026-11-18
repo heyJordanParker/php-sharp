@@ -2,7 +2,7 @@
 A Map or a Set field's initial value is a new object for each object, and plain PHP still writes no new there
 --FILE--
 <?php
-require __DIR__ . '/Tallies.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 // Each round runs every row, so the JIT variants compile them before the last round, whose output is printed.
 for ($round = 0; $round < 100; $round++) {

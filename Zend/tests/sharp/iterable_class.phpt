@@ -2,8 +2,7 @@
 A class whose header names Iterable<T> is an Iterable<T> of its elements(): a PHP# loop, an Iterable<T> parameter, toList() and the lazy operations read each element, and plain PHP's foreach and iterator_to_array() receive the object as a Traversable whose keys count from 0, or whose [key, value] tuples give their key and value
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('Bags');
+require __DIR__ . '/vendor/autoload.php';
 
 $report = new Bags\Report();
 $bag = $report->made();

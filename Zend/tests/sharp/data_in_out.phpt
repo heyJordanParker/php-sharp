@@ -3,11 +3,7 @@ Data in and out, spec section 10: Json.encode writes a struct by its keys, a val
 --FILE--
 <?php
 require __DIR__ . '/attempt.inc';
-foreach (['InvalidFields', 'Decimal', 'RoundingMode', 'Math', 'Int', 'Time/Instant', 'Time/Duration', 'Time/Date', 'Time/DateTime', 'Time/TimeZone', 'Time/DateTimeInterfaceMembers', 'Net/Url', 'Encoding/Json', 'Encoding/JsonValue', 'Encoding/Query'] as $file) {
-    require __DIR__ . "/../../../sharp/composer/library/Sharp/$file.sharp";
-}
-require __DIR__ . '/harness/fixture.inc';
-fixture('DataInOut');
+require __DIR__ . '/vendor/autoload.php';
 
 use DataInOut\Ledger;
 use DataInOut\Letter;

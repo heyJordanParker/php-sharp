@@ -3,8 +3,7 @@ PHP# ZipArchive creates an archive with an entry from text and one from a file, 
 --FILE--
 <?php
 require __DIR__ . '/effect_classes.inc';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/IO/ZipArchive.sharp';
-require __DIR__ . '/ZipQueries.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\ZipQueries;
 

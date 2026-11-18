@@ -3,8 +3,7 @@ PHP# renumbers plain PHP's int-keyed array where it arrives as a List, and a Map
 --FILE--
 <?php
 require __DIR__ . '/harness/Users.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Arrivals');
+require __DIR__ . '/vendor/autoload.php';
 
 $users = new Lib\Users();
 $roster = new Arrivals\Roster();

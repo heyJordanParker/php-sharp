@@ -2,8 +2,7 @@
 A PHP# class calls every method of Sharp.Net.Ip, and Ip.toBinary throws ValueError on an address that is not one
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Net/Ip.sharp';
-require __DIR__ . '/IpCalls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\IpCalls;
 

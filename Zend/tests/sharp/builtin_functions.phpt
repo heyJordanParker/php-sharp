@@ -12,7 +12,7 @@ namespace Demo {
 
 namespace {
     require __DIR__ . '/harness/Words.inc';
-    require __DIR__ . '/Expressions.sharp';
+    require __DIR__ . '/vendor/autoload.php';
 
     echo Demo\Expressions::describe("cart", new ArrayObject([1, 2, 3]), "carts"), "\n";
 }

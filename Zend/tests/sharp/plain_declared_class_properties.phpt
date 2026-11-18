@@ -3,8 +3,7 @@ Class<T>.properties() reads `self` in a plain PHP trait's property as the class 
 --FILE--
 <?php
 require __DIR__ . '/harness/Linked.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Linking');
+require __DIR__ . '/vendor/autoload.php';
 
 foreach (App\Linking\Report::describeProperties() as $line) {
     echo $line, "\n";

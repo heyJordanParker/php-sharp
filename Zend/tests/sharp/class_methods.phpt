@@ -4,8 +4,7 @@ Class<T>.methods() gives each instance and static method of a class, its own fir
 <?php
 require __DIR__ . '/harness/Attributes.inc';
 require __DIR__ . '/harness/Crate.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Methods');
+require __DIR__ . '/vendor/autoload.php';
 
 foreach (App\Shop\Report::describe() as $line) {
     echo $line, "\n";

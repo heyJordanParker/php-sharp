@@ -2,11 +2,7 @@
 A PHP# class calls Sharp.Encoding.Json: parse gives objects as maps and throws JsonException on invalid JSON, decode<T> reads a struct and a nested struct through T's parse and throws its InvalidFields for a bad field and for JSON that holds no object, and encode writes a Map as an object and a List as an array, a struct key through its toString(), floats with their fraction, and slashes and Unicode as they are, and the checker's mark on encode's parameter never reaches the code that runs
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Json.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/JsonValue.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/InvalidFields.sharp';
-require __DIR__ . '/harness/fixture.inc';
-fixture('JsonCalls');
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\JsonCalls;
 

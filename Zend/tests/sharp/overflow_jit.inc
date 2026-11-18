@@ -10,7 +10,7 @@ final class PhpOverflow
 
 require __DIR__ . '/attempt.inc';
 require __DIR__ . '/harness/Overflow.inc';
-require __DIR__ . '/Overflow.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 echo 'jit ', opcache_get_status()['jit']['on'] ? 'on' : 'off', "\n";
 

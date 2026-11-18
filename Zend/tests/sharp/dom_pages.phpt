@@ -4,8 +4,7 @@ A PHP# class imports PHP 8.4's HTML DOM, which the standard library names, and r
 dom
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('DomPages');
+require __DIR__ . '/vendor/autoload.php';
 
 $html = '<!DOCTYPE html><html><body><p>Hello <b>there</b></p><p>second</p><a href="/one">1</a><a href="/two">2</a></body></html>';
 var_dump(DomPages\Page::first($html));

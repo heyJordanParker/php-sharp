@@ -3,10 +3,7 @@ A PHP# class calls the time and path members of Kotlin, Rust and .NET that PHP# 
 --FILE--
 <?php
 require __DIR__ . '/effect_classes.inc';
-foreach (['Time/TimeZone', 'Time/Date', 'Time/Weekday', 'Time/Month', 'Time/DateTime', 'Time/TimeOfDay', 'IO/Path'] as $class) {
-    require __DIR__ . "/../../../sharp/composer/library/Sharp/$class.sharp";
-}
-require __DIR__ . '/TimeAndPaths.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\TimeAndPaths;
 use Sharp\IO\Files;

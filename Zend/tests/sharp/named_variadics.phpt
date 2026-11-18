@@ -3,8 +3,7 @@ A PHP# named argument fills a plain PHP static method's, method's, constructor's
 --FILE--
 <?php
 require __DIR__ . '/harness/Markup.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('NamedVariadics');
+require __DIR__ . '/vendor/autoload.php';
 
 echo NamedVariadics\Page::tagged(), "\n";
 echo NamedVariadics\Page::opened(), "\n";

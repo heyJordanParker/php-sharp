@@ -27,8 +27,7 @@ prompt> [Breakpoint #3 added at ExactNames\Order::sum#1]
 prompt>
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('ExactNames');
+require __DIR__ . '/vendor/autoload.php';
 
 $order = new ExactNames\Order();
 echo $order->total(), "\n";

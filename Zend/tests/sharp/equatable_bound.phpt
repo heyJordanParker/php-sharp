@@ -2,8 +2,7 @@
 A value of a type parameter bounded by Equatable runs its type's ==: a struct compares by value, a class by its operator ==
 --FILE--
 <?php
-require_once __DIR__ . '/harness/fixture.inc';
-fixture('EquatableBound');
+require __DIR__ . '/vendor/autoload.php';
 
 use Equatables\Generic;
 use Equatables\Order;

@@ -1,7 +1,7 @@
 <?php
 
 require __DIR__ . '/attempt.inc';
-require __DIR__ . '/Tally.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 attempt(fn () => Demo\Tally::postInc(PHP_INT_MAX));
 var_dump(Demo\Tally::$count);

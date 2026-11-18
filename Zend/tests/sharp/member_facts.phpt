@@ -3,8 +3,7 @@ Class<T>.methods(), properties() and fields() give each member's declaring class
 --FILE--
 <?php
 require __DIR__ . '/harness/MemberFacts.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('MemberFacts');
+require __DIR__ . '/vendor/autoload.php';
 
 foreach ([App\Facts\Facts::journal(), App\Facts\Facts::tag(), App\Facts\Facts::plainJournal()] as $lines) {
     echo implode("\n", $lines), "\n";

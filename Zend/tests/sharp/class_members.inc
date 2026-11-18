@@ -3,7 +3,7 @@
 namespace Lib;
 
 require __DIR__ . '/harness/Registry.inc';
-require __DIR__ . '/Members.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\Members;
 

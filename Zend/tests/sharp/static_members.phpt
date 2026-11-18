@@ -4,7 +4,7 @@ PHP# class constants and static members are PHP class constants and static prope
 <?php
 
 require __DIR__ . '/harness/Registry.inc';
-require __DIR__ . '/Members.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 $class = new ReflectionClass(Demo\Members::class);
 

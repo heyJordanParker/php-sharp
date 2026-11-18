@@ -2,8 +2,7 @@
 A PHP# interface's constant reads through the interface and each implementer, its default property body runs unless a class overrides it, and each operator use runs the most specific operator the static types of both operands declare, in every operand order, for enums, unions and sub-interfaces, as sortedBy, Set and Map do
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('InterfaceMembers');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/interface_members.inc';
 library();
 

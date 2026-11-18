@@ -114,7 +114,7 @@ foreach (ini_get_all(null, false) as $name => $value) {
     }
 }
 $prelude = 'require ' . var_export(__DIR__ . '/harness/Interop.inc', true) . '; require '
-    . var_export(__DIR__ . '/harness/fixture.inc', true) . "; fixture('InteropMatrix'); " . REACH;
+    . var_export(__DIR__ . '/vendor/autoload.php', true) . '; ' . REACH;
 
 foreach ($rows as $row => [$declarations, $object, $methods]) {
     echo "== $row\n";

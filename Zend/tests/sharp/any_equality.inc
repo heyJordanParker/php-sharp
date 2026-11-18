@@ -1,7 +1,6 @@
 <?php
 
-require_once __DIR__ . '/harness/fixture.inc';
-fixture('Unchecked');
+require __DIR__ . '/vendor/autoload.php';
 
 use Equalities\Point;
 use Equalities\Suit;

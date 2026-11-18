@@ -4,8 +4,7 @@ PHP# throws ArithmeticError when a parameter default or a field's initial value 
 <?php
 
 require __DIR__ . '/attempt.inc';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
-require __DIR__ . '/Overflow.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 attempt(fn () => Demo\Overflow::withDefault(5));
 attempt(fn () => Demo\Overflow::withDefault());

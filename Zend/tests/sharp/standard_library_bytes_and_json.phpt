@@ -2,12 +2,7 @@
 A string reads as its bytes, trims the characters it is given, Json.encode takes its switches, Json.parse compares by structure, and a string-backed enum case gives its value, and no other name becomes one
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Text/StringMembers.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Json.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/JsonValue.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Net/Ip.sharp';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Payloads');
+require __DIR__ . '/vendor/autoload.php';
 
 use Payloads\Report;
 use Payloads\SortColumn;

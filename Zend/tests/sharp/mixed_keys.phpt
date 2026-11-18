@@ -3,7 +3,7 @@ A Map keyed by string|Standing holds "active" and Standing::Active as two entrie
 --FILE--
 <?php
 require __DIR__ . '/harness/Standing.inc';
-require __DIR__ . '/MixedKeys.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\MixedKeys;
 

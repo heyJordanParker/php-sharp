@@ -2,8 +2,7 @@
 An object plain PHP creates of a class whose bound names the class's own type parameter holds that bound with Any? in its place, and serialize keeps it
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('Sorted');
+require __DIR__ . '/vendor/autoload.php';
 
 $sorted = new Demo\Sorted();
 var_dump((new ReflectionObject($sorted))->getTypeArguments());

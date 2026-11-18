@@ -7,8 +7,7 @@ namespace Demo;
 
 require_once __DIR__ . '/harness/Report.inc';
 require_once __DIR__ . '/harness/Attributes.inc';
-require_once __DIR__ . '/harness/fixture.inc';
-\fixture('Constructors');
+require __DIR__ . '/vendor/autoload.php';
 
 class LegacyArtifact extends Artifact
 {

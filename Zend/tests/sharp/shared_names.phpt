@@ -3,8 +3,7 @@ PHP# reads a plain PHP class's property by its name, and its method of that name
 --FILE--
 <?php
 require __DIR__ . '/harness/Gadget.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('SharedNames');
+require __DIR__ . '/vendor/autoload.php';
 
 $labels = new SharedNames\Labels();
 $gadget = new Lib\Gadget();

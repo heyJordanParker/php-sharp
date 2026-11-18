@@ -3,8 +3,7 @@ A PHP# template shows an int, a float, a string or a bool in `${…}`, a bool as
 --FILE--
 <?php
 
-require __DIR__ . '/Expressions.sharp';
-require __DIR__ . '/Template.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 echo Demo\Expressions::label("cart", new ArrayObject([1, 2])), "\n";
 echo Demo\Template::summary(new ArrayObject([1, 2])), "\n";

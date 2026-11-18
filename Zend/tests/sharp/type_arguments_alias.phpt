@@ -7,8 +7,7 @@ class PlainPair
 {
 }
 class_alias(PlainPair::class, 'App\Pair');
-require __DIR__ . '/harness/fixture.inc';
-fixture('TypeArgumentsAlias');
+require __DIR__ . '/vendor/autoload.php';
 // PHP# compiled `new Node<int>` against App.Node, which declares one type parameter, but the name reaches a class that
 // declares two.
 class_alias(Aliased\Twin::class, 'App\Node');

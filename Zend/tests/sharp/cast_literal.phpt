@@ -3,7 +3,7 @@ PHP# (int) of a float literal becomes an int at compile time only when it cannot
 --FILE--
 <?php
 
-require __DIR__ . '/LiteralCast.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 foreach (['half', 'huge', 'below'] as $method) {
     try {

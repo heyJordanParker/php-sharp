@@ -4,8 +4,7 @@ require __DIR__ . '/harness/Witness.inc';
 require __DIR__ . '/harness/Snapshot.inc';
 require __DIR__ . '/harness/Sleeper.inc';
 require __DIR__ . '/harness/Holder.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('TypeArguments');
+require __DIR__ . '/vendor/autoload.php';
 
 function arguments(object $object): array
 {

@@ -74,8 +74,8 @@ int(1)
 string(23) "int string | string int"
 bool(true)
 Sharp\InvalidFields: inner.first: expected int, got string 'x' in Wrapped.sharp on line 3
-Error: Cannot modify readonly property Demo\Stamp::$name in structs.inc on line 65
-Error: Cannot modify protected(set) property Demo\Stamp::$shown from global scope in structs.inc on line 66
-Error: Cannot modify protected(set) readonly property Demo\Stamp::$name from global scope in structs.inc on line 67
+Error: Cannot modify readonly property Demo\Stamp::$name in structs.inc on line 62
+Error: Cannot modify protected(set) property Demo\Stamp::$shown from global scope in structs.inc on line 63
+Error: Cannot modify protected(set) readonly property Demo\Stamp::$name from global scope in structs.inc on line 64
 
 Fatal error: Class Sticker cannot extend final class Demo\Stamp in %sstructs.inc(%d) : eval()'d code on line %d

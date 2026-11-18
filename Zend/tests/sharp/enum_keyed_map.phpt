@@ -4,7 +4,7 @@ A PHP# Map keyed by a backed enum reads and deletes by case, and filters, maps a
 <?php
 require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/harness/Standing.inc';
-require __DIR__ . '/Roster.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 // Each report runs twice, so the JIT variants compile the method and its lambdas before the second run.
 $members = ['active' => 1, 'closed' => 4];

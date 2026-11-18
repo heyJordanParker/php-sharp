@@ -3,8 +3,7 @@ Plain PHP's array keyed by int alone arrives as a List wherever it sits: an int-
 --FILE--
 <?php
 require __DIR__ . '/harness/Pivot.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('ShapedLists');
+require __DIR__ . '/vendor/autoload.php';
 
 echo implode("\n", Demo\ShapedLists::read()), "\n";
 ?>

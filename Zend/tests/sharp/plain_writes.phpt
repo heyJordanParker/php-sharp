@@ -3,8 +3,7 @@ PHP# a write through a plain PHP property it reads as a List changes the propert
 --FILE--
 <?php
 require __DIR__ . '/harness/Roster.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('PlainWrites');
+require __DIR__ . '/vendor/autoload.php';
 
 $editor = new PlainWrites\Editor();
 $show = static fn (array $list): string => json_encode($list);

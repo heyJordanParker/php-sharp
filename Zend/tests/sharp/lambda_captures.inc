@@ -2,7 +2,7 @@
 
 require __DIR__ . '/harness/Callbacks.inc';
 require __DIR__ . '/harness/Probe.inc';
-require __DIR__ . '/Lambdas.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 // Each call runs twice, so the JIT variants compile the methods and closures before the second run.
 $lambdas = new Demo\Lambdas();

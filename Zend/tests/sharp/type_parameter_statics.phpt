@@ -3,9 +3,8 @@ PHP# TItem.make() and TItem.size reach the statics of the type argument the code
 --FILE--
 <?php
 
-require __DIR__ . '/harness/fixture.inc';
 require __DIR__ . '/project.inc';
-fixture('TypeStatics');
+require __DIR__ . '/vendor/autoload.php';
 
 var_dump(TypeStatics\Builds::ofClasses());
 

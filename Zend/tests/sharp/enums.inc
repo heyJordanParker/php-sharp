@@ -3,17 +3,7 @@
 require __DIR__ . '/harness/Attributes.inc';
 require __DIR__ . '/harness/Priority.inc';
 require __DIR__ . '/harness/HasLabel.inc';
-require __DIR__ . '/Stage.sharp';
-require __DIR__ . '/Suit.sharp';
-require __DIR__ . '/Rank.sharp';
-require __DIR__ . '/Shipment.sharp';
-require __DIR__ . '/Task.sharp';
-require __DIR__ . '/PaymentResult.sharp';
-require __DIR__ . '/CheckoutState.sharp';
-require __DIR__ . '/Interaction.sharp';
-require __DIR__ . '/PopupInteraction.sharp';
-require __DIR__ . '/ScrollInteraction.sharp';
-require __DIR__ . '/Payments.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\CheckoutState;
 use Demo\HasLabel;

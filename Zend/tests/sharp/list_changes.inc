@@ -1,6 +1,5 @@
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('ListChanges');
+require __DIR__ . '/vendor/autoload.php';
 
 use ListChanges\Journal;
 use ListChanges\Ledger;

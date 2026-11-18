@@ -2,8 +2,7 @@
 A PHP# static constructor runs once, right after the statics' initial values, at the first use of a static, and a throw there makes every later use of the class's statics throw an Error that names the class and the failure
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('StaticConstructors');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/static_constructors.inc';
 ?>
 --EXPECT--

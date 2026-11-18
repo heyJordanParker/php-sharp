@@ -3,7 +3,7 @@ PHP# runs the constructor named after its class as __construct
 --FILE--
 <?php
 
-require __DIR__ . '/Account.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 $constructor = (new ReflectionClass(Demo\Account::class))->getConstructor();
 echo $constructor->getName(), ' ', $constructor->getStartLine(), '-', $constructor->getEndLine(),

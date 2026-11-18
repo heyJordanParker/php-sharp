@@ -58,9 +58,7 @@ echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n ' . escapes
 $exports = "$package/vendor/composer/autoload_sharp_exports.php";
 echo file_get_contents($exports), "\n";
 
-require __DIR__ . '/harness/fixture.inc';
-fixture('Exports');
-require_once $exports;
+require __DIR__ . '/vendor/autoload.php';
 
 // A library that declares the function only when none exists, as WordPress's pluggable functions do, skips its own.
 if (!function_exists('sharp_test_auth_redirect')) {

@@ -3,11 +3,7 @@ TimeZone's fixedOffset gives the offset of every zone whose clocks never change,
 --FILE--
 <?php
 require __DIR__ . '/attempt.inc';
-foreach (['InvalidFields', 'Int', 'Math', 'Time/Duration', 'Time/Instant', 'Time/Date', 'Time/DateTime', 'Time/TimeZone', 'Encoding/Json', 'Encoding/JsonValue'] as $file) {
-    require __DIR__ . "/../../../sharp/composer/library/Sharp/$file.sharp";
-}
-require __DIR__ . '/harness/fixture.inc';
-fixture('HomeZones');
+require __DIR__ . '/vendor/autoload.php';
 
 use HomeZones\Zones;
 

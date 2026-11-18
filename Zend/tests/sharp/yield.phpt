@@ -6,10 +6,7 @@ PHP# yield produces an Iterable<T> lazily: yield value, yield ...other, a body t
 require __DIR__ . '/harness/Arrays.inc';
 require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/effect_classes.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Import');
-// `text.split(",")` calls the standard library's `Sharp\Text\StringMembers`, which a project's autoloader finds.
-fixture_files(['Sharp\Text\StringMembers' =>__DIR__ . '/../../../sharp/composer/library/Sharp/Text/StringMembers.sharp']);
+require __DIR__ . '/vendor/autoload.php';
 
 $path = tempnam(sys_get_temp_dir(), 'sharp_yield');
 file_put_contents($path, "A1,tea,3\n\nA2,cake,5\n");

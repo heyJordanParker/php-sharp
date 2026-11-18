@@ -3,8 +3,7 @@ PHP# `@` before a keyword makes it a name: an override keeps a plain PHP parent'
 --FILE--
 <?php
 require __DIR__ . '/harness/Behavior.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('KeywordNames');
+require __DIR__ . '/vendor/autoload.php';
 
 $form = new KeywordNames\Form();
 echo $form->submit(form: 'x', event: 'y'), "\n";

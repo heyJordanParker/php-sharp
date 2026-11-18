@@ -3,8 +3,7 @@ Class<T>.fields() gives each field and auto-property's storage of a class, its o
 --FILE--
 <?php
 require __DIR__ . '/harness/Attributes.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Declared');
+require __DIR__ . '/vendor/autoload.php';
 
 $report = new Declared\Report();
 foreach ($report->describe() as $line) {

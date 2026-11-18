@@ -2,10 +2,7 @@
 PHP# Decimal is exact, as Java's BigDecimal: 0.1 + 0.2 == 0.3, +, - and * keep every digit, == and <=> compare the number whatever its scale, parse keeps the scale it reads, and divide and round take a scale and each of the seven RoundingModes, deciding a halfway quotient by its exact remainder
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Math.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/RoundingMode.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Decimal.sharp';
-require __DIR__ . '/NumberQueries.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\NumberQueries;
 use Sharp\RoundingMode;

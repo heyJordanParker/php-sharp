@@ -3,7 +3,7 @@ A PHP# get-only property is readonly: set once in the constructor, and never aga
 --FILE--
 <?php
 
-require __DIR__ . '/Badge.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 $label = new ReflectionProperty(Demo\Badge::class, 'label');
 echo $label->isReadOnly() ? 'readonly' : 'writable', ' ', $label->hasDefaultValue() ? 'with a default' : 'set in the constructor', "\n";

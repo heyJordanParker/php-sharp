@@ -4,8 +4,7 @@ A class keys each method a trait gives it by its own rule, never the trait's: a 
 <?php
 
 require __DIR__ . '/harness/TraitKeys.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('TraitKeys');
+require __DIR__ . '/vendor/autoload.php';
 
 $names = static fn (object $object): array => array_map(
     static fn (ReflectionMethod $method): string => $method->name,

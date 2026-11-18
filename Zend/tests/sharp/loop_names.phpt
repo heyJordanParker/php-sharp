@@ -2,8 +2,7 @@
 `break name` and `continue name` leave or continue the PHP# loop of that name from a loop inside it, from `for`, `for`-`of`, `while` and `do` loops, and a plain `break` leaves the innermost loop
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('LoopNames');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/loop_names.inc';
 ?>
 --EXPECT--

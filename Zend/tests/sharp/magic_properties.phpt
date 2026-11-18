@@ -3,8 +3,7 @@ PHP# reads the properties __get serves on a plain PHP class or a PHP# subclass o
 --FILE--
 <?php
 require __DIR__ . '/harness/Booking.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('MagicProperties');
+require __DIR__ . '/vendor/autoload.php';
 
 $greeter = new MagicProperties\Greeter();
 $booking = new Lib\Booking();

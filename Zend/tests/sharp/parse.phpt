@@ -2,8 +2,7 @@
 Sharp\Int and Sharp\Float parse a string holding only a number, with no spaces around it, tryParse gives null where parse throws, and both take only a string
 --FILE--
 <?php declare(strict_types=1);
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Float.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 function attempt(callable $parse, mixed $value): void
 {

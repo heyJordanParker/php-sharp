@@ -98,7 +98,7 @@ array(2) {
   [1]=>
   string(6) "Closed"
 }
-TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 45
-TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 48
-TypeError: Cannot access offset of type Lib\Size on array in enum_keys.inc on line 49
-TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 50
+TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 44
+TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 47
+TypeError: Cannot access offset of type Lib\Size on array in enum_keys.inc on line 48
+TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 49

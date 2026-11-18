@@ -2,10 +2,7 @@
 A PHP# class calls the math members of Kotlin, Rust and .NET that PHP# lacked: Math.log10, Math.exp, the trigonometric functions, Math.PI and Math.E, isNaN, checked and saturating int arithmetic at both ends of the range, and Int.parse and Int.tryParse in another base, with each edge case
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Float.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Math.sharp';
-require __DIR__ . '/MathQueries.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\MathQueries;
 

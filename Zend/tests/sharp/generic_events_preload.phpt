@@ -13,8 +13,7 @@ if (PHP_OS_FAMILY == 'Windows') die('skip Preloading is not supported on Windows
 --FILE--
 <?php
 var_dump(class_exists(GenericEvents\Saved::class, false));
-require __DIR__ . '/harness/fixture.inc';
-fixture('GenericEvents');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/generic_events.inc';
 ?>
 --EXPECT--

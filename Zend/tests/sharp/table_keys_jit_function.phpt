@@ -14,7 +14,7 @@ if (ini_get('opcache.jit') === false) die('skip JIT is not available');
 --FILE--
 <?php
 echo 'jit ', opcache_get_status()['jit']['on'] ? 'on' : 'off', "\n";
-require __DIR__ . '/Spot.sharp';
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/table_keys.inc';
 echo table_keys_rounds();
 ?>

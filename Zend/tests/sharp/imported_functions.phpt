@@ -2,9 +2,8 @@
 An [Import] method runs the PHP function it names: each Map argument passes as a PHP array, at every depth and whatever type holds it, the result crosses into the declared type, renumbered or made a Map, a result of another type throws a TypeError naming the function, and a function PHP doesn't declare throws at the call. A plain PHP function takes each Map as a PHP array too, held as Any?, in a List, in a union or as a generic member's type parameter, and a result whose conditional type resolves to array_slice's int-keyed branch arrives as a List renumbered from 0. A nullable result reads the false file_get_contents and stream_get_contents return for a failure as null, without PHP's warning
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
 require __DIR__ . '/harness/Arrays.inc';
-fixture('Imports');
+require __DIR__ . '/vendor/autoload.php';
 
 use Imports\Report;
 use Imports\Words;

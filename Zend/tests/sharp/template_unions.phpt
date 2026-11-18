@@ -2,8 +2,7 @@
 PHP# a template shows a union of int, float, string and bool, each value as its own type shows
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('Shown');
+require __DIR__ . '/vendor/autoload.php';
 
 echo Shown\Labels::of(5), "\n";
 echo Shown\Labels::of('five'), "\n";

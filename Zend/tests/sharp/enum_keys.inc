@@ -7,8 +7,7 @@ namespace {
 
     require __DIR__ . '/attempt.inc';
     require __DIR__ . '/harness/Standing.inc';
-    require __DIR__ . '/harness/fixture.inc';
-    fixture('EnumKeys');
+    require __DIR__ . '/vendor/autoload.php';
 
     for ($round = 0; $round < 100; $round++) {
         ob_start();

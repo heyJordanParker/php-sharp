@@ -3,7 +3,7 @@ PHP# chooses a value with the ternary, which nests to the right in its else bran
 --FILE--
 <?php
 
-require __DIR__ . '/Checkout.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 var_dump(Demo\Checkout::host("shop.test"), Demo\Checkout::host(""));
 var_dump(Demo\Checkout::sign(3), Demo\Checkout::sign(-3), Demo\Checkout::sign(0));

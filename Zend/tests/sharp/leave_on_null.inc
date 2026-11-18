@@ -1,7 +1,7 @@
 <?php
 
 require __DIR__ . '/harness/Shapes.inc';
-require __DIR__ . '/Leave.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 for ($round = 0; $round < 100; $round++) {
     $leave = new Demo\Leave();

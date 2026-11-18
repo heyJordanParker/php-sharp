@@ -7,7 +7,7 @@ require __DIR__ . '/attempt.inc';
 require __DIR__ . '/harness/Helper.inc';
 require __DIR__ . '/harness/Slots.inc';
 require __DIR__ . '/harness/Standing.inc';
-require __DIR__ . '/IndexRead.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 for ($round = 0; $round < 100; $round++) {
     ob_start();

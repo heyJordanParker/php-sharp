@@ -3,8 +3,7 @@ A plain PHP value arrives in PHP# as its declared type says wherever PHP# holds 
 --FILE--
 <?php
 require __DIR__ . '/harness/Folder.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Arrivals');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/harness/MovedSource.inc';
 require __DIR__ . '/harness/Feed.inc';
 

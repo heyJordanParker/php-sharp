@@ -2,9 +2,7 @@
 A PHP# class calls every method of Sharp.Security.Hash and Sharp.Security.Hmac, Hmac.verify accepts only the signature of the data and the key, and an unknown algorithm throws ValueError
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Security/Hash.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Security/Hmac.sharp';
-require __DIR__ . '/HashCalls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\HashCalls;
 

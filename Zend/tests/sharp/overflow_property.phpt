@@ -29,7 +29,7 @@ final class MagicCounter extends Cell
 }
 
 require __DIR__ . '/attempt.inc';
-require __DIR__ . '/Overflow.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 $counter = new Cell(PHP_INT_MAX);
 attempt(fn () => Overflow::incProperty($counter));

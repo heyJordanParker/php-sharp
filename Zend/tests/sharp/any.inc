@@ -1,7 +1,7 @@
 <?php
 
 require __DIR__ . '/harness/Settings.inc';
-require __DIR__ . '/Inbox.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\Inbox;
 

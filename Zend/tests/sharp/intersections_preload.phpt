@@ -13,8 +13,7 @@ if (PHP_OS_FAMILY == 'Windows') die('skip Preloading is not supported on Windows
 --FILE--
 <?php
 var_dump(class_exists(Intersections\Desk::class, false));
-require __DIR__ . '/harness/fixture.inc';
-fixture('Intersections');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/intersections.inc';
 ?>
 --EXPECTF--

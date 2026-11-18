@@ -11,9 +11,8 @@ namespace Demo {
 }
 
 namespace {
-    require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
     require __DIR__ . '/harness/Shipping/Functions.inc';
-    require __DIR__ . '/Interop.sharp';
+    require __DIR__ . '/vendor/autoload.php';
 
     echo Demo\Interop::shipping(1250), "\n";
     echo Demo\Interop::shippingIn("EUR", 1250), "\n";

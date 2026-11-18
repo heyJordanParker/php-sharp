@@ -1,13 +1,16 @@
 --TEST--
 A PHP# class, and any class below it, finds a method only by its exact name: `total` and `Total` are two methods, every caller, plain PHP included, names the one it means, another case is an Error that names the declared method, and the engine still finds each method it calls by PHP's own name. A PHP# class is found only by its exact name, by `new`, `instanceof`, `class_exists`, reflection, unserialize and the autoloader
+--SKIPIF--
+<?php
+if (is_file(__DIR__ . '/COMPOSER.JSON')) die('skip the disk ignores case, so the autoloader finds a class in any case');
+?>
 --FILE--
 <?php
 require __DIR__ . '/harness/Framework.inc';
 require __DIR__ . '/harness/Grid.inc';
 require __DIR__ . '/harness/Magic.inc';
 require __DIR__ . '/harness/Witness.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('ExactNames');
+require __DIR__ . '/vendor/autoload.php';
 
 function attempt(callable $call): void
 {

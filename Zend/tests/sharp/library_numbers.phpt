@@ -2,9 +2,7 @@
 A PHP# class calls every member of int and float: abs, clamp, round, floor, ceil, isFinite, toHex, floorDiv, mod and format, floorDiv rounds down and mod takes the divisor's sign, abs throws ArithmeticError for the smallest int, and clamp throws ValueError for a minimum above its maximum
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Float.sharp';
-require __DIR__ . '/NumberCalls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\NumberCalls;
 

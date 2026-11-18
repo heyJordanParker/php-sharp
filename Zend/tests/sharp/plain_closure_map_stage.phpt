@@ -2,8 +2,7 @@
 A lazy `map` of a plain PHP closure is an `Iterable` of the result type the closure declares, spec section 12, read without running it, and of `Any?` when it declares none
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('PlainClosures');
+require __DIR__ . '/vendor/autoload.php';
 
 use App\PlainClosures\Labels;
 

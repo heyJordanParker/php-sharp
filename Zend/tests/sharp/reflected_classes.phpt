@@ -3,8 +3,7 @@ A class value reads every fact a class declaration states: its applied base and 
 --FILE--
 <?php
 require __DIR__ . '/harness/Attributes.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('ReflectedClasses');
+require __DIR__ . '/vendor/autoload.php';
 
 var_dump(ReflectedClasses\Facts::shape());
 var_dump(ReflectedClasses\Facts::cases());

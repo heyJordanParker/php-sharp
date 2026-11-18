@@ -2,7 +2,7 @@
 Sharp\Bool::tryParse gives true or false for what filter_var reads as a boolean, and null for anything else
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Bool.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 var_dump(Sharp\Bool::tryParse('yes'), Sharp\Bool::tryParse('off'), Sharp\Bool::tryParse('maybe'), Sharp\Bool::tryParse(true));
 ?>

@@ -2,8 +2,7 @@
 
 namespace Plain;
 
-require_once __DIR__ . '/harness/fixture.inc';
-\fixture('Unverified');
+require __DIR__ . '/vendor/autoload.php';
 
 use Crossed\Unverified;
 

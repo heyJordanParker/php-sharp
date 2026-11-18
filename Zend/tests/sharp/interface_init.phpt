@@ -2,8 +2,7 @@
 A PHP# interface states a property `{ get; init; }`, a class, a struct and an event give it, each sets it while its object is created, the interface reads it, and plain PHP sees it get-only and can't write it after creation
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('InterfaceInit');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/interface_init.inc';
 ?>
 --EXPECT--

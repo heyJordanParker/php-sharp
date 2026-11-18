@@ -1,6 +1,6 @@
 <?php
 
-require __DIR__ . '/Checkout.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\Checkout;
 

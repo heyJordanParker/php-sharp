@@ -4,8 +4,7 @@ namespace Demo;
 
 require __DIR__ . '/attempt.inc';
 require __DIR__ . '/harness/Overflow.inc';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
-require __DIR__ . '/Overflow.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 function phpPower(int $a, int $b)
 {

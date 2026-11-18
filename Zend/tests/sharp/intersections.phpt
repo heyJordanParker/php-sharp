@@ -2,8 +2,7 @@
 An intersection parameter, property, pattern and local take a value of every type the intersection joins, a plain PHP object included, a union holds an intersection with or without parentheses, and plain PHP that passes a value of one of them gets a TypeError
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('Intersections');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/intersections.inc';
 ?>
 --EXPECTF--

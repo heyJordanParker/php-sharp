@@ -3,8 +3,7 @@ An extern line states a plain PHP function's signature: a backed case crosses to
 --FILE--
 <?php
 require __DIR__ . '/harness/Routing.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('TypedExterns');
+require __DIR__ . '/vendor/autoload.php';
 
 use TypedExterns\Links;
 

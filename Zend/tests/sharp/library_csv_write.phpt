@@ -2,10 +2,7 @@
 PHP# List<string>.toCsv writes one CSV record of RFC 4180, the write side of string.parseCsv: a field that holds a comma, a quote, a carriage return or a line feed is quoted with each quote doubled, every other field is written as it is, and parseCsv reads each record back to its fields
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/ListMembers.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Text/StringMembers.sharp';
-require __DIR__ . '/EncodingQueries.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\EncodingQueries;
 

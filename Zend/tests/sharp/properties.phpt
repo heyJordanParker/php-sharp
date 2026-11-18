@@ -3,7 +3,7 @@ PHP# auto-properties are public properties with their set visibility and initial
 --FILE--
 <?php
 
-require __DIR__ . '/Profile.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 foreach ((new ReflectionClass(Demo\Profile::class))->getProperties() as $property) {
     $set = match (true) {

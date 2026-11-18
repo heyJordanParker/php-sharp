@@ -1,7 +1,6 @@
 <?php
 
-require __DIR__ . '/harness/fixture.inc';
-fixture('ReadonlyValues');
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\ReadonlyValues\Ledger;
 use Demo\ReadonlyValues\Viewer;

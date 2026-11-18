@@ -2,10 +2,7 @@
 PHP# a never method throws to its caller, and is PHP's never to plain PHP, and never is a whole type: a type argument of a result that cannot fail, and a parameter's type, which is PHP's null
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Error.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Result.sharp';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Nevers');
+require __DIR__ . '/vendor/autoload.php';
 
 echo Nevers\Errors::named('ada'), "\n";
 echo Nevers\Errors::counted(false), "\n";

@@ -2,8 +2,7 @@
 A List's flatMap gives the elements of each Iterable its function gives, a List, a Set, a generator or a Map's [key, value] entries, in order, an empty List gives an empty List, and a function that gives no Iterable throws TypeError; toList gives a Set's elements, a Map's entries, a Map's values and a List's own elements as a List of their own, a Map or a Set read through an index of a List too
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('ListMembers');
+require __DIR__ . '/vendor/autoload.php';
 
 use ListMembers\Shelf;
 

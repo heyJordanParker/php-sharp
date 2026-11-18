@@ -1,7 +1,7 @@
 <?php
 
 namespace {
-    require __DIR__ . '/Deadlines.sharp';
+    require __DIR__ . '/vendor/autoload.php';
 
     $shown = static fn (array $keys): string => implode(' ', array_map(static fn (int|string|null $key): string => var_export($key, true), $keys));
 
