@@ -62,8 +62,8 @@ extern PHP_JSON_API zend_class_entry *php_json_exception_ce;
 SHARP_KINDS(SHARP_KIND_IS_ZEND_KIND)
 ZEND_STATIC_ASSERT(SHARP_T_FILE == T_FILE, "SHARP_T_FILE differs from T_FILE");
 
-ZEND_STATIC_ASSERT(sizeof(sharp_unit_header) == 144, "a .sharpc header is 144 bytes");
-ZEND_STATIC_ASSERT(sizeof(sharp_input) == 40, "a .sharpc input is 40 bytes");
+ZEND_STATIC_ASSERT(sizeof(sharp_unit_header) == 160, "a .sharpc header is 160 bytes");
+ZEND_STATIC_ASSERT(sizeof(sharp_input) == 56, "a .sharpc input is 56 bytes");
 ZEND_STATIC_ASSERT(sizeof(sharp_node) == 56, "a .sharpc node is 56 bytes");
 
 /* Spec section 32: a scope keeps the scoped services built in it, by binding row. Sharp\Internal\runScoped starts one
@@ -326,6 +326,10 @@ typedef struct {
 	uint64_t size;
 	int64_t mtime_ns;
 	uint8_t hash[16];
+	/* Whether declarations_hash holds the one the header of the file's compiled file names, or all zero when it has
+	 * no compiled file this engine reads. */
+	bool declarations_read;
+	uint8_t declarations_hash[16];
 } sharp_stamp;
 
 typedef struct {
@@ -629,6 +633,69 @@ static bool sharp_stamp_current(zend_string *path, uint64_t size, int64_t mtime_
 	return stamp->hashed && memcmp(stamp->hash, hash, sizeof(stamp->hash)) == 0;
 }
 
+/* The hash of the declarations of the file at path, under the root of the first root_length bytes of path, that the
+ * header of its compiled file names, read once per request from that header alone. All zero when the file has no
+ * compiled file this engine reads, which no recorded hash equals. */
+static const uint8_t *sharp_compiled_declarations(const zend_string *path, size_t root_length, sharp_stamp *stamp)
+{
+	char real[MAXPATHLEN];
+	size_t length;
+
+	if (stamp->declarations_read) {
+		return stamp->declarations_hash;
+	}
+	stamp->declarations_read = true;
+	if (!VCWD_REALPATH(ZSTR_VAL(path), real)) {
+		return stamp->declarations_hash;
+	}
+	length = strlen(real);
+	if (length > root_length && real[root_length] == '/' && memcmp(real, ZSTR_VAL(path), root_length) == 0) {
+		zend_string *folder = sharp_compiled_folder(real, length, root_length);
+		zend_string *compiled = zend_strpprintf(0, "%s%sc", ZSTR_VAL(folder), real + root_length);
+		int file = VCWD_OPEN(ZSTR_VAL(compiled), O_RDONLY);
+		sharp_unit_header header;
+
+		if (file >= 0) {
+			if (read(file, &header, sizeof(header)) == (ssize_t) sizeof(header)
+					&& memcmp(header.magic, SHARP_UNIT_MAGIC, sizeof(header.magic)) == 0
+					&& memcmp(header.abi, SHARP_UNIT_ABI, sizeof(header.abi)) == 0) {
+				memcpy(stamp->declarations_hash, header.declarations_hash, sizeof(stamp->declarations_hash));
+			}
+			close(file);
+		}
+		zend_string_release(compiled);
+		zend_string_release(folder);
+	}
+
+	return stamp->declarations_hash;
+}
+
+/* Whether an input of a file under the root of the first root_length bytes of path is as it was compiled. One whose
+ * declarations_hash is all zero holds while the file at path has its stamp. One that names the hash of the declarations
+ * of a .sharp file the compiled file imports holds while that file is there with its stamp, or while the file's own
+ * compiled file names that hash, so a body edit to an import leaves its importers current. The edited import is
+ * refused itself until it compiles, so no importer runs its new code. */
+static bool sharp_input_holds(zend_string *path, size_t root_length, uint64_t size, int64_t mtime_ns,
+	const uint8_t hash[16], const uint8_t declarations_hash[16])
+{
+	static const uint8_t none[16] = {0};
+	sharp_stamp *stamp;
+
+	if (memcmp(declarations_hash, none, sizeof(none)) == 0) {
+		return sharp_stamp_current(path, size, mtime_ns, hash);
+	}
+	stamp = sharp_stamp_of(path);
+	if (!stamp->exists) {
+		return false;
+	}
+	if (stamp->hashed ? memcmp(stamp->hash, hash, sizeof(stamp->hash)) == 0
+			: stamp->size == size && stamp->mtime_ns == mtime_ns) {
+		return true;
+	}
+
+	return memcmp(sharp_compiled_declarations(path, root_length, stamp), declarations_hash, sizeof(none)) == 0;
+}
+
 /* Whether an input is as it was compiled. mago compile records an input inside the project by its path under the root,
  * and one outside it, as a file of an includes folder that is a symlink to a folder elsewhere, by its absolute path,
  * which it reads as is, so the engine does too. */
@@ -638,7 +705,8 @@ static bool sharp_input_current(const sharp_compiled *compiled, const sharp_inpu
 	zend_string *path = IS_ABSOLUTE_PATH(recorded, input->path.len)
 		? zend_string_init(recorded, input->path.len, 0)
 		: zend_string_concat3(ZSTR_VAL(compiled->source), compiled->root_length, "/", 1, recorded, input->path.len);
-	bool current = sharp_stamp_current(path, input->size, input->mtime_ns, input->hash);
+	bool current = sharp_input_holds(path, compiled->root_length, input->size, input->mtime_ns, input->hash,
+		input->declarations_hash);
 
 	zend_string_release(path);
 

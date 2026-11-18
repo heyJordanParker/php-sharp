@@ -730,6 +730,28 @@ fn a_member_inherited_from_a_plain_php_parent_is_not_too_wide() {
     );
 }
 
+/// Spec sections 5 and 22: a member must be visible to each class that overrides or implements it, so an override from
+/// outside the namespace is an outside use, as a call from there is. `Base`'s abstract `name` and `invoke` and its
+/// virtual `label`, which `One` replaces from `App.Web`, report nothing, though only `App.Shop` calls them. `title`,
+/// which only `Two` replaces, from `App.Shop.Deep` below the namespace, is still too wide.
+#[test]
+fn a_member_a_class_outside_its_namespace_overrides_is_not_too_wide() {
+    let base = "namespace App.Shop;\n\npublic abstract class Base\n{\n    public abstract string name();\n    public abstract string invoke();\n    public virtual string label() => \"base\";\n    public virtual string title() => \"base\";\n}\n";
+    let runner = "namespace App.Shop;\n\ninternal class Runner\n{\n    internal string run(Base base) => base.name() + base.invoke() + base.label() + base.title();\n}\n";
+    let one = "namespace App.Web;\n\nimport App.Shop.Base;\n\npublic class One : Base\n{\n    public override string name() => \"one\";\n    public override string invoke() => \"one\";\n    public override string label() => \"one\";\n}\n";
+    let two = "namespace App.Shop.Deep;\n\nimport App.Shop.Base;\n\ninternal abstract class Two : Base\n{\n    public override string title() => \"two\";\n}\n";
+
+    assert_eq!(
+        too_wide(&[
+            ("src/App/Shop/Base.sharp", base),
+            ("src/App/Shop/Runner.sharp", runner),
+            ("src/App/Web/One.sharp", one),
+            ("src/App/Shop/Deep/Two.sharp", two),
+        ]),
+        ["src/App/Shop/Base.sharp 8:27 `Base.title` is public, and nothing outside `App.Shop` uses it."]
+    );
+}
+
 /// Spec section 5: a member whose attribute's class is marked `[DynamicallyAccessed]` is reached by the framework that
 /// reads the attribute, through reflection, which no checker sees, so it counts as used. So are a plain PHP `[Listen]`
 /// method and `[Field]` property, and a PHP# `[Route]` method. Any other attribute, as PHP's `[Deprecated]`, says
@@ -22319,6 +22341,36 @@ fn a_refused_plain_php_generic_value_shows_its_literal_type_arguments_and_names_
     );
 }
 
+/// Spec section 25: `this.belongsTo(…)` in a `virtual` method gives a `BelongsTo<Offer, Self>`, as Laravel's `$this` is
+/// the class the call runs on, which a subclass's override makes the subclass, and `TDeclaring` takes no subclass in
+/// place of `Offer`. So declaring `BelongsTo<Offer, Offer>` is refused against the body and against an interface that
+/// declares `BelongsTo<Offer, Self>`, and each message writes `Self`, never two types that read the same. Declaring
+/// `BelongsTo<Offer, Self>` compiles.
+#[test]
+fn a_refusal_of_a_self_type_argument_writes_it_as_self() {
+    let files = [
+        ("src/Lib/Relations.php", RELATIONS),
+        (
+            "src/App/Linked.sharp",
+            "namespace App;\n\nimport Lib.BelongsTo;\n\npublic interface Linked\n{\n    BelongsTo<Offer, Self> parent();\n}\n",
+        ),
+    ];
+    let offer = |declared: &str| {
+        leak(format!(
+            "namespace App;\n\nimport Lib.BelongsTo;\nimport Lib.Model;\n\npublic class Offer : Model, Linked\n{{\n    public virtual {declared} parent() => this.belongsTo(typeof(Offer));\n}}\n"
+        ))
+    };
+
+    assert_eq!(
+        compile_errors(("src/App/Offer.sharp", offer("BelongsTo<Offer, Offer>")), &files),
+        [
+            "Return type `BelongsTo<Offer, Offer>` of `Offer.parent` is incompatible with parent return type `BelongsTo<Offer, Self>` of `Linked.parent`",
+            "Returned type `BelongsTo<Offer, Self>` is less specific than the declared return type `BelongsTo<Offer, Offer>` for method `Offer.parent`.",
+        ]
+    );
+    assert_eq!(compile_errors(("src/App/Offer.sharp", offer("BelongsTo<Offer, Self>")), &files), Vec::<String>::new());
+}
+
 /// A static member of `Counter<Order>` has `Order` for `TItem`, spec section 11: a static property read, a collection
 /// call on it, a write and a static call's argument and result are checked against `Order`, through the class's own
 /// `Counter<TItem>` too, and against `List<Order>` for a nested type argument. A write by index into it is refused as
@@ -27072,7 +27124,7 @@ fn a_loop_over_an_object_that_is_no_iterable_is_refused() {
     assert_eq!(
         written_errors(sharp, &issues),
         [
-            "this invalid-iterator The expression provided to a loop is not iterable. It resolved to type `Basket`, which is not iterable."
+            "this invalid-iterator The expression provided to a loop is not iterable. It resolved to type `Self`, which is not iterable."
         ]
     );
 
