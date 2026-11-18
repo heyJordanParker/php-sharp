@@ -154,7 +154,10 @@ jobs:
           # Each job in this matrix defines a build target. The following custom keys control the pipeline steps:
           # - `smoke: true`: Smoke-checks the built binary. Only targets the job's runner can execute set it.
           # - `pgo: true`: Builds with profile-guided optimization, profiled on corpus/. Only aarch64-apple-darwin
-          #   sets it.
+          #   sets it. On the M2 Max, fat LTO with one codegen unit and this profile analyzed and compiled a
+          #   14,860-file vendor tree in 15% fewer instructions and 15 to 19% fewer CPU-seconds than a thin-LTO build
+          #   of the same source with 16 units, and a 1,536-file PHP# project in 1.6 to 2.4% fewer instructions. So
+          #   its 37-minute build on the self-hosted Mac stays.
           #
           # The targets PHP# runs on: macOS on Apple silicon, and glibc Linux on arm64 and x86_64.
 
