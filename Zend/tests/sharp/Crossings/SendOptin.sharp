@@ -1,22 +1,15 @@
 namespace Demo;
 
-import BaseJob;
+import Illuminate.Database.Events.MigrationsStarted;
 
-// A PHP# job whose plain PHP parent declares the properties it fills.
-public class SendOptin : BaseJob
+// A PHP# event whose plain PHP parent declares the array property it fills.
+public class SendOptin : MigrationsStarted
 {
-    public required SendOptin() { }
+    public required SendOptin() : super("up") { }
 
-    public void fill(Map<string, int> prices)
-    {
-        this.payload = prices;
-        this.payloads["first"] = prices;
-        SendOptin.registry = prices;
-        this.rows[0]["shelf"] = prices;
-        this.rows.add(prices);
-    }
+    public void fill(Map<string, int> prices) { this.options = prices; }
 
-    public string firstName() => this.names.getOrNull(0) ?? "none";
+    public void fillElement(Map<string, int> prices) { this.options["first"] = prices; }
 
-    public static SendOptin made(Map<string, int> prices) => new Self { payload: prices };
+    public static SendOptin made(Map<string, int> prices) => new Self { options: prices };
 }

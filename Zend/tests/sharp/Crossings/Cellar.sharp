@@ -1,14 +1,14 @@
 namespace Demo;
 
-import Lib;
+import Illuminate.Support.Collection;
 
 // A PHP# subclass that writes plain PHP's arrays into the collection properties its PHP# base declares.
 public class Cellar : Stockroom
 {
-    public string restocked()
+    public string restocked(Collection<string, int> prices, Collection<int, string> names)
     {
-        this.stock = Lib.price_list();
-        this.names = Lib.shelf_names();
+        this.stock = prices.all();
+        this.names = names.all();
 
         return `${this.stock.count()} ${this.stock.has("5")} ${this.names.count()} ${this.names.getOrNull(0) ?? "none"}`;
     }

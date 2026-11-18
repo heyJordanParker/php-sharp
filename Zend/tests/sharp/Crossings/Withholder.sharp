@@ -1,9 +1,9 @@
 namespace Demo;
 
-import Hiding;
+import Illuminate.Database.Eloquent.Model;
 import Lib.Probe;
 
-public class Withholder : Hiding
+public class Withholder : Model
 {
     protected override List<string> hidden
     {

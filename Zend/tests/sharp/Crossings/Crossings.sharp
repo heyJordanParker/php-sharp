@@ -1,102 +1,82 @@
 namespace Demo;
 
-import ArrayCounter;
-import Attributes;
-import Lib;
+import Illuminate.Container.Attributes.Config;
+import Illuminate.Database.Events.MigrationsStarted;
+import Illuminate.Support.Arr;
+import Illuminate.Support.Collection;
+import Illuminate.Support.Fluent;
+import Illuminate.Support.LazyCollection;
+import Illuminate.Support.ServiceProvider;
 import Lib.Probe;
-import RequestContext;
+import Symfony.Component.EventDispatcher.EventDispatcher;
 
 class Crossings
 {
+    // Arr::isAssoc declares array, Arr::query declares no type and documents array, and Arr::wrap documents mixed.
     public static List<string> outward(Map<string, int> prices, Set<string> tags)
     {
-        return [
-            Lib.array_keys_of(prices),
-            Lib.array_keys_of(tags),
-            Lib.documented_keys_of(prices),
-            Lib.type_of_mixed(prices),
-            Lib.type_of_untyped(prices),
-            Lib.type_of_iterable(tags),
-        ];
+        return [`${Arr.isAssoc(prices)}`, `${Arr.isAssoc(tags)}`, Arr.query(prices), Arr.query(tags)];
     }
+
+    public static Any? wrapped(Map<string, int> prices) => Arr.wrap(prices);
 
     // A value that may be one of several collections reaches an array parameter as the PHP array of the one it holds.
-    public static string mapOrSet(bool pick, Map<string, int> prices, Set<string> tags) => Lib.array_keys_of(pick ? prices : tags);
+    public static string mapOrSet(bool pick, Map<string, int> prices, Set<string> tags) => Arr.query(pick ? prices : tags);
 
-    public static string listOrMap(bool pick, List<int> sizes, Map<string, int> prices) => Lib.array_keys_of(pick ? sizes : prices);
+    public static string listOrMap(bool pick, List<int> sizes, Map<string, int> prices) => Arr.query(pick ? sizes : prices);
 
-    public static Map<string, int> written(Map<string, int> prices)
+    // Arr::add writes into its own copy of the array.
+    public static string written(Map<string, int> prices) => `${Arr.query(Arr.add(prices, "jam", 9))} / ${Arr.query(prices)}`;
+
+    // Collection::all() documents array<TKey, TValue>, whose PHP array holds the key "5" as the int 5.
+    public static Map<string, int> local(Collection<string, int> plain)
     {
-        Lib.write_array(prices);
-        Lib.write_mixed(prices);
-        return prices;
-    }
-
-    public static Map<string, int> local()
-    {
-        Map<string, int> prices = Lib.price_list();
+        Map<string, int> prices = plain.all();
         prices["jam"] = 5;
         return prices;
     }
 
-    public static Map<string, int> returned() => Lib.price_list();
+    public static Map<string, int> returned(Collection<string, int> plain) => plain.all();
 
-    public static List<string> plainMapCalls() => [
-        `${Lib.price_list().get("tea") ?? -1}`,
-        `${Lib.price_list().get("5") ?? -1}`,
-        `${Lib.price_list().has("5")}`,
-        Probe.join(",",Lib.price_list().keys()),
-        `${Lib.price_list().count()}`,
+    public static List<string> plainMapCalls(Collection<string, int> plain) => [
+        `${plain.all().get("tea") ?? -1}`,
+        `${plain.all().get("5") ?? -1}`,
+        `${plain.all().has("5")}`,
+        Probe.join(",",plain.all().keys()),
+        `${plain.all().count()}`,
     ];
 
-    public static List<string> plainLoops()
+    public static List<string> plainLoops(Collection<string, int> plain)
     {
         List<string> seen = [];
-        for (const [sku, count] of Lib.price_list()) {
+        for (const [sku, count] of plain.all()) {
             seen.add(`${sku is string}:${sku}=${count}`);
         }
-        for (const entry of Lib.price_list()) {
+        for (const entry of plain.all()) {
             seen.add(`${entry[0] is string}:${entry[0]}=${entry[1]}`);
         }
-        for (const [string, int] typed of Lib.price_list()) {
+        for (const [string, int] typed of plain.all()) {
             seen.add(`${typed[0] is string}:${typed[0]}`);
         }
         return seen;
     }
 
-    public static string untypedLocal()
+    public static string untypedLocal(Collection<string, int> plain)
     {
-        let kept = Lib.price_list();
+        let kept = plain.all();
         const removed = kept.remove("5");
         const left = kept.count();
-        kept = Lib.price_list();
+        kept = plain.all();
         return `${removed} ${left} ${kept.has("5")} ${Probe.typeName(kept)}`;
     }
 
     public static Map<string, int> received(Map<string, int> counts) => counts;
 
-    public static List<string> objects(Map<string, int> prices, Set<string> tags)
+    // EventDispatcher::dispatch() takes an object and returns it.
+    public static string dispatched(Map<string, int> prices, Set<string> tags)
     {
-        return [
-            Lib.count_of_countable(prices),
-            Lib.count_of_traversable(tags),
-            Lib.json_of(prices),
-            Lib.type_of_object(tags),
-            Lib.count_of_map(prices),
-            Lib.count_of_bounded_countable(Crossings.limits()),
-        ];
-    }
-
-    public static string counted(Map<string, int> prices)
-    {
-        const counter = Lib.array_counter();
-        return counter(prices);
-    }
-
-    public static string invoked(Map<string, int> prices)
-    {
-        const counter = new ArrayCounter();
-        return counter(prices);
+        const events = new EventDispatcher();
+        return `${Probe.className(events.dispatch(prices))} ${Probe.className(events.dispatch(tags))}`;
     }
 
     public static string applied(Function<string(Map<string, int>)> each, Map<string, int> prices) => each(prices);
@@ -116,30 +96,17 @@ class Crossings
         return joined;
     }
 
-    public static string lazilyReturned(Any? last)
+    // LazyCollection::getIterator() documents Traversable<TKey, TValue>.
+    public static string lazilyReturned(LazyCollection<int, string> plain)
     {
-        Iterable<string> names = Lib.names_and(last);
+        Iterable<string> names = plain.getIterator();
         return Crossings.joined(names);
     }
 
-    public static string heldGenerator(Any? last)
-    {
-        Iterable<string> names = Lib.names_generator(last);
-        return Crossings.joined(names);
-    }
-
-    public static string heldRows(Any? last)
-    {
-        Iterable<string> names = Lib.name_rows(last);
-        return Crossings.joined(names);
-    }
-
-    public static Iterable<string> returnedLazy(Any? last) => Lib.lazy_names(last);
-
-    public static string passedGenerator(Any? last) => Crossings.joined(Lib.names_generator(last));
+    public static Iterable<string> returnedLazy(LazyCollection<int, string> plain) => plain;
 
     // Until it is held as an `Iterable<T>`, a plain PHP class keeps its own methods.
-    public static int lazyCount(Any? last) => Lib.lazy_names(last).count();
+    public static int lazyCount(LazyCollection<int, string> plain) => plain.count();
 
     public static Map<Level, int?> limits() => [Level.Low: 5, Level.High: null];
 
@@ -153,7 +120,7 @@ class Crossings
 
     public static Function<Map<string, int>()> sizer() => () => ["s": 1];
 
-    public static string sent(Envelope envelope) => Lib.send_headers(envelope.headers);
+    public static string sent(Envelope envelope) => Arr.query(envelope.headers);
 
     public static string pair([string name, int count] given) => `${given.name} ${given.count}`;
 
@@ -176,47 +143,38 @@ class Crossings
 
     public static string cartonPayloadClass(Carton carton) => Probe.className(carton.payload);
 
-    // Each write into a plain PHP object gives it what a parameter of the property's type takes.
-    public static void filled(RequestContext context, Map<string, int> prices, Set<string> tags)
+    // Each write into a plain PHP object gives it what a parameter of the property's type takes: MigrationsStarted
+    // declares an array $options, Config a mixed $default, and ServiceProvider a static array.
+    public static void filled(MigrationsStarted started, Config config, Map<string, int> prices, Set<string> tags)
     {
-        context.payload = prices;
-        context.extra = tags;
-        context.untyped = prices;
-        context.anything = tags;
-        context.items = prices;
-        context.either = prices;
-        context.counted = prices;
-        RequestContext.registry = tags;
-        context.payloads["first"] = prices;
-        context.rows[0] = tags;
-        context.rows.add(prices);
+        started.options = prices;
+        config.default = tags;
     }
 
-    public static void filledOnce(RequestContext context, Map<string, int> prices) { context.extra ??= prices; }
+    public static void filledStatic(Map<string, string> commands) { ServiceProvider.optimizeCommands = commands; }
 
-    public static void filledNested(RequestContext context, Map<string, int> prices, Set<string> tags)
+    public static void filledElement(MigrationsStarted started, Map<string, int> prices) { started.options["first"] = prices; }
+
+    public static void filledNested(MigrationsStarted started, Config config, Map<string, int> prices, Set<string> tags)
     {
-        context.payload = ["shelf": prices];
-        context.items = [prices, tags];
+        started.options = ["shelf": prices];
+        config.default = [prices, tags];
     }
 
-    public static void filledFromPlain(RequestContext context, RequestContext other) { context.payload = other.payload; }
+    public static void filledFromPlain(MigrationsStarted started, MigrationsStarted other) { started.options = other.options; }
 
-    public static RequestContext initialized(Map<string, int> prices) => new RequestContext { payload: prices };
+    public static MigrationsStarted copied(MigrationsStarted started, Map<string, int> prices) => started with { options: prices };
 
-    public static RequestContext copied(RequestContext context, Map<string, int> prices) => context with { payload: prices };
+    public static void filledPlus(MigrationsStarted started, Map<string, int> prices) { started.options += prices; }
 
-    public static SendOptin jobInitialized(Map<string, int> prices) => new SendOptin { payload: prices };
+    // Fluent takes a member it declares no property for through __set.
+    public static void attributed(Fluent<string, Any?> attributes, Map<string, int> prices) { attributes.meta = prices; }
 
-    public static SendOptin jobCopied(SendOptin job, Map<string, int> prices) => job with { payload: prices };
+    public static Fluent<string, Any?> initialized(Map<string, int> prices) => new Fluent<string, Any?> { payload: prices };
 
-    public static T initializedAs<T : RequestContext>(Map<string, int> prices) => new T { payload: prices };
+    public static SendOptin jobInitialized(Map<string, int> prices) => new SendOptin { options: prices };
 
-    public static RequestContext initializedAsContext(Map<string, int> prices) => Crossings.initializedAs<RequestContext>(prices);
-
-    public static void filledPlus(RequestContext context, Map<string, int> prices) { context.payload += prices; }
-
-    public static void attributed(Attributes attributes, Map<string, int> prices) { attributes.meta = prices; }
+    public static SendOptin jobCopied(SendOptin job, Map<string, int> prices) => job with { options: prices };
 
     // A write into PHP#'s own property keeps the Map.
     public static string ownWritten(Holdings holdings, Map<string, string> payload)

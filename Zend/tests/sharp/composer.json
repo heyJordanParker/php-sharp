@@ -17,7 +17,8 @@
     "require": {
         "heyjordanparker/php-sharp-composer": "*",
         "illuminate/collections": "^13.43",
-        "illuminate/database": "^13.43"
+        "illuminate/database": "^13.43",
+        "symfony/event-dispatcher": "^8.1"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
