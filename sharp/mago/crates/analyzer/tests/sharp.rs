@@ -655,6 +655,60 @@ fn a_plain_php_use_outside_the_namespace_keeps_a_public_member() {
     );
 }
 
+/// Spec sections 5 and 15: an event's parameters are its payload, public get-only properties that take no modifier,
+/// so no use makes them too wide: `Changed`, created in another namespace that reads neither `id` nor `name`, and
+/// `Quiet`, which only its namespace uses, report nothing. An event nothing uses, as `Lost`, is still refused, since
+/// it never runs.
+#[test]
+fn an_event_s_parameters_are_never_too_wide() {
+    let changed = "namespace App.Shop;\n\npublic event Changed(int id, string name);\n";
+    let quiet = "namespace App.Shop;\n\npublic event Quiet(int id);\n";
+    let lost = "namespace App.Shop;\n\npublic event Lost(int id);\n";
+    let cart = "namespace App.Shop;\n\npublic class Cart\n{\n    internal Quiet quiet() => new Quiet(1);\n}\n";
+    let page = "namespace App.Web;\n\nimport App.Shop.Changed;\n\npublic class Page\n{\n    internal Changed changed() => new Changed(1, \"a\");\n}\n";
+    let files = [
+        ("src/App/Shop/Changed.sharp", changed),
+        ("src/App/Shop/Quiet.sharp", quiet),
+        ("src/App/Shop/Lost.sharp", lost),
+        ("src/App/Shop/Cart.sharp", cart),
+        ("src/App/Web/Page.sharp", page),
+    ];
+
+    assert_eq!(too_wide(&files), Vec::<String>::new());
+    assert_eq!(
+        unused_classes(&files),
+        [
+            "src/App/Shop/Lost.sharp 3:14 Nothing uses `Lost`, so it never runs.",
+            "src/App/Shop/Cart.sharp 3:14 Nothing uses `Cart`, so it never runs.",
+            "src/App/Web/Page.sharp 5:14 Nothing uses `Page`, so it never runs.",
+        ]
+    );
+}
+
+/// Spec sections 5 and 10: `Json.encode` writes a struct by the fields its `parse` reads, and `parse` and `Json.decode`
+/// read them, so each uses every field of the struct from the namespace of the code that encodes or parses it, inside a
+/// `List` too. `Row`, encoded, `Line`, parsed, and `Item`, decoded as a `List`, report nothing for their fields. A field
+/// the wire never holds and nothing reads by name, as `Row`'s get-only `unused`, is still too wide.
+#[test]
+fn a_struct_s_fields_are_used_where_it_is_encoded_or_parsed() {
+    let row = "namespace Demo;\n\npublic struct Row\n{\n    public int id { get; init; }\n    public string name { get; init; }\n    public int unused { get; } = 0;\n}\n";
+    let line = "namespace Demo;\n\npublic struct Line\n{\n    public int amount { get; init; }\n}\n";
+    let item = "namespace Demo;\n\npublic struct Item\n{\n    public int cents { get; init; }\n}\n";
+    let wire = "namespace Other;\n\nimport Demo.Item;\nimport Demo.Line;\nimport Demo.Row;\nimport Sharp.Encoding.Json;\n\npublic class Wire\n{\n    internal string sent(Row row) => Json.encode(row);\n\n    internal Line got(Map<string, Any?> input) => Line.parse(input);\n\n    internal List<Item> items(string text) => Json.decode<List<Item>>(text);\n}\n";
+
+    assert_eq!(
+        too_wide(&[
+            JSON,
+            JSON_VALUE,
+            ("src/Demo/Row.sharp", row),
+            ("src/Demo/Line.sharp", line),
+            ("src/Demo/Item.sharp", item),
+            ("src/Other/Wire.sharp", wire),
+        ]),
+        ["src/Demo/Row.sharp 7:16 `Row.unused` is public, and nothing outside `Demo` uses it."]
+    );
+}
+
 /// Spec section 5: a member is too wide only on the class that declares it. A PHP# class that inherits a constant from
 /// a plain PHP parent declares no such member, whatever file the constant is in, and a plain PHP class's member is no
 /// PHP# report at all. The PHP# class's own constant still warns.
@@ -4031,7 +4085,7 @@ fn a_list_test_of_a_value_declared_a_map_is_an_error() {
         errors,
         [
             "This pattern never matches the value it tests, a `Map<int|string, Any?>?`: a `Map` is never a `List`.",
-            "This pattern never matches the value it tests, a `Map<int|string, Any?>?`: a `Map` is never a `List`.",
+            "`box.records` is a `Map<int|string, Any?>?` that is never a `List<Map<string, string?>>` here, so `box.records as List<Map<string, string?>>` always gives `null`.",
             "This pattern never matches the value it tests, a `Map<int, int>`: a `Map` is never a `List`.",
         ]
     );
@@ -4800,6 +4854,21 @@ fn a_loop_never_ends_on_its_condition_only_when_the_condition_is_true() {
     assert_eq!(
         (refusals(("src/Demo/Passes.sharp", sharp), &[]), issues(("src/Demo/Passes.php", php), &[])),
         (Vec::<String>::new(), Vec::<String>::new())
+    );
+}
+
+/// A `for` loop's update step runs after a pass whose condition held, so it reads the locals as the condition narrowed
+/// them whenever the body leaves them alone: an empty body, one that only calls something, and one that always breaks
+/// each walk a list with `node = node.next`, as an update step that only reads `node` does. A body that writes `node`
+/// again leaves the update step a node that may be `null`.
+#[test]
+fn a_for_update_step_reads_what_its_condition_proved() {
+    let node = "namespace Demo;\n\npublic class Node\n{\n    public Node? next { get; set; } = null;\n\n    public void touch()\n    {\n    }\n}\n";
+    let sharp = "namespace Demo;\n\npublic class Walker\n{\n    public static void empty(Node? head)\n    {\n        for (Node? node = head; node != null; node = node.next) {\n        }\n    }\n\n    public static void called(Node? head)\n    {\n        for (Node? node = head; node != null; node = node.next) {\n            Walker.note();\n        }\n    }\n\n    public static void touched(Node? head)\n    {\n        for (Node? node = head; node != null; node = node.next) {\n            node.touch();\n        }\n    }\n\n    public static void broken(Node? head)\n    {\n        for (Node? node = head; node != null; node = node.next) {\n            break;\n        }\n    }\n\n    public static void read(Node? head)\n    {\n        for (Node? node = head; node != null; Walker.last(node.next == null)) {\n        }\n    }\n\n    public static void reassigned(Node? head, Node? other)\n    {\n        for (Node? node = head; node != null; node = node.next) {\n            node = other;\n        }\n    }\n\n    private static void note()\n    {\n    }\n\n    private static void last(bool last)\n    {\n    }\n}\n";
+
+    assert_eq!(
+        issues(("src/Demo/Walker.sharp", sharp), &[("src/Demo/Node.sharp", node)]),
+        ["40:54 possibly-null-property-access"]
     );
 }
 
@@ -8226,6 +8295,23 @@ fn a_branch_that_leaves_on_a_type_test_narrows_the_rest_of_the_block_to_the_othe
     assert_eq!(issues(("src/App/Shop.sharp", sharp), &[INTERACTION, POPUP_INTERACTION, level]), Vec::<String>::new());
 }
 
+/// Spec section 14 calls only a property holding a function like a method, and a case's `name` holds a string. So
+/// `name()` on a value that may be an enum case or a class with a `name()` method is refused once, as an ambiguous call,
+/// and on a case alone it is a call of a method the enum lacks. Neither looks a case's name up as a function.
+#[test]
+fn a_call_of_a_case_s_name_never_runs_the_name_as_a_function() {
+    let level = ("src/App/Level.sharp", "namespace App;\n\npublic enum Level\n{\n    case Low;\n    case High;\n}\n");
+    let sharp = "namespace App;\n\npublic class Shop\n{\n    public static string either(Level|Interaction audience) => audience.name();\n\n    public static string alone(Level level) => level.name();\n}\n";
+
+    assert_eq!(
+        refusals(("src/App/Shop.sharp", sharp), &[INTERACTION, POPUP_INTERACTION, level]),
+        [
+            "5:73 ambiguous-object-method-access `audience.name()` calls a method on `Interaction` but a function in a property on `Level`, so PHP# cannot tell how to call it. | Narrow `audience` to one class first, as in `if (audience is Interaction interaction)`.",
+            "7:54 non-existent-method Method `Level.name` does not exist. | Ensure the method `Level.name` is defined.",
+        ]
+    );
+}
+
 /// Spec section 20.1: a sealed interface's implementers sit in its namespace. A class of another namespace that
 /// implements it is an error that names the namespace, and an implementer in it is not.
 #[test]
@@ -8848,9 +8934,9 @@ fn a_type_with_properties_tests_both_and_binds() {
     );
 }
 
-/// A type pattern that can never match is an error at the pattern. A value pattern's `==` is the code's own, spec
-/// section 19, so a value of another type is the error `is == "none"` gives: at the tested value for `is`, and at the
-/// value in a `match` arm, whose read of the subject has no text.
+/// A type pattern that can never match is an error at the pattern, and an `as` that always gives null is one at the
+/// cast. A value pattern's `==` is the code's own, spec section 19, so a value of another type is the error `is ==
+/// "none"` gives: at the tested value for `is`, and at the value in a `match` arm, whose read of the subject has no text.
 #[test]
 fn a_pattern_that_can_never_match_is_an_error_at_the_pattern() {
     let sharp = "namespace Demo;\n\nimport Lib.Circle;\nimport Lib.Square;\n\nclass Report\n{\n    public static bool square(Circle circle) => circle is Square;\n\n    public static bool text(int count) => count is string;\n\n    public static bool named(int count) => count is \"none\";\n\n    public static Square? converted(Circle circle) => circle as Square;\n\n    public static int arm(Circle circle) => match (circle) {\n        Square => 1,\n        default => 0,\n    };\n\n    public static int value(int count) => match (count) {\n        1 => 1,\n        \"none\" => 0,\n        default => 2,\n    };\n\n    public static bool possible(int? count) => count is int and > 0;\n}\n";
@@ -8877,7 +8963,7 @@ fn a_pattern_that_can_never_match_is_an_error_at_the_pattern() {
             "Square impossible-type-comparison This pattern never matches the value it tests.",
             "string impossible-type-comparison Impossible type assertion: `count` of type `int` can never be `string`.",
             "count invalid-operand `==` cannot compare `int` with `string`.",
-            "Square impossible-type-comparison This pattern never matches the value it tests.",
+            "circle as Square impossible-type-comparison `circle` is a `Circle` that is never a `Square` here, so `circle as Square` always gives `null`.",
             "Square impossible-type-comparison This pattern never matches the value it tests.",
             "\"none\" invalid-operand `==` cannot compare `int` with `string`.",
         ]
@@ -10881,6 +10967,26 @@ fn a_typed_extern_that_misfits_the_native_types_is_refused_at_its_line() {
             "`Mailer` declares no type parameters, so its `extern` line writes `Mailer` alone.",
             "`QueuedMailer.ping` is a method of `Mailer`, so `extern Mailer.ping` states its signature.",
         ]
+    );
+}
+
+/// Spec section 23: an `extern` line states any return type a PHP# method declares: a function type over a native
+/// `\Closure`, a tuple over a native `array` and a nullable union over a native one, as a nullable type over a nullable
+/// one. A call reads each as the line states it, so the function `Factory.make()` returns is called in turn, with no
+/// argument, as `Function<void()>` takes none.
+#[test]
+fn an_extern_line_states_any_return_type_a_method_declares() {
+    let factory = "<?php\n\nnamespace Lib;\n\nfinal class Factory\n{\n    public static function make(): \\Closure\n    {\n        return static function (): void {};\n    }\n\n    public static function pair(): array\n    {\n        return [1, 2];\n    }\n\n    public static function either(): int|string|null\n    {\n        return 1;\n    }\n\n    public static function name(): ?string\n    {\n        return null;\n    }\n}\n";
+    let stubs = "namespace Stubs;\n\nimport Lib.Factory;\n\nextern Function<void()> Factory.make();\nextern [int, int] Factory.pair();\nextern (int|string)? Factory.either();\nextern string? Factory.name();\n";
+    let shop = "namespace Shop;\n\nimport Lib.Factory;\n\npublic class Shop\n{\n    public int run()\n    {\n        Factory.make()();\n        Factory.make()(1);\n        [int, int] pair = Factory.pair();\n        (int|string)? either = Factory.either();\n        string? name = Factory.name();\n        return pair[0] + pair[1];\n    }\n}\n";
+
+    assert_eq!(
+        package_errors(&[
+            ("src/Lib/Factory.php", factory),
+            ("src/Stubs/Library.sharp", stubs),
+            ("src/Shop/Shop.sharp", shop),
+        ]),
+        ["Too many arguments provided for function value `Factory.make()`."]
     );
 }
 
@@ -21333,6 +21439,22 @@ fn a_class_value_test_of_an_interface_a_subclass_may_implement_can_match() {
     assert_eq!(issues(("src/Demo/Regions.sharp", sharp), &declared), ["9:62 impossible-type-comparison"]);
 }
 
+/// Spec section 21: a class value that passes `is Class<Linkable>` is a class value of both its own type and
+/// `Linkable`, as an `Entity` that passes `is Linkable` is an `Entity&Linkable`, so code after the test calls its
+/// members and passes it as either. A class value of a type parameter narrows the same way.
+#[test]
+fn a_class_value_that_passes_a_test_of_an_interface_is_a_class_value_of_both() {
+    let mut files = REFLECTION.to_vec();
+    files.extend([
+        ("src/Demo/Entity.sharp", "namespace Demo;\n\npublic abstract class Entity\n{\n}\n"),
+        ("src/Demo/Linkable.sharp", "namespace Demo;\n\npublic interface Linkable\n{\n}\n"),
+        ("src/Demo/Page.sharp", "namespace Demo;\n\npublic class Page : Entity, Linkable\n{\n}\n"),
+    ]);
+    let sharp = "namespace Demo;\n\npublic class Links\n{\n    public static string named(Class<Entity> type)\n    {\n        if (type is Class<Linkable>) {\n            return type.name();\n        }\n        return \"\";\n    }\n\n    public static Class<Linkable>? linkable(Class<Entity> type) => type is Class<Linkable> ? type : null;\n\n    public static Class<Entity>? entity(Class<Entity> type) => type is Class<Linkable> ? type : null;\n\n    public static string published<T : Object>(List<Class<T>> classes)\n    {\n        for (const type of classes) {\n            if (type is Class<Linkable>) {\n                return type.name();\n            }\n        }\n        return \"\";\n    }\n}\n";
+
+    assert_eq!(issues(("src/Demo/Links.sharp", sharp), &files), Vec::<String>::new());
+}
+
 /// A list pattern of types alone, as `[int, string]`, matches the values of that tuple, so the value it narrows is the
 /// tuple, which unpacks and returns as one. A list pattern with a name or a rest narrows to a `List`, and a parameter's
 /// type may start with a tuple.
@@ -21430,6 +21552,38 @@ fn as_gives_its_target_type_or_null_for_every_target() {
         explained(("src/Demo/Sweep.sharp", sweep), &files),
         ["16:39 semantics `as` converts to a type that is not nullable or `void`. Write `as Paid`."]
     );
+}
+
+/// Spec section 21: an `as` whose value can never be of its target type always gives null, so it is refused at the
+/// cast, which names both types, and a member read on its result reports nothing more, for an open interface as for a
+/// sealed one. An `as` that can succeed, as `maybe`'s, reports nothing.
+#[test]
+fn an_as_that_always_gives_null_is_refused_at_the_cast() {
+    let open = [
+        ("src/Demo/Payment.sharp", "namespace Demo;\n\npublic interface Payment\n{\n}\n"),
+        (
+            "src/Demo/Paid.sharp",
+            "namespace Demo;\n\npublic class Paid : Payment\n{\n    public int amount { get; init; }\n}\n",
+        ),
+    ];
+    let sealed = [
+        ("src/Demo/Payment.sharp", "namespace Demo;\n\npublic sealed interface Payment\n{\n}\n"),
+        (
+            "src/Demo/Paid.sharp",
+            "namespace Demo;\n\npublic class Paid : Payment\n{\n    public int amount { get; init; }\n}\n",
+        ),
+        ("src/Demo/Refund.sharp", "namespace Demo;\n\npublic class Refund : Payment\n{\n}\n"),
+    ];
+    let sweep = "namespace Demo;\n\npublic class Sweep\n{\n    public static int? total(Payment x)\n    {\n        if (x is not Paid) {\n            return (x as Paid).amount;\n        }\n        return null;\n    }\n\n    public static int? maybe(Payment x) => (x as Paid)?.amount;\n}\n";
+
+    let refused = |value_type: &str| {
+        vec![format!(
+            "8:21 impossible-type-comparison `x` is a `{value_type}` that is never a `Paid` here, so `x as Paid` always gives `null`. Remove the `as`, or convert a value that can be a `Paid`."
+        )]
+    };
+
+    assert_eq!(explained(("src/Demo/Sweep.sharp", sweep), &open), refused("Payment"));
+    assert_eq!(explained(("src/Demo/Sweep.sharp", sweep), &sealed), refused("Refund"));
 }
 
 /// Spec section 21: `as` converts a value, and only `is` narrows one, so the local an `as` converts keeps its own type
@@ -26719,7 +26873,7 @@ fn a_message_names_a_tested_value_as_sharp_writes_it() {
         [
             "7:49 impossible-type-comparison Impossible type assertion: `this.total()` of type `int` can never be `string`. | Argument `this.total()` has type `int` | The assertion expects `this.total()` to be `string`, but no value of type `int` can satisfy this. | Check that the correct variable is being passed, or update the assertion type.",
             "9:47 redundant-type-comparison Redundant type assertion: `this.total()` is already `int`. | Argument `this.total()` already has type `int` | The assertion against `int` always holds because `this.total()` is `int`. | Consider removing this assertion or replacing it with `default` if used in a `match` arm.",
-            "11:46 impossible-type-comparison Impossible type assertion: `this.total()` of type `int` can never be `string`. | Argument `this.total()` has type `int` | The assertion expects `this.total()` to be `string`, but no value of type `int` can satisfy this. | Check that the correct variable is being passed, or update the assertion type.",
+            "11:30 impossible-type-comparison `this.total()` is an `int` that is never a `string` here, so `this.total() as string` always gives `null`. | Always `null`. | Remove the `as`, or convert a value that can be a `string`.",
         ]
     );
 }
@@ -29282,6 +29436,30 @@ fn a_php_built_in_class_is_the_name_a_misspelled_class_is() {
         "namespace Sharp.Data;\n\nimport DateTimeImmutable;\nimport PDO;\n\npublic class Stamp\n{\n    public string year(DateTimeImmutable moment) => moment.format(\"Y\");\n\n    public int drivers() => PDO.getAvailableDrivers().count();\n\n    public DateTimeImmutable? at(string text)\n    {\n        const parsed = DateTimeImmutable.createFromFormat(\"Y-m-d\", text);\n        return parsed is DateTimeImmutable ? parsed : null;\n    }\n\n    public PDO open() => new PDO(\"sqlite::memory:\");\n}\n",
     );
     assert_eq!(issues(library, &[]), Vec::<String>::new());
+}
+
+/// Decision 83: a `.sharp` file names no PHP built-in class outside the standard library, so a message never asks it to
+/// write one. A plain PHP parameter of a type that holds one, as `\Closure(): \PDO`, refuses a wrong argument with
+/// plain PHP as the place for the call, where any other type asks for a value of that type, and a local that holds
+/// such a value refuses another value with a local of its own as the fix. The value itself passes on unnamed.
+#[test]
+fn a_message_never_asks_for_a_type_php_sharp_cannot_name() {
+    let pool = (
+        "src/Lib/Pool.php",
+        "<?php\n\nnamespace Lib;\n\nfinal class Pool\n{\n    /** @param \\Closure(): \\PDO $connect */\n    public static function using(\\Closure $connect): void\n    {\n    }\n\n    /** @return \\Closure(): \\PDO */\n    public static function connector(): \\Closure\n    {\n        return static fn (): \\PDO => new \\PDO('sqlite::memory:');\n    }\n}\n",
+    );
+    let sharp = "namespace App.Shop;\n\nimport Lib.Pool;\n\npublic class Store\n{\n    public static void open() => Pool.using(1);\n\n    public static void swap()\n    {\n        let connect = Pool.connector();\n        connect = 1;\n        Pool.using(connect);\n    }\n}\n";
+
+    assert_eq!(
+        refusals(("app/Shop/Store.sharp", sharp), &[pool]),
+        [
+            "7:45 invalid-argument Invalid argument type for argument #1 of `Pool.using`: expected `Function<PDO()>`, but found `int`. | `Function<PDO()>` holds `PDO`, which a `.sharp` file cannot name, so make this call to `Pool.using` from plain PHP.",
+            "12:19 invalid-local-assignment-value Invalid assignment to `connect`: it is declared as `Function<PDO()>`. | `Function<PDO()>` holds `PDO`, which a `.sharp` file cannot name, so give this value a local of its own.",
+        ]
+    );
+
+    let fixed = "namespace App.Shop;\n\nimport Lib.Pool;\n\npublic class Store\n{\n    public static int swap()\n    {\n        let connect = Pool.connector();\n        let count = 1;\n        Pool.using(connect);\n        return count;\n    }\n}\n";
+    assert_eq!(refusals(("app/Shop/Store.sharp", fixed), &[pool]), Vec::<String>::new());
 }
 
 /// Decision 83: the standard library names the interfaces a PHP# class implements for a plain PHP library, the root of
