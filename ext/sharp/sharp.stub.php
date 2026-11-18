@@ -175,7 +175,7 @@ function createDelegate(string $readOn, string $class, string $method, string $t
 
 function read(?object $receiver, string $class, string $property): mixed {}
 
-function write(?object $receiver, string $class, string $property, mixed $value, bool $beforeLoad = false): void {}
+function write(?object $receiver, string $class, string $property, mixed $value): void {}
 
 function readField(?object $receiver, string $class, string $field): mixed {}
 

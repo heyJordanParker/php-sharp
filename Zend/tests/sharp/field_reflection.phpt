@@ -1,5 +1,5 @@
 --TEST--
-Class<T>.fields() lists each field and each closed accessor-less auto-property's storage, and no other property, properties() lists no field, and a Field reads and writes the storage as a direct use from the calling code would, refuses an `init` storage that holds a value, and refuses a lazy object that has not loaded rather than load it
+Class<T>.fields() lists each field and each closed accessor-less auto-property's storage, and no other property, properties() lists no field, and a Field reads and writes the storage as a direct use from the calling code would, refuses an `init` storage that holds a value, refuses a read of a lazy object that has not loaded rather than load it, and writes one without loading it
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -100,17 +100,17 @@ array(8) {
   [0]=>
   string(112) "Error: `get` reads the storage of Fields\Row::$name, and the lazy object has not loaded, which `get` never loads"
   [1]=>
-  string(113) "Error: `set` writes the storage of Fields\Row::$name, and the lazy object has not loaded, which `set` never loads"
-  [2]=>
   int(0)
+  [2]=>
+  bool(true)
   [3]=>
-  bool(false)
+  string(3) "ada"
   [4]=>
   int(0)
   [5]=>
-  string(3) "row"
+  string(5) "plain"
   [6]=>
   int(1)
   [7]=>
-  string(3) "row"
+  string(3) "ada"
 }

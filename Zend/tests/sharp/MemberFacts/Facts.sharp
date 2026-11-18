@@ -1,6 +1,8 @@
 namespace App.Facts;
 
+import Lib.HookedLedger;
 import Lib.PlainJournal;
+import Lib.PlainLedger;
 
 // Reads each fact `methods()`, `properties()` and `fields()` give about a class's members, inherited ones included, spec
 // section 25.
@@ -32,6 +34,26 @@ public static class Facts
             );
         }
         return lines;
+    }
+
+    // `PlainLedger`'s `code` read and written through its `Field` on a `HookedLedger`, which declares it again with
+    // accessors, which a `Field` never runs.
+    public static List<string> hookedRefusals()
+    {
+        const code = typeof(PlainLedger).fields().first(stored => stored.name == "code");
+        const hooked = new HookedLedger();
+        List<string> refusals = [];
+        try {
+            code.get(hooked);
+        } catch (Throwable failure) {
+            refusals.add(Class.of(failure).name() + ": " + failure.getMessage());
+        }
+        try {
+            code.set(hooked, "other");
+        } catch (Throwable failure) {
+            refusals.add(Class.of(failure).name() + ": " + failure.getMessage());
+        }
+        return refusals;
     }
 
     // A `new` in a default creates a new object on each read.

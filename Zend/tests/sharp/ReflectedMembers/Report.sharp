@@ -6,6 +6,8 @@ public static class Report
     private static Property property(Class<Object> type, string name)
         => type.properties().first(property => property.name == name);
 
+    private static Field field(Class<Object> type, string name) => type.fields().first(field => field.name == name);
+
     // A static read and written through its Property, and a static method invoked with no receiver.
     public static List<Any?> statics()
     {
@@ -162,7 +164,8 @@ public static class Report
         ];
     }
 
-    // A lazy object loads at its first property read, and a property written before the load reads without it.
+    // A lazy object loads at its first property read, and storage its Field wrote before the load reads without it and
+    // keeps the value once it loads.
     public static List<Any?> lazy()
     {
         Account.opened = 0;
@@ -170,10 +173,10 @@ public static class Report
             Account.opened += 1;
             loaded.owner = "grace";
         });
-        Report.property(typeof(Account), "balance").setBeforeLoad(account, 99);
+        Report.field(typeof(Account), "balance").set(account, 99);
         List<string> refused = [];
         try {
-            Report.property(typeof(Account), "pin").setBeforeLoad(account, 1234);
+            Report.field(typeof(Account), "pin").set(account, 1234);
         } catch (Throwable failure) {
             refused.add(failure.getMessage());
         }

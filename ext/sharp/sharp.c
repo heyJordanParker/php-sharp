@@ -5437,7 +5437,8 @@ static void sharp_add_modifiers(
  * sharp_declared_types reads it, with what writes it and its modifiers in `words`, as a line of sharp_declared spells
  * them and sharp_add_modifiers adds them: its PHP# declaration as its class writes it, or its PHP declaration, whose
  * `readonly` has no writer, and whose write takes its set visibility. A PHP# field's words end with `field`, by which
- * `Class<T>.fields()` and `properties()` tell it from a property, spec section 25. */
+ * `Class<T>.fields()` and `properties()` tell it from a property, and a plain PHP property's with `plain`, by which
+ * `fields()` lists one that declares no hook whether or not a subclass may replace it, spec section 25. */
 static const sharp_type *sharp_property_declared_type(
 	const zend_property_info *info, const zend_class_entry *ce, const sharp_type *arguments, smart_str *words)
 {
@@ -5471,6 +5472,9 @@ static const sharp_type *sharp_property_declared_type(
 	sharp_add_modifiers(words, info->flags, info->ce, plain, replaces);
 	if (info->flags & ZEND_ACC_FIELD) {
 		sharp_add_word(words, "field");
+	}
+	if (plain) {
+		sharp_add_word(words, "plain");
 	}
 	const sharp_type *types = sharp_declared_types(line.type, line.type_length, info->ce, ce, arguments);
 	smart_str_free(&written);
@@ -6114,7 +6118,7 @@ static zend_class_entry *sharp_reflected_class(zend_object *receiver, zend_strin
 static void sharp_reflected_read(zend_execute_data *execute_data, zend_object *receiver, zend_string *class_name,
 	zend_string *name, zval *return_value);
 static void sharp_reflected_write(zend_execute_data *execute_data, zend_object *receiver, zend_string *class_name,
-	zend_string *name, zval *value, bool before_load, zval *return_value);
+	zend_string *name, zval *value, zval *return_value);
 
 /* The kind of accessor the name `name` gives, `$total::get` or `$total::set` as PHP 8.4 names a property hook, with its
  * property's name, `total`, in `property`, which the caller releases: ZEND_PROPERTY_HOOK_GET, ZEND_PROPERTY_HOOK_SET,
@@ -6173,7 +6177,7 @@ ZEND_FUNCTION(Sharp_Internal_invoke)
 			sharp_reflected_read(execute_data, receiver, class_name, property, return_value);
 		} else {
 			sharp_reflected_write(execute_data, receiver, class_name, property, zend_hash_index_find(arguments, 0),
-				false, return_value);
+				return_value);
 		}
 		zend_string_release_ex(property, false);
 		return;
@@ -6362,56 +6366,20 @@ ZEND_FUNCTION(Sharp_Internal_read)
 	sharp_reflected_read(execute_data, receiver, class_name, name, return_value);
 }
 
-/* The write of `value` into the property `name` that `ce` declares, by code in `scope`, on `receiver`, a lazy object
- * that has not loaded, without loading it, as PHP 8.4's ReflectionProperty::setRawValueWithoutLazyInitialization
- * writes: the code reaches the property as a direct write would, its `set` included, the property stops being lazy,
- * and the object counts as loaded once it has no lazy property left. A computed property has no storage to write. */
-static void sharp_write_before_load(
-	zend_class_entry *scope, zend_object *receiver, const zend_class_entry *ce, zend_string *name, zval *value)
-{
-	const zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, name);
-	if (info && !(info->flags & ZEND_ACC_PRIVATE)) {
-		info = zend_hash_find_ptr(&receiver->ce->properties_info, name);
-	}
-	if (!info || (info->flags & ZEND_ACC_VIRTUAL)) {
-		zend_throw_error(NULL, "`setBeforeLoad` writes a property's storage, and %s::$%s has none",
-			ZSTR_VAL(ce->name), ZSTR_VAL(name));
-		return;
-	}
-	zval *slot = OBJ_PROP(receiver, info->offset);
-	bool was_lazy = Z_PROP_FLAG_P(slot) & IS_PROP_LAZY;
-	Z_PROP_FLAG_P(slot) &= ~IS_PROP_LAZY;
-	zend_update_property_ex(scope, receiver, name, value);
-	if (!was_lazy) {
-		return;
-	}
-	/* A refused write leaves the property lazy, as PHP leaves it. */
-	if (EG(exception) && Z_TYPE_P(slot) == IS_UNDEF) {
-		Z_PROP_FLAG_P(slot) |= IS_PROP_LAZY;
-	} else if (zend_lazy_object_decr_lazy_props(receiver)) {
-		zend_lazy_object_realize(receiver);
-	}
-}
-
 /* The write of `value` into the property `name` that `class_name` declares on `receiver`, or into the static `name`,
  * by the code that called the standard library member whose body made the internal call `execute_data`, see
- * Sharp_Internal_write, before `receiver` loads when `before_load` says so, see sharp_write_before_load. A static whose
- * accessors run as hidden static methods runs its `set`, and one with no `set` and no storage is read-only. */
+ * Sharp_Internal_write. A static whose accessors run as hidden static methods runs its `set`, and one with no `set` and
+ * no storage is read-only. */
 static void sharp_reflected_write(zend_execute_data *execute_data, zend_object *receiver, zend_string *class_name,
-	zend_string *name, zval *value, bool before_load, zval *return_value)
+	zend_string *name, zval *value, zval *return_value)
 {
 	bool is_static;
-	zend_class_entry *ce = sharp_property_class(receiver, class_name, name, before_load ? "setBeforeLoad" : "set",
-		&is_static);
+	zend_class_entry *ce = sharp_property_class(receiver, class_name, name, "set", &is_static);
 	const zend_execute_data *caller = sharp_reflection_caller(execute_data);
 	if (!ce || !sharp_reaches_property(caller, ce, name)) {
 		RETURN_THROWS();
 	}
 	zend_class_entry *scope = caller ? caller->func->common.scope : NULL;
-	if (!is_static && before_load && zend_object_is_lazy(receiver) && !zend_lazy_object_initialized(receiver)) {
-		sharp_write_before_load(scope, receiver, ce, name, value);
-		return;
-	}
 	if (!is_static) {
 		zend_update_property_ex(scope, receiver, name, value);
 		return;
@@ -6432,26 +6400,22 @@ static void sharp_reflected_write(zend_execute_data *execute_data, zend_object *
  * on `receiver`, or into the static `name`, as .NET's PropertyInfo.SetValue and Kotlin's KMutableProperty1.set make
  * it. The caller of `set` reaches the property as a direct write would, a get-only or readonly one included, and the
  * value is checked against the property's type as a direct PHP# write's is, since `write` runs in strict mode
- * (PHP_MINIT_FUNCTION). With `beforeLoad`, `Property.setBeforeLoad(receiver, value)`, it writes a lazy object that has
- * not loaded without loading it, see sharp_write_before_load. */
+ * (PHP_MINIT_FUNCTION). */
 ZEND_FUNCTION(Sharp_Internal_write)
 {
 	zend_object *receiver;
 	zend_string *class_name;
 	zend_string *name;
 	zval *value;
-	bool before_load = false;
 
-	ZEND_PARSE_PARAMETERS_START(4, 5)
+	ZEND_PARSE_PARAMETERS_START(4, 4)
 		Z_PARAM_OBJ_OR_NULL(receiver)
 		Z_PARAM_STR(class_name)
 		Z_PARAM_STR(name)
 		Z_PARAM_ZVAL(value)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_BOOL(before_load)
 	ZEND_PARSE_PARAMETERS_END();
 
-	sharp_reflected_write(execute_data, receiver, class_name, name, value, before_load, return_value);
+	sharp_reflected_write(execute_data, receiver, class_name, name, value, return_value);
 }
 
 /* Whether the next use of the statics of `ce` runs code a project wrote, spec section 6: the `#statics` of `ce` or of a
@@ -6473,23 +6437,6 @@ static bool sharp_statics_run_code(zend_class_entry *ce)
 	return false;
 }
 
-/* Whether code in `scope` reaches the write of the property `info` by its set visibility, which PHP checks in its
- * handler and a hook trampoline passes, as zend_asymmetric_property_has_set_access decides, with PHP's Error for a
- * write it can't make. */
-static bool sharp_reaches_set(const zend_property_info *info, const zend_class_entry *scope, zend_string *name)
-{
-	if (!(info->flags & ZEND_ACC_PPP_SET_MASK)
-		|| ((info->flags & ZEND_ACC_PRIVATE_SET) ? scope == info->ce
-			: zend_check_protected(info->prototype->ce, scope))) {
-		return true;
-	}
-	zend_throw_error(NULL, "Cannot modify %s(set) property %s::$%s from %s%s",
-		(info->flags & ZEND_ACC_PRIVATE_SET) ? "private" : "protected", ZSTR_VAL(info->ce->name), ZSTR_VAL(name),
-		scope ? "scope " : "global scope", scope ? ZSTR_VAL(scope->name) : "");
-
-	return false;
-}
-
 /* Whether the PHP# line of the property `info`, named `name`, gives it `init`, spec section 6.1, by which its words
  * open, as `init protected`. */
 static bool sharp_is_init(const zend_property_info *info, zend_string *name)
@@ -6507,14 +6454,16 @@ static bool sharp_is_init(const zend_property_info *info, zend_string *name)
 }
 
 /* Spec section 25: `Field.get(receiver)`, or with `value` `Field.set(receiver, value)`, the read or the write of the
- * storage of the field or auto-property `name` that `class_name` declares, on `receiver`, or of the static `name`, by
- * the code that called the standard library member whose body made the internal call `execute_data`, as .NET's
- * FieldInfo.GetValue and SetValue reach a field. The code reaches the storage as a direct use from it would, and a
- * written value is checked against its type as `Property.set` checks it, since `writeField` runs in strict mode
+ * storage of the field, auto-property or plain PHP property `name` that `class_name` declares, on `receiver`, or of the
+ * static `name`, by the code that called the standard library member whose body made the internal call `execute_data`,
+ * as .NET's FieldInfo.GetValue and SetValue reach a field. The code reaches the storage as a direct use from it would,
+ * and a written value is checked against its type as `Property.set` checks it, since `writeField` runs in strict mode
  * (PHP_MINIT_FUNCTION). The storage of an `init` property takes a write only while it holds no value, as only the
- * object's creation writes it. No code a project wrote runs: an accessor a subclass gives the storage runs no body, as
- * ReflectionProperty::getRawValue reads through PHP's hook trampoline, and a lazy object that has not loaded or statics
- * whose initial values have not run throw Error rather than running them. */
+ * object's creation writes it. A write into a lazy object that has not loaded writes the storage without loading it,
+ * as PHP 8.4's ReflectionProperty::setRawValueWithoutLazyInitialization writes: the property stops being lazy, and the
+ * object counts as loaded once it has no lazy property left. No code a project wrote runs, so a receiver whose class
+ * gives the property an accessor, as a PHP 8.4 subclass may by declaring it again, a read of a lazy object that has
+ * not loaded and statics whose initial values have not run throw Error rather than run that code. */
 static void sharp_storage_use(zend_execute_data *execute_data, zend_object *receiver, zend_string *class_name,
 	zend_string *name, zval *value, zval *return_value)
 {
@@ -6544,16 +6493,22 @@ static void sharp_storage_use(zend_execute_data *execute_data, zend_object *rece
 		}
 		RETURN_COPY_DEREF(read);
 	}
-	if (zend_object_is_lazy(receiver) && !zend_lazy_object_initialized(receiver)) {
-		zend_throw_error(NULL, "`%s` %s the storage of %s::$%s, and the lazy object has not loaded, which `%s` never "
-			"loads", member, use, ZSTR_VAL(ce->name), ZSTR_VAL(name), member);
-		RETURN_THROWS();
-	}
 	const zend_class_entry *outer = EG(fake_scope);
 	EG(fake_scope) = scope;
 	zend_property_info *info = zend_get_property_info(receiver->ce, name, false);
 	EG(fake_scope) = outer;
 	if (info == ZEND_WRONG_PROPERTY_INFO) {
+		RETURN_THROWS();
+	}
+	if (info && info->hooks) {
+		zend_throw_error(NULL, "`%s` %s the storage of %s::$%s, and %s gives it an accessor, which `%s` never runs",
+			member, use, ZSTR_VAL(ce->name), ZSTR_VAL(name), ZSTR_VAL(receiver->ce->name), member);
+		RETURN_THROWS();
+	}
+	bool unloaded = zend_object_is_lazy(receiver) && !zend_lazy_object_initialized(receiver);
+	if (unloaded && (!value || !info)) {
+		zend_throw_error(NULL, "`%s` %s the storage of %s::$%s, and the lazy object has not loaded, which `%s` never "
+			"loads", member, use, ZSTR_VAL(ce->name), ZSTR_VAL(name), member);
 		RETURN_THROWS();
 	}
 	if (value && info && IS_VALID_PROPERTY_OFFSET(info->offset) && !Z_ISUNDEF_P(OBJ_PROP(receiver, info->offset))
@@ -6562,12 +6517,7 @@ static void sharp_storage_use(zend_execute_data *execute_data, zend_object *rece
 			"once, and it holds a value", ZSTR_VAL(info->ce->name), ZSTR_VAL(name));
 		RETURN_THROWS();
 	}
-	int kind = value ? ZEND_PROPERTY_HOOK_SET : ZEND_PROPERTY_HOOK_GET;
-	if (!info || !info->hooks || !info->hooks[kind]) {
-		if (value) {
-			zend_update_property_ex(scope, receiver, name, value);
-			return;
-		}
+	if (!value) {
 		zval read;
 		zval *found = zend_read_property_ex(scope, receiver, name, false, &read);
 		if (EG(exception)) {
@@ -6581,14 +6531,22 @@ static void sharp_storage_use(zend_execute_data *execute_data, zend_object *rece
 		}
 		RETURN_COPY_VALUE(&read);
 	}
-	if (value && !sharp_reaches_set(info, scope, name)) {
-		RETURN_THROWS();
+	if (!unloaded) {
+		zend_update_property_ex(scope, receiver, name, value);
+		return;
 	}
-	zend_function *raw = zend_get_property_hook_trampoline(info, kind, name);
-	if (value) {
-		zend_call_known_instance_method_with_1_params(raw, receiver, NULL, value);
-	} else {
-		zend_call_known_instance_method_with_0_params(raw, receiver, return_value);
+	zval *slot = OBJ_PROP(receiver, info->offset);
+	bool was_lazy = Z_PROP_FLAG_P(slot) & IS_PROP_LAZY;
+	Z_PROP_FLAG_P(slot) &= ~IS_PROP_LAZY;
+	zend_update_property_ex(scope, receiver, name, value);
+	if (!was_lazy) {
+		return;
+	}
+	/* A refused write leaves the property lazy, as PHP leaves it. */
+	if (EG(exception) && Z_TYPE_P(slot) == IS_UNDEF) {
+		Z_PROP_FLAG_P(slot) |= IS_PROP_LAZY;
+	} else if (zend_lazy_object_decr_lazy_props(receiver)) {
+		zend_lazy_object_realize(receiver);
 	}
 }
 
