@@ -12,7 +12,7 @@ set -euo pipefail
 # sharp/mago/Cargo.toml's version, and bump: whether origin has no tag yet for that version, so the change releases
 # it. A release runs every check, so a bump's code and mago are true.
 usage() {
-  echo "usage: sharp/bin/check [workflows | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php | patch-coverage]..." >&2
+  echo "usage: sharp/bin/check [workflows | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php]..." >&2
   echo "       sharp/bin/check --changes <base>" >&2
   exit 2
 }
@@ -38,7 +38,7 @@ changes() {
     esac
     case "$file" in
       sharp/mago/* | sharp/composer/* | sharp/harness/Psr/* | sharp/phpunit/* | sharp/docker/* \
-        | sharp/bin/check | sharp/bin/coverage | sharp/bin/build-mago | sharp/bin/jobs | sharp/bin/test \
+        | sharp/bin/check | sharp/bin/build-mago | sharp/bin/jobs | sharp/bin/test \
         | .github/workflows/mago.yml | .github/actions/setup-lean/* | .github/actions/clean-kept-build/* \
         | .github/actions/mago-cache/* | .github/actions/mago-cache-prune/* | .github/actions/red-master-issue/*)
         mago=true
@@ -79,7 +79,7 @@ if [[ ${1:-} == --changes ]]; then
   exit 0
 fi
 
-all=(workflows spec-guard mago-checks linux upstream hosts generated mago-tests plain-php patch-coverage)
+all=(workflows spec-guard mago-checks linux upstream hosts generated mago-tests plain-php)
 for gate in "$@"; do
   if [[ " ${all[*]} " != *" $gate "* ]]; then
     usage
@@ -111,7 +111,7 @@ if [[ ${#gates[@]} -eq 0 ]]; then
     gates+=(linux upstream hosts generated)
   fi
   if [[ $needs == *mago=true* ]]; then
-    gates+=(mago-tests plain-php patch-coverage)
+    gates+=(mago-tests plain-php)
   fi
 fi
 
@@ -210,9 +210,9 @@ no_notify() {
   fi
   grep -q "did not match any packages" <<< "$output"
 }
-# cargo install puts typos in the folder cargo keeps installed tools in, which cargo finds its own subcommands in, such
-# as cargo-llvm-cov, but which a Mac with Homebrew's rustup leaves off PATH. That folder can hold an older rustup's
-# rustc, so it never joins PATH.
+# cargo install puts typos in the folder cargo keeps installed tools in, which cargo finds its own subcommands in, but
+# which a Mac with Homebrew's rustup leaves off PATH. That folder can hold an older rustup's rustc, so it never joins
+# PATH.
 misspellings() {
   local typos
   typos="$(command -v typos || echo "${CARGO_HOME:-$HOME/.cargo}/bin/typos")"
@@ -441,11 +441,6 @@ plain_phpunit() {
 gate_plain_php() {
   step composer_install
   step plain_phpunit
-}
-
-# mago.yml's patch-coverage, against the merge base.
-gate_patch_coverage() {
-  step sharp/bin/coverage "$(base)"
 }
 
 cd "$root"

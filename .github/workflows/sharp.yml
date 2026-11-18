@@ -26,9 +26,7 @@ jobs:
   # A pull request runs the Linux suites, each job on 4 cores. A release's pull request, whose sharp/mago/Cargo.toml
   # version has no tag yet, also runs what needs the Mac, the runtime image and the release assets, so every check that
   # guards a release runs before the merge, on the tree that merges. GitHub runs 20 of the account's hosted jobs at once,
-  # across all its repositories, and a job past them waits: a pull request's runs hold 14 at most, and a release's 18,
-  # and mago.yml's checks run beside patch-coverage, since one after the other they took 13.4 minutes on pull request
-  # #337.
+  # across all its repositories, and a job past them waits: a pull request's runs hold 14 at most, and a release's 18.
   #
   # A tree runs the checks once, as bors's "not rocket science" rule tests the exact tree that lands once. A push to
   # master runs none of them when a pull request's run passed CI_PASSED on its tree, as .github/actions/passed-tree

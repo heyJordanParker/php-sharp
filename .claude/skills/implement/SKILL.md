@@ -21,7 +21,7 @@ Build the final version: no stopgap, no code marked "until X lands", and no narr
 
 ## 3. Check only what the change reaches
 
-Run the tests the acceptance criteria name and the tests of each crate you changed, plus `cargo clippy -- -D warnings` and `cargo fmt --check` on those crates. The PR's CI runs everything else once, so never run `sharp/bin/coverage`, `sharp/bin/spec`, the phpt suite or `sharp/bin/test --mago`.
+Run the tests the acceptance criteria name and the tests of each crate you changed, plus `cargo clippy -- -D warnings` and `cargo fmt --check` on those crates. The PR's CI runs everything else once, so never run `sharp/bin/spec`, the phpt suite or `sharp/bin/test --mago`.
 
 Every cargo command runs under `nice -n 15`, with `CARGO_TARGET_DIR=sharp/build/<platform>/mago` and at most the job count `sharp/bin/jobs` prints, so the machine keeps its cores and compiles one copy of the workspace.
 
