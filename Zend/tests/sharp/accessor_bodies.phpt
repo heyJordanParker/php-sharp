@@ -4,7 +4,6 @@ PHP# accessor bodies run as property hooks: field and value, a validating set, a
 <?php
 
 require __DIR__ . '/harness/Row.inc';
-require __DIR__ . '/harness/Words.inc';
 require __DIR__ . '/vendor/autoload.php';
 
 // Each run repeats, so the JIT variants compile the accessors and methods before the second run.

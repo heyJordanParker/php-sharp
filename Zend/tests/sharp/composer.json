@@ -124,6 +124,7 @@
             "LazyObjects\\": "LazyObjects/",
             "Lazy\\": "Lazy/",
             "Legacy\\": "TypeArgumentsLegacy/",
+            "Lib\\": "Lib/",
             "ListChanges\\": "ListChanges/",
             "ListMembers\\": "ListMembers/",
             "LoopNames\\": "LoopNames/",
