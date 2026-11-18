@@ -1,13 +1,13 @@
 name: Release
 
-# Builds a release's assets: the mago binary per platform with its attestation, Mago's source archives, the SHA-256 of
-# every asset and the release's notes. PHP# and Mago release at one version: ext/sharp/php_sharp.h's PHP_SHARP_VERSION
-# and sharp/mago/Cargo.toml's version must be equal, and sharp/CHANGELOG.md must have that version's section.
+# Builds a release's assets: the mago binary per platform with its attestation, Mago's source archives and the SHA-256
+# of every asset. PHP# and Mago release at one version, the root package's in sharp/mago/Cargo.toml, which the binary and
+# the engine take when they build.
 #
 # A release builds its binaries once, as Humble and Farley's Continuous Delivery asks. sharp.yml's RELEASE_ASSETS calls
-# this workflow in a bump's pull request run, beside the suites, and sharp.yml's RELEASE publishes exactly these files
-# when the merge's tree is the one that run passed. Its attestations name this workflow as their signer, which
-# install.sh and mago self-update verify, so the binaries build here and nowhere else.
+# this workflow in the push of a release's merge, from the tree its pull request's run passed, and sharp.yml's RELEASE
+# publishes exactly these files. Its attestations name this workflow as their signer, which install.sh and mago
+# self-update verify, so the binaries build here and nowhere else.
 on:
   workflow_call:
 
@@ -33,7 +33,7 @@ jobs:
         run: |
           rustup update stable
           cargo metadata --no-deps --format-version 1 | jq -r '
-            .packages[0] |
+            .packages[] | select(.name == "mago") |
             [
               "version=" + .version,
               "maintainer=" + (.authors[0] // ""),
@@ -42,39 +42,6 @@ jobs:
             ] |
             join("\n")
           ' | tee -a "$GITHUB_OUTPUT"
-      - name: PHP# and Mago share one version
-        env:
-          VERSION: ${{ steps.crate_metadata.outputs.version }}
-        run: |
-          engine=$(sed -n 's/^#define PHP_SHARP_VERSION "\(.*\)"$/\1/p' ../../ext/sharp/php_sharp.h)
-          if [[ "$engine" != "$VERSION" ]]; then
-            echo "::error::ext/sharp/php_sharp.h is PHP# $engine, and sharp/mago/Cargo.toml is Mago $VERSION. Release both at one version."
-            exit 1
-          fi
-      # The section runs from its "## [<version>]" heading, which may carry a date, to the next version's heading or
-      # the link definitions that end the file.
-      - name: The release notes are sharp/CHANGELOG.md's section of the version
-        env:
-          VERSION: ${{ steps.crate_metadata.outputs.version }}
-        run: |
-          notes="$RUNNER_TEMP/release-notes.md"
-          awk -v heading="## [$VERSION]" '
-            $0 == heading || index($0, heading " ") == 1 { found = 1; next }
-            found && (/^## \[/ || /^\[.*\]: /) { exit }
-            found { print }
-          ' ../CHANGELOG.md > "$notes"
-          if ! grep -q '[^[:space:]]' "$notes"; then
-            echo "::error::sharp/CHANGELOG.md has no \"## [$VERSION]\" section, so release $VERSION has no notes. Add the section."
-            exit 1
-          fi
-          cat "$notes"
-      # sharp.yml's RELEASE publishes them with the assets.
-      - name: "Artifact upload: release notes"
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-notes
-          path: ${{ runner.temp }}/release-notes.md
-          if-no-files-found: error
     outputs:
       name: "mago"
       bin-name: "mago"
@@ -157,7 +124,7 @@ jobs:
           #   sets it. On the M2 Max, fat LTO with one codegen unit and this profile analyzed and compiled a
           #   14,860-file vendor tree in 15% fewer instructions and 15 to 19% fewer CPU-seconds than a thin-LTO build
           #   of the same source with 16 units, and a 1,536-file PHP# project in 1.6 to 2.4% fewer instructions. So
-          #   its 37-minute build on the self-hosted Mac stays.
+          #   its 37-minute build on the self-hosted Mac stays, in the release's push, after its pull request's run.
           #
           # The targets PHP# runs on: macOS on Apple silicon, and glibc Linux on arm64 and x86_64.
 

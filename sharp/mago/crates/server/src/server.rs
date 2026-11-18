@@ -168,15 +168,18 @@ impl Server {
     /// its compiled file, which `compiled` gives, and is not lowered again. `stamp` gives the size, modification time
     /// and hash of the file at a workspace-relative path, or none when no file is there. `check` gets the Lean
     /// translation of each file whose laws are checked again and of each file they reach, with the reach, and returns
-    /// the issues of each file whose law is not proved. Each compiled file's header names `standard_library`, the
-    /// standard library the workspace compiles against. `refusing` keeps the analysis's errors that refuse their file.
+    /// the issues of each file whose law is not proved. Each compiled file's header names `build_id`, the build ID of
+    /// the checker that compiles, and `standard_library`, the standard library the workspace compiles against.
+    /// `refusing` keeps the analysis's errors that refuse their file.
     ///
     /// # Errors
     ///
     /// Returns [`ServerError`] when no analysis ran yet, or when re-analyzing a file, `compiled`, `stamp` or `check`
     /// fails.
+    #[allow(clippy::too_many_arguments)]
     pub fn compile(
         &mut self,
+        build_id: u128,
         last: &CompiledFiles,
         compiled: impl FnMut(&File) -> Result<Option<Vec<u8>>, DatabaseError>,
         stamp: impl FnMut(&[u8]) -> Result<Option<Input>, DatabaseError>,
@@ -184,7 +187,9 @@ impl Server {
         standard_library: &Library,
         refusing: impl FnOnce(IssueCollection) -> IssueCollection,
     ) -> Result<(Vec<(FileId, Compilation)>, CompiledFiles), ServerError> {
-        self.service.compile(last, compiled, stamp, check, standard_library, refusing).map_err(ServerError::from)
+        self.service
+            .compile(build_id, last, compiled, stamp, check, standard_library, refusing)
+            .map_err(ServerError::from)
     }
 
     /// The standard library's inline forms, which `mago convert` reads to find the library member that runs a PHP

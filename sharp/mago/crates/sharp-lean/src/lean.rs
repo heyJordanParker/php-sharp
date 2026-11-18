@@ -11,7 +11,6 @@ use std::path::PathBuf;
 
 use foldhash::HashMap;
 use foldhash::HashSet;
-use mago_build_id::BUILD_ID;
 use mago_codex::graph::strongly_connected_parts;
 use mago_database::error::DatabaseError;
 use mago_database::error::IOAction;
@@ -54,6 +53,9 @@ pub const PROOFS: &str = "proofs.json";
 #[derive(Debug)]
 pub struct Lean {
     root: PathBuf,
+    mago_version: &'static str,
+    /// The build ID of the mago that proves, as [`Record`] names the build that wrote it.
+    build: String,
 }
 
 /// Every law of the translations, in an order where each comes after each law it calls.
@@ -125,8 +127,8 @@ enum Outcome {
 /// the checker's limits stopped it there, which depends on the machine's load, so the record keeps none.
 type Ended = Result<Outcome, (String, Stop)>;
 
-/// [`PROOFS`]: how the proof of each law ended, by the proof's key, as [`proof_key`] gives it, written by this checker
-/// build. A law whose key is in it is never proved again.
+/// [`PROOFS`]: how the proof of each law ended, by the proof's key, as [`proof_key`] gives it, written by the checker
+/// build `build` names. A law whose key is in it is never proved again.
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Record {
     build: String,
@@ -143,13 +145,13 @@ struct Recorded {
 }
 
 impl Record {
-    /// The record at `path`, or an empty one when none is there or another checker build wrote it.
-    fn read(path: &Path) -> Self {
+    /// The record at `path`, or an empty one of `build` when none is there or another checker build wrote it.
+    fn read(path: &Path, build: &str) -> Self {
         fs::read(path)
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Record>(&bytes).ok())
-            .filter(|record| record.build == build())
-            .unwrap_or_default()
+            .filter(|record| record.build == build)
+            .unwrap_or_else(|| Record { build: build.to_owned(), proofs: BTreeMap::new() })
     }
 
     /// Keeps each proof of a law that a file of `law_files` states and whose key `keys` doesn't replace, as it holds
@@ -162,8 +164,7 @@ impl Record {
     }
 
     /// Writes the record to `path`, unless it holds the same bytes.
-    fn write(mut self, path: &Path) -> io::Result<()> {
-        self.build = build();
+    fn write(self, path: &Path) -> io::Result<()> {
         let bytes = serde_json::to_vec(&self).map_err(io::Error::other)?;
         write_if_changed(path, &bytes)?;
 
@@ -171,16 +172,12 @@ impl Record {
     }
 }
 
-/// This checker build's ID, as [`Record`] names the build that wrote it.
-fn build() -> String {
-    format!("{BUILD_ID:032x}")
-}
-
 impl Lean {
-    /// The Lean step of the workspace at `root`.
+    /// The Lean step of the workspace at `root`, for mago `mago_version` of build `build_id`, which installs the law
+    /// checker when no `lake` is on the `PATH`.
     #[must_use]
-    pub fn new(root: &Path) -> Lean {
-        Lean { root: root.to_path_buf() }
+    pub fn new(root: &Path, mago_version: &'static str, build_id: u128) -> Lean {
+        Lean { root: root.to_path_buf(), mago_version, build: format!("{build_id:032x}") }
     }
 
     /// Proves the laws of `translations` and returns the issues that refuse each file whose law is not proven.
@@ -217,7 +214,7 @@ impl Lean {
             };
         }
 
-        let mut record = Record::read(&record_path);
+        let mut record = Record::read(&record_path, &self.build);
         let program = Program::new(&translations);
         let laws = Laws::new(&translations);
         let translated: HashSet<FileId> = translations.iter().map(|translation| translation.file).collect();
@@ -268,7 +265,7 @@ impl Lean {
                     continue;
                 }
 
-                let key = proof_key(law, &program, &laws);
+                let key = proof_key(&self.build, law, &program, &laws);
                 match record.proofs.get(&key) {
                     Some(recorded) => {
                         for issue in ended(law, &Ok(recorded.outcome.clone()), &receivers, &declared) {
@@ -295,7 +292,7 @@ impl Lean {
             return Ok(issues);
         }
 
-        let toolchain = package.toolchain()?;
+        let toolchain = package.toolchain(self.mago_version)?;
         if !matches!(toolchain, Toolchain::Ready) {
             if let Toolchain::Failed(failure) = &toolchain {
                 tracing::debug!("The law checker could not be installed: {failure}");
@@ -352,17 +349,17 @@ impl Lean {
     }
 }
 
-/// The key a law's proof ends once for: the hash of this checker build, the Lean version, and the statement and
+/// The key a law's proof ends once for: the hash of the checker build `build`, the Lean version, and the statement and
 /// theorem of the law and of each law it calls, transitively, with the text of every declaration their statements
 /// reach, as [`Program::reached`] gives them, each in the order of its name. An edit of a declaration a law reaches
 /// changes it, and nothing else does.
-fn proof_key(law: &Law, program: &Program<'_>, laws: &Laws<'_>) -> String {
+fn proof_key(build: &str, law: &Law, program: &Program<'_>, laws: &Laws<'_>) -> String {
     let mut hasher = Sha256::new();
     let mut part = |bytes: &[u8]| {
         hasher.update(format!("{}\0", bytes.len()));
         hasher.update(bytes);
     };
-    part(BUILD_ID.to_string().as_bytes());
+    part(build.as_bytes());
     part(library::TOOLCHAIN.as_bytes());
 
     let called: BTreeMap<&str, &str> = laws

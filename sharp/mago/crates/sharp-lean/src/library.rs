@@ -416,9 +416,10 @@ pub(crate) fn build_in(builds: &Path, lake: &Lake) -> io::Result<PathBuf> {
     Ok(library)
 }
 
-/// Installs the pinned elan into `elan/` in Mago's cache folder, with the library's Lean version, and returns its
-/// `lake`. `None` where elan ships no build for the platform Mago is built for. An error names the step that failed.
-pub(crate) fn install() -> io::Result<Option<Lake>> {
+/// Installs the pinned elan into `elan/` in Mago's cache folder, with the library's Lean version, for mago
+/// `mago_version`, and returns its `lake`. `None` where elan ships no build for the platform Mago is built for. An
+/// error names the step that failed.
+pub(crate) fn install(mago_version: &str) -> io::Result<Option<Lake>> {
     let Some(archive) = &ARCHIVE else {
         return Ok(None);
     };
@@ -426,7 +427,7 @@ pub(crate) fn install() -> io::Result<Option<Lake>> {
         format!("https://github.com/leanprover/elan/releases/download/v{ELAN_VERSION}/elan-{}.tar.gz", archive.target);
     let cache = cache_root()?;
 
-    install_from(&url, archive, &cache)
+    install_from(&url, archive, &cache, mago_version)
         .map(Some)
         .map_err(|error| io::Error::other(format!("{}: {error}", cache.join("elan").display())))
 }
@@ -435,7 +436,7 @@ pub(crate) fn install() -> io::Result<Option<Lake>> {
 /// Installs take turns under an exclusive lock on `elan.lock`, across threads and processes alike, and the first one
 /// prints what it downloads. Each Lean install first deletes elan's `tmp/`, since elan names each download anew and so
 /// never reuses or deletes the download a killed install left there.
-fn install_from(url: &str, archive: &Archive, cache: &Path) -> io::Result<Lake> {
+fn install_from(url: &str, archive: &Archive, cache: &Path, mago_version: &str) -> io::Result<Lake> {
     let home = cache.join("elan");
     let _lock = install_lock(cache)?;
 
@@ -450,7 +451,7 @@ fn install_from(url: &str, archive: &Archive, cache: &Path) -> io::Result<Lake> 
     tracing::info!("Downloading the law checker ({size}) into Mago's cache folder, once.");
     tracing::debug!("The law checker installs into {}.", home.display());
     if !has_elan {
-        install_elan(url, archive, &home)?;
+        install_elan(url, archive, &home, mago_version)?;
     }
 
     remove_folder(&home.join("tmp"))?;
@@ -491,11 +492,11 @@ fn sha256_hex(bytes: &[u8]) -> String {
     })
 }
 
-/// Downloads elan's archive from `url`, checks its SHA-256, and runs its `elan-init` with `elan.staging/` as elan's
-/// home, then renames that folder to `home`, so a dead install leaves no `home` behind.
-fn install_elan(url: &str, archive: &Archive, home: &Path) -> io::Result<()> {
+/// Downloads elan's archive from `url` as mago `mago_version`, checks its SHA-256, and runs its `elan-init` with
+/// `elan.staging/` as elan's home, then renames that folder to `home`, so a dead install leaves no `home` behind.
+fn install_elan(url: &str, archive: &Archive, home: &Path, mago_version: &str) -> io::Result<()> {
     let bytes = ureq::get(url)
-        .header("User-Agent", concat!("mago/", env!("CARGO_PKG_VERSION")))
+        .header("User-Agent", format!("mago/{mago_version}"))
         .call()
         .and_then(|response| response.into_body().with_config().limit(ELAN_LIMIT).read_to_vec())
         .map_err(|error| io::Error::other(format!("downloading {url} failed: {error}")))?;
@@ -697,7 +698,8 @@ if [ -e "$ELAN_HOME/../broken-init" ]; then
 fi
 "#;
 
-    /// An elan archive that holds `ELAN_INIT`, served over HTTP on a local port, and how many requests it answered.
+    /// An elan archive that holds `ELAN_INIT`, served over HTTP on a local port to a request whose User-Agent names
+    /// mago 1.2.3, and how many requests it answered. It refuses any other request with 403.
     fn serve_elan() -> io::Result<(String, Vec<u8>, Arc<AtomicUsize>)> {
         let mut tarball = tar::Builder::new(flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default()));
         let mut header = tar::Header::new_gnu();
@@ -716,8 +718,14 @@ fi
                 let mut stream = stream?;
                 let mut reader = BufReader::new(&stream);
                 let mut line = String::new();
+                let mut names_mago = false;
                 while reader.read_line(&mut line)? > 2 {
+                    names_mago |= line.trim_end().eq_ignore_ascii_case("user-agent: mago/1.2.3");
                     line.clear();
+                }
+                if !names_mago {
+                    write!(stream, "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")?;
+                    continue;
                 }
                 answered.fetch_add(1, Ordering::SeqCst);
                 write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", served.len())?;
@@ -752,7 +760,9 @@ fi
         let lakes = std::thread::scope(|scope| {
             #[allow(clippy::needless_collect)]
             let installs: Vec<_> =
-                std::iter::repeat_with(|| scope.spawn(|| install_from(&url, &archive, cache.path()))).take(4).collect();
+                std::iter::repeat_with(|| scope.spawn(|| install_from(&url, &archive, cache.path(), "1.2.3")))
+                    .take(4)
+                    .collect();
             installs
                 .into_iter()
                 .map(|install| install.join().map_err(|_| io::Error::other("an install panicked"))?)
@@ -770,15 +780,32 @@ fi
         Ok(())
     }
 
+    /// The download of elan names the release of the `mago` binary that installs it, which the binary passes, in its
+    /// User-Agent.
+    #[test]
+    fn the_download_of_elan_names_the_release_of_mago_in_its_user_agent() -> io::Result<()> {
+        let (url, bytes, requests) = serve_elan()?;
+        let archive = archive(sha256(&bytes));
+        let cache = tempfile::tempdir()?;
+
+        let refused = install_from(&url, &archive, cache.path(), "9.9.9").err().map(|error| error.to_string());
+        install_from(&url, &archive, cache.path(), "1.2.3")?;
+
+        assert_eq!(refused, Some(format!("downloading {url} failed: http status: 403")));
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+
+        Ok(())
+    }
+
     #[test]
     fn an_install_whose_lean_is_missing_installs_only_lean() -> io::Result<()> {
         let (url, bytes, requests) = serve_elan()?;
         let archive = archive(sha256(&bytes));
         let cache = tempfile::tempdir()?;
-        install_from(&url, &archive, cache.path())?;
+        install_from(&url, &archive, cache.path(), "1.2.3")?;
         fs::remove_file(cache.path().join("elan/installed"))?;
 
-        install_from(&url, &archive, cache.path())?;
+        install_from(&url, &archive, cache.path(), "1.2.3")?;
 
         assert_eq!(requests.load(Ordering::SeqCst), 1);
         assert_eq!(installed(cache.path())?, format!("{}\n", TOOLCHAIN.trim()));
@@ -791,12 +818,12 @@ fi
         let (url, bytes, _) = serve_elan()?;
         let archive = archive(sha256(&bytes));
         let cache = tempfile::tempdir()?;
-        install_from(&url, &archive, cache.path())?;
+        install_from(&url, &archive, cache.path(), "1.2.3")?;
         fs::remove_file(cache.path().join("elan/installed"))?;
         fs::create_dir_all(cache.path().join("elan/tmp"))?;
         fs::write(cache.path().join("elan/tmp/jpvym4et00p_dz4p_file"), "half of Lean")?;
 
-        install_from(&url, &archive, cache.path())?;
+        install_from(&url, &archive, cache.path(), "1.2.3")?;
 
         assert!(!cache.path().join("elan/tmp").exists());
         assert_eq!(installed(cache.path())?, format!("{}\n", TOOLCHAIN.trim()));
@@ -829,14 +856,15 @@ fi
             }
             let before = requests.load(Ordering::SeqCst);
 
-            let failed = install_from(&url, &archive(pinned), cache.path()).err().map(|failed| failed.to_string());
+            let failed =
+                install_from(&url, &archive(pinned), cache.path(), "1.2.3").err().map(|failed| failed.to_string());
             assert_eq!(failed, Some(error), "{failure}");
             assert!(!cache.path().join("elan").exists(), "{failure}");
 
             if broken_init {
                 fs::remove_file(cache.path().join("broken-init"))?;
             }
-            install_from(&url, &archive(digest), cache.path())?;
+            install_from(&url, &archive(digest), cache.path(), "1.2.3")?;
             assert_eq!(requests.load(Ordering::SeqCst) - before, 2, "{failure}");
             assert_eq!(installed(cache.path())?, format!("{}\n", TOOLCHAIN.trim()), "{failure}");
         }

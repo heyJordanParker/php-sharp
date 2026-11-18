@@ -603,6 +603,7 @@ fn compiled(server: &mut Server) -> (BTreeMap<String, Option<Input>>, Vec<u8>) {
     let mut inputs = BTreeMap::new();
     let (compiled, _) = server
         .compile(
+            mago_build_id::BUILD_ID,
             &CompiledFiles::default(),
             |_| Ok(None),
             |path| {

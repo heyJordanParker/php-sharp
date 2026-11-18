@@ -13,7 +13,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
-use mago_build_id::BUILD_ID;
 use mago_database::error::DatabaseError;
 use mago_database::error::IOAction;
 use xxhash_rust::xxh3::Xxh3;
@@ -188,11 +187,11 @@ pub fn source_hash(source: &[u8]) -> [u8; 16] {
     xxh3_128(source).to_be_bytes()
 }
 
-/// The name of the code a check compiles: the hash of the magic, `SHARP_UNIT_ABI`, the checker's build ID, the
-/// source's hash and the reads. The order the reads come in never changes it.
+/// The name of the code a check compiles: the hash of the magic, `SHARP_UNIT_ABI`, the checker's build ID `build_id`,
+/// the source's hash and the reads. The order the reads come in never changes it.
 #[must_use]
-pub fn key(source_hash: [u8; 16], reads: &Reads) -> [u8; 16] {
-    key_of(&[&SHARP_UNIT_MAGIC, &SHARP_UNIT_ABI, &BUILD_ID.to_be_bytes()], source_hash, reads)
+pub fn key(build_id: u128, source_hash: [u8; 16], reads: &Reads) -> [u8; 16] {
+    key_of(&[&SHARP_UNIT_MAGIC, &SHARP_UNIT_ABI, &build_id.to_be_bytes()], source_hash, reads)
 }
 
 fn key_of(compiler: &[&[u8]], source_hash: [u8; 16], reads: &Reads) -> [u8; 16] {
@@ -218,14 +217,21 @@ fn key_of(compiler: &[&[u8]], source_hash: [u8; 16], reads: &Reads) -> [u8; 16] 
     hasher.digest128().to_be_bytes()
 }
 
-/// The bytes of the `.sharpc` file for `unit`, lowered from `source` against `library`. The same arguments always give
-/// the same bytes.
+/// The bytes of the `.sharpc` file for `unit`, lowered from `source` against `library` by the checker build `build_id`.
+/// The same arguments always give the same bytes.
 ///
 /// # Panics
 ///
 /// Panics when a section holds more than a 32-bit size can say.
 #[must_use]
-pub fn encode(unit: &Unit, source: &[u8], key: [u8; 16], inputs: &[Input], library: &Library) -> Vec<u8> {
+pub fn encode(
+    unit: &Unit,
+    source: &[u8],
+    build_id: u128,
+    key: [u8; 16],
+    inputs: &[Input],
+    library: &Library,
+) -> Vec<u8> {
     let mut nodes =
         Vec::with_capacity(size_of::<sharp_node>() * unit.nodes.len() + size_of::<u32>() * unit.children.len());
     for node in &unit.nodes {
@@ -235,6 +241,7 @@ pub fn encode(unit: &Unit, source: &[u8], key: [u8; 16], inputs: &[Input], libra
         nodes.extend_from_slice(&child.to_le_bytes());
     }
     let code = Code {
+        checker: build_id.to_be_bytes(),
         key,
         source_hash: source_hash(source),
         source_size: source.len() as u64,
@@ -250,8 +257,8 @@ pub fn encode(unit: &Unit, source: &[u8], key: [u8; 16], inputs: &[Input], libra
 
 /// The bytes of the compiled file `bytes` with `inputs` as its inputs and `library` as its standard library.
 ///
-/// They are the bytes [`encode`] gives the unit `bytes` holds, with its key and its source. None when `bytes` is no
-/// compiled file this bridge reads.
+/// They are the bytes [`encode`] gives the unit `bytes` holds, with the checker build that wrote it, its key and its
+/// source. None when `bytes` is no compiled file this bridge reads.
 ///
 /// A compile keeps the code of each file whose key holds, and only an input's stamp or the standard library can differ
 /// from the compile that wrote it.
@@ -277,6 +284,7 @@ pub fn restamp(bytes: &[u8], inputs: &[Input], library: &Library) -> Option<Vec<
     // `Code::encode` stores the library's version right after the unit's own texts, then each input's path.
     let own_texts = word(offset_of!(sharp_unit_header, library_version) + offset_of!(sharp_str, offset)) as usize;
     let code = Code {
+        checker: header.checker,
         key: header.key,
         source_hash: header.source_hash,
         source_size: header.source_size,
@@ -290,9 +298,11 @@ pub fn restamp(bytes: &[u8], inputs: &[Input], library: &Library) -> Option<Vec<
     Some(code.encode(inputs, library))
 }
 
-/// The code a compiled file holds apart from its inputs and its standard library: its key, its source's hash and size,
-/// and its tree, the nodes then the children as the file lays them out, with the texts they point into.
+/// The code a compiled file holds apart from its inputs and its standard library: the build ID of the checker that
+/// wrote it, its key, its source's hash and size, and its tree, the nodes then the children as the file lays them out,
+/// with the texts they point into.
 struct Code<'code> {
+    checker: [u8; 16],
     key: [u8; 16],
     source_hash: [u8; 16],
     source_size: u64,
@@ -304,7 +314,7 @@ struct Code<'code> {
 }
 
 impl Code<'_> {
-    /// The compiled file of this code, written by this checker build, with `inputs` and `library`.
+    /// The compiled file of this code, with `inputs` and `library`.
     fn encode(&self, inputs: &[Input], library: &Library) -> Vec<u8> {
         let mut texts = self.texts.to_vec();
         let library_version = store_text(&mut texts, &library.version);
@@ -321,7 +331,7 @@ impl Code<'_> {
         let header = sharp_unit_header {
             magic: SHARP_UNIT_MAGIC,
             abi: SHARP_UNIT_ABI,
-            checker: BUILD_ID.to_be_bytes(),
+            checker: self.checker,
             key: self.key,
             source_hash: self.source_hash,
             source_size: self.source_size,
@@ -548,15 +558,17 @@ pub fn compiled_path(root: &Path, source: &Path) -> Result<Option<PathBuf>, Data
     Ok(real.strip_prefix(root).ok().map(|relative| root.join(COMPILED_FOLDER).join(relative).with_extension("sharpc")))
 }
 
-/// Returns `true` when the compiled file `bytes` cannot stand for the code whose key is `key` any more: it is no compiled
-/// file this bridge reads, another checker build wrote it, or it names another key.
+/// Returns `true` when the compiled file `bytes` cannot stand for the code whose key is `key` any more.
+///
+/// It is stale when it is no compiled file this bridge reads, a checker build other than `build_id` wrote it, or it
+/// names another key.
 ///
 /// The key hashes the source and the fingerprint of each declaration its check read, as [`key`] gives it, so a compile
 /// that computes `key` from the fingerprints of the reads the file's last check named keeps the file while none of
 /// them changed, whatever else an edit changed.
 #[must_use]
-pub fn is_stale(bytes: &[u8], key: [u8; 16]) -> bool {
-    header(bytes).ok().is_none_or(|header| header.checker != BUILD_ID.to_be_bytes() || header.key != key)
+pub fn is_stale(bytes: &[u8], build_id: u128, key: [u8; 16]) -> bool {
+    header(bytes).ok().is_none_or(|header| header.checker != build_id.to_be_bytes() || header.key != key)
 }
 
 /// Returns `true` when the compiled file `bytes` is no compiled file this bridge reads, or one of its inputs changed.

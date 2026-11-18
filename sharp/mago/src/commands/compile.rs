@@ -321,8 +321,10 @@ fn compile_into(configuration: &Configuration, root: &Path, folder: &Path) -> Re
     let mut stamped = Vec::new();
     let compiled_files_path = folder.join(COMPILED_FILES);
     let compilations = server.compile(
+        BUILD_ID,
         &CompiledFiles::decode(
             &std::fs::read(&compiled_files_path).unwrap_or_default(),
+            BUILD_ID,
             configuration_hash(configuration),
         ),
         |file| match host_compiled_path(root, folder, &source_path(root, file))? {
@@ -360,7 +362,7 @@ fn compile_into(configuration: &Configuration, root: &Path, folder: &Path) -> Re
     let mut accepted = HashSet::new();
     let mut recompiled = HashSet::new();
     let (compilations, compiled_files) = compilations?;
-    write(&compiled_files_path, &compiled_files.encode(configuration_hash(configuration))?)?;
+    write(&compiled_files_path, &compiled_files.encode(BUILD_ID, configuration_hash(configuration))?)?;
     written.insert(compiled_files_path);
     for (file_id, compilation) in compilations {
         let file = database.get_ref(&file_id)?;
@@ -419,6 +421,7 @@ fn compile_into(configuration: &Configuration, root: &Path, folder: &Path) -> Re
             sort: false,
             minimum_report_level: None,
             editor_url: None,
+            mago_version: VERSION,
         },
     )
     .report(refused, None)?;
@@ -706,12 +709,14 @@ fn compile(configuration: &Configuration, color_choice: ColorChoice) -> Result<C
         None => None,
     };
     let read_database = server.database().read_only();
-    let lean = Lean::new(&root);
+    let lean = Lean::new(&root, VERSION, BUILD_ID);
     let mut stamped = Vec::new();
     let compiled_files_path = compiled_folder.join(COMPILED_FILES);
     let (compilations, compiled_files) = server.compile(
+        BUILD_ID,
         &CompiledFiles::decode(
             &std::fs::read(&compiled_files_path).unwrap_or_default(),
+            BUILD_ID,
             configuration_hash(configuration),
         ),
         |file| match unit::compiled_path(&root, &source_path(&root, file))? {
@@ -804,7 +809,7 @@ fn compile(configuration: &Configuration, color_choice: ColorChoice) -> Result<C
         written.insert(table);
     }
     if compiled_folder.is_dir() {
-        let bytes = compiled_files.encode(configuration_hash(configuration))?;
+        let bytes = compiled_files.encode(BUILD_ID, configuration_hash(configuration))?;
         write_if_changed(&compiled_files_path, &bytes)?;
         if let Some(record) = record.as_mut() {
             record.output(&compiled_files_path, &bytes);
@@ -980,6 +985,7 @@ impl Outcome {
                     sort: false,
                     minimum_report_level: None,
                     editor_url: configuration.editor_url.clone(),
+                    mago_version: VERSION,
                 },
             );
             reporter.report(self.issues, None)?;

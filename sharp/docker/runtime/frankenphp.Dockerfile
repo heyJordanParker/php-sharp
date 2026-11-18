@@ -34,7 +34,8 @@ RUN set -eux; \
 	scripts/dev/genfiles; \
 	rm -rf autom4te.cache; \
 	cd /usr/src; \
-	tar -cJf php.tar.xz --owner=0 --group=0 --numeric-owner --sort=name php
+# PHP#: CI builds from its checkout, whose .git the source tarball leaves out.
+	tar -cJf php.tar.xz --exclude-vcs --owner=0 --group=0 --numeric-owner --sort=name php
 
 FROM ${BASE_IMAGE} AS php-base
 

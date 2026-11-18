@@ -34,6 +34,7 @@ use clap::Parser;
 use diffy::PatchFormatter;
 
 use mago_allocator::LocalArena;
+use mago_build_id::BUILD_ID;
 use mago_codex::metadata::CodebaseMetadata;
 use mago_composer::AutoloadPsr4value;
 use mago_composer::ComposerPackage;
@@ -668,6 +669,7 @@ impl<'configuration> Session<'configuration> {
         let database = self.server.database().read_only();
         let issues = keys(&self.server, prover.hidden.shown(analysis.issues, &database));
         let (compilations, _) = self.server.compile(
+            BUILD_ID,
             &CompiledFiles::default(),
             |_| Ok(None),
             |path| unit::stamp(&prover.root, path),

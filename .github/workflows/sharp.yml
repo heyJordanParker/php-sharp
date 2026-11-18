@@ -23,19 +23,18 @@ jobs:
   # runs their examples. sharp/bin/check --changes holds these rules, so sharp/bin/check on a machine chooses its gates
   # as this job does.
   #
-  # A pull request runs the Linux suites, each job on 4 cores. A release's pull request, whose sharp/mago/Cargo.toml
-  # version has no tag yet, also runs what needs the Mac, the runtime image and the release assets, so every check that
-  # guards a release runs before the merge, on the tree that merges. GitHub runs 20 of the account's hosted jobs at once,
-  # across all its repositories, and a job past them waits: a pull request's runs hold 14 at most, and a release's 18,
-  # and mago.yml's checks run beside patch-coverage, since one after the other they took 13.4 minutes on pull request
-  # #337.
+  # A pull request runs the Linux suites alone, each job on 4 cores, a release's pull request too, so every pull
+  # request ends in under 10 minutes. GitHub runs 20 of the account's hosted jobs at once, across all its
+  # repositories, and a job past them waits: a pull request's runs hold 16 at most, and mago.yml's checks run beside
+  # patch-coverage, since one after the other they took 13.4 minutes on pull request #337.
   #
   # A tree runs the checks once, as bors's "not rocket science" rule tests the exact tree that lands once. A push to
-  # master runs none of them when a pull request's run passed CI_PASSED on its tree, as .github/actions/passed-tree
-  # explains, and links that run: it saves the caches every pull request's run restores and, for a release, publishes
-  # what that run built. A push whose tree no pull request's run passed runs every check, the Mac's among them, as the
-  # check of the merge, and a release publishes what that push builds. A red push opens an issue, as CI_PASSED does,
-  # for a pull request that fixes it forward.
+  # master runs none of the Linux checks when a pull request's run passed CI_PASSED on its tree, as
+  # .github/actions/passed-tree explains, and links that run: it saves the caches every pull request's run restores. A
+  # push whose tree no pull request's run passed runs every check, the Mac's among them, as the check of the merge. A
+  # release's push, whose sharp/mago/Cargo.toml version has no tag yet, runs the Mac's checks beside the release's
+  # build, as RELEASE_ASSETS explains, and RELEASE publishes the release only once they passed. A red push opens an
+  # issue, as CI_PASSED does, for a pull request that fixes it forward.
   CHANGES:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
@@ -50,10 +49,11 @@ jobs:
       code: ${{ steps.diff.outputs.code }}
       passed: ${{ steps.passed.outputs.run }}
       version: ${{ steps.diff.outputs.version }}
-      # A release's pull request, or a push whose tree no pull request's run passed, runs every check.
+      # A push runs the checks a pull request leaves out, the Mac's and the image's, when no pull request's run passed
+      # its tree, or when it is a release's.
       full: >-
-        ${{ (github.event_name == 'pull_request' && steps.diff.outputs.bump == 'true'
-        || github.event_name == 'push' && !steps.passed.outputs.run) && 'true' || '' }}
+        ${{ github.event_name == 'push' && (!steps.passed.outputs.run || steps.diff.outputs.bump == 'true')
+        && 'true' || '' }}
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -114,6 +114,32 @@ jobs:
             BASE=$(git hash-object -t tree /dev/null)
           fi
           sharp/bin/check --changes "$BASE" | tee -a "$GITHUB_OUTPUT"
+      # The section runs from its "## [<version>]" heading, which may carry a date, to the next version's heading or the
+      # link definitions that end the file. So a release's pull request without its notes fails before the merge, and
+      # RELEASE publishes the notes of its push's run.
+      - name: A release's notes are sharp/CHANGELOG.md's section of its version
+        if: steps.diff.outputs.bump == 'true'
+        env:
+          VERSION: ${{ steps.diff.outputs.version }}
+        run: |
+          notes="$RUNNER_TEMP/release-notes.md"
+          awk -v heading="## [$VERSION]" '
+            $0 == heading || index($0, heading " ") == 1 { found = 1; next }
+            found && (/^## \[/ || /^\[.*\]: /) { exit }
+            found { print }
+          ' sharp/CHANGELOG.md > "$notes"
+          if ! grep -q '[^[:space:]]' "$notes"; then
+            echo "::error::sharp/CHANGELOG.md has no \"## [$VERSION]\" section, so release $VERSION has no notes. Add the section."
+            exit 1
+          fi
+          cat "$notes"
+      - name: Upload the release's notes for RELEASE
+        if: steps.diff.outputs.bump == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes.md
+          if-no-files-found: error
   # The run's one Linux build, which every Linux suite runs on: the engine, its install and mago, which the suites run
   # with --no-build. Each of the 8 suite jobs built them itself for 2 to 5 minutes on release pull request #363's run,
   # where the bump rebuilt every Mago crate in each, so a run built the same code 8 times. The suites wait for it, so its
@@ -128,7 +154,8 @@ jobs:
   # On each push to master it saves the ccache, the Rust toolchain and crates, and the target, which every pull
   # request's run restores, as .github/actions/mago-cache explains. A cache only its own ref's runs would restore is no
   # use to the next pull request, so only master saves. So it runs on every push to master, even one whose tree a pull
-  # request's run passed, but for the push that publishes a release, which builds nothing, so the next push saves them.
+  # request's run passed, but for the push that publishes a release, which builds only the release, so the next push
+  # saves them.
   # CI_PASSED, which runs after it, deletes the caches it replaced.
   BUILD_LINUX:
     needs: CHANGES
@@ -156,6 +183,37 @@ jobs:
           save: ${{ github.event_name == 'push' }}
       - name: Build mago and its test binaries
         run: sharp/docker/run sharp/bin/build-mago --quiet
+      # The Lean toolchain mago.yml's tests jobs prove laws with, in sharp/build/elan, the ELAN_HOME sharp/docker/run
+      # sets, saved on master under the hash of the lean-toolchain file that pins it, as the other caches are. Every
+      # pull request's tests jobs restore it, so none downloads Lean.
+      - name: Lean cache, saved on master
+        if: github.ref == 'refs/heads/master'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/elan
+          key: SHARP_LEAN-${{ runner.arch }}-${{ hashFiles('sharp/mago/crates/sharp-lean/lean/lean-toolchain') }}
+      - name: Install the pinned Lean toolchain into the Lean cache
+        if: github.ref == 'refs/heads/master'
+        run: sharp/docker/run elan toolchain install "$(cat sharp/mago/crates/sharp-lean/lean/lean-toolchain)"
+      # The packages the LINUX slices' Composer installs download, in sharp/build/composer-home/cache, the cache folder of
+      # the COMPOSER_HOME sharp/docker/run sets, saved on master under the hash of the lock files that pin them. Every pull
+      # request's LINUX slices restore it: with none, the part of the whole-project proof that runs its two installs took
+      # 343 seconds on test pull request #401's run, and 5.8 on #394's. A download-only install fills it and writes no
+      # vendor folder.
+      - name: Composer cache, saved on master
+        if: github.ref == 'refs/heads/master'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/composer-home/cache
+          key: SHARP_COMPOSER-${{ hashFiles('sharp/mago/composer.lock', 'Zend/tests/sharp/composer.lock', 'sharp/phpunit/composer.lock') }}
+          restore-keys: SHARP_COMPOSER-
+      - name: Download the locked Composer packages into the Composer cache
+        if: github.ref == 'refs/heads/master'
+        run: |
+          for project in sharp/mago Zend/tests/sharp sharp/phpunit; do
+            sharp/docker/run composer install --download-only --no-interaction --no-progress --no-plugins --no-scripts \
+              --working-dir="$project"
+          done
       # What the suites run: the CLI, phpdbg, which run-tests.php finds beside it for the tests that need it, the install
       # sharp/bin/hosts builds FrankenPHP against, and mago. An artifact keeps no file's mode, so the files travel in a
       # tar, compressed here, since Actions would compress them on one thread.
@@ -175,12 +233,13 @@ jobs:
       - name: Verify the generated files, and that no Cargo.lock names a local source
         run: sharp/bin/check generated
 
-  # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in two slices, each without opcache, in shared
-  # memory twice per process, and under the tracing JIT production runs with the opcache. The slices balance by the
-  # seconds sharp/baseline/seconds lists, and the one that weighs least runs mago convert's whole-project proof, as
-  # sharp/bin/test explains. The second slice also runs the census, the differential and PHPUnit.
+  # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in three slices, each without opcache, in
+  # shared memory twice per process, and under the tracing JIT production runs with the opcache. The slices balance by
+  # the seconds sharp/baseline/seconds lists, as sharp/bin/test explains. mago convert's whole-project proof weighs most,
+  # so it always lands in the first slice: on test pull request #393's run, the proof took 2.8 minutes and that slice's
+  # tests 0.6. The second slice also runs the census, the differential and PHPUnit, which took 0.7.
   LINUX:
-    name: LINUX (${{ matrix.shard }}/2)
+    name: LINUX (${{ matrix.shard }}/3)
     needs: [CHANGES, BUILD_LINUX]
     if: needs.CHANGES.outputs.code == 'true' && !needs.CHANGES.outputs.passed
     runs-on: ubuntu-24.04
@@ -191,7 +250,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
@@ -210,9 +269,16 @@ jobs:
           path: ${{ runner.temp }}
       - name: Unpack BUILD_LINUX's engine and mago
         run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
+      # BUILD_LINUX saves it on master, as it explains.
+      - name: Restore the Composer cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/composer-home/cache
+          key: SHARP_COMPOSER-${{ hashFiles('sharp/mago/composer.lock', 'Zend/tests/sharp/composer.lock', 'sharp/phpunit/composer.lock') }}
+          restore-keys: SHARP_COMPOSER-
       - name: Test PHP#
         run: >-
-          sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/2
+          sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/3
           ${{ matrix.shard == 2 && '--census --differential --phpunit' || '' }}
   # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before, and
   # sharp/bin/spec's self-test. Each took 155 and 54 seconds on release pull request #379's run, where LINUX (1/2), which
@@ -398,9 +464,12 @@ jobs:
         uses: ./.github/actions/red-master-issue
         with:
           title: The nightly ASAN run failed
-  # The run's one macOS build, which MACOS runs on: the engine and mago, as BUILD_LINUX builds Linux's. A release's pull
-  # request runs it, and a push whose tree no pull request's run passed. A job never installs on the self-hosted Mac
-  # runners, so it checks that Homebrew already has the build's formulae, and builds without ccache.
+  # The run's one macOS build, which MACOS runs on: the engine and mago, as BUILD_LINUX builds Linux's. A release's push
+  # runs it, and a push whose tree no pull request's run passed. A job never installs on the self-hosted Mac
+  # runners, so it checks that Homebrew already has the build's formulae, ccache among them. The engine builds through
+  # ccache, as BUILD_LINUX's does: a change to a file configure reads configures again and compiles every file, which
+  # took 24.5 minutes on release pull request #379's run. Each runner has a HOME of its own, so each keeps its own
+  # ccache, as it keeps its own build.
   #
   # The 12-core Mac runs this job beside the other runners' jobs and the work the suite checks, and two or three jobs
   # that each took every core held its load between 200 and 480 for hours. So every job on the self-hosted Macs caps its
@@ -414,7 +483,9 @@ jobs:
     runs-on: macos-arm64-local
     timeout-minutes: 120
     env:
-      FORMULAE: autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
+      FORMULAE: autoconf bison ccache curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
+      CC: ccache cc
+      CXX: ccache c++
       CARGO_BUILD_JOBS: 4
       RUST_TEST_THREADS: 4
       RAYON_NUM_THREADS: 4
@@ -523,12 +594,14 @@ jobs:
           echo "$RUNNER_TEMP/actionlint" >> "$GITHUB_PATH"
       - name: The actions are pinned, no Dockerfile names a syntax frontend, and actionlint passes
         run: sharp/bin/check workflows
-  # The release's Mago binaries, their attestations, Mago's source archives, their SHA-256s and its notes, which
-  # release.yml builds beside the suites in a release's pull request run, and in a release's push whose tree no pull
-  # request's run passed. RELEASE publishes them. A called workflow's jobs may ask only for permissions its caller grants.
+  # The release's Mago binaries, their attestations, Mago's source archives and their SHA-256s, which release.yml
+  # builds in a release's push from the tree its pull request's run passed, or, when no pull request's run passed it,
+  # beside that push's checks. RELEASE publishes them. The pull request's run proves the tree, not these files: the
+  # macOS binary's profile-guided build took 37 minutes on release pull request #379's run, longer than every check of
+  # the tree. A called workflow's jobs may ask only for permissions its caller grants.
   RELEASE_ASSETS:
     needs: CHANGES
-    if: needs.CHANGES.outputs.bump == 'true' && needs.CHANGES.outputs.full == 'true'
+    if: github.event_name == 'push' && needs.CHANGES.outputs.bump == 'true'
     uses: ./.github/workflows/release.yml
     permissions:
       attestations: write
@@ -552,6 +625,7 @@ jobs:
       - WORKFLOWS
       - RELEASE_ASSETS
       - IMAGE
+      - IMAGE_ARM64
       - RELEASE
       - COMPOSER
     runs-on: ubuntu-24.04
@@ -570,7 +644,8 @@ jobs:
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
           allowed-skips: >-
-            BUILD_LINUX, LINUX, UPSTREAM, SPEC, HOSTS, BUILD_MACOS, MACOS, RELEASE_ASSETS, IMAGE, RELEASE, COMPOSER
+            BUILD_LINUX, LINUX, UPSTREAM, SPEC, HOSTS, BUILD_MACOS, MACOS, RELEASE_ASSETS, IMAGE, IMAGE_ARM64, RELEASE,
+            COMPOSER
           jobs: ${{ toJSON(needs) }}
       # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed run on master
@@ -597,7 +672,6 @@ jobs:
       actions: read
       contents: read
     env:
-      RUN_ID: ${{ needs.RELEASE.outputs.run-id }}
       VERSION: ${{ needs.RELEASE.outputs.version }}
     steps:
       - name: git checkout
@@ -656,8 +730,6 @@ jobs:
         with:
           name: sha256sums
           path: ${{ runner.temp }}
-          run-id: ${{ env.RUN_ID }}
-          github-token: ${{ github.token }}
       # The tag pins these SHA-256s for good, so the assets a user downloads from the published release must match
       # them, and so must the sums file install.sh checks a download against.
       - name: The published assets match the SHA-256s the tag pins
@@ -670,11 +742,11 @@ jobs:
           published="$RUNNER_TEMP/published"
           gh release download "v$VERSION" --dir "$published"
           if ! cmp "$sums" "$published/mago-$VERSION-sha256sums.txt"; then
-            echo "::error::Release v$VERSION publishes a mago-$VERSION-sha256sums.txt that differs from the one run $RUN_ID wrote, so no heyjordanparker/mago-sharp tag is pushed."
+            echo "::error::Release v$VERSION publishes a mago-$VERSION-sha256sums.txt that differs from the one this run wrote, so no heyjordanparker/mago-sharp tag is pushed."
             exit 1
           fi
           if ! (cd "$published" && sha256sum --check --strict "$sums"); then
-            echo "::error::An asset of release v$VERSION has a SHA-256 other than the one run $RUN_ID wrote, so no heyjordanparker/mago-sharp tag is pushed."
+            echo "::error::An asset of release v$VERSION has a SHA-256 other than the one this run wrote, so no heyjordanparker/mago-sharp tag is pushed."
             exit 1
           fi
       # A rerun finds the tag an earlier attempt pushed, and leaves it.
@@ -699,9 +771,9 @@ jobs:
   # BuildKit, its SBOM scanner and the bases are base-images.yml's copies in ghcr.io at pinned digests, pulled after the
   # login, so no pull is an anonymous Docker Hub pull (#86). The engine changes PHP's internal structures, so an
   # extension can stop building or loading: each pushed image then installs the extensions a typical Laravel app
-  # installs on top, the way such an app's Dockerfile does. A release's pull request runs it, and a push whose tree no
-  # pull request's run passed. The two platforms build at once, since a release's run ends with its slowest job: each
-  # took 12 to 13 minutes on the pushes of pull requests #351 and #352.
+  # installs on top, the way such an app's Dockerfile does. A release's push builds it, as RELEASE_ASSETS builds the
+  # assets, and so does a push whose tree no pull request's run passed. The two platforms build at once, since a run
+  # ends with its slowest job: each took 12 to 14 minutes on release pull request #379's run.
   IMAGE:
     name: IMAGE (${{ matrix.platform }})
     if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.full == 'true'
@@ -722,7 +794,7 @@ jobs:
       # outages failed this job.
       INSTALL: exif gd /usr/src/imagick pcntl pdo_pgsql pgsql /usr/src/phpredis
     steps:
-      # For .github/actions/boot-image and sharp/bin/php-extensions. The build fetches its own context.
+      # The build's context, and .github/actions/boot-image and sharp/bin/php-extensions.
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Log in to ghcr.io
@@ -735,16 +807,17 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           driver-opts: image=ghcr.io/heyjordanparker/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
-      # The build's context is the commit's tree, which BuildKit fetches from GitHub by the commit's SHA, so a ref
-      # moved after the push builds nothing else, as docker/github-builder's checksum pinned it.
+      # The build's context is the checked-out commit, which the image's OCI revision label names. BuildKit's fetch of
+      # the commit from GitHub took 83 seconds of IMAGE (linux/arm64) on release pull request #379's run.
       - name: Build and push the image by digest
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: ${{ github.server_url }}/${{ github.repository }}.git#${{ github.sha }}
+          context: .
           file: sharp/docker/runtime/frankenphp.Dockerfile
           platforms: ${{ matrix.platform }}
           build-args: REGISTRY=ghcr.io/heyjordanparker
+          labels: org.opencontainers.image.revision=${{ github.sha }}
           provenance: mode=max
           sbom: generator=ghcr.io/heyjordanparker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
           outputs: type=image,name=ghcr.io/heyjordanparker/php-sharp,push-by-digest=true,name-canonical=true,push=true
@@ -765,7 +838,8 @@ jobs:
         uses: ./.github/actions/boot-image
         with:
           image: ghcr.io/heyjordanparker/php-sharp@${{ steps.build.outputs.digest }}
-      # No job runs the PHP# suite on arm64, so this platform's engine shows here that it starts and loads PHP#.
+      # No job runs the PHP# suite on arm64 Linux, so this platform's engine shows here that it starts and loads PHP#,
+      # and IMAGE_ARM64 that it runs PHP#.
       - name: The image's php prints its version and lists the sharp extension
         env:
           IMAGE: ghcr.io/heyjordanparker/php-sharp@${{ steps.build.outputs.digest }}
@@ -797,30 +871,112 @@ jobs:
         run: |
           # shellcheck disable=SC2086 # EXTENSIONS is a list of extensions.
           docker run --rm --volume "$PWD:/src" --workdir /src php-sharp-extensions frankenphp php-cli sharp/bin/php-extensions $EXTENSIONS
-      # The file is named by the digest and holds the commit the image was built from.
-      - name: Keep the digest for RELEASE
+      # The file is named by the digest.
+      - name: Keep the digest for IMAGE_ARM64 and RELEASE
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           mkdir "$RUNNER_TEMP/digests"
-          echo "$GITHUB_SHA" > "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
-      # Kept as long as release.yml's assets, as the repository's artifact retention sets. The name keeps the frankenphp
-      # of the runs that also built php-fpm's image, so a tag of their commits tags FrankenPHP's alone.
-      - name: Upload the digest for RELEASE
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      # Named by the platform's architecture, which IMAGE_ARM64 downloads arm64's by.
+      - name: Upload the digest for IMAGE_ARM64 and RELEASE
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: digest-frankenphp-${{ strategy.job-index }}
+          name: digest-frankenphp-${{ matrix.platform == 'linux/arm64' && 'arm64' || 'amd64' }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
+  # The release's arm64 Linux mago compiles a one-class PHP# project, and the engine of the release's arm64 image runs
+  # it, so the two arm64 files a release ships work together, where no job runs the PHP# suite on arm64 Linux. It runs
+  # on an arm64 runner once IMAGE and RELEASE_ASSETS built them.
+  IMAGE_ARM64:
+    needs: [CHANGES, RELEASE_ASSETS, IMAGE]
+    if: github.event_name == 'push' && needs.CHANGES.outputs.bump == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    env:
+      VERSION: ${{ needs.CHANGES.outputs.version }}
+    steps:
+      - name: Download the arm64 image's digest
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: digest-frankenphp-arm64
+          path: ${{ runner.temp }}/digest
+      - name: Download the arm64 Linux mago
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mago-${{ needs.CHANGES.outputs.version }}-aarch64-unknown-linux-gnu.tar.gz
+          path: ${{ runner.temp }}
+      - name: Log in to ghcr.io
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The project is mounted at its own path, as the README's deploy runs mago compile and the engine on one path.
+      - name: The arm64 mago compiles a PHP# class, and the arm64 image's php runs it
+        run: |
+          digests=("$RUNNER_TEMP"/digest/*)
+          image="ghcr.io/heyjordanparker/php-sharp@sha256:${digests[0]##*/}"
+          tar -xzf "$RUNNER_TEMP/mago-$VERSION-aarch64-unknown-linux-gnu.tar.gz" -C "$RUNNER_TEMP"
+          mago="$RUNNER_TEMP/mago-$VERSION-aarch64-unknown-linux-gnu/mago"
+          output=$("$mago" --version)
+          if [[ $output != "mago $VERSION" ]]; then
+            echo "::error::The arm64 Linux mago prints \"$output\", not \"mago $VERSION\"."
+            exit 1
+          fi
+          project="$RUNNER_TEMP/project"
+          mkdir -p "$project/src/App"
+          cd "$project"
+          cat > mago.toml <<'TOML'
+          [source]
+          paths = ["src"]
+          extensions = ["sharp"]
+          TOML
+          cat > src/App/Counter.sharp <<'SHARP'
+          namespace App;
+
+          class Counter
+          {
+              private int count = 0;
+
+              public int add(int amount)
+              {
+                  this.count += amount;
+                  return this.count;
+              }
+          }
+          SHARP
+          "$mago" --no-version-check compile
+          counted=$(docker run --rm --volume "$project:$project" --workdir "$project" "$image" \
+            php -r 'require "src/App/Counter.php"; $counter = new App\Counter(); $counter->add(2); echo $counter->add(3);')
+          if [[ $counted != 5 ]]; then
+            echo "::error::The arm64 image's php printed \"$counted\" for the compiled Counter, not 5."
+            exit 1
+          fi
   # Publishes a release from the push of its merge to master, once every job before it passed, and mago.yml's run of
   # the same push: the GitHub release of the files RELEASE_ASSETS built, whose publication creates tag v<version> on the
-  # merge commit, and the runtime image as ghcr.io/heyjordanparker/php-sharp:<version>, never as latest. The files and
-  # images are the ones the pull request's run built on this commit's tree, or the ones this run built when no pull
-  # request's run passed that tree, so a release builds them once and the merge builds nothing. A tag GITHUB_TOKEN makes
-  # starts no workflow, so this run publishes, and COMPOSER then publishes the Composer packages. A rerun of a failed
-  # RELEASE finds what an earlier attempt published, and leaves it.
+  # merge commit, and the runtime image IMAGE built as ghcr.io/heyjordanparker/php-sharp:<version>, never as latest.
+  # This run built both from the merge commit, whose tree its pull request's run passed, or which this run checked when
+  # no pull request's run passed it. A tag GITHUB_TOKEN makes starts no workflow, so this run publishes, and COMPOSER
+  # then publishes the Composer packages. A rerun of a failed RELEASE finds what an earlier attempt published, and
+  # leaves it.
   RELEASE:
-    needs: [CHANGES, BUILD_LINUX, LINUX, UPSTREAM, SPEC, HOSTS, BUILD_MACOS, MACOS, WORKFLOWS, RELEASE_ASSETS, IMAGE]
+    needs:
+      - CHANGES
+      - BUILD_LINUX
+      - LINUX
+      - UPSTREAM
+      - SPEC
+      - HOSTS
+      - BUILD_MACOS
+      - MACOS
+      - WORKFLOWS
+      - RELEASE_ASSETS
+      - IMAGE
+      - IMAGE_ARM64
     if: ${{ !failure() && !cancelled() && github.event_name == 'push' && needs.CHANGES.outputs.bump == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
@@ -830,22 +986,12 @@ jobs:
       id-token: write
       packages: write
     outputs:
-      run-id: ${{ steps.run.outputs.id }}
       version: ${{ needs.CHANGES.outputs.version }}
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.CHANGES.outputs.version }}
     steps:
-      - name: Find the run that built the release
-        id: run
-        env:
-          PASSED: ${{ needs.CHANGES.outputs.passed }}
-        run: |
-          id=${PASSED##*/}
-          echo "id=${id:-$GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
-          echo "tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)" >> "$GITHUB_OUTPUT"
-          echo "Release $VERSION publishes what run ${id:-$GITHUB_RUN_ID} built."
       # Its pull request's run passed both workflows on this tree, or this push's run of mago.yml runs every Mago check.
       - name: Mago CI passed on this push
         run: |
@@ -862,34 +1008,24 @@ jobs:
           pattern: mago-${{ env.VERSION }}-*
           path: assets
           merge-multiple: true
-          run-id: ${{ steps.run.outputs.id }}
-          github-token: ${{ github.token }}
       - name: Download the SHA-256s
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: sha256sums
           path: assets
-          run-id: ${{ steps.run.outputs.id }}
-          github-token: ${{ github.token }}
       - name: Download the release notes
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-notes
           path: ${{ runner.temp }}
-          run-id: ${{ steps.run.outputs.id }}
-          github-token: ${{ github.token }}
-      # An asset changed after its build fails its SHA-256 or its attestation, and one built from another tree fails the
-      # tree, so nothing is published.
-      - name: The assets are the ones the SHA-256s name, signed by release.yml and built from this commit's tree
-        env:
-          RUN_ID: ${{ steps.run.outputs.id }}
-          TREE: ${{ steps.run.outputs.tree }}
+      # An asset changed after its build fails its SHA-256 or its attestation, so nothing is published.
+      - name: The assets are the ones the SHA-256s name, signed by release.yml and built from this commit
         run: |
           sums="mago-$VERSION-sha256sums.txt"
           { cut -d ' ' -f 3- "assets/$sums"; echo "$sums"; } | sort > expected-assets.txt
           find assets -type f -printf '%f\n' | sort > downloaded-assets.txt
           diff -u expected-assets.txt downloaded-assets.txt || {
-            echo "::error::Run $RUN_ID kept other assets than the ones $sums names, so nothing is published."
+            echo "::error::This run kept other assets than the ones $sums names, so nothing is published."
             exit 1
           }
           (cd assets && sha256sum --check --strict "$sums")
@@ -899,18 +1035,17 @@ jobs:
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" --format json \
               --jq '.[].verificationResult.statement.predicate.buildDefinition.resolvedDependencies[].digest.gitCommit // empty')
             if [[ -z $commits ]]; then
-              echo "::error::$asset's attestation from run $RUN_ID names no commit it was built from, so nothing is published."
+              echo "::error::$asset's attestation names no commit it was built from, so nothing is published."
               exit 1
             fi
             for commit in $commits; do
-              built=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)
-              if [[ $built != "$TREE" ]]; then
-                echo "::error::Run $RUN_ID built $asset from commit $commit, whose tree $built isn't commit $GITHUB_SHA's tree $TREE, so nothing is published."
+              if [[ $commit != "$GITHUB_SHA" ]]; then
+                echo "::error::$asset was built from commit $commit, not $GITHUB_SHA, so nothing is published."
                 exit 1
               fi
             done
           done
-          echo "Every asset of run $RUN_ID matches its SHA-256 and its attestation, and was built from tree $TREE."
+          echo "Every asset matches its SHA-256 and its attestation, and was built from commit $GITHUB_SHA."
       # Publishing the draft creates tag v<version> on this commit.
       - name: Upload every asset to the draft release, check it, then publish it
         env:
@@ -944,31 +1079,21 @@ jobs:
           pattern: digest-frankenphp-*
           path: ${{ runner.temp }}/digests
           merge-multiple: true
-          run-id: ${{ steps.run.outputs.id }}
-          github-token: ${{ github.token }}
       - name: Log in to ghcr.io
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Each digest's file holds the commit IMAGE built it from.
+      # Each digest's file is named by the digest of an image IMAGE built from this commit.
       - name: Tag the platforms' images as one image
         id: tag
         working-directory: ${{ runner.temp }}/digests
-        env:
-          TREE: ${{ steps.run.outputs.tree }}
         run: |
           image=ghcr.io/heyjordanparker/php-sharp
           tag="$image:$VERSION"
           sources=()
           for digest in *; do
-            commit=$(< "$digest")
-            built=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)
-            if [[ $built != "$TREE" ]]; then
-              echo "::error::IMAGE built $image@sha256:$digest from commit $commit, whose tree $built isn't commit $GITHUB_SHA's tree $TREE."
-              exit 1
-            fi
             sources+=("$image@sha256:$digest")
           done
           if [[ ${#sources[@]} != 2 ]]; then

@@ -20,7 +20,6 @@ use mago_analyzer::external::ExternalAnalysisSession;
 use mago_analyzer::external::FileReads;
 use mago_analyzer::external::Listing;
 use mago_analyzer::is_collection_member;
-use mago_build_id::BUILD_ID;
 use mago_codex::metadata::module::ModuleKind;
 use mago_codex::metadata::module::ModuleMetadata;
 use mago_codex::metadata::module::top_dispatcher_namespaces;
@@ -124,14 +123,14 @@ struct CompiledFile {
 }
 
 impl CompiledFiles {
-    /// The bytes [`Self::decode`] reads back: this checker build's ID, the hash of the `configuration` the files were
-    /// compiled with, then the files.
+    /// The bytes [`Self::decode`] reads back: the build ID `build_id` of the checker that compiled the files, the hash
+    /// of the `configuration` they were compiled with, then the files.
     ///
     /// # Errors
     ///
     /// Returns [`OrchestratorError`] when the files do not encode.
-    pub fn encode(&self, configuration: [u8; 16]) -> Result<Vec<u8>, OrchestratorError> {
-        let mut bytes = compiled_with(configuration);
+    pub fn encode(&self, build_id: u128, configuration: [u8; 16]) -> Result<Vec<u8>, OrchestratorError> {
+        let mut bytes = compiled_with(build_id, configuration);
         bytes.extend(bincode::serde::encode_to_vec(self, bincode::config::standard()).map_err(|error| {
             OrchestratorError::General(format!("The record of the compiled files does not encode: {error}."))
         })?);
@@ -139,21 +138,22 @@ impl CompiledFiles {
         Ok(bytes)
     }
 
-    /// The files `bytes` hold, or none when another checker build or another `configuration` compiled them or they
-    /// hold no record, so every file compiles again.
+    /// The files `bytes` hold, or none when a checker build other than `build_id` or another `configuration` compiled
+    /// them or they hold no record, so every file compiles again.
     #[must_use]
-    pub fn decode(bytes: &[u8], configuration: [u8; 16]) -> Self {
+    pub fn decode(bytes: &[u8], build_id: u128, configuration: [u8; 16]) -> Self {
         bytes
-            .strip_prefix(compiled_with(configuration).as_slice())
+            .strip_prefix(compiled_with(build_id, configuration).as_slice())
             .and_then(|record| bincode::serde::decode_from_slice(record, bincode::config::standard()).ok())
             .map(|(files, _)| files)
             .unwrap_or_default()
     }
 }
 
-/// What the record of the compiled files starts with: this checker build's ID and the hash of the `configuration`.
-fn compiled_with(configuration: [u8; 16]) -> Vec<u8> {
-    let mut bytes = format!("{BUILD_ID}\0").into_bytes();
+/// What the record of the compiled files starts with: the checker's build ID `build_id` and the hash of the
+/// `configuration`.
+fn compiled_with(build_id: u128, configuration: [u8; 16]) -> Vec<u8> {
+    let mut bytes = format!("{build_id}\0").into_bytes();
     bytes.extend(configuration);
 
     bytes
@@ -432,7 +432,8 @@ impl IncrementalAnalysisService {
     /// file is there. It is called once per input. An input no file is at is stored absent: its size, modification
     /// time and hash are all zero. No file has that stamp, because the hash of an empty file is not zero.
     ///
-    /// Each compiled file's header names `standard_library`, the standard library the project compiles against.
+    /// Each compiled file's header names `build_id`, the build ID of the checker that compiles, and `standard_library`,
+    /// the standard library the project compiles against. A file another build compiled compiles again.
     ///
     /// `refusing` keeps, of the error-level issues the analysis reported, those that refuse their file: the ones no
     /// `ignore` entry or baseline entry hides for `mago compile`, or none for the compile the extension hosts load the
@@ -443,8 +444,10 @@ impl IncrementalAnalysisService {
     ///
     /// Returns [`OrchestratorError`] when no analysis ran yet, when re-analyzing a file fails, or when `compiled`,
     /// `stamp` or `check` fails.
+    #[allow(clippy::too_many_arguments)]
     pub fn compile(
         &mut self,
+        build_id: u128,
         last: &CompiledFiles,
         mut compiled: impl FnMut(&File) -> Result<Option<Vec<u8>>, DatabaseError>,
         mut stamp: impl FnMut(&[u8]) -> Result<Option<Input>, DatabaseError>,
@@ -468,7 +471,9 @@ impl IncrementalAnalysisService {
         // theirs give the forms the others' lowering and keys read.
         let mut kept: HashMap<FileId, (Vec<u8>, &CompiledFile)> = HashMap::default();
         for file in &library {
-            if let Some(found) = self.kept(file, last, &mut compiled, &reads, &HashMap::default(), &effects, &errors)? {
+            if let Some(found) =
+                self.kept(build_id, file, last, &mut compiled, &reads, &HashMap::default(), &effects, &errors)?
+            {
                 kept.insert(file.id, found);
             }
         }
@@ -487,7 +492,9 @@ impl IncrementalAnalysisService {
             library_forms.iter().map(|(name, form)| (name.clone(), form.fingerprint())).collect();
         let forms: InlineForms = library_forms.into_iter().collect();
         for file in &rest {
-            if let Some(found) = self.kept(file, last, &mut compiled, &reads, &fingerprints, &effects, &errors)? {
+            if let Some(found) =
+                self.kept(build_id, file, last, &mut compiled, &reads, &fingerprints, &effects, &errors)?
+            {
                 kept.insert(file.id, found);
             }
         }
@@ -693,14 +700,14 @@ impl IncrementalAnalysisService {
                         let (mut reads, _) = reads.remove(&file.id).unwrap_or_default();
                         reads.inlined = unit.inlined().to_vec();
                         reads.function_types = unit.function_types().to_vec();
-                        let key = key(source_hash(&file.contents), &reads);
+                        let key = key(build_id, source_hash(&file.contents), &reads);
                         let inputs = stamped(input_paths.remove(&file.id).unwrap_or_default())?;
                         next.files.insert(
                             file.name.to_vec(),
                             CompiledFile { key, reads, forms, namespace_classes, reaches_extension },
                         );
 
-                        Compilation::Accepted(encode(&unit, &file.contents, key, &inputs, standard_library))
+                        Compilation::Accepted(encode(&unit, &file.contents, build_id, key, &inputs, standard_library))
                     }
                 }
             };
@@ -712,14 +719,15 @@ impl IncrementalAnalysisService {
         Ok((compilations, next))
     }
 
-    /// The compiled file of `file` and what `last` kept of it, when its key holds: `last` keeps it, the analysis
-    /// refused nothing in it, and the key of its source and the current fingerprints of the reads `last` kept, as
-    /// `reads` holds the declarations, inferred returns and sets of names it reads, `forms` the fingerprint of each
-    /// library form by its name and `effects` its function types' effects, is the one `last` kept and its compiled
-    /// file, as `compiled` gives it, names.
+    /// The compiled file of `file` and what `last` kept of it, when its key under the checker build `build_id` holds:
+    /// `last` keeps it, the analysis refused nothing in it, and the key of its source and the current fingerprints of
+    /// the reads `last` kept, as `reads` holds the declarations, inferred returns and sets of names it reads, `forms`
+    /// the fingerprint of each library form by its name and `effects` its function types' effects, is the one `last`
+    /// kept and its compiled file, as `compiled` gives it, names.
     #[allow(clippy::too_many_arguments)]
     fn kept<'last>(
         &self,
+        build_id: u128,
         file: &File,
         last: &'last CompiledFiles,
         compiled: &mut impl FnMut(&File) -> Result<Option<Vec<u8>>, DatabaseError>,
@@ -752,12 +760,12 @@ impl IncrementalAnalysisService {
                 })
                 .collect(),
         };
-        let key = key(source_hash(&file.contents), &current);
+        let key = key(build_id, source_hash(&file.contents), &current);
         if key != record.key {
             return Ok(None);
         }
 
-        Ok(compiled(file)?.filter(|bytes| !unit::is_stale(bytes, key)).map(|bytes| (bytes, record)))
+        Ok(compiled(file)?.filter(|bytes| !unit::is_stale(bytes, build_id, key)).map(|bytes| (bytes, record)))
     }
 
     /// Refuses each plain PHP file that declares a class extending or implementing a PHP# type that it doesn't satisfy,
@@ -1553,6 +1561,9 @@ mod tests {
         Ok(HashMap::default())
     }
 
+    /// The build ID of the checker these tests compile as.
+    const BUILD_ID: u128 = 7;
+
     /// No compiled file, as a compile with no `.sharp` folder finds.
     fn uncompiled(_: &File) -> Result<Option<Vec<u8>>, DatabaseError> {
         Ok(None)
@@ -1567,7 +1578,7 @@ mod tests {
         refusing: impl FnOnce(IssueCollection) -> IssueCollection,
     ) -> Result<Vec<(FileId, Compilation)>, OrchestratorError> {
         service
-            .compile(&CompiledFiles::default(), uncompiled, stamp, check, standard_library, refusing)
+            .compile(BUILD_ID, &CompiledFiles::default(), uncompiled, stamp, check, standard_library, refusing)
             .map(|(compiled, _)| compiled)
     }
 
@@ -2492,6 +2503,7 @@ mod tests {
         let mut asked = BTreeSet::new();
         let (compiled, kept) = service
             .compile(
+                BUILD_ID,
                 last,
                 |file| {
                     let name = String::from_utf8_lossy(&file.name).into_owned();
@@ -2548,7 +2560,8 @@ mod tests {
             let mut warm = analyzed(&base);
             let (before, last, _) =
                 compile_keeping(&mut warm, &CompiledFiles::default(), &BTreeMap::new(), empty_stamp);
-            let last = CompiledFiles::decode(&last.encode([0; 16]).expect("the record encodes"), [0; 16]);
+            let last =
+                CompiledFiles::decode(&last.encode(BUILD_ID, [0; 16]).expect("the record encodes"), BUILD_ID, [0; 16]);
             warm.update_database(edited.read_only());
             warm.analyze_incremental(None).expect("the warm path runs");
 
@@ -2573,20 +2586,21 @@ mod tests {
     }
 
     /// The lowering reads the configuration, which no key holds, so the record of another configuration's compile
-    /// keeps no compiled file.
+    /// keeps no compiled file, and neither does the record another checker build wrote.
     #[test]
-    fn the_record_of_the_compiled_files_keeps_none_under_another_configuration() {
+    fn the_record_of_the_compiled_files_keeps_none_under_another_configuration_or_build() {
         let (_, last, _) = compile_keeping(
             &mut analyzed(&shop_project(&shop(MONEY, RATE))),
             &CompiledFiles::default(),
             &BTreeMap::new(),
             empty_stamp,
         );
-        let bytes = last.encode([0; 16]).expect("the record encodes");
+        let bytes = last.encode(BUILD_ID, [0; 16]).expect("the record encodes");
 
-        assert_eq!(CompiledFiles::decode(&bytes, [0; 16]).files.len(), last.files.len());
+        assert_eq!(CompiledFiles::decode(&bytes, BUILD_ID, [0; 16]).files.len(), last.files.len());
         assert!(!last.files.is_empty());
-        assert!(CompiledFiles::decode(&bytes, [1; 16]).files.is_empty());
+        assert!(CompiledFiles::decode(&bytes, BUILD_ID, [1; 16]).files.is_empty());
+        assert!(CompiledFiles::decode(&bytes, BUILD_ID + 1, [0; 16]).files.is_empty());
     }
 
     /// A vendor file is no input of a compiled file, which `composer.lock` stands for, but a declaration a file reads

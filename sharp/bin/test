@@ -4,6 +4,7 @@ set -euo pipefail
 usage() {
   echo "usage: sharp/bin/test [--linux] [--no-build] [--census] [--spec] [--differential] [--phpunit] [--upstream | --mago | --shard <i>/<n> | paths...]" >&2
   echo "       sharp/bin/test [--linux] [--no-build] --mago [--shard <i>/<n>]" >&2
+  echo "       sharp/bin/test [--linux] --doc-and-property" >&2
   exit 2
 }
 
@@ -18,6 +19,7 @@ differential=false
 phpunit=false
 upstream=false
 mago=false
+doc_and_property=false
 shard=
 tests=()
 container_command=(sharp/bin/test)
@@ -34,6 +36,7 @@ for ((a = 0; a < ${#args[@]}; a++)); do
     --phpunit) phpunit=true ;;
     --upstream) upstream=true ;;
     --mago) mago=true ;;
+    --doc-and-property) doc_and_property=true ;;
     -*) usage ;;
     *) tests+=("$arg") ;;
   esac
@@ -44,6 +47,10 @@ if { $upstream || $mago; } && [[ ${#tests[@]} -gt 0 ]] || { $upstream && $mago; 
   usage
 fi
 if $mago && { $census || $spec || $differential || $phpunit; }; then
+  usage
+fi
+if $doc_and_property && { $mago || $upstream || ! $build || $census || $spec || $differential || $phpunit \
+  || [[ -n $shard || ${#tests[@]} -gt 0 ]]; }; then
   usage
 fi
 # --shard <i>/<n> runs the i-th of n slices, so n jobs that run the same modes together run each test once.
@@ -99,13 +106,31 @@ finish() {
   exit 0
 }
 
+# The doc tests, and the property tests of mago-codex, which builds with a feature of its own. cargo builds them as it
+# runs them, so they never run from a build job's binaries: --doc-and-property runs them alone, in a CI job beside the
+# slices of the other tests, and a whole run of --mago runs them after its binaries.
+doc_and_property_tests() {
+  local cargo
+  cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
+  echo "== the doc tests"
+  run_step "the doc tests" "$root" env PATH="$(dirname "$cargo"):$PATH" "$cargo" test --workspace --locked --doc \
+    --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" --jobs "$jobs" -- --test-threads "$jobs"
+  echo "== mago-codex's property tests"
+  run_step "mago-codex's property tests" "$root" env PATH="$(dirname "$cargo"):$PATH" "$cargo" test -p mago-codex \
+    --features property-tests --locked --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" \
+    --jobs "$jobs" -- --test-threads "$jobs"
+}
+
+if $doc_and_property; then
+  doc_and_property_tests
+  finish
+fi
+
 # sharp/mago's workspace tests: every test binary the build.json of sharp/bin/build-mago names, run from its package's
-# folder as cargo test runs it, then the doc tests and the property tests of mago-codex, which builds with a
-# feature of its own. With --shard, every n-th test of all the binaries' tests, in binary and name order, from the i-th,
-# so a set of slow tests, such as the compile:: tests of tests/main.rs, spreads over the slices, and the last slice also
-# runs the doc and the property tests. A test binary runs the tests of its slice by skipping the others by exact name,
-# which both libtest and libtest-mimic's harnesses take as often as needed. With --no-build, cargo runs nothing, so the
-# doc and the property tests, which cargo builds, are left to a run that builds.
+# folder as cargo test runs it. With --shard, every n-th test of all the binaries' tests, in binary and name order,
+# from the i-th, so a set of slow tests, such as the compile:: tests of tests/main.rs, spreads over the slices. A test
+# binary runs the tests of its slice by skipping the others by exact name, which both libtest and libtest-mimic's
+# harnesses take as often as needed. A whole run that builds then runs the doc and the property tests.
 if $mago; then
   # The tests run a PHP SDK worker from sharp/mago's vendor folder, and lake, which mago compile proves laws with:
   # installing the pinned Lean first keeps the tests that run lake at once from each installing it.
@@ -152,15 +177,8 @@ if $mago; then
       run_step "${executable##*/}" "$folder" "$executable" --exact --test-threads "$jobs" "${skips[@]}"
     fi
   done
-  if $build && { [[ -z $shard ]] || (( shard_index == shard_count )); }; then
-    cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
-    echo "== the doc tests"
-    run_step "the doc tests" "$root" env PATH="$(dirname "$cargo"):$PATH" "$cargo" test --workspace --locked --doc \
-      --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" --jobs "$jobs" -- --test-threads "$jobs"
-    echo "== mago-codex's property tests"
-    run_step "mago-codex's property tests" "$root" env PATH="$(dirname "$cargo"):$PATH" "$cargo" test -p mago-codex \
-      --features property-tests --locked --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" \
-      --jobs "$jobs" -- --test-threads "$jobs"
+  if $build && [[ -z $shard ]]; then
+    doc_and_property_tests
   fi
   finish
 fi
@@ -224,8 +242,8 @@ if [[ ! -x "$php" ]]; then
 fi
 
 # A build folder an older sharp/bin/build configured can hold an engine without thread safety, which PHP# no longer
-# runs, at the tree's version.
-version="$(sed -n 's/^#define PHP_SHARP_VERSION "\(.*\)"$/\1/p' "$root/ext/sharp/php_sharp.h")"
+# runs, at the tree's version, the root package's in sharp/mago/Cargo.toml.
+version="$(sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q;}' "$root/sharp/mago/Cargo.toml")"
 engine_version="$("$php" -n --ri sharp | sed -n 's/^Version => //p')"
 if [[ "$engine_version" != "$version" || "$("$php" -n -r 'echo PHP_ZTS;')" != 1 ]]; then
   echo "The engine $php is $engine_version$("$php" -n -r 'echo PHP_ZTS ? "" : " without thread safety";'), but the tree is the thread-safe $version. Run sharp/bin/build." >&2

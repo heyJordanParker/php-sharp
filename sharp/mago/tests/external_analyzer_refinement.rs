@@ -631,6 +631,7 @@ fn compiled_consumer(
     let mut inputs = Vec::new();
     let (compiled, _) = incremental
         .compile(
+            mago_build_id::BUILD_ID,
             &CompiledFiles::default(),
             |_| Ok(None),
             |path| {
