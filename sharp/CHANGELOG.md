@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.31] - 2026-11-19
+
 ### Fixed
 
 - A method that a class outside its namespace overrides or implements is never too wide, spec sections 5 and 22. A method must be visible to each class that replaces it, and 0.6.30 counted only the code that calls it. So with an abstract `Base` in `App.Shop` whose `name()` and `invoke()` only `App.Shop` calls, and `One` in `App.Web` that overrides both, it refused each, as "`Base.name` is public, and nothing outside `App.Shop` uses it.", though `One` reaches both from `App.Web`. An override from outside the namespace now counts as a use from there. A method that only its own namespace and the namespaces below it override and call is still refused.
@@ -1312,7 +1314,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.30...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.31...HEAD
+[0.6.31]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.30...v0.6.31
 [0.6.30]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.29...v0.6.30
 [0.6.29]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.28...v0.6.29
 [0.6.28]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.27...v0.6.28
