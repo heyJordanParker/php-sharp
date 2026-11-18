@@ -22,6 +22,7 @@ use function preg_replace;
 use function rtrim;
 use function sprintf;
 use function str_replace;
+use function substr_count;
 use function trim;
 
 use const STDERR;
@@ -129,11 +130,12 @@ function minor_version(string $version): string
 function prepare_updates(string $root, string $manifest, string $currentVersion, string $newVersion): array
 {
     $lockPath = $root . '/Cargo.lock';
-
-    return [
+    $updates = [
         $root . '/Cargo.toml' => namespace\update_manifest($manifest, $newVersion),
         $lockPath => namespace\update_lock($lockPath, namespace\read_file($lockPath), $currentVersion, $newVersion),
-    ] + namespace\prepare_documentation_updates($root, $currentVersion, $newVersion);
+    ];
+
+    return $updates + namespace\prepare_documentation_updates($root, $currentVersion, $newVersion);
 }
 
 /** @return array<string, string> */
@@ -274,17 +276,12 @@ function update_manifest_line(string $line, string $newVersion): string
  */
 function update_lock(string $path, string $lock, string $currentVersion, string $newVersion): string
 {
-    $updated = str_replace(
-        sprintf("\nname = \"mago\"\nversion = \"%s\"\n", $currentVersion),
-        sprintf("\nname = \"mago\"\nversion = \"%s\"\n", $newVersion),
-        $lock,
-        $replacements,
-    );
-    if (1 !== $replacements) {
+    $current = sprintf("\nname = \"mago\"\nversion = \"%s\"\n", $currentVersion);
+    if (1 !== substr_count($lock, $current)) {
         throw new RuntimeException(sprintf('%s holds no mago package at version %s.', $path, $currentVersion));
     }
 
-    return $updated;
+    return str_replace($current, sprintf("\nname = \"mago\"\nversion = \"%s\"\n", $newVersion), $lock);
 }
 
 try {
