@@ -4,6 +4,13 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.27] - 2026-11-17
+
+### Fixed
+
+- `mago analyze --watch` on a project with Composer's autoload maps reports what `mago analyze` reports and keeps watching. 0.6.26 stopped the watch with exit 2 right after its first analysis, with "Failed to report results: Files error: file missing", whenever an issue pointed into a vendor file the maps served, as the declaration of a private method the project calls: the watch rendered its reports from its own tree, which holds only the files it watches, and the one-shot command from the tree that holds each file the analysis read. The watch now renders from that tree too.
+- With an extension that takes a method's return from its body, `mago analyze --watch` checks again only the files an edit reaches, as without one. An edit of such a method's body changes the return its callers read, so it checks again the files that call it, and the files that call a method whose return is taken from a body that calls it, along the whole chain. 0.6.26 analyzed the whole project again after every edit once an extension took any method's return from its body: in a 6-file project, an edit of one such body checked all 6 files again, and now checks the 4 the edit reaches.
+
 ## [0.6.26] - 2026-11-17
 
 ### Upgrading from 0.6.25
@@ -1251,7 +1258,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.26...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.27...HEAD
+[0.6.27]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.26...v0.6.27
 [0.6.26]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.25...v0.6.26
 [0.6.25]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.24...v0.6.25
 [0.6.24]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.23...v0.6.24
