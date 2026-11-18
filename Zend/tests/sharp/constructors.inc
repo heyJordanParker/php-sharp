@@ -1,11 +1,10 @@
 <?php declare(strict_types=1);
 
-// The plain PHP side of the Constructors fixture: the base class `SalesReport` extends, the attribute on
-// `Artifact.fromJson`, and plain PHP subclasses of two PHP# classes.
+// The plain PHP side of the Constructors fixture: the attribute on `Artifact.fromJson`, and plain PHP subclasses of
+// two PHP# classes.
 
 namespace Demo;
 
-require_once __DIR__ . '/harness/Report.inc';
 require_once __DIR__ . '/harness/Attributes.inc';
 require __DIR__ . '/vendor/autoload.php';
 

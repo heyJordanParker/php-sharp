@@ -4,7 +4,6 @@ Two Sets are == when they hold equal elements in any order, also in a List, a Ma
 <?php
 require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/set_values.inc';
-library();
 
 run_rows();
 ?>

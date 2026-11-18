@@ -1,8 +1,8 @@
 namespace CallerChecked;
 
-public class Article : Contact
-{
-    public Article() { }
+import Illuminate.Support.Collection;
 
-    public string viaThis() => this.morphToMany("Tag", "this").name;
+public class Article : Collection<int, Relation>, Related
+{
+    public string viaThis() => this.first().name;
 }

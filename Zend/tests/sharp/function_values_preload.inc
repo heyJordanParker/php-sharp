@@ -1,7 +1,7 @@
 <?php
 
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Text/StringMembers.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/ListMembers.sharp';
+require __DIR__ . '/vendor/heyjordanparker/php-sharp-composer/library/Sharp/Text/StringMembers.sharp';
+require __DIR__ . '/vendor/heyjordanparker/php-sharp-composer/library/Sharp/ListMembers.sharp';
 require __DIR__ . '/harness/Callbacks.inc';
 require __DIR__ . '/Lib/Words.sharp';
 require __DIR__ . '/FunctionValues/FunctionShelf.sharp';

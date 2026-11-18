@@ -1,6 +1,6 @@
 namespace Demo;
 
-import Lib;
+import Illuminate.Support.Arr;
 import Lib.Probe;
 import Sharp.IO.Files;
 
@@ -62,11 +62,10 @@ public class Import
 
     public Iterable<Row> printed()
     {
-        Lib.names_and("printed");
         yield this.latest;
     }
 
-    public Iterable<int> lengths() => this.all().map(row => Probe.counted(Lib.names_and(row.number)));
+    public Iterable<int> lengths() => this.all().map(row => Probe.counted(Arr.wrap(row.number)));
 
     public static List<string> spelled(string word) => word.letters().toList();
 }

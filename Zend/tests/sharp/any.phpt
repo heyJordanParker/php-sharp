@@ -3,12 +3,11 @@ PHP# receives Any? from plain PHP, keeps it and passes it back to plain PHP unch
 --FILE--
 <?php
 
-require __DIR__ . '/harness/Settings.inc';
 require __DIR__ . '/vendor/autoload.php';
 
 use Demo\Inbox;
 
-$inbox = new Inbox();
+$inbox = new Inbox(['plan' => 'pro', 'seats' => 5, 'tags' => ['a', 'b'], 'trial' => null]);
 foreach (['plan', 'seats', 'tags', 'trial', 'missing'] as $key) {
     echo $key, ': ', $inbox->show($key), "\n";
 }
@@ -32,11 +31,11 @@ for ($i = 0; $i < 200; $i++) {
 echo "plans $plans, last ", json_encode($inbox->keep($inbox->read('seats'))), "\n";
 ?>
 --EXPECT--
-plan: string "pro"
-seats: int 5
-tags: array ["a","b"]
-trial: null null
-missing: null null
+plan: "pro"
+seats: 5
+tags: ["a","b"]
+trial: null
+missing: null
 int(5)
 array(2) {
   [0]=>
@@ -49,10 +48,10 @@ bool(true)
 float(1.5)
 bool(true)
 bool(false)
-saved plan: string "pro"
-saved tags: array ["a","b"]
-saved trial: null null
-saved missing: null null
+saved plan: "pro"
+saved tags: ["a","b"]
+saved trial: null
+saved missing: null
 bool(true)
 NULL
 plans 100, last 5

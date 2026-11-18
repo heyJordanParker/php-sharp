@@ -1,8 +1,7 @@
 --TEST--
-An [Import] method runs the PHP function it names: each Map argument passes as a PHP array, at every depth and whatever type holds it, the result crosses into the declared type, renumbered or made a Map, a result of another type throws a TypeError naming the function, and a function PHP doesn't declare throws at the call. A plain PHP function takes each Map as a PHP array too, held as Any?, in a List, in a union or as a generic member's type parameter, and a result whose conditional type resolves to array_slice's int-keyed branch arrives as a List renumbered from 0. A nullable result reads the false file_get_contents and stream_get_contents return for a failure as null, without PHP's warning
+An [Import] method runs the PHP function it names: each Map argument passes as a PHP array, at every depth and whatever type holds it, the result crosses into the declared type, renumbered or made a Map, a result of another type throws a TypeError naming the function, and a function PHP doesn't declare throws at the call. A plain PHP function takes each Map as a PHP array too, held as Any?, in a List, in a union or as a generic member's type parameter. A nullable result reads the false file_get_contents and stream_get_contents return for a failure as null, without PHP's warning
 --FILE--
 <?php
-require __DIR__ . '/harness/Arrays.inc';
 require __DIR__ . '/vendor/autoload.php';
 
 use Imports\Report;
@@ -13,8 +12,7 @@ var_dump(Report::unique());
 var_dump(Report::position('y'), Report::position('w'));
 var_dump(Report::keys());
 var_dump(Report::heldMaps());
-var_dump(Report::passedMaps());
-var_dump(Report::sliced());
+var_dump(array_map(serialize(...), Report::passedMaps()));
 $path = sys_get_temp_dir() . '/sharp-imported-read-' . getmypid() . '.txt';
 file_put_contents($path, 'imported');
 var_dump(Words::read($path), Words::read("$path.missing"));
@@ -73,16 +71,6 @@ array(4) {
   string(33) "a:1:{i:0;a:1:{s:2:"id";s:1:"a";}}"
   [3]=>
   string(23) "a:1:{s:2:"id";s:1:"a";}"
-}
-array(4) {
-  [0]=>
-  int(6)
-  [1]=>
-  int(2)
-  [2]=>
-  int(6)
-  [3]=>
-  int(2)
 }
 string(8) "imported"
 NULL

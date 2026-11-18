@@ -54,6 +54,27 @@ public class Memo
         return 1;
     }
 
+    // A compound assignment into a property with a `set` body runs its value first too, so what the value writes to the
+    // same property stays.
+    public static List<int> raised(Basket basket)
+    {
+        basket.total += Memo.reset(basket);
+        basket.sizes[0] += Memo.grow(basket);
+        return [basket.total, basket.sizes[0], basket.sizes[1]];
+    }
+
+    private static int reset(Basket basket)
+    {
+        basket.total = 10;
+        return 1;
+    }
+
+    private static int grow(Basket basket)
+    {
+        basket.sizes.add(9);
+        return 1;
+    }
+
     private int step()
     {
         this.steps.add(7);

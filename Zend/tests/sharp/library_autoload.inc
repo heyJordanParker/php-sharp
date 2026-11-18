@@ -131,7 +131,7 @@ namespace {
         run_mago($package);
     }
 
-    $library = "$root/sharp/composer/library/Sharp";
+    $library = __DIR__ . '/vendor/heyjordanparker/php-sharp-composer/library/Sharp';
     if ($layout === 'classmap') {
         require "$root/sharp/composer/src/Plugin.php";
         $declaredClasses = new ReflectionMethod(PhpSharp\Composer\Plugin::class, 'declaredClasses');

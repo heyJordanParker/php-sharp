@@ -12,14 +12,13 @@ use xxhash_rust::xxh3::xxh3_64;
 
 use mago_allocator::LocalArena;
 use mago_analyzer::analysis_result::AnalysisResult;
-use mago_analyzer::artifacts::AnalysisArtifacts;
+use mago_analyzer::artifacts::LoweringInput;
 use mago_analyzer::code::IssueCode;
 use mago_analyzer::effects::EffectSummary;
 use mago_analyzer::effects::Effects;
 use mago_analyzer::external::ExternalAnalysisSession;
 use mago_analyzer::external::FileReads;
 use mago_analyzer::external::Listing;
-use mago_analyzer::is_collection_member;
 use mago_build_id::BUILD_ID;
 use mago_codex::metadata::module::ModuleKind;
 use mago_codex::metadata::module::ModuleMetadata;
@@ -99,7 +98,7 @@ struct LoweredUnit {
     unit: Unit,
     /// The inline forms of a standard library file, or none of another file.
     forms: Vec<(Vec<u8>, InlineForm)>,
-    /// Each class-like of the file's namespace that would win over a default class-like it names.
+    /// Each class-like of the file's namespace that would win over a default class-like it names, in order.
     namespace_classes: Vec<Word>,
     /// Whether the file's code reaches a PHP# extension member, spec section 26.
     reaches_extension: bool,
@@ -107,6 +106,9 @@ struct LoweredUnit {
 
 /// What [`IncrementalAnalysisService::compile`] keeps of each `.sharp` file it accepted, by the file's name, so the
 /// next compile keeps the file's compiled file while its key holds.
+///
+/// Each list it keeps is in order, so two compiles of one tree by one checker build encode the same bytes on any
+/// number of threads.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CompiledFiles {
     files: BTreeMap<Vec<u8>, CompiledFile>,
@@ -273,10 +275,7 @@ impl IncrementalAnalysisService {
                     .effects
                     .iter()
                     .map(|effect| {
-                        let name = self
-                            .codebase
-                            .get_class_like(effect.as_bytes())
-                            .map_or(*effect, |class| class.original_name);
+                        let name = self.codebase.get_class_like(*effect).map_or(*effect, |class| class.original_name);
 
                         name.as_str_lossy().trim_start_matches('\\').replace('\\', ".")
                     })
@@ -311,7 +310,7 @@ impl IncrementalAnalysisService {
                             Some(_) => type_text(listed, &self.codebase),
                             None => self
                                 .codebase
-                                .get_class_like(named.name.as_bytes())
+                                .get_class_like(named.name)
                                 .map_or(named.name, |event| event.original_name)
                                 .to_string(),
                         })
@@ -429,8 +428,9 @@ impl IncrementalAnalysisService {
     /// or baseline the analysis honors.
     ///
     /// `stamp` gives the size, modification time and hash of the file at a workspace-relative path, or none when no
-    /// file is there. It is called once per input. An input no file is at is stored absent: its size, modification
-    /// time and hash are all zero. No file has that stamp, because the hash of an empty file is not zero.
+    /// file is there. It is called once per input, from several threads at once. An input no file is at is stored
+    /// absent: its size, modification time and hash are all zero. No file has that stamp, because the hash of an empty
+    /// file is not zero.
     ///
     /// Each compiled file's header names `standard_library`, the standard library the project compiles against.
     ///
@@ -447,7 +447,7 @@ impl IncrementalAnalysisService {
         &mut self,
         last: &CompiledFiles,
         mut compiled: impl FnMut(&File) -> Result<Option<Vec<u8>>, DatabaseError>,
-        mut stamp: impl FnMut(&[u8]) -> Result<Option<Input>, DatabaseError>,
+        stamp: impl Fn(&[u8]) -> Result<Option<Input>, DatabaseError> + Sync,
         check: impl FnOnce(Vec<Translation>, &Reach) -> std::io::Result<HashMap<FileId, IssueCollection>>,
         standard_library: &Library,
         refusing: impl FnOnce(IssueCollection) -> IssueCollection,
@@ -516,8 +516,9 @@ impl IncrementalAnalysisService {
             lowered_again.len(),
             translated_only.len(),
         );
-        // Lowering analyzes each PHP# file again against the codebase its last analysis saw, so it sends the provider
-        // requests that analysis sent, and every read their answers rest on is one the analysis already holds.
+        // A file the last analysis kept no lowering input for is analyzed again against the codebase that analysis saw,
+        // so it sends the provider requests that analysis sent, and every read their answers rest on is one the
+        // analysis already holds.
         debug_assert!(
             session.as_ref().is_none_or(|session| {
                 let lowering = session.take_reads();
@@ -644,28 +645,28 @@ impl IncrementalAnalysisService {
             counts.last().copied().unwrap_or_default(),
         );
 
-        let mut stamps: HashMap<Vec<u8>, Input> = HashMap::default();
-        let mut stamped = |paths: Vec<Vec<u8>>| -> Result<Vec<Input>, OrchestratorError> {
-            let mut inputs = Vec::with_capacity(paths.len());
-            for path in paths {
-                let input = match stamps.get(&path) {
-                    Some(input) => input.clone(),
-                    None => {
-                        let input = stamp(&path)?.unwrap_or_else(|| Input {
-                            path: path.clone(),
-                            size: 0,
-                            mtime_ns: 0,
-                            hash: [0; 16],
-                        });
-                        stamps.insert(path, input.clone());
-                        input
-                    }
-                };
-                inputs.push(input);
-            }
-
-            Ok(inputs)
+        // Each input of an accepted file is read once, all at once, and the first in the order the files name them that
+        // can't be read fails the compile, as reading them one after another did.
+        let named: Vec<Vec<u8>> = {
+            let mut seen: HashSet<&[u8]> = HashSet::default();
+            files
+                .iter()
+                .filter(|file| {
+                    !refused.contains_key(&file.id)
+                        && (kept.contains_key(&file.id) || matches!(lowered.get(&file.id), Some(Ok(_))))
+                })
+                .flat_map(|file| input_paths.get(&file.id).into_iter().flatten())
+                .filter(|path| seen.insert(path.as_slice()))
+                .cloned()
+                .collect()
         };
+        let stamped: Vec<Result<Option<Input>, DatabaseError>> = named.par_iter().map(|path| stamp(path)).collect();
+        let mut stamps: HashMap<Vec<u8>, Input> = HashMap::default();
+        for (path, input) in named.into_iter().zip(stamped) {
+            let input = input?.unwrap_or_else(|| Input { path: path.clone(), size: 0, mtime_ns: 0, hash: [0; 16] });
+            stamps.insert(path, input);
+        }
+        let stamped = |paths: Vec<Vec<u8>>| -> Vec<Input> { paths.iter().map(|path| stamps[path].clone()).collect() };
         let mut next = CompiledFiles::default();
         let mut compilations = Vec::with_capacity(files.len());
         for file in &files {
@@ -674,7 +675,7 @@ impl IncrementalAnalysisService {
                 match issues {
                     Some(issues) => Compilation::Refused(issues),
                     None => {
-                        let inputs = stamped(input_paths.remove(&file.id).unwrap_or_default())?;
+                        let inputs = stamped(input_paths.remove(&file.id).unwrap_or_default());
                         let Some(bytes) = unit::restamp(&bytes, &inputs, standard_library) else {
                             unreachable!("a compiled file the compile keeps is one `unit::is_stale` read");
                         };
@@ -694,7 +695,7 @@ impl IncrementalAnalysisService {
                         reads.inlined = unit.inlined().to_vec();
                         reads.function_types = unit.function_types().to_vec();
                         let key = key(source_hash(&file.contents), &reads);
-                        let inputs = stamped(input_paths.remove(&file.id).unwrap_or_default())?;
+                        let inputs = stamped(input_paths.remove(&file.id).unwrap_or_default());
                         next.files.insert(
                             file.name.to_vec(),
                             CompiledFile { key, reads, forms, namespace_classes, reaches_extension },
@@ -784,7 +785,7 @@ impl IncrementalAnalysisService {
             })
         };
         let names_sharp_type =
-            |name: &Word| self.codebase.get_class_like(name.as_bytes()).is_some_and(|class| class.flags.is_sharp());
+            |name: &Word| self.codebase.get_class_like(*name).is_some_and(|class| class.flags.is_sharp());
         let declarations: HashSet<_> = self
             .codebase
             .class_likes
@@ -813,15 +814,14 @@ impl IncrementalAnalysisService {
         refused.into_iter().map(|(file_id, issues)| (file_id, Compilation::Refused(issues))).collect()
     }
 
-    /// What each file's analysis read from other files: each declaration it read through its signature, each method
-    /// whose return is taken from its body, and each declaration and set of names its extensions read. With them, the
-    /// files whose bodies it read: those that declare those methods, and those whose bodies its calls reach, which
-    /// `effects` solved its functions' effects from.
+    /// What each file's analysis read from other files, each list in order: each declaration it read through its
+    /// signature, each method whose return is taken from its body, and each declaration and set of names its extensions
+    /// read. With them, the files whose bodies it read: those that declare those methods, and those whose bodies its
+    /// calls reach, which `effects` solved its functions' effects from.
     fn reads(&self, effects: &Effects) -> HashMap<FileId, (Reads, HashSet<FileId>)> {
         // A declaration several files hold, as two polyfill files each declare one function, is read as the one the
         // codebase keeps, else as the one in the first file by id, so every compile fingerprints the same one.
         let kept = |name: Word, is_function: bool| {
-            let name = name.as_bytes();
             let span = if is_function {
                 self.codebase.get_function(name).map(|function| function.span)
             } else {
@@ -853,7 +853,7 @@ impl IncrementalAnalysisService {
 
         let declared = |target: SymbolIdentifier| -> Option<(SymbolIdentifier, FileId, u64)> {
             let find = |class: mago_word::Word| {
-                [(class, target.1), (self.codebase.class_key(class.as_bytes()), target.1)]
+                [(class, target.1), (self.codebase.class_key(class), target.1)]
                     .into_iter()
                     .find_map(|member| declarations.get(&member).map(|(file_id, hash)| (member, *file_id, *hash)))
             };
@@ -863,7 +863,7 @@ impl IncrementalAnalysisService {
 
             let mut class = Some(target.0);
             while let Some(name) = class {
-                let metadata = self.codebase.get_class_like(name.as_bytes())?;
+                let metadata = self.codebase.get_class_like(name)?;
                 if let Some(found) = find(name).or_else(|| metadata.used_traits.iter().find_map(|t| find(*t))) {
                     return Some(found);
                 }
@@ -944,6 +944,11 @@ impl IncrementalAnalysisService {
         for (file_id, callee_files) in effects.callee_files(&self.codebase) {
             reads.entry(file_id).or_default().1.extend(callee_files);
         }
+        for (file_reads, _) in reads.values_mut() {
+            file_reads.signatures.sort();
+            file_reads.bodies.sort();
+            file_reads.listed.sort();
+        }
 
         reads
     }
@@ -964,7 +969,7 @@ impl IncrementalAnalysisService {
         }
 
         let read = dependencies.files.get(&mago_word::word(file.name.as_ref())).into_iter().flatten();
-        let read = read.filter_map(|(class, _)| self.codebase.get_class_like(class.as_bytes()));
+        let read = read.filter_map(|(class, _)| self.codebase.get_class_like(*class));
         let tested = modules.iter().filter(|module| module.kind == ModuleKind::Test).flat_map(|module| {
             self.codebase.class_likes.values().map(|class| &**class).filter(|class| {
                 let name = class.name.as_bytes();
@@ -997,14 +1002,14 @@ impl IncrementalAnalysisService {
     /// `name` and, when it names a class-like, every class, interface and trait it inherits from, since an extension
     /// that read a class-like read its inherited members too.
     fn with_ancestors(&self, name: Word) -> Vec<Word> {
-        let Some(class_like) = self.codebase.get_class_like(name.as_bytes()) else {
+        let Some(class_like) = self.codebase.get_class_like(name) else {
             return vec![name];
         };
 
         let classes = std::iter::once(class_like.name).chain(class_like.all_parent_classes.iter().copied());
         let traits = classes
             .clone()
-            .filter_map(|class| self.codebase.get_class_like(class.as_bytes()))
+            .filter_map(|class| self.codebase.get_class_like(class))
             .flat_map(|class| class.used_traits.iter().copied());
 
         classes.chain(class_like.all_parent_interfaces.iter().copied()).chain(traits).collect()
@@ -1128,14 +1133,15 @@ impl IncrementalAnalysisService {
         })
     }
 
-    /// Analyzes each of `files` again with `forms` to inline and gives what `output` makes of its checked program, with
-    /// the class-likes of its namespace that would win over a default class-like it names and whether its code reaches
-    /// a PHP# extension member, the files with errors that refuse them refused. A file with a parse error or an error
-    /// that refuses it is refused without being analyzed again, since its refusal holds only those errors. A file with
-    /// only `unrefused` errors is checked as far as its code allows. The checked program assumes the checker accepted it, so one `output` can't
-    /// handle is refused with those errors and the panic's own text, [`LOWERING_PANIC`], as rust-analyzer turns a panic
-    /// on broken code into a failed request. A panic on a file with no error is a defect of the checker, which the same
-    /// refusal names.
+    /// Gives what `output` makes of the checked program of each of `files`, with `forms` to inline, the class-likes of
+    /// its namespace that would win over a default class-like it names and whether its code reaches a PHP# extension
+    /// member, the files with errors that refuse them refused. Each file is checked from what the last analysis gave
+    /// its lowering, or, where that analysis kept none, as an incremental one keeps none, from an analysis of the file
+    /// alone. A file with a parse error or an error that refuses it is refused without being analyzed again, since its
+    /// refusal holds only those errors. A file with only `unrefused` errors is checked as far as its code allows. The
+    /// checked program assumes the checker accepted it, so one `output` can't handle is refused with those errors and
+    /// the panic's own text, [`LOWERING_PANIC`], as rust-analyzer turns a panic on broken code into a failed request. A
+    /// panic on a file with no error is a defect of the checker, which the same refusal names.
     fn checked_all<T>(
         &self,
         files: &[&Arc<File>],
@@ -1161,26 +1167,40 @@ impl IncrementalAnalysisService {
                     &self.changing_members,
                     &self.extern_namespaces,
                 );
-                let namespace_classes = names.namespace_classes().map(mago_word::word).collect();
-                let mut result = AnalysisResult::new(SymbolReferences::new());
-                let artifacts = if issues.is_empty() && program.errors.is_empty() {
-                    self.file_analyzer(&arena, file, &names, session).analyze_with_artifacts(program, &mut result)?
-                } else {
-                    AnalysisArtifacts::new()
+                let mut namespace_classes: Vec<Word> = names.namespace_classes().map(mago_word::word).collect();
+                namespace_classes.sort();
+                let kept = self
+                    .file_states
+                    .get(&file.id)
+                    .and_then(|state| Some((state.lowering_input.as_ref()?, state.reaches_extension)));
+                let analyzed;
+                let (input, reaches_extension) = match kept {
+                    Some(kept) => kept,
+                    None if issues.is_empty() && program.errors.is_empty() => {
+                        #[cfg(test)]
+                        self.analyzed_to_lower
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .insert(file.id);
+                        // This analysis of the one file records exactly what its code reaches, unlike the references
+                        // the warm path keeps from a method it analyzed before.
+                        let mut result = AnalysisResult::new(SymbolReferences::new());
+                        let artifacts = self
+                            .file_analyzer(&arena, file, &names, session)
+                            .analyze_with_artifacts(program, &mut result)?;
+                        analyzed = (
+                            artifacts.into_lowering_input(),
+                            super::reaches_extension(&self.codebase, &result.symbol_references),
+                        );
+                        (&analyzed.0, analyzed.1)
+                    }
+                    None => {
+                        analyzed = (LoweringInput::default(), false);
+                        (&analyzed.0, analyzed.1)
+                    }
                 };
-                // This analysis of the one file records exactly what its code reaches, unlike the references the warm
-                // path keeps from a method it analyzed before. A collection's member is the collection's own, which no
-                // extension of the namespace replaces.
-                let mut reaches_extension = false;
-                result.symbol_references.for_each_reference(|_, (class, member), _| {
-                    reaches_extension |= !member.is_empty()
-                        && self.codebase.get_method(class.as_bytes(), member.as_bytes()).is_some_and(|method| {
-                            (method.flags.is_extension_method() || method.flags.is_extension_property())
-                                && !is_collection_member(class, method)
-                        });
-                });
 
-                Ok(match check(file, program, names, &artifacts, &self.codebase, effects, forms, &issues) {
+                Ok(match check(file, program, names, input, &self.codebase, effects, forms, &issues) {
                     Ok(checked) => std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         output(&checked, namespace_classes, reaches_extension)
                     }))
@@ -1340,7 +1360,7 @@ impl<'service> Dependencies<'service> {
         // lists the file that declares it and, along the chain of aliases, each file that declares the next name.
         for (alias, target, span) in service.codebase.class_like_alias_declarations() {
             let alias = (alias, empty_word());
-            let target = service.codebase.class_key(target.as_bytes());
+            let target = service.codebase.class_key(target);
             dependencies.signature.entry(alias).or_default().push((target, empty_word()));
             if service.database.get(&span.file_id).is_ok_and(|file| is_source(&file)) {
                 dependencies.declared_in.entry(alias).or_default().push(span.file_id);
@@ -1380,11 +1400,7 @@ impl<'service> Dependencies<'service> {
         }
         // A read names a class-like as the extension wrote it, which the codebase keys, spec section 24.
         for &(class, member) in &self.code_reads.symbols {
-            self.signature_changes(
-                (self.service.codebase.class_key(class.as_bytes()), member),
-                &mut changes,
-                &mut visited,
-            );
+            self.signature_changes((self.service.codebase.class_key(class), member), &mut changes, &mut visited);
         }
 
         changes
@@ -1511,6 +1527,33 @@ mod tests {
         analyzed_with(database, Settings::default())
     }
 
+    /// The service after a full analysis of `database` that kept what it gave the lowering of each PHP# file.
+    fn analyzed_for_lowering(database: &Database<'static>) -> IncrementalAnalysisService {
+        let mut service = IncrementalAnalysisService::new(
+            database.read_only(),
+            prelude,
+            Settings::default(),
+            ParserSettings::default(),
+            Arc::clone(&PLUGIN_REGISTRY),
+        )
+        .keeping_lowering_inputs();
+        service.analyze().expect("the analysis runs");
+
+        service
+    }
+
+    /// The name of each file the compiles of `service` analyzed again to lower it.
+    fn analyzed_to_lower(service: &IncrementalAnalysisService) -> BTreeSet<String> {
+        let analyzed = service.analyzed_to_lower.lock().expect("no compile panicked while it held the files");
+
+        analyzed
+            .iter()
+            .map(|file_id| {
+                String::from_utf8_lossy(&service.database().get(file_id).expect("the file exists").name).into()
+            })
+            .collect()
+    }
+
     /// The service after a full analysis of `database` under `settings`.
     fn analyzed_with(database: &Database<'static>, settings: Settings) -> IncrementalAnalysisService {
         let mut service = IncrementalAnalysisService::new(
@@ -1531,7 +1574,7 @@ mod tests {
     }
 
     /// Stamps each file of `database` with its size and hash, and `composer.lock` as an empty file.
-    fn database_stamp(database: &Database<'static>) -> impl FnMut(&[u8]) -> Result<Option<Input>, DatabaseError> {
+    fn database_stamp(database: &Database<'static>) -> impl Fn(&[u8]) -> Result<Option<Input>, DatabaseError> + Sync {
         let database = database.read_only();
 
         move |path| {
@@ -1561,7 +1604,7 @@ mod tests {
     /// Each compilation of a compile of `service` that keeps no file, as the first compile of a project runs.
     fn fresh(
         service: &mut IncrementalAnalysisService,
-        stamp: impl FnMut(&[u8]) -> Result<Option<Input>, DatabaseError>,
+        stamp: impl Fn(&[u8]) -> Result<Option<Input>, DatabaseError> + Sync,
         check: impl FnOnce(Vec<Translation>, &Reach) -> std::io::Result<HashMap<FileId, IssueCollection>>,
         standard_library: &Library,
         refusing: impl FnOnce(IssueCollection) -> IssueCollection,
@@ -1574,7 +1617,7 @@ mod tests {
     /// Each compiled file of `service` by its name.
     fn compile(
         service: &mut IncrementalAnalysisService,
-        stamp: impl FnMut(&[u8]) -> Result<Option<Input>, DatabaseError>,
+        stamp: impl Fn(&[u8]) -> Result<Option<Input>, DatabaseError> + Sync,
     ) -> std::collections::BTreeMap<String, Compilation> {
         let compiled = fresh(service, stamp, proved, &Library::default(), |issues| issues).expect("the compile runs");
         let database = service.database();
@@ -1818,7 +1861,7 @@ mod tests {
     #[test]
     fn an_input_no_file_is_at_is_stored_absent_as_an_all_zero_stamp() {
         let database = project(&[("app/Order.sharp", ORDER)]);
-        let mut stamp = database_stamp(&database);
+        let stamp = database_stamp(&database);
 
         let compiled =
             compile(&mut analyzed(&database), |path| if path == b"composer.lock" { Ok(None) } else { stamp(path) });
@@ -2092,12 +2135,13 @@ mod tests {
     fn each_input_is_stamped_once_however_many_files_name_it() {
         let database = shop_project(&shop(MONEY, RATE));
         let mut service = analyzed(&database);
-        let mut stamped: std::collections::BTreeMap<Vec<u8>, usize> = std::collections::BTreeMap::new();
+        let stamped: std::sync::Mutex<std::collections::BTreeMap<Vec<u8>, usize>> = std::sync::Mutex::default();
 
         compile(&mut service, |path| {
-            *stamped.entry(path.to_vec()).or_default() += 1;
+            *stamped.lock().unwrap().entry(path.to_vec()).or_default() += 1;
             empty_stamp(path)
         });
+        let stamped = stamped.into_inner().unwrap();
 
         assert!(stamped.contains_key(b"app/Money.sharp".as_slice()), "{stamped:?}");
         assert!(stamped.values().all(|count| *count == 1), "{stamped:?}");
@@ -2263,7 +2307,8 @@ mod tests {
                 polyfills.iter().map(|(name, code)| (name.as_str(), code.as_str())).collect();
             files.push((TEXT_PATH, text.as_str()));
             let mut service = analyzed(&project(&files));
-            let kept = service.codebase.get_function(b"shout").expect("the codebase keeps one `shout`").span.file_id;
+            let kept =
+                service.codebase.get_function(word("shout")).expect("the codebase keeps one `shout`").span.file_id;
 
             (kept, compiled_key(accepted(&compile(&mut service, empty_stamp), TEXT_PATH)))
         };
@@ -2480,6 +2525,60 @@ mod tests {
         }
     }
 
+    /// A compile after a full analysis that kept what it gave the lowering of each PHP# file lowers each file from it,
+    /// analyzing none again, and writes the bytes and refuses the files a compile that analyzes each file again does.
+    #[test]
+    fn a_compile_lowers_each_file_from_the_analysis_before_it_as_analyzing_the_file_again_lowers_it() {
+        let generated = generated_project(40, 11);
+        let fixtures = [
+            shop_project(&shop(MONEY, RATE)),
+            shop_project(&headers()),
+            shop_project(&bounds()),
+            shop_project(&constants()),
+            project(&[(TEXT_PATH, TEXT), ("app/Title.sharp", TITLE)]),
+            project(&generated.iter().map(|(name, contents)| (name.as_str(), contents.as_str())).collect::<Vec<_>>()),
+        ];
+
+        for database in &fixtures {
+            let mut from_analysis = analyzed_for_lowering(database);
+            let mut analyzing_again = analyzed(database);
+            let lowered = compile(&mut from_analysis, empty_stamp);
+            let lowered_again = compile(&mut analyzing_again, empty_stamp);
+
+            assert_eq!(whole(&lowered), whole(&lowered_again));
+            assert_eq!(analyzed_to_lower(&from_analysis), BTreeSet::new());
+            assert_eq!(
+                analyzed_to_lower(&analyzing_again),
+                lowered
+                    .iter()
+                    .filter(|(_, compilation)| matches!(compilation, Compilation::Accepted(_)))
+                    .map(|(name, _)| name.clone())
+                    .collect::<BTreeSet<_>>()
+            );
+        }
+    }
+
+    /// An incremental analysis keeps nothing for the lowering, since it skips the methods it keeps, so the compile
+    /// after it analyzes each file it lowers again, and writes what a clean compile writes.
+    #[test]
+    fn a_compile_after_an_incremental_analysis_analyzes_each_file_it_lowers_again() {
+        let edited = shop_project(&shop(&MONEY.replace("return 1;", "return 2;"), RATE));
+        let mut warm = analyzed_for_lowering(&shop_project(&shop(MONEY, RATE)));
+        warm.update_database(edited.read_only());
+        warm.analyze_incremental(None).expect("the warm path runs");
+
+        let warm_compiled = compile(&mut warm, empty_stamp);
+
+        assert_eq!(
+            analyzed_to_lower(&warm),
+            BTreeSet::from(
+                ["app/Cash.sharp", "app/Money.sharp", "app/Order.sharp", "app/Rates.sharp", "app/Unrelated.sharp"]
+                    .map(str::to_owned)
+            )
+        );
+        assert_eq!(whole(&warm_compiled), whole(&compile(&mut analyzed_for_lowering(&edited), empty_stamp)));
+    }
+
     /// The compiled files and the [`CompiledFiles`] of a compile of `service` that keeps each file `last` and
     /// `previous`, the compiled files of the last compile by name, hold whose key holds, and the name of each file it
     /// kept.
@@ -2487,7 +2586,7 @@ mod tests {
         service: &mut IncrementalAnalysisService,
         last: &CompiledFiles,
         previous: &BTreeMap<String, Compilation>,
-        stamp: impl FnMut(&[u8]) -> Result<Option<Input>, DatabaseError>,
+        stamp: impl Fn(&[u8]) -> Result<Option<Input>, DatabaseError> + Sync,
     ) -> (BTreeMap<String, Compilation>, CompiledFiles, BTreeSet<String>) {
         let mut asked = BTreeSet::new();
         let (compiled, kept) = service

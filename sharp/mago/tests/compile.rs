@@ -112,6 +112,7 @@ fn compile_writes_each_accepted_file_into_the_sharp_folder_at_its_source_path() 
             Path::new("compiled.bin"),
             Path::new("inputs.json"),
             Path::new("listeners.php"),
+            Path::new("preload.php"),
             Path::new("vendor/acme/money/src/Money.sharpc")
         ]
     );
@@ -122,6 +123,84 @@ fn compile_writes_each_accepted_file_into_the_sharp_folder_at_its_source_path() 
     }
     assert_eq!(files_under(&root.join("vendor")), vendor, "nothing is written under vendor/");
     assert!(printed(&output).contains("Compiled 2 PHP# files into .sharp/."), "{}", printed(&output));
+}
+
+/// Spec section 27: `.sharp/preload.php`, which `opcache.preload` names, requires the workspace's Composer autoloader
+/// and then each accepted source that declares a type, the package's too, in path order. A refused source, one that
+/// declares no type, as a module's file, and a test in an `autoload-dev` folder stay out, so production never preloads
+/// a test.
+#[test]
+fn compile_writes_a_preload_script_that_requires_the_autoloader_and_every_accepted_type() {
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    write(root, "app/Broken.sharp", &BROKEN_ORDER.replace("class Order", "class Broken"));
+    write(root, "app/Module.sharp", "module\n{\n}\n");
+    write(
+        root,
+        "composer.json",
+        "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}, \"autoload-dev\": {\"psr-4\": {\"Tests\\\\\": \"tests/\"}}}\n",
+    );
+    write(root, "tests/Shop/CheckoutTest.sharp", "namespace Tests.Shop;\n\npublic class CheckoutTest\n{\n}\n");
+    write(
+        root,
+        "mago.toml",
+        "php-version = \"8.4\"\n\n[source]\npaths = [\"app\", \"tests\"]\nincludes = [\"vendor\"]\n",
+    );
+
+    let output = compile(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(compiled(root, "tests/Shop/CheckoutTest.sharp").exists());
+    assert_eq!(
+        read(root, ".sharp/preload.php"),
+        "<?php\n\n// mago compile writes this file. It rewrites it on every compile.\n\nrequire_once __DIR__ . '/../vendor/autoload.php';\nrequire_once __DIR__ . '/../app/Order.sharp';\nrequire_once __DIR__ . '/../vendor/acme/money/src/Money.sharp';\n"
+    );
+}
+
+/// Spec section 27: PHP declares an anonymous class only when its code runs, so `.sharp/preload.php` loads each type
+/// an anonymous class names, PHP's own left out, in a file the preload loads: a file Composer's autoloader loads up
+/// front, as `illuminate/reflection`'s `helpers.php`, and the file of a type a preloaded type extends. Opcache would
+/// warn that it can't preload the class otherwise. A file the preload never loads keeps what its anonymous class names
+/// unloaded.
+#[test]
+fn compile_writes_a_preload_script_that_loads_what_the_anonymous_classes_it_loads_name() {
+    let directory = project("namespace App;\n\nimport Acme.Model.Base;\n\npublic class Order : Base\n{\n}\n", MONEY);
+    let root = directory.path();
+    write(
+        root,
+        "vendor/composer/autoload_psr4.php",
+        "<?php\n\n$vendorDir = dirname(__DIR__);\n\nreturn array(\n    'Acme\\\\Model\\\\' => array($vendorDir . '/acme/model/src'),\n);\n",
+    );
+    write(
+        root,
+        "vendor/composer/autoload_files.php",
+        "<?php\n\n$vendorDir = dirname(__DIR__);\n\nreturn array(\n    'a1' => $vendorDir . '/acme/model/helpers.php',\n);\n",
+    );
+    write(
+        root,
+        "vendor/acme/model/helpers.php",
+        "<?php\n\nfunction lazy(): object\n{\n    return new class implements Stringable\n    {\n        use Acme\\Model\\Reflects;\n\n        public function __toString(): string\n        {\n            return '';\n        }\n    };\n}\n",
+    );
+    write(root, "vendor/acme/model/src/Reflects.php", "<?php\n\nnamespace Acme\\Model;\n\ntrait Reflects\n{\n}\n");
+    write(
+        root,
+        "vendor/acme/model/src/Base.php",
+        "<?php\n\nnamespace Acme\\Model;\n\nclass Base\n{\n    public function contract(): Contract\n    {\n        return new class implements Contract {};\n    }\n\n    public function unused(): Unused\n    {\n        return new Unused();\n    }\n}\n",
+    );
+    write(root, "vendor/acme/model/src/Contract.php", "<?php\n\nnamespace Acme\\Model;\n\ninterface Contract\n{\n}\n");
+    write(
+        root,
+        "vendor/acme/model/src/Unused.php",
+        "<?php\n\nnamespace Acme\\Model;\n\nclass Unused\n{\n    public function shown(): Shown\n    {\n        return new class extends Shown {};\n    }\n}\n",
+    );
+    write(root, "vendor/acme/model/src/Shown.php", "<?php\n\nnamespace Acme\\Model;\n\nclass Shown\n{\n}\n");
+
+    compile_succeeds(root);
+
+    assert_eq!(
+        read(root, ".sharp/preload.php"),
+        "<?php\n\n// mago compile writes this file. It rewrites it on every compile.\n\nrequire_once __DIR__ . '/../vendor/autoload.php';\nrequire_once __DIR__ . '/../app/Order.sharp';\nrequire_once __DIR__ . '/../vendor/acme/money/src/Money.sharp';\ninterface_exists('Acme\\\\Model\\\\Contract');\ntrait_exists('Acme\\\\Model\\\\Reflects');\n"
+    );
 }
 
 /// Each compiled file names the standard library the project installs: the native fingerprint its package's
@@ -1883,6 +1962,7 @@ fn compile_deletes_the_compiled_file_of_a_renamed_or_removed_source() {
             Path::new("compiled.bin"),
             Path::new("inputs.json"),
             Path::new("listeners.php"),
+            Path::new("preload.php"),
             Path::new("vendor/acme/money/src/Money.sharpc")
         ]
     );
@@ -1962,7 +2042,8 @@ fn compile_reports_a_link_to_a_file_outside_the_project_and_writes_no_compiled_f
             Path::new("app/Order.sharpc"),
             Path::new("compiled.bin"),
             Path::new("inputs.json"),
-            Path::new("listeners.php")
+            Path::new("listeners.php"),
+            Path::new("preload.php")
         ]
     );
 }
@@ -2549,6 +2630,51 @@ fn compiles_with_different_threads_share_one_compile() {
 
     assert!(shared.status.success(), "{}", printed(&shared));
     assert_eq!(compiled_at(root, "app/Order.sharp"), written, "the compile on 2 threads wrote nothing");
+}
+
+/// Two compiles of one tree write the same record of the compiled files, byte for byte, on one thread and on several:
+/// each list the record keeps, such as what a file read of the classes of its namespace, keeps one order.
+#[test]
+fn compiles_of_one_tree_write_the_same_record_on_any_number_of_threads() {
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    let items: Vec<String> = (0..12).map(|item| format!("Item{item}.value()")).collect();
+    for item in 0..12 {
+        write(
+            root,
+            &format!("app/Item{item}.sharp"),
+            &format!("namespace App;\n\npublic class Item{item}\n{{\n    public static int value() => {item};\n}}\n"),
+        );
+    }
+    write(
+        root,
+        "app/Catalog.sharp",
+        &format!(
+            "namespace App;\n\npublic class Catalog\n{{\n    public static int total() => {};\n}}\n",
+            items.join(" + ")
+        ),
+    );
+    let record_on = |threads: &str| {
+        let output = process::output(
+            Command::new(env!("CARGO_BIN_EXE_mago"))
+                .args(["--no-version-check", "--colors", "never", "--threads", threads, "compile"])
+                .env("MAGO_REPORTING_FORMAT", "medium")
+                .env("XDG_CACHE_HOME", Path::new(env!("CARGO_TARGET_TMPDIR")).join("cache"))
+                .current_dir(root),
+        )
+        .unwrap();
+        assert!(output.status.success(), "{}", printed(&output));
+
+        let record = std::fs::read(root.join(".sharp/compiled.bin")).unwrap();
+        std::fs::remove_dir_all(root.join(".sharp")).unwrap();
+
+        record
+    };
+
+    let on_one = record_on("1");
+
+    assert_eq!(record_on("4"), on_one, "the compile on 4 threads wrote another record");
+    assert_eq!(record_on("4"), on_one, "the second compile on 4 threads wrote another record");
 }
 
 /// Each message `output` logged, without the time, level, thread and module a debug build's log puts before it.
@@ -3222,7 +3348,7 @@ fn compile_keeps_the_php_files_out_of_git_with_no_git_to_run() {
         assert!(checkout.join("app/Order.php").exists());
         assert_eq!(
             untracked(checkout),
-            "?? .sharp/app/Order.sharpc\n?? .sharp/compiled.bin\n?? .sharp/inputs.json\n?? .sharp/listeners.php\n?? .sharp/vendor/acme/money/src/Money.sharpc\n",
+            "?? .sharp/app/Order.sharpc\n?? .sharp/compiled.bin\n?? .sharp/inputs.json\n?? .sharp/listeners.php\n?? .sharp/preload.php\n?? .sharp/vendor/acme/money/src/Money.sharpc\n",
             "{}",
             checkout.display()
         );
@@ -3745,21 +3871,26 @@ fn compile_proves_a_law_from_its_sharp_file_alone_and_writes_the_compiled_file()
     assert!(!root.join(".sharp/.lean/Code").exists(), "the runner's request holds the generated code, so no file does");
 }
 
-/// An earlier `mago` wrote the generated code to `.sharp/.lean/Code/` and built it there with Lake. The runner reads the
-/// code from its request, so the compile deletes both, and a file in them cannot reach a proof.
+/// An earlier `mago` wrote the generated code to `.sharp/.lean/Code/` and built it there with Lake, and wrote the
+/// `lakefile.toml` and the manifest that `lake env` gave its runner the search path from. The runner reads the code from
+/// its request and starts with the search path the library build records, so the compile deletes them all, and a file
+/// in them cannot reach a proof.
 #[test]
-fn compile_deletes_the_generated_code_and_the_lake_build_an_earlier_mago_left_and_proves_its_law() {
+fn compile_deletes_the_generated_code_and_the_lake_package_an_earlier_mago_left_and_proves_its_law() {
     let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]);
     let root = directory.path();
     write(root, ".sharp/.lean/Code/App/Shared/Money.lean", "this is not Lean\n");
     write(root, ".sharp/.lean/.lake/build/lib/lean/Code/App/Shared/Money.olean", "this is not a build\n");
+    write(root, ".sharp/.lean/lakefile.toml", "this is not a lakefile\n");
+    write(root, ".sharp/.lean/lake-manifest.json", "this is not a manifest\n");
 
     let output = compile(root);
 
     assert!(output.status.success(), "{}", printed(&output));
     assert!(compiled(root, "app/Shared/Money.sharp").exists());
-    assert!(!root.join(".sharp/.lean/Code").exists());
-    assert!(!root.join(".sharp/.lean/.lake/build").exists());
+    for left in ["Code", ".lake", "lakefile.toml", "lake-manifest.json"] {
+        assert!(!root.join(".sharp/.lean").join(left).exists(), "{left}");
+    }
 }
 
 #[test]
@@ -3987,37 +4118,60 @@ fn compile_proves_two_stale_law_files_and_refuses_each_one_whose_method_breaks_i
     }
 }
 
-/// Puts a `lake` first on the `PATH` that runs the real one, and leaves a file in `started` in `folder` for each
-/// `sharp-lean` runner it starts, which holds the runner's request.
+/// A cache folder in `folder` whose law checker build is the tests' own, with a runner that runs the shell commands
+/// `script` in its place, which `$real` names the tests' runner in. Every other file of the build is a link to the
+/// tests' build, so a compile with this cache builds nothing.
 #[cfg(unix)]
-fn counting_lake(folder: &Path) -> std::ffi::OsString {
+fn cache_with_runner(folder: &Path, script: &str) -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
 
-    let path = std::env::var_os("PATH").unwrap();
-    let real =
-        std::env::split_paths(&path).map(|directory| directory.join("lake")).find(|lake| lake.is_file()).unwrap();
-    let started = folder.join("started");
-    std::fs::create_dir_all(&started).unwrap();
-    let script = format!(
-        "#!/bin/sh\ncase \"$2\" in\n  */sharp-lean)\n    tee '{started}/'$$ | '{real}' \"$@\"\n    exit $?\n    ;;\nesac\nexec '{real}' \"$@\"\n",
-        started = started.display(),
-        real = real.display(),
-    );
-    let lake = folder.join("bin/lake");
-    write(folder, "bin/lake", &script);
-    std::fs::set_permissions(&lake, std::fs::Permissions::from_mode(0o755)).unwrap();
+    compile_succeeds(lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]).path());
+    let builds = Path::new(env!("CARGO_TARGET_TMPDIR")).join("cache/mago/lean");
+    let runner = Path::new(".lake/build/bin/sharp-lean");
+    let built = std::fs::read_dir(&builds)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|build| build.join(runner).is_file())
+        .unwrap();
+    let cache = folder.join("cache");
+    let library = cache.join("mago/lean").join(built.file_name().unwrap());
+    let mut parts = runner.ancestors().skip(1).collect::<Vec<_>>();
+    parts.reverse();
+    for part in parts {
+        std::fs::create_dir_all(library.join(part)).unwrap();
+        for entry in std::fs::read_dir(built.join(part)).unwrap() {
+            let name = Path::new(part).join(entry.unwrap().file_name());
+            if !runner.starts_with(&name) {
+                std::os::unix::fs::symlink(built.join(&name), library.join(&name)).unwrap();
+            }
+        }
+    }
+    let real = built.join(runner);
+    std::fs::write(library.join(runner), format!("#!/bin/sh\nreal='{}'\n{script}\n", real.display())).unwrap();
+    std::fs::set_permissions(library.join(runner), std::fs::Permissions::from_mode(0o755)).unwrap();
 
-    std::env::join_paths(std::iter::once(folder.join("bin")).chain(std::env::split_paths(&path))).unwrap()
+    cache
 }
 
-/// The generated Lean module of `name` in the request of the one runner `counting_lake` started in `folder`: the
-/// request's header, the modules an earlier runner stopped in, then each generated module's name and source.
+/// A cache folder in `folder` whose runner runs the tests' runner, and leaves a file in `started` in `folder` for each
+/// runner it starts, which holds the runner's request.
+#[cfg(unix)]
+fn counting_cache(folder: &Path) -> PathBuf {
+    let started = folder.join("started");
+    std::fs::create_dir_all(&started).unwrap();
+
+    cache_with_runner(folder, &format!("tee '{}/'$$ | \"$real\" \"$@\"", started.display()))
+}
+
+/// The generated Lean module of `name` in the request of the one runner `counting_cache` started in `folder`: the
+/// request's header and the threads and heartbeats it answers with, the modules an earlier runner stopped in, then each
+/// generated module's name and source.
 #[cfg(unix)]
 fn generated_module(folder: &Path, name: &str) -> String {
     let mut started = std::fs::read_dir(folder.join("started")).unwrap();
     let request = std::fs::read(started.next().unwrap().unwrap().path()).unwrap();
     assert!(started.next().is_none(), "one runner started");
-    let mut at = 12;
+    let mut at = 20;
     let length = |at: &mut usize| {
         let length = u32::from_be_bytes(request[*at..*at + 4].try_into().unwrap());
         *at += 4;
@@ -4049,7 +4203,7 @@ fn compile_proves_the_laws_of_two_stale_files_with_one_runner() {
     let root = directory.path();
     let lake = tempfile::tempdir().unwrap();
 
-    let output = process::output(command(root, "never").env("PATH", counting_lake(lake.path()))).unwrap();
+    let output = process::output(command(root, "never").env("XDG_CACHE_HOME", counting_cache(lake.path()))).unwrap();
 
     assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(std::fs::read_dir(lake.path().join("started")).unwrap().count(), 1, "one runner started");
@@ -4270,7 +4424,12 @@ fn compile_deletes_the_lean_package_once_no_law_remains() {
     assert!(!root.join(".sharp/.lean").exists());
     assert_eq!(
         files_under(&root.join(".sharp")),
-        [Path::new("app/Order.sharpc"), Path::new("compiled.bin"), Path::new("listeners.php")]
+        [
+            Path::new("app/Order.sharpc"),
+            Path::new("compiled.bin"),
+            Path::new("listeners.php"),
+            Path::new("preload.php")
+        ]
     );
 }
 
@@ -4326,7 +4485,7 @@ fn compile_proves_a_law_whose_calls_go_from_one_file_to_another_and_back_with_no
     let root = directory.path();
     let lake = tempfile::tempdir().unwrap();
 
-    let output = process::output(command(root, "never").env("PATH", counting_lake(lake.path()))).unwrap();
+    let output = process::output(command(root, "never").env("XDG_CACHE_HOME", counting_cache(lake.path()))).unwrap();
 
     assert!(output.status.success(), "{}", printed(&output));
     assert!(compiled(root, "app/Shared/Alpha.sharp").exists());
@@ -4353,7 +4512,7 @@ fn compile_proves_a_law_through_an_extension_member_as_the_static_call_it_runs_a
     let root = directory.path();
     let lake = tempfile::tempdir().unwrap();
 
-    let output = process::output(command(root, "never").env("PATH", counting_lake(lake.path()))).unwrap();
+    let output = process::output(command(root, "never").env("XDG_CACHE_HOME", counting_cache(lake.path()))).unwrap();
 
     assert!(output.status.success(), "{}", printed(&output));
     let laws = generated_module(lake.path(), "Code.App.Shared.Shape");
@@ -4778,16 +4937,15 @@ fn issue_lines(output: &Output) -> Vec<String> {
         .collect()
 }
 
-/// `mago compile` with each issue on one line, as `compile_lines` runs it, with `path` as its `PATH`, under a
+/// `mago compile` with each issue on one line, as `compile_lines` runs it, with the cache folder `cache`, under a
 /// processor-time limit of `seconds`, which each Lean process it starts inherits, so a row reaches the limit long before
 /// 120 seconds and the deadline long before 480 seconds, and the processor seconds it and every process it waited for
-/// used. The limit is soft, as `ulimit -S -t` sets it. Mago's own limit on each Lean process is `library.rs`'s
-/// `each_process_a_lake_starts_runs_under_the_processor_time_limit`'s to prove: Mago takes the lower of 120 seconds and
-/// this limit, so no compile can tell the two apart.
+/// used. The limit is soft, as `ulimit -S -t` sets it. The runner runs under it as Mago does, and Mago's own limit on
+/// each `lake` process is `library.rs`'s `each_process_a_lake_starts_runs_under_the_processor_time_limit`'s to prove.
 #[cfg(unix)]
 // `wait4` reaps the compile, which clippy can't see.
 #[allow(clippy::zombie_processes)]
-fn compile_lines_within(root: &Path, seconds: u64, path: &std::ffi::OsStr) -> (Output, f64) {
+fn compile_lines_within(root: &Path, seconds: u64, cache: &Path) -> (Output, f64) {
     use std::io::Read;
     use std::os::unix::process::CommandExt;
     use std::os::unix::process::ExitStatusExt;
@@ -4795,7 +4953,11 @@ fn compile_lines_within(root: &Path, seconds: u64, path: &std::ffi::OsStr) -> (O
     use std::process::Stdio;
 
     let mut command = command(root, "never");
-    command.env("MAGO_REPORTING_FORMAT", "emacs").env("PATH", path).stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+        .env("MAGO_REPORTING_FORMAT", "emacs")
+        .env("XDG_CACHE_HOME", cache)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     // SAFETY: `getrlimit` and `setrlimit` are async-signal-safe, and the closure allocates nothing.
     unsafe {
         command.pre_exec(move || {
@@ -4835,27 +4997,18 @@ fn compile_lines_within(root: &Path, seconds: u64, path: &std::ffi::OsStr) -> (O
     )
 }
 
-/// Puts a `lake` first on the `PATH` that runs the real one, except in a project's `.sharp/.lean` package: there the
-/// runner it runs reads the request, reports that it elaborates the generated module of `app/Shared/Money.sharp`, as
-/// the runner does, leaves `stalled` in `folder` and runs the shell commands `work`, which stand in for Lean work in
-/// that module that never ends. Its own path, `bin/lake` in `folder`, names each process it runs `work` in.
+/// A cache folder in `folder` whose runner reads the request, reports that it elaborates the generated module of
+/// `app/Shared/Money.sharp`, as the runner does, leaves `stalled` in `folder` and runs the shell commands `work`, which
+/// stand in for Lean work in that module that never ends. The runner's path names each process it runs `work` in.
 #[cfg(unix)]
-fn stalling_lake(folder: &Path, work: &str) -> std::ffi::OsString {
-    use std::os::unix::fs::PermissionsExt;
-
-    let path = std::env::var_os("PATH").unwrap();
-    let real =
-        std::env::split_paths(&path).map(|directory| directory.join("lake")).find(|lake| lake.is_file()).unwrap();
-    let script = format!(
-        "#!/bin/sh\ncase \"$PWD\" in\n  */.sharp/.lean)\n    case \"$1 $2\" in\n      \"env \"*/sharp-lean)\n        cat > /dev/null\n        echo 'module 0 Code.App.Shared.Money' >&2\n        touch '{stalled}'\n        {work}\n        ;;\n    esac\n    ;;\nesac\nexec '{real}' \"$@\"\n",
-        stalled = folder.join("stalled").display(),
-        real = real.display(),
-    );
-    let lake = folder.join("bin/lake");
-    write(folder, "bin/lake", &script);
-    std::fs::set_permissions(&lake, std::fs::Permissions::from_mode(0o755)).unwrap();
-
-    std::env::join_paths(std::iter::once(folder.join("bin")).chain(std::env::split_paths(&path))).unwrap()
+fn stalling_cache(folder: &Path, work: &str) -> PathBuf {
+    cache_with_runner(
+        folder,
+        &format!(
+            "cat > /dev/null\necho 'module 0 Code.App.Shared.Money' >&2\ntouch '{}'\n{work}",
+            folder.join("stalled").display()
+        ),
+    )
 }
 
 /// Lean work that runs past the processor-time limit, or waits until the deadline, stops there once instead of holding
@@ -4882,7 +5035,7 @@ fn lean_work_that_never_ends_stops_once_at_its_limit_or_deadline() {
         let lake = tempfile::tempdir().unwrap();
         let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]);
 
-        let (output, seconds) = compile_lines_within(directory.path(), limit, &stalling_lake(lake.path(), work));
+        let (output, seconds) = compile_lines_within(directory.path(), limit, &stalling_cache(lake.path(), work));
 
         assert!(lake.path().join("stalled").exists(), "{work}: {}", printed(&output));
         assert_eq!(issue_lines(&output), expected, "{work}, after {seconds} processor seconds: {}", printed(&output));
@@ -4895,7 +5048,7 @@ fn lean_work_that_never_ends_stops_once_at_its_limit_or_deadline() {
         stops(
             2,
             "exec perl -e '$| = 1; $SIG{ALRM} = sub { exit if (times)[0] + (times)[1] >= 10; print time, qq(\\n); alarm 1 }; alarm 1; 1 while 1'",
-            &refused("it ran past 2 processor seconds, the limit the checker sets on each check"),
+            &refused("it ran past 2 processor seconds, the processor-time limit Mago runs under"),
         );
         waits.join().unwrap();
     });
@@ -4916,13 +5069,13 @@ fn a_signal_that_ends_a_compile_ends_the_lean_it_waits_on() {
 
     for signal in [libc::SIGINT, libc::SIGQUIT, libc::SIGHUP, libc::SIGTERM] {
         let lake = tempfile::tempdir().unwrap();
-        let path = stalling_lake(lake.path(), "while :; do sleep 1; done");
-        let script = lake.path().join("bin/lake").display().to_string();
+        let cache = stalling_cache(lake.path(), "while :; do sleep 1; done");
+        let script = lake.path().join("cache/mago/lean").display().to_string();
         let leans =
             || String::from_utf8(process::output(Command::new("pgrep").args(["-f", &script])).unwrap().stdout).unwrap();
         let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]);
         let mut compiling = command(directory.path(), "never");
-        compiling.env("PATH", &path).stdout(Stdio::null()).stderr(Stdio::null()).process_group(0);
+        compiling.env("XDG_CACHE_HOME", &cache).stdout(Stdio::null()).stderr(Stdio::null()).process_group(0);
         // SAFETY: `setrlimit` is async-signal-safe, and the closure allocates nothing.
         unsafe {
             compiling.pre_exec(|| {

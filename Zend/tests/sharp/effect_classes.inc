@@ -11,6 +11,6 @@ if (!class_exists(Sharp\Time\Clock::class, false)) {
         'IO/Console', 'System/Process', 'System/ChildProcess', 'IO/Files', 'Text/StringMembers', 'Net/Http', 'Data/Cache', 'Net/Mail',
         'Net/IpFamily', 'Net/IpAddress', 'Net/Dns', 'Interop/Superglobal', 'Interop/PhpGlobals', 'Data/Database', 'ListMembers', 'MapMembers', 'SetMembers',
     ] as $class) {
-        require __DIR__ . "/../../../sharp/composer/library/Sharp/$class.sharp";
+        require __DIR__ . "/vendor/heyjordanparker/php-sharp-composer/library/Sharp/$class.sharp";
     }
 }

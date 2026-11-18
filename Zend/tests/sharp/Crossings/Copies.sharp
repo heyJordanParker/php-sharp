@@ -1,10 +1,9 @@
 namespace Demo;
 
-import Label;
+import Illuminate.Container.Attributes.Give;
 import Lib.Probe;
 
 // Each place PHP evaluates a constant expression reads a Map or a Set constant of another class.
-[Label("copies", config: Holdings.LIMITS)]
 public class Copies
 {
     public const Map<string, int> COPY = Holdings.LIMITS;
@@ -15,7 +14,7 @@ public class Copies
 
     public static Set<string> codes { get; set; } = Holdings.CODES;
 
-    public string sized(Map<string, int> given = Holdings.LIMITS) => `${Probe.className(given)} ${given.count()}`;
+    public string sized([Give("copies", params: Holdings.LIMITS)] Map<string, int> given = Holdings.LIMITS) => `${Probe.className(given)} ${given.count()}`;
 
     public string limitsClass() => Probe.className(this.limits);
 

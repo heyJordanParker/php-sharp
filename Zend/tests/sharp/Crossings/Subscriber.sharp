@@ -1,9 +1,9 @@
 namespace Demo;
 
-import Hiding;
+import Illuminate.Database.Eloquent.Model;
 import Lib.Probe;
 
-public class Subscriber : Hiding
+public class Subscriber : Model
 {
     protected override List<string> hidden { get => field; set; } = ["password"];
 

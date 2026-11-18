@@ -6,13 +6,7 @@ public static class Calls
 
     public static string nullSafe(Taggable? owner) => owner?.morphToMany("Tag", "null-safe").name ?? "none";
 
-    public static string concrete(Contact contact)
-    {
-        Relation tags = contact.morphToMany("Tag", "concrete");
-        return tags.name;
-    }
-
-    public static string subclass(Article article) => article.morphToMany("Tag", "subclass").name;
+    public static string subclass(Article article) => article.first().name;
 
     public static string viaThis(Article article) => article.viaThis();
 

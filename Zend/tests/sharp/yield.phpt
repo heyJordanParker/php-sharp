@@ -3,7 +3,6 @@ PHP# yield produces an Iterable<T> lazily: yield value, yield ...other, a body t
 --FILE--
 <?php
 
-require __DIR__ . '/harness/Arrays.inc';
 require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/effect_classes.inc';
 require __DIR__ . '/vendor/autoload.php';

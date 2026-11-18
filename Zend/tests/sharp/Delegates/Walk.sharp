@@ -1,9 +1,10 @@
 namespace App.Delegates;
 
-import Demo.Helper;
+import Psr.Container.ContainerInterface;
 import RuntimeException;
+import Sharp.Psr.Container;
 
-extern Helper.trusted uses Database;
+extern Container.has uses Database;
 
 // Delegates of `Order`'s members and of plain PHP methods, each of the function type its member fits or of one it
 // doesn't.
@@ -52,7 +53,8 @@ public static class Walk
     public static Any? noFunction() => Walk.method("add").createDelegate<int>();
 
     public static Any? plainPhp()
-        => typeof(Helper).methods().first(method => method.name == "take").createDelegate<Function<int(int)>>();
+        => typeof(ContainerInterface).methods().first(method => method.name == "get")
+            .createDelegate<Function<Any?(ContainerInterface, string)>>();
 
     public static Function<int(Object) uses Database> rowsOfAnyObject()
         => Walk.method("rows").createDelegate<Function<int(Object) uses Database>>();
@@ -68,9 +70,10 @@ public static class Walk
             .createDelegate<Function<string(RuntimeException)>>();
 
     public static Any? declaredEffect()
-        => typeof(Helper).methods().first(method => method.name == "trusted").createDelegate<Function<Any?(Any?)>>();
+        => typeof(Container).methods().first(method => method.name == "has")
+            .createDelegate<Function<bool(Container, string)>>();
 
-    public static Function<Any?(Any?) uses Database> declaredEffectAllowed()
-        => typeof(Helper).methods().first(method => method.name == "trusted")
-            .createDelegate<Function<Any?(Any?) uses Database>>();
+    public static Function<bool(Container, string) uses Database> declaredEffectAllowed()
+        => typeof(Container).methods().first(method => method.name == "has")
+            .createDelegate<Function<bool(Container, string) uses Database>>();
 }

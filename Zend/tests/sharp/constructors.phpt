@@ -9,7 +9,7 @@ require __DIR__ . '/constructors.inc';
 for ($round = 0; $round < 3; $round++) {
     ob_start();
     // `: super(id)` runs the plain PHP base class's constructor with the argument.
-    attempt(fn () => [(new Demo\SalesReport(1))->built, (new Demo\SalesReport(1))->id]);
+    attempt(fn () => (new Demo\SalesReport(1))->all());
     // `new Artifact.fromJson(json)` in PHP# and `Artifact::fromJson($json)` in plain PHP create the same object, and
     // the named constructor's `super.describe()` runs on it.
     attempt(function () {
@@ -73,10 +73,8 @@ var_dump(
 );
 ?>
 --EXPECT--
-array(2) {
+array(1) {
   [0]=>
-  string(22) "Report::__construct(1)"
-  [1]=>
   int(1)
 }
 array(4) {

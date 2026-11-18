@@ -80,6 +80,14 @@ impl Server {
         self
     }
 
+    /// Keep, from each analysis from scratch, what it gives the lowering of each PHP# file, so [`Server::compile`]
+    /// lowers each file from the analysis it already made instead of analyzing it again.
+    #[must_use]
+    pub fn keeping_lowering_inputs(mut self) -> Self {
+        self.service = self.service.keeping_lowering_inputs();
+        self
+    }
+
     /// Analyze the whole workspace, but report only the issues in the files `scope` holds, plus the
     /// issues that name no file. An issue is reported in its primary annotation's file, else in its
     /// first annotation's. The node-analysis hooks report only in the file they inspect, so they run
@@ -120,6 +128,14 @@ impl Server {
     /// files as the workspace changes).
     pub fn database_mut(&mut self) -> &mut Database<'static> {
         &mut self.database
+    }
+
+    /// Ends a run that exits next: drops what holds processes and files open, and leaks the files and the analysis,
+    /// which the process's exit frees at once, where dropping them would walk every file, symbol and type on one
+    /// thread.
+    pub fn leak(self) {
+        std::mem::forget(self.database);
+        self.service.leak();
     }
 
     /// Run a full analysis pass over the workspace.
@@ -166,10 +182,11 @@ impl Server {
     /// Compile each `.sharp` file of the last analysis into the bytes of its `.sharpc` file, or the errors that
     /// refuse it, and give the [`CompiledFiles`] the next compile keeps files by. A file whose key `last` holds keeps
     /// its compiled file, which `compiled` gives, and is not lowered again. `stamp` gives the size, modification time
-    /// and hash of the file at a workspace-relative path, or none when no file is there. `check` gets the Lean
-    /// translation of each file whose laws are checked again and of each file they reach, with the reach, and returns
-    /// the issues of each file whose law is not proved. Each compiled file's header names `standard_library`, the
-    /// standard library the workspace compiles against. `refusing` keeps the analysis's errors that refuse their file.
+    /// and hash of the file at a workspace-relative path, or none when no file is there, once for each path, called
+    /// from several threads at once. `check` gets the Lean translation of each file whose laws are checked again and
+    /// of each file they reach, with the reach, and returns the issues of each file whose law is not proved. Each
+    /// compiled file's header names `standard_library`, the standard library the workspace compiles against.
+    /// `refusing` keeps the analysis's errors that refuse their file.
     ///
     /// # Errors
     ///
@@ -179,7 +196,7 @@ impl Server {
         &mut self,
         last: &CompiledFiles,
         compiled: impl FnMut(&File) -> Result<Option<Vec<u8>>, DatabaseError>,
-        stamp: impl FnMut(&[u8]) -> Result<Option<Input>, DatabaseError>,
+        stamp: impl Fn(&[u8]) -> Result<Option<Input>, DatabaseError> + Sync,
         check: impl FnOnce(Vec<Translation>, &Reach) -> std::io::Result<HashMap<FileId, IssueCollection>>,
         standard_library: &Library,
         refusing: impl FnOnce(IssueCollection) -> IssueCollection,

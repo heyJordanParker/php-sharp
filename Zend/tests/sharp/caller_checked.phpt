@@ -1,8 +1,128 @@
 --TEST--
-A plain PHP method that declares no return type implements a PHP# interface's member, and each PHP# call of the member checks the result: through the interface, the plain PHP class, a PHP# subclass and its this, a null-safe call, each collection alone at any depth, and the bound type of a generic method's or a generic class's static method's result where its call binds it, naming the type the code wrote. Each member of the Set or the Map such a call gives as the PHP array it crosses into runs on the object, a Map's keys keeping their type
+A plain PHP method that declares no return type implements a PHP# interface's member, whether a plain class declares it or a PHP# subclass inherits it from a package's class, and each PHP# call of the member checks the result: through the interface, the PHP# subclass and its this, a null-safe call, each collection alone at any depth, and the bound type of a generic method's or a generic class's static method's result where its call binds it, naming the type the code wrote. Each member of the Set or the Map such a call gives as the PHP array it crosses into runs on the object, a Map's keys keeping their type
 --FILE--
 <?php
-require __DIR__ . '/caller_checked.inc';
+
+namespace Plain;
+
+require __DIR__ . '/vendor/autoload.php';
+
+use CallerChecked\Article;
+use CallerChecked\Calls;
+use CallerChecked\IntSource;
+use CallerChecked\Relation;
+use CallerChecked\Taggable;
+
+// A plain class whose methods declare no return type implements each PHP# member.
+final class Contact implements Taggable
+{
+    public mixed $given = null;
+
+    public function morphToMany($related, $name)
+    {
+        return $this->given ?? new Relation($name);
+    }
+
+    public function fail($reason)
+    {
+        throw new \LogicException($reason);
+    }
+
+    public function ids()
+    {
+        return $this->given ?? [1, 2];
+    }
+
+    public function labels()
+    {
+        return $this->given ?? ['a', 'b', 'c'];
+    }
+
+    public function counts()
+    {
+        return $this->given ?? ['a' => 1];
+    }
+
+    public function stream()
+    {
+        return $this->given ?? new \ArrayIterator([1, 2, 3]);
+    }
+
+    public function pair()
+    {
+        return $this->given ?? [[1, 2], 'two'];
+    }
+}
+
+final class Values implements IntSource
+{
+    public function __construct(private $value)
+    {
+    }
+
+    public function read()
+    {
+        return $this->value;
+    }
+}
+
+$given = static function (mixed $value): Contact {
+    $owner = new Contact();
+    $owner->given = $value;
+
+    return $owner;
+};
+$calls = [
+    'through an interface' => fn () => Calls::through(new Contact()),
+    'through an interface, given text' => fn () => Calls::through($given('text')),
+    'null-safe' => fn () => Calls::nullSafe(new Contact()),
+    'null-safe, given text' => fn () => Calls::nullSafe($given('text')),
+    'null-safe, of null' => fn () => Calls::nullSafe(null),
+    'a PHP# subclass' => fn () => Calls::subclass(new Article([new Relation('subclass')])),
+    'a PHP# subclass, given text' => fn () => Calls::subclass(new Article(['text'])),
+    'this in a PHP# subclass' => fn () => Calls::viaThis(new Article([new Relation('this')])),
+    'this in a PHP# subclass, given text' => fn () => Calls::viaThis(new Article(['text'])),
+    'never' => fn () => Calls::fail(new Contact()),
+    'List' => fn () => Calls::ids(new Contact()),
+    'List, given text' => fn () => Calls::ids($given('text')),
+    'List, given strings, whose elements the check leaves' => fn () => Calls::ids($given(['a', 'b', 'c'])),
+    'Set' => fn () => Calls::labels(new Contact()),
+    'Set, given text' => fn () => Calls::labels($given('text')),
+    'Map' => fn () => Calls::counts(new Contact()),
+    'Map, given text' => fn () => Calls::counts($given('text')),
+    'Iterable' => fn () => Calls::stream(new Contact()),
+    'Iterable, given text' => fn () => Calls::stream($given('text')),
+    'tuple' => fn () => Calls::pair(new Contact()),
+    'tuple, given text' => fn () => Calls::pair($given('text')),
+    'tuple, given text for its List' => fn () => Calls::pair($given(['text', 'two'])),
+    "tuple, given strings in its List, whose elements the check leaves" => fn () => Calls::pair($given([['a'], 'two'])),
+    "a generic class's static method" => fn () => Calls::first(new Values(41)),
+    "a generic class's static method, given text" => fn () => Calls::first(new Values('text')),
+    "a method's type parameter" => fn () => Calls::readFrom(new Values(41)),
+    "a method's type parameter, given text" => fn () => Calls::readFrom(new Values('text')),
+];
+foreach ($calls as $name => $call) {
+    try {
+        $result = $call();
+    } catch (\TypeError|\LogicException $error) {
+        $result = get_class($error) . ': ' . $error->getMessage();
+    }
+    echo $name, ': ', $result, "\n";
+}
+$members = [
+    'Set' => Calls::setMembers(new Contact()),
+    'Map' => Calls::mapMembers($given(['a' => 1, 'b' => 2, '10' => 3])),
+];
+foreach ($members as $kind => $calls) {
+    foreach ($calls as $name => $call) {
+        try {
+            $result = json_encode($call());
+        } catch (\Error $error) {
+            $result = get_class($error) . ': ' . $error->getMessage();
+        }
+        echo $kind, ' ', $name, ': ', $result, "\n";
+    }
+}
 ?>
 --EXPECT--
 through an interface: through
@@ -10,12 +130,10 @@ through an interface, given text: TypeError: CallerChecked.Taggable.morphToMany(
 null-safe: null-safe
 null-safe, given text: TypeError: CallerChecked.Taggable.morphToMany(): Return value must be of type CallerChecked.Relation, string returned
 null-safe, of null: none
-the plain class: concrete
-the plain class, given text: TypeError: CallerChecked.Taggable.morphToMany(): Return value must be of type CallerChecked.Relation, string returned
 a PHP# subclass: subclass
-a PHP# subclass, given text: TypeError: CallerChecked.Taggable.morphToMany(): Return value must be of type CallerChecked.Relation, string returned
+a PHP# subclass, given text: TypeError: CallerChecked.Related.first(): Return value must be of type CallerChecked.Relation, string returned
 this in a PHP# subclass: this
-this in a PHP# subclass, given text: TypeError: CallerChecked.Taggable.morphToMany(): Return value must be of type CallerChecked.Relation, string returned
+this in a PHP# subclass, given text: TypeError: CallerChecked.Related.first(): Return value must be of type CallerChecked.Relation, string returned
 never: LogicException: stopped
 List: 2
 List, given text: TypeError: CallerChecked.Taggable.ids(): Return value must be of type List<int>, string returned

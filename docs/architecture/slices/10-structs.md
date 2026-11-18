@@ -648,7 +648,7 @@ The names, each with the slate it was picked from:
    - `parse` and `tryParse` (decision 5), `[Key]` (rules 10 and 11), and question 3's answer. Its type checks call R3c's `\Sharp\Internal\accepts` (ruling 20).
    - A generic struct refused whole (question 4).
    - Its tests stub `Sharp\Key` and `Sharp\InvalidFields` as fixtures, so the PR needs nothing from php-sharp.
-   - It needs #166 merged, for a struct key in `has`, `keys()` and `remove`. The branch merges `origin/master` once #166 lands, then the PR opens with `ci-passed` and `patch-coverage` green. One fresh reviewer follows.
+   - It needs #166 merged, for a struct key in `has`, `keys()` and `remove`. The branch merges `origin/master` once #166 lands, then the PR opens with `ci-passed` green. One fresh reviewer follows.
    - Run: `compile` compiles `struct-changes`, `struct-parse` and `import-rename`, refuses `Size.sharp` with "Every struct is already read-only: write `struct`.", refuses `p.x = 5` naming `moved`, refuses `new Label { }` with "`new Label` must set `text`.", refuses `Map<Order, int>` for an `Order` holding a `Plan`, and refuses `Order.parse` on a struct holding a not-backed enum.
 2. **php-sharp: the engine runs structs**, on `feat/slice-structs` in slot 8. It follows the collection Slice's engine PR, which brings `sharp_collection_key_slot`'s backed enum arm, and is built while the mago-sharp PR is reviewed. It holds `sharp/composer/library/Sharp/Key.sharp` and `InvalidFields.sharp`, `Sharp\Struct` and `Sharp\Map` with the struct arms of `sharp_collection_key_slot` and `Sharp\Set::from`, the harness's `Username` and `OrderRow`, `struct_keys.phpt`, `struct_marker.phpt`, `structs.phpt` and `struct_parse.phpt` with their fixtures in all four opcache modes, and the pin past both the mago-sharp PR's merge and R3c's php-sharp merge. It removes every Guard 1 entry it fixes, through the `cp` command a run prints.
    - Run: `sharp/bin/test --opcache --passes` passes, and `sharp/bin/test --spec` passes with the shorter list.
@@ -668,7 +668,7 @@ Each PR body states the Problem, the Solution and an annotated file tree.
 
 # The tests
 
-Each test proves one rule and fails on a real bug in it, with its forms as rows. No `.php` twin is written: no rule here runs code that `.php` also runs. Each help that quotes code has a row that compiles the fix. mago-sharp's `patch-coverage` needs every changed line run, so each refusal arm has a row.
+Each test proves one rule and fails on a real bug in it, with its forms as rows. No `.php` twin is written: no rule here runs code that `.php` also runs. Each help that quotes code has a row that compiles the fix.
 
 **mago-sharp, `crates/syntax/tests/sharp.rs`:**
 

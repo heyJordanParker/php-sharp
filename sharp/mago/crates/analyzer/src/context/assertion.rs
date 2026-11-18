@@ -3,6 +3,7 @@ use mago_names::binding::Binding;
 use mago_span::HasSpan;
 use mago_span::Span;
 use mago_word::Word;
+use mago_word::word;
 
 use mago_allocator::Arena;
 use mago_codex::metadata::CodebaseMetadata;
@@ -17,6 +18,7 @@ use mago_syntax::utils::pattern::PhpShape;
 use mago_syntax::utils::pattern::php_shape;
 
 use crate::artifacts::AnalysisArtifacts;
+use crate::artifacts::ExpressionTypes;
 use crate::utils::expression::get_expression_id;
 
 #[derive(Debug)]
@@ -54,15 +56,20 @@ where
     }
 }
 
-/// What the PHP of a PHP# pattern depends on, answered from a file's resolved names, the codebase and the types the
-/// analysis gave, for the analyzer and the bridge alike.
-pub struct CodebasePatternNames<'names, 'arena> {
+/// What the PHP of a PHP# pattern depends on.
+///
+/// It answers from a file's resolved names, the codebase and the types the analysis gave, for the analyzer, from its
+/// artifacts, and the bridge, from a lowering input, alike.
+pub struct CodebasePatternNames<'names, 'arena, Types = AnalysisArtifacts> {
     pub names: &'names ResolvedNames<'arena>,
     pub codebase: &'names CodebaseMetadata,
-    pub artifacts: &'names AnalysisArtifacts,
+    pub artifacts: &'names Types,
 }
 
-impl PatternNames for CodebasePatternNames<'_, '_> {
+impl<Types> PatternNames for CodebasePatternNames<'_, '_, Types>
+where
+    Types: ExpressionTypes,
+{
     fn reads_quietly(&self, access: &ArrayAccess<'_>) -> bool {
         !self.artifacts.get_expression_type(access.array).is_some_and(|indexed| {
             indexed.types.iter().all(|atomic| matches!(atomic, TAtomic::Array(TArray::List(_)) | TAtomic::Null))
@@ -74,11 +81,11 @@ impl PatternNames for CodebasePatternNames<'_, '_> {
     }
 
     fn case_fields(&self, span: Span) -> Option<Vec<Vec<u8>>> {
-        let class = self.codebase.get_class_like(self.names.resolve(&span)?)?;
+        let class = self.codebase.get_class_like(word(self.names.resolve(&span)?))?;
         if !class.flags.is_enum_case_class() {
             return None;
         }
-        let Some(constructor) = self.codebase.get_method(class.name.as_bytes(), b"__construct") else {
+        let Some(constructor) = self.codebase.get_method(class.name, word("__construct")) else {
             unreachable!("a case's class has a constructor, which takes no field for a plain case")
         };
 

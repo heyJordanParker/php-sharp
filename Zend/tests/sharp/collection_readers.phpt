@@ -2,7 +2,6 @@
 Plain PHP sorts, references and loops by reference over a PHP# Map or Set property as its PHP array, which PHP# then reads, writes and copies, and gets the array form where it appends to a hooked property, passes a union, iterates an ArrayIterator, reads a lazy Iterable element by element and runs var_export()
 --FILE--
 <?php
-require __DIR__ . '/harness/Arrays.inc';
 require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/collection_readers.inc';
@@ -23,7 +22,7 @@ foreach by reference over a Map property: Sharp\Map b,a=3,2
 array_walk() by reference over a Map property: Sharp\Map b,a=20,10
 sort() of a Set property: Sharp\Set a,b
 a plain PHP parent appends to its PHP# subclass's get => field property: password,secret
-get => field over a parent get hook, and get { return field; }: b / token,secret
+get { return field; } over a plain parent field: token,secret
 a PHP array into a Set<string>|int property with a set body: Sharp\Set a
 a PHP array into a Set<string>|int and a Map<string, int>|int parameter: Sharp\Set a,b / int 7 / Sharp\Map 1
 an ArrayIterator over a PHP# object: payload array {"b":2,"a":1} / codes array ["b","a"] / levels array {"low":1} / mixedKeys array [] / tags array [] / counts array [1,2] / grid array [[1]] / numbers array [1] / tallies array {"top":9223372036854775807,"low":1} / shelves array {"k":["a"]} / nested array {"k":{"n":1}} / marks bool false / later array [] / picked int 0 / current() array {"b":2,"a":1} / getArrayCopy() array {"payload":{"b":2,"a":1},"codes":["b","a"],"levels":{"low":1},"mixedKeys":[],"tags":[],"counts":[1,2],"grid":[[1]],"numbers":[1],"tallies":{"top":9223372036854775807,"low":1},"shelves":{"k":["a"]},"nested":{"k":{"n":1}},"marks":false,"later":[],"picked":0}

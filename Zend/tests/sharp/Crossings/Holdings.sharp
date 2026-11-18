@@ -1,10 +1,9 @@
 namespace Demo;
 
-import Label;
-import Lib;
+import Illuminate.Container.Attributes.Give;
+import Illuminate.Support.Collection;
 import Lib.Probe;
 
-[Label("paid", config: ["variant": "success"])]
 public class Holdings
 {
     public const Map<string, int> LIMITS = ["card": 100];
@@ -76,7 +75,7 @@ public class Holdings
 
     public static string countsClass() => Probe.className(Holdings.counts);
 
-    public int accepted(Map<string, string> given) => given.count();
+    public int accepted([Give("paid", params: ["variant": "success"])] Map<string, string> given) => given.count();
 
     // A PHP array holds no `List` key, so plain PHP gets this Map itself.
     public Map<List<int>, int> listKeyed() => [[1, 2]: 1];
@@ -127,10 +126,10 @@ public class Holdings
 
     public string tallyClass() => Probe.className(this.tally());
 
-    // Each PHP array a plain PHP generator yields, held as an Iterable<Map<string, int>>.
-    public static string plainRows()
+    // Each PHP array a Collection's iterator gives, held as an Iterable<Map<string, int>>.
+    public static string plainRows(Collection<int, Map<string, int>> plain)
     {
-        Iterable<Map<string, int>> rows = Lib.price_rows();
+        Iterable<Map<string, int>> rows = plain.getIterator();
         let seen = "";
         for (const row of rows) {
             seen = `${seen}${Probe.className(row)}:${row.count()} `;

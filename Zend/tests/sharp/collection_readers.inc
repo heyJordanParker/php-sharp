@@ -4,7 +4,6 @@ use Demo\Carton;
 use Demo\Crossings;
 use Demo\Held;
 use Demo\Loosely;
-use Demo\Quiet;
 use Demo\Subscriber;
 use Demo\Withholder;
 use Sharp\Map;
@@ -173,7 +172,7 @@ function reader_sort_set(): string
 function reader_hidden_append(): string
 {
     $subscriber = new Subscriber();
-    $subscriber->hide('secret');
+    $subscriber->makeHidden('secret');
 
     return $subscriber->hiddenText();
 }
@@ -181,9 +180,9 @@ function reader_hidden_append(): string
 function reader_field_getters(): string
 {
     $withholder = new Withholder();
-    $withholder->hide('secret');
+    $withholder->makeHidden('secret');
 
-    return (new Quiet())->word . ' / ' . $withholder->hiddenText();
+    return $withholder->hiddenText();
 }
 
 function reader_union_setter(): string
@@ -443,7 +442,7 @@ function reader_table_entry_reads_checked(): string
     // Carton's Json and Serialized reads run the standard library's classes, which no fixture loads.
     foreach (['Json' => 'Encoding/Json', 'Serialized' => 'Encoding/Serialized'] as $class => $file) {
         if (!class_exists("Sharp\\Encoding\\$class", false)) {
-            require __DIR__ . "/../../../sharp/composer/library/Sharp/$file.sharp";
+            require __DIR__ . "/vendor/heyjordanparker/php-sharp-composer/library/Sharp/$file.sharp";
         }
     }
     $reads = ['shelvesText', 'shelvesValues', 'shelvesList', 'shelvesFiltered', 'shelvesGrouped', 'shelvesLooped',
@@ -625,7 +624,7 @@ function readers(): string
         'array_walk() by reference over a Map property' => reader_array_walk(...),
         'sort() of a Set property' => reader_sort_set(...),
         "a plain PHP parent appends to its PHP# subclass's get => field property" => reader_hidden_append(...),
-        'get => field over a parent get hook, and get { return field; }' => reader_field_getters(...),
+        'get { return field; } over a plain parent field' => reader_field_getters(...),
         'a PHP array into a Set<string>|int property with a set body' => reader_union_setter(...),
         'a PHP array into a Set<string>|int and a Map<string, int>|int parameter' => reader_union_parameters(...),
         'an ArrayIterator over a PHP# object' => reader_array_iterator(...),

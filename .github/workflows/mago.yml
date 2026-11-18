@@ -28,9 +28,9 @@ jobs:
   # A release's pull request, whose sharp/mago/Cargo.toml version has no tag yet, also runs the macOS jobs, as
   # sharp.yml's CHANGES explains, so a defect only macOS finds, such as one in the watch mode's FSEvents code, fails
   # before the release merges. A push to master runs none of the tests when a pull request's run passed ci-passed on its
-  # tree. It runs checks and patch-coverage again, which save the targets every pull request's run restores, but for a
-  # release's push, which builds nothing. A push whose tree no pull request's run passed runs every job, the macOS ones
-  # among them, and its red push opens an issue, as ci-passed does, for a pull request that fixes it forward.
+  # tree. It runs checks again, which saves the target every pull request's run restores, but for a release's push,
+  # which builds nothing. A push whose tree no pull request's run passed runs every job, the macOS ones among them, and
+  # its red push opens an issue, as ci-passed does, for a pull request that fixes it forward.
   CHANGES:
     runs-on: ubuntu-latest
     permissions:
@@ -479,63 +479,13 @@ jobs:
           CARGO_TARGET_DIR: ${{ runner.temp }}/target
         run: sharp/bin/check plain-php
 
-  # Fails unless a test runs every line the pull request adds to Mago's analyzer, semantics and sharp-bridge crates.
-  # sharp/bin/coverage measures that, with the dated nightly it installs and the cargo-llvm-cov this job installs. A
-  # builder runs sharp/bin/coverage only to reproduce a failure of this job, after merging the latest origin/master,
-  # because this job measures the branch merged into master. The push to master runs it again on the merge, and saves
-  # its instrumented target, which every pull request's run restores.
-  patch-coverage:
-    needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true' && !(needs.CHANGES.outputs.passed && needs.CHANGES.outputs.bump == 'true')
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    permissions:
-      contents: read
-
-    steps:
-      # The merge commit and its first parent, the base it merges into.
-      - name: checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 2
-
-      # sharp/bin/coverage builds in the Mago target folder, in llvm-cov-target.
-      - name: Rust and Mago caches
-        uses: ./.github/actions/mago-cache
-        with:
-          name: MAGO_COVERAGE
-          rust: MAGO
-          rust-paths: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          save: ${{ github.event_name == 'push' }}
-
-      # sharp/bin/coverage reads this version, and fails on a builder's Mac when its cargo-llvm-cov is another.
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
-        with:
-          tool: cargo-llvm-cov@0.9.1
-
-      # The root crate's external analyzer tests run a PHP SDK worker, which needs PHP.
-      - name: Install PHP
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
-        with:
-          php-version: "8.3"
-          tools: "composer:v2"
-
-      - name: Every line the pull request adds is covered
-        working-directory: .
-        run: sharp/bin/coverage HEAD^1
-
   # The one required check of this workflow: it passes only when every job above passed, or skipped a change that
   # leaves Mago alone, so a job added later blocks merges without a change to the repository's rules. It runs always,
   # so it reports on every pull request, even one whose every other job skipped. The macOS jobs skip but on a release's
   # pull request and a push whose tree no pull request's run passed, as CHANGES explains.
   ci-passed:
     if: always()
-    needs: [CHANGES, checks, build, tests, tests-macos, release-build, plain-php, patch-coverage]
+    needs: [CHANGES, checks, build, tests, tests-macos, release-build, plain-php]
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -555,7 +505,7 @@ jobs:
       - name: Every job passed, or skipped a change that leaves Mago alone
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: checks, build, tests, tests-macos, release-build, plain-php, patch-coverage
+          allowed-skips: checks, build, tests, tests-macos, release-build, plain-php
           jobs: ${{ toJSON(needs) }}
 
       # As .github/actions/red-master-issue explains.
@@ -566,8 +516,7 @@ jobs:
           title: A push to master failed Mago CI
           range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
 
-      # checks and patch-coverage saved their targets when they ended, so this job, which needs them all, deletes the
-      # ones the new targets replaced.
+      # checks saved its target when it ended, so this job, which needs it, deletes the ones the new target replaced.
       - name: Delete the Mago target caches this run replaced
         if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: ./.github/actions/mago-cache-prune

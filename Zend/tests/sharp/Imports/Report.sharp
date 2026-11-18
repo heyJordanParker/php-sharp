@@ -1,6 +1,6 @@
 namespace Imports;
 
-import Lib;
+import Illuminate.Support.Arr;
 
 public static class Report
 {
@@ -20,22 +20,16 @@ public static class Report
         Words.column([["id": "a"]], "id")[0],
     ];
 
-    public static List<string> passedMaps()
+    // Arr::wrap documents mixed, and gives back an array it takes as it is.
+    public static List<Any?> passedMaps()
     {
         Any? held = [["id": "a"]];
         List<Any?> rows = [["id": "a"]];
         List<Map<string, string>>|Map<string, string> either = [["id": "a"]];
-        return [Lib.serialized(held), Lib.serialized(rows), Lib.serialized(either), Report.send(["id": "a"])];
+        return [Arr.wrap(held), Arr.wrap(rows), Arr.wrap(either), Report.send(["id": "a"])];
     }
 
-    private static string send<T>(T value) => Lib.serialized(value);
-
-    public static List<int> sliced()
-    {
-        List<int> kept = Lib.sliced([5, 6, 7], true);
-        List<int> numbered = Lib.sliced([5, 6, 7], false);
-        return [kept[0], kept.count(), numbered[0], numbered.count()];
-    }
+    private static Any? send<T>(T value) => Arr.wrap(value);
 
     public static void missing()
     {

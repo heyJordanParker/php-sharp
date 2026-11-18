@@ -13,8 +13,8 @@ if (PHP_OS_FAMILY == 'Windows') die('skip Preloading is not supported on Windows
 ?>
 --FILE--
 <?php
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/set_values.inc';
-library();
 
 var_dump(class_exists(SetValues\Report::class, false));
 run_rows();

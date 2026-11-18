@@ -7,19 +7,6 @@ use SetValues\Report;
 use SetValues\Rows;
 use SetValues\Tagged;
 
-/** Binds the standard library's dispatcher, as its module does, and loads each of its classes the first time code names it, as events.phpt does. */
-function library(): void
-{
-    $library = dirname(__DIR__, 3) . '/sharp/composer/library';
-    Sharp\Internal\readModule("$library/Sharp/Module.sharp");
-    spl_autoload_register(static function (string $class) use ($library): void {
-        $path = "$library/" . str_replace('\\', '/', $class) . '.sharp';
-        if (str_starts_with($class, 'Sharp\\') && is_file($path)) {
-            require $path;
-        }
-    });
-}
-
 /** Each row compares sets, in PHP# from its literals and from the PHP arrays plain PHP passes. */
 function rows(): array
 {

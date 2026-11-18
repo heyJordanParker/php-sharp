@@ -1,15 +1,21 @@
 namespace Demo;
 
+import Illuminate.Database.Eloquent.Casts.Json;
+import Illuminate.Support.Arr;
+
+// Arr::get() and Json::encode() take and give mixed.
 class Inbox
 {
     private Any first = "none";
     private Map<string, Any?> saved = [:];
 
-    public Any? read(string key) => Settings.get(key);
+    public Inbox(private Map<string, Any?> settings) { }
+
+    public Any? read(string key) => Arr.get(this.settings, key);
 
     public Any? raw(string key)
     {
-        Any? value = Settings.raw(key);
+        Any? value = Arr.get(this.settings, key);
         return value;
     }
 
@@ -19,16 +25,16 @@ class Inbox
         return this.first;
     }
 
-    public string show(string key) => Settings.describe(this.read(key));
+    public string show(string key) => Json.encode(this.read(key)) as string ?? "";
 
     public bool isPlan(string plan) => this.read("plan") == plan;
 
     public void save(string key)
     {
-        this.saved[key] = Settings.get(key);
+        this.saved[key] = Arr.get(this.settings, key);
     }
 
     public Any? load(string key) => this.saved[key] ?? null;
 
-    public string showSaved(string key) => Settings.describe(this.saved[key] ?? null);
+    public string showSaved(string key) => Json.encode(this.saved[key] ?? null) as string ?? "";
 }

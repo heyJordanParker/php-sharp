@@ -11,6 +11,9 @@
 //! source loses its PHP file, and a `.gitignore` the compile writes in each folder that holds such files keeps them
 //! out of git in that checkout alone.
 //!
+//! It writes `preload.php` in the `.sharp` folder too, the script `opcache.preload` names to preload every type it
+//! accepted outside `autoload-dev` folders, spec section 27.
+//!
 //! A compile that warns of nothing beyond what it refused keeps a record of everything it read and wrote, and of what it
 //! printed, in the `.sharp` folder, and the next compile checks it before any analysis: when every input and output is
 //! as it was, it prints the same outcome, a failure's issues and errors included, exits as it did, and does nothing
@@ -31,13 +34,22 @@ use std::sync::PoisonError;
 
 use clap::ColorChoice;
 use clap::Parser;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 use serde::Deserialize;
 use serde::Serialize;
 
 use mago_allocator::LocalArena;
 use mago_analyzer::code::IssueCode;
 use mago_build_id::BUILD_ID;
+use mago_codex::metadata::CodebaseMetadata;
+use mago_codex::metadata::class_like::ClassLikeMetadata;
+use mago_codex::symbol::SymbolKind;
+use mago_composer::autoload::Autoload;
+use mago_composer::autoload::AutoloadError;
 use mago_composer::autoload::MAPS;
+use mago_composer::autoload::vendor_folder;
 use mago_database::Database;
 use mago_database::DatabaseConfiguration;
 use mago_database::DatabaseReader;
@@ -107,6 +119,10 @@ const VENDOR: &[u8] = b"vendor/";
 /// The listener table in the `.sharp` folder, which the engine reads to run each PHP# listener, spec section 15. Every
 /// compile of a project with a PHP# file writes it, listeners or none, so the engine can tell when it is out of date.
 const LISTENERS: &str = "listeners.php";
+
+/// The preload script in the `.sharp` folder, spec section 27, which `opcache.preload` names to preload every type
+/// the compile accepted outside `autoload-dev` folders.
+const PRELOAD: &str = "preload.php";
 
 /// The record of everything the last compile read and wrote, in the `.sharp` folder and in the hosts' folder, which the
 /// next compile checks before any analysis: when every input and output is as it was, the compile has nothing to do. A
@@ -258,12 +274,14 @@ fn compile_in_turn(configuration: &Configuration, root: &Path, folder: &Path) ->
     let mut filesystems = Filesystems::new();
     let orchestrator = whole_workspace(configuration, ColorChoice::Never, false)?;
     let excluded = excluded_folders(&orchestrator, configuration)?;
-    let sources = source_files(configuration, root, &mut filesystems, orchestrator.autoloader().as_deref(), &excluded);
+    let mut sources =
+        source_files(configuration, root, &mut filesystems, orchestrator.autoloader().as_deref(), &excluded);
     if !sources.keys().any(|name| name.ends_with(".sharp")) {
         return Ok(HostsChange::Unchanged);
     }
 
     let path = folder.join(COMPILE_LOCK);
+    let record_path = folder.join(INPUTS);
     let locking = |error| DatabaseError::io(IOAction::WriteFile, &path, error);
     let mut held = HOSTS_FOLDERS.lock().unwrap_or_else(PoisonError::into_inner).remove(folder);
     let lock = match held.as_mut().and_then(|held| held.lock.take()) {
@@ -273,12 +291,25 @@ fn compile_in_turn(configuration: &Configuration, root: &Path, folder: &Path) ->
     let compiled = if every_compiled_file_is_current(configuration, root, folder, &sources, &mut filesystems) {
         None
     } else {
+        let stale = std::fs::read(&record_path).ok();
         lock.unlock().and_then(|()| lock.lock()).map_err(locking)?;
-        let compiled = compile_into(configuration, root, folder)?;
+        // Only a compile writes the record, under the exclusive lock, so a record that changed while this run waited
+        // for the lock is another run's compile, whose tree this run checks again and reuses when it is current.
+        let reused = std::fs::read(&record_path).ok() != stale && {
+            filesystems = Filesystems::new();
+            sources =
+                source_files(configuration, root, &mut filesystems, orchestrator.autoloader().as_deref(), &excluded);
+            every_compiled_file_is_current(configuration, root, folder, &sources, &mut filesystems)
+        };
+        let compiled = if reused {
+            None
+        } else {
+            compile_into(configuration, root, folder, &orchestrator, &sources, filesystems)?
+        };
         lock.unlock().and_then(|()| lock.lock_shared()).map_err(locking)?;
         compiled
     };
-    let record = std::fs::read(folder.join(INPUTS)).ok().map(|bytes| unit::source_hash(&bytes));
+    let record = std::fs::read(&record_path).ok().map(|bytes| unit::source_hash(&bytes));
     let last = held.map(|held| held.record);
     HOSTS_FOLDERS
         .lock()
@@ -292,33 +323,34 @@ fn compile_in_turn(configuration: &Configuration, root: &Path, folder: &Path) ->
     })
 }
 
-/// Compiles the project at `root` into `folder` for its extension hosts, as [`compile_for_hosts`] says, unless every
-/// file there is current, and keeps the record of what it read and wrote in `folder`'s [`INPUTS`]. Its log never
-/// decides the record: the loader and the analysis log from their worker threads too, which the main thread's
-/// subscriber doesn't silence, and the run with the hosts that follows reports what they log. Returns, when a file in
-/// `folder` changed, the files whose compiled file changed.
-fn compile_into(configuration: &Configuration, root: &Path, folder: &Path) -> Result<Option<Recompiled>, Error> {
+/// Compiles the project at `root`, whose source files are `sources`, as [`source_files`] found them with `orchestrator`
+/// and `filesystems`, into `folder` for its extension hosts, as [`compile_for_hosts`] says, and keeps the record of what
+/// it read and wrote in `folder`'s [`INPUTS`]. Its log never decides the record: the loader and the analysis log from
+/// their worker threads too, which the main thread's subscriber doesn't silence, and the run with the hosts that follows
+/// reports what they log. Returns, when a file in `folder` changed, the files whose compiled file changed.
+fn compile_into(
+    configuration: &Configuration,
+    root: &Path,
+    folder: &Path,
+    orchestrator: &Orchestrator<'_>,
+    sources: &BTreeMap<String, Found>,
+    filesystems: Filesystems,
+) -> Result<Option<Recompiled>, Error> {
     let record_path = folder.join(INPUTS);
-    let mut filesystems = Filesystems::new();
-    let orchestrator = whole_workspace(configuration, ColorChoice::Never, false)?;
     let autoloader = orchestrator.autoloader();
-    let excluded = excluded_folders(&orchestrator, configuration)?;
-    let sources = source_files(configuration, root, &mut filesystems, autoloader.as_deref(), &excluded);
-    if every_compiled_file_is_current(configuration, root, folder, &sources, &mut filesystems) {
-        return Ok(None);
-    }
     // A record the compile can't delete is in a folder it then fails to write its compiled files to.
     let _ = std::fs::remove_file(&record_path);
-    let mut record = Record::start(configuration, root, &sources, folder, filesystems, autoloader.as_deref());
-    let (database, _) = project_database(&orchestrator, &configuration.source.workspace)?;
+    let mut record = Record::start(configuration, root, sources, folder, filesystems, autoloader.as_deref());
+    let (database, _) = project_database(orchestrator, &configuration.source.workspace)?;
 
     let library = standard_library(root, &database).map_err(OrchestratorError::General)?;
-    let mut server = Server::new(database.into_static(), decode_prelude, server_settings(&orchestrator));
+    let mut server =
+        Server::new(database.into_static(), decode_prelude, server_settings(orchestrator)).keeping_lowering_inputs();
     server.analyze()?;
     // A file whose errors the lowering does not survive is refused, whatever panic message its lowering printed.
     let printing = std::panic::take_hook();
     std::panic::set_hook(Box::new(|panic| tracing::debug!("{panic}")));
-    let mut stamped = Vec::new();
+    let stamped = Mutex::new(Vec::new());
     let compiled_files_path = folder.join(COMPILED_FILES);
     let compilations = server.compile(
         &CompiledFiles::decode(
@@ -329,39 +361,33 @@ fn compile_into(configuration: &Configuration, root: &Path, folder: &Path) -> Re
             Some(compiled) => read_listed(&compiled),
             None => Ok(None),
         },
-        |path| {
-            let input = unit::stamp(root, path)?;
-            stamped.push(recorded(path, input.as_ref()));
-            Ok(input)
-        },
+        recording_stamp(root, &stamped),
         |_, _| Ok(Default::default()),
         &library,
         |_| IssueCollection::default(),
     );
     std::panic::set_hook(printing);
     let database = server.database();
+    let mut stamped = in_path_order(stamped);
     stamped.extend(served_stamps(root, database, autoloader.as_deref())?);
 
     // Whether a file a host's worker loads changed, so a watch knows to start the workers again.
     let mut changed = false;
-    let mut write = |path: &Path, bytes: &[u8]| -> Result<bool, Error> {
-        let rewritten = std::fs::read(path).ok().as_deref() != Some(bytes);
-        if rewritten {
-            write_by_rename(path, bytes)?;
-            changed = true;
-        }
+    let mut keep = |path: &Path, bytes: &[u8], wrote: bool| {
+        changed |= wrote;
         if let Some(record) = record.as_mut() {
             record.output(path, bytes);
         }
-        Ok(rewritten)
     };
     let mut written = BTreeSet::new();
     let mut refused = IssueCollection::default();
     let mut accepted = HashSet::new();
     let mut recompiled = HashSet::new();
     let (compilations, compiled_files) = compilations?;
-    write(&compiled_files_path, &compiled_files.encode(configuration_hash(configuration))?)?;
+    let bytes = compiled_files.encode(configuration_hash(configuration))?;
+    keep(&compiled_files_path, &bytes, write_if_changed(&compiled_files_path, &bytes)?);
     written.insert(compiled_files_path);
+    let mut writes = Vec::new();
     for (file_id, compilation) in compilations {
         let file = database.get_ref(&file_id)?;
         let Some(compiled) = host_compiled_path(root, folder, &source_path(root, file))? else {
@@ -369,10 +395,7 @@ fn compile_into(configuration: &Configuration, root: &Path, folder: &Path) -> Re
         };
         match compilation {
             Compilation::Accepted(bytes) => {
-                if write(&compiled, &bytes)? {
-                    recompiled.insert(file_id);
-                }
-                written.insert(compiled);
+                writes.push((file_id, compiled, bytes));
                 accepted.insert(file_id);
             }
             Compilation::Refused(errors) => {
@@ -382,6 +405,17 @@ fn compile_into(configuration: &Configuration, root: &Path, folder: &Path) -> Re
                 refused.extend(errors);
             }
         }
+    }
+    // Each file is read and written on its own, so they are written at once and kept in the record in compile order.
+    let wrote: Vec<Result<bool, DatabaseError>> =
+        writes.par_iter().map(|(_, compiled, bytes)| write_if_changed(compiled, bytes)).collect();
+    for ((file_id, compiled, bytes), wrote) in writes.into_iter().zip(wrote) {
+        let wrote = wrote?;
+        if wrote {
+            recompiled.insert(file_id);
+        }
+        keep(&compiled, &bytes, wrote);
+        written.insert(compiled);
     }
     let classes = server
         .codebase()
@@ -403,7 +437,8 @@ fn compile_into(configuration: &Configuration, root: &Path, folder: &Path) -> Re
         let effects = server.extern_effects();
         let table = folder.join(LISTENERS);
         let dispatcher = server.dispatcher_module();
-        write(&table, &listener_table(&inputs, &accepted, dispatcher.as_ref(), &externs, &effects, &families))?;
+        let bytes = listener_table(&inputs, &accepted, dispatcher.as_ref(), &externs, &effects, &families);
+        keep(&table, &bytes, write_if_changed(&table, &bytes)?);
         written.insert(table);
     }
 
@@ -424,7 +459,7 @@ fn compile_into(configuration: &Configuration, root: &Path, folder: &Path) -> Re
     .report(refused, None)?;
     let report = report.lock().unwrap_or_else(PoisonError::into_inner).clone();
     let path = folder.join(HOST_REPORT);
-    write(&path, &report)?;
+    keep(&path, &report, write_if_changed(&path, &report)?);
     written.insert(path);
     // A compile with a file that doesn't lower keeps no record, so the next one tries that file again.
     let record = record.filter(|_| lowered);
@@ -510,12 +545,17 @@ fn served_stamps(
         return Ok(Vec::new());
     };
 
-    database
+    let served: Vec<_> = database
         .files()
         .filter(|file| !file.name.starts_with(VENDOR))
         .filter(|file| file.path.as_deref().is_some_and(|path| autoloader.serves(path)))
-        .map(|file| Ok(recorded(&file.name, unit::stamp(root, &file.name)?.as_ref())))
-        .collect()
+        .collect();
+
+    // Stamped at once, and the first file in order that can't be read is the one named, as one after another.
+    let stamped: Vec<Result<Stamp, Error>> =
+        served.par_iter().map(|file| Ok(recorded(&file.name, unit::stamp(root, &file.name)?.as_ref()))).collect();
+
+    stamped.into_iter().collect()
 }
 
 /// The path of `file`, a file of the project at `root`: its own, or its name under `root`.
@@ -524,17 +564,18 @@ fn source_path(root: &Path, file: &File) -> PathBuf {
 }
 
 /// Writes `bytes` to the file at `path`, unless it holds them already, so a compile that changes nothing in it leaves
-/// it as it was.
+/// it as it was. Returns whether it wrote.
 ///
 /// # Errors
 ///
 /// Returns the error of writing the file.
-fn write_if_changed(path: &Path, bytes: &[u8]) -> Result<(), DatabaseError> {
-    if std::fs::read(path).ok().as_deref() != Some(bytes) {
-        write_by_rename(path, bytes)?;
+fn write_if_changed(path: &Path, bytes: &[u8]) -> Result<bool, DatabaseError> {
+    if std::fs::read(path).ok().as_deref() == Some(bytes) {
+        return Ok(false);
     }
+    write_by_rename(path, bytes)?;
 
-    Ok(())
+    Ok(true)
 }
 
 /// The folders the loader skips in `orchestrator`'s workspace, which `configuration` names, as it loads the project's
@@ -695,8 +736,9 @@ fn compile(configuration: &Configuration, color_choice: ColorChoice) -> Result<C
             return finish(record, &record_path, outcome, &database, Vec::new(), configuration, color_choice);
         }
     };
-    let mut server =
-        Server::new(database.into_static(), decode_prelude, server_settings(&orchestrator)).scoped_to(is_lowered);
+    let mut server = Server::new(database.into_static(), decode_prelude, server_settings(&orchestrator))
+        .keeping_lowering_inputs()
+        .scoped_to(is_lowered);
     server.analyze()?;
     // The compile hides what `mago analyze` hides: a host rule's error an `ignore` entry or the baseline targets.
     let ignored =
@@ -706,8 +748,8 @@ fn compile(configuration: &Configuration, color_choice: ColorChoice) -> Result<C
         None => None,
     };
     let read_database = server.database().read_only();
-    let lean = Lean::new(&root);
-    let mut stamped = Vec::new();
+    let lean = Lean::new(&root, configuration.threads);
+    let stamped = Mutex::new(Vec::new());
     let compiled_files_path = compiled_folder.join(COMPILED_FILES);
     let (compilations, compiled_files) = server.compile(
         &CompiledFiles::decode(
@@ -718,11 +760,7 @@ fn compile(configuration: &Configuration, color_choice: ColorChoice) -> Result<C
             Some(compiled) => read_listed(&compiled),
             None => Ok(None),
         },
-        |path| {
-            let input = unit::stamp(&root, path)?;
-            stamped.push(recorded(path, input.as_ref()));
-            Ok(input)
-        },
+        recording_stamp(&root, &stamped),
         |translations, reach| lean.check(translations, reach),
         &library,
         |mut issues| {
@@ -736,6 +774,7 @@ fn compile(configuration: &Configuration, color_choice: ColorChoice) -> Result<C
         },
     )?;
     let database = server.database();
+    let mut stamped = in_path_order(stamped);
     stamped.extend(served_stamps(&root, database, autoloader.as_deref())?);
 
     let mut written = BTreeSet::new();
@@ -744,6 +783,7 @@ fn compile(configuration: &Configuration, color_choice: ColorChoice) -> Result<C
     let mut refused_files = 0;
     let mut refused_php_files = 0;
     let mut packaged_refusals = Vec::new();
+    let mut writes = Vec::new();
     for (file_id, compilation) in compilations {
         let file = database.get_ref(&file_id)?;
         let name = String::from_utf8_lossy(&file.name);
@@ -761,11 +801,7 @@ fn compile(configuration: &Configuration, color_choice: ColorChoice) -> Result<C
 
         match compilation {
             Compilation::Accepted(bytes) => {
-                write_if_changed(&compiled, &bytes)?;
-                if let Some(record) = record.as_mut() {
-                    record.output(&compiled, &bytes);
-                }
-                written.insert(compiled);
+                writes.push((compiled, bytes));
                 accepted.insert(file_id);
             }
             Compilation::Refused(issues) => {
@@ -782,6 +818,16 @@ fn compile(configuration: &Configuration, color_choice: ColorChoice) -> Result<C
                 }
             }
         }
+    }
+    // Each file is read and written on its own, so they are written at once and kept in the record in compile order.
+    let wrote: Vec<Result<bool, DatabaseError>> =
+        writes.par_iter().map(|(compiled, bytes)| write_if_changed(compiled, bytes)).collect();
+    wrote.into_iter().collect::<Result<Vec<bool>, _>>()?;
+    for (compiled, bytes) in writes {
+        if let Some(record) = record.as_mut() {
+            record.output(&compiled, &bytes);
+        }
+        written.insert(compiled);
     }
 
     let listeners = server.listeners();
@@ -811,6 +857,26 @@ fn compile(configuration: &Configuration, color_choice: ColorChoice) -> Result<C
         }
         written.insert(compiled_files_path);
         written.insert(compiled_folder.join(PROOFS));
+        let codebase = server.codebase();
+        let mut types = BTreeSet::new();
+        let mut loaded = up_front_files(&root)?;
+        for class in codebase.class_likes.values() {
+            if class.flags.is_module() || !accepted.contains(&class.span.file_id) {
+                continue;
+            }
+            let file = database.get_ref(&class.span.file_id)?;
+            if file.folder_namespace != Some(FolderNamespace::Test) {
+                types.insert(file.name.as_ref());
+                loaded.insert(class.span.file_id);
+            }
+        }
+        let preload = compiled_folder.join(PRELOAD);
+        let bytes = preload_script(&types, &anonymous_class_types(codebase, loaded));
+        write_if_changed(&preload, &bytes)?;
+        if let Some(record) = record.as_mut() {
+            record.output(&preload, &bytes);
+        }
+        written.insert(preload);
         let kept: BTreeSet<PathBuf> = written
             .iter()
             .cloned()
@@ -1247,7 +1313,7 @@ fn every_input_is_current(
                 .is_ok_and(|metadata| status.sees_writes() && Status::of(&output, &metadata, filesystems) == *status)
                 || hashes_as(&output, hash)
         })
-        && record.inputs.iter().all(|(path, size, hash)| match unit::stamp(root, path.as_bytes()) {
+        && record.inputs.par_iter().all(|(path, size, hash)| match unit::stamp(root, path.as_bytes()) {
             Ok(Some(input)) => (input.size, input.hash) == (*size, *hash),
             // On a disk that ignores case, the loader reads a file whose name differs only in case.
             Ok(None) => (*size, *hash) == (0, [0; 16]) && !root.join(path).exists(),
@@ -1260,6 +1326,28 @@ fn every_input_is_current(
 
 /// An input as [`Record`] holds it: its path, size and hash, both zero when no file is there.
 type Stamp = (String, u64, [u8; 16]);
+
+/// The `stamp` a compile of the project at `root` takes, which stamps each input it is given and keeps the stamp in
+/// `stamped`, from whichever thread stamps it.
+fn recording_stamp<'a>(
+    root: &'a Path,
+    stamped: &'a Mutex<Vec<Stamp>>,
+) -> impl Fn(&[u8]) -> Result<Option<unit::Input>, DatabaseError> + Sync + 'a {
+    move |path| {
+        let input = unit::stamp(root, path)?;
+        stamped.lock().unwrap_or_else(PoisonError::into_inner).push(recorded(path, input.as_ref()));
+
+        Ok(input)
+    }
+}
+
+/// The stamps [`recording_stamp`] kept, in path order, which no order of the threads that took them changes.
+fn in_path_order(stamped: Mutex<Vec<Stamp>>) -> Vec<Stamp> {
+    let mut stamped = stamped.into_inner().unwrap_or_else(PoisonError::into_inner);
+    stamped.sort_unstable();
+
+    stamped
+}
 
 /// The stamp of the input at `path`, as `unit::stamp` gave it.
 fn recorded(path: &[u8], input: Option<&unit::Input>) -> Stamp {
@@ -1401,82 +1489,109 @@ fn source_files(
     let whole_workspace = [".".to_owned()];
     let paths = if source.paths.is_empty() { &whole_workspace[..] } else { &source.paths[..] };
     let is_glob = |text: &str| text.contains(['*', '?', '[', '{']);
-    let mut walk =
-        Walk { root, extensions: &source.extensions, autoloader, excluded, filesystems, files: BTreeMap::new() };
+    let walk = Walk { root, extensions: &source.extensions, autoloader, excluded };
+    let mut files = BTreeMap::new();
+    let mut keep = |Kept { path, real, metadata }: Kept| {
+        let name = source_name(root, &path);
+        let real = Some(source_name(root, &real)).filter(|real| *real != name);
+        files.insert(name, Found(Status::of(&path, &metadata, filesystems), real));
+    };
     for configured in paths.iter().chain(&source.includes).chain(&source.patches) {
         let path = root.join(configured);
         if path.exists() {
             let path = path.canonicalize().unwrap_or(path);
             match std::fs::metadata(&path) {
-                Ok(metadata) if metadata.is_file() => walk.found(&path, &path, &metadata),
-                Ok(_) => walk.folder(&path, &mut vec![path.clone()], false),
+                Ok(metadata) if metadata.is_file() => keep(Kept { path: path.clone(), real: path, metadata }),
+                Ok(_) => walk.folder(&path, std::slice::from_ref(&path), false).into_iter().for_each(&mut keep),
                 Err(_) => {}
             }
         } else if is_glob(configured) {
             let start: PathBuf =
                 path.components().take_while(|part| !is_glob(&part.as_os_str().to_string_lossy())).collect();
             let start = start.canonicalize().unwrap_or(start);
-            walk.folder(&start, &mut vec![start.clone()], true);
+            walk.folder(&start, std::slice::from_ref(&start), true).into_iter().for_each(&mut keep);
         }
     }
 
-    walk.files
+    files
 }
 
-/// The walk of [`source_files`] under `root`, which keeps each file of one of `extensions` it finds in `files`.
+/// The walk of [`source_files`] under `root`, which finds each file of one of `extensions`.
 struct Walk<'walk> {
     root: &'walk Path,
     extensions: &'walk [String],
     autoloader: Option<&'walk Autoloader>,
     excluded: &'walk ExcludedFolders,
-    filesystems: &'walk mut Filesystems,
-    files: BTreeMap<String, Found>,
+}
+
+/// A file the walk of [`source_files`] keeps: the path it is named by, its real path, and its metadata.
+struct Kept {
+    path: PathBuf,
+    real: PathBuf,
+    metadata: std::fs::Metadata,
+}
+
+/// An entry of a folder the walk of [`source_files`] reaches: a file it keeps, or a folder below, by its path and its
+/// real path.
+enum Reached {
+    File(Kept),
+    Folder(PathBuf, PathBuf),
 }
 
 impl Walk<'_> {
-    /// Walks `folder`, whose real path is the last of `real`, as the real paths of the folders above it in the walk
-    /// come before it. A folder whose real path `real` holds is a link back to one of them, which the walk skips as the
-    /// loader does. Each file is kept by its name, or by the name of its real path when `by_real_path` is set, as the
-    /// loader names a file a glob pattern matches.
-    fn folder(&mut self, folder: &Path, real: &mut Vec<PathBuf>, by_real_path: bool) {
+    /// The files the walk keeps under `folder`, whose real path is the last of `real`, as the real paths of the folders
+    /// above it in the walk come before it, in the order a walk of one entry after another finds them. The folders below
+    /// `folder` are walked at once. A folder whose real path `real` holds is a link back to one of them, which the walk
+    /// skips as the loader does. Each file is kept by its name, or by the name of its real path when `by_real_path` is
+    /// set, as the loader names a file a glob pattern matches.
+    fn folder(&self, folder: &Path, real: &[PathBuf], by_real_path: bool) -> Vec<Kept> {
         let Ok(entries) = std::fs::read_dir(folder) else {
-            return;
+            return Vec::new();
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            // A link whose target is gone is no file, as the loader skips it.
-            let Ok(metadata) = std::fs::metadata(&path) else {
-                continue;
-            };
-            let real_path = match entry.file_type() {
-                Ok(kind) if kind.is_symlink() => path.canonicalize().unwrap_or_else(|_| path.clone()),
-                _ => real.last().map_or_else(|| path.clone(), |parent| parent.join(entry.file_name())),
-            };
-            if metadata.is_dir() {
-                if path != self.root.join(unit::COMPILED_FOLDER)
-                    && !self.excluded.contains(&path)
-                    && !real.contains(&real_path)
-                {
-                    real.push(real_path);
-                    self.folder(&path, real, by_real_path);
-                    real.pop();
+        let reached: Vec<Reached> = entries
+            .flatten()
+            .filter_map(|entry| {
+                let path = entry.path();
+                let kind = entry.file_type().ok()?;
+                // The listing gives each entry's kind, so only a link's target and a kept file are read from the disk.
+                let (is_folder, real_path) = if kind.is_symlink() {
+                    // A link whose target is gone is no file, as the loader skips it.
+                    let target = std::fs::metadata(&path).ok()?;
+                    (target.is_dir(), path.canonicalize().unwrap_or_else(|_| path.clone()))
+                } else {
+                    (kind.is_dir(), real.last().map_or_else(|| path.clone(), |parent| parent.join(entry.file_name())))
+                };
+                if is_folder {
+                    return (path != self.root.join(unit::COMPILED_FOLDER)
+                        && !self.excluded.contains(&path)
+                        && !real.contains(&real_path))
+                    .then_some(Reached::Folder(path, real_path));
                 }
-            } else if path
-                .extension()
-                .is_some_and(|extension| self.extensions.iter().any(|known| extension == known.as_str()))
-                && !self.autoloader.is_some_and(|autoloader| autoloader.serves(&path))
-            {
+                if !path
+                    .extension()
+                    .is_some_and(|extension| self.extensions.iter().any(|known| extension == known.as_str()))
+                    || self.autoloader.is_some_and(|autoloader| autoloader.serves(&path))
+                {
+                    return None;
+                }
+                let metadata = std::fs::metadata(&path).ok()?;
                 let named = if by_real_path { real_path.clone() } else { path };
-                self.found(&named, &real_path, &metadata);
-            }
-        }
-    }
 
-    /// Keeps the file the walk reached at `path`, whose real path is `real`.
-    fn found(&mut self, path: &Path, real: &Path, metadata: &std::fs::Metadata) {
-        let name = source_name(self.root, path);
-        let real = Some(source_name(self.root, real)).filter(|real| *real != name);
-        self.files.insert(name, Found(Status::of(path, metadata, self.filesystems), real));
+                Some(Reached::File(Kept { path: named, real: real_path, metadata }))
+            })
+            .collect();
+
+        reached
+            .into_par_iter()
+            .flat_map_iter(|reached| match reached {
+                Reached::File(kept) => vec![kept],
+                Reached::Folder(path, real_path) => {
+                    let below: Vec<PathBuf> = real.iter().cloned().chain([real_path]).collect();
+
+                    self.folder(&path, &below, by_real_path)
+                }
+            })
+            .collect()
     }
 }
 
@@ -1567,12 +1682,13 @@ fn listener_inputs(root: &Path, database: &impl DatabaseReader) -> Result<Vec<un
         paths.insert(unit::SOURCE_LISTING.as_bytes().to_vec());
     }
 
-    let mut inputs = Vec::with_capacity(paths.len());
-    for path in paths {
-        inputs.extend(unit::stamp(root, &path)?);
-    }
+    let paths: Vec<Vec<u8>> = paths.into_iter().collect();
+    // Stamped at once, and the first file in order that can't be read is the one named, as one after another.
+    let stamped: Vec<Result<Option<unit::Input>, DatabaseError>> =
+        paths.par_iter().map(|path| unit::stamp(root, path)).collect();
+    let stamped: Vec<Option<unit::Input>> = stamped.into_iter().collect::<Result<_, _>>()?;
 
-    Ok(inputs)
+    Ok(stamped.into_iter().flatten().collect())
 }
 
 /// The PHP source of the listener table. Its `inputs` are the files whose change makes the table out of date, each as
@@ -1681,6 +1797,77 @@ fn listener_table(
     table.extend_from_slice(b"    ],\n];\n");
 
     table
+}
+
+/// The PHP source of the preload script, spec section 27, for `types`, the workspace-relative name of each source whose
+/// type the compile accepted, a test's left out. It requires the workspace's Composer autoloader, then each source, so
+/// a type whose parent another file declares, plain PHP or PHP#, gets its parent from the autoloader, as in a request.
+/// Then it loads each of `named`, a type an anonymous class names, through the function its kind's check takes.
+fn preload_script(types: &BTreeSet<&[u8]>, named: &BTreeSet<(&str, &[u8])>) -> Vec<u8> {
+    let mut script = b"<?php\n\n// mago compile writes this file. It rewrites it on every compile.\n\nrequire_once __DIR__ . '/../vendor/autoload.php';\n".to_vec();
+    for name in types {
+        script.extend_from_slice(b"require_once __DIR__ . ");
+        quoted(&mut script, &[b"/../", *name].concat());
+        script.extend_from_slice(b";\n");
+    }
+    for (check, name) in named {
+        script.extend_from_slice(check.as_bytes());
+        script.push(b'(');
+        quoted(&mut script, name);
+        script.extend_from_slice(b");\n");
+    }
+
+    script
+}
+
+/// The files Composer's autoloader in `root` loads up front, `autoload_files.php`'s, which the preload loads with it.
+///
+/// # Errors
+///
+/// Returns the error of reading `composer.json` or Composer's autoload maps.
+fn up_front_files(root: &Path) -> Result<HashSet<FileId>, Error> {
+    let unreadable = |error: AutoloadError| OrchestratorError::General(error.to_string());
+    let Some(autoload) = Autoload::read(&vendor_folder(root).map_err(unreadable)?).map_err(unreadable)? else {
+        return Ok(HashSet::new());
+    };
+
+    Ok(autoload.files().iter().map(|path| FileId::new(&File::logical_name(root, path))).collect())
+}
+
+/// Each type outside PHP's own an anonymous class names as its parent, an interface or a trait, with the function that
+/// loads it, for each anonymous class in a file the preload loads: one of `loaded`, or the file of a type a loaded
+/// file's types name so. PHP declares an anonymous class only when its code runs, so nothing else loads what it names
+/// before opcache links the preloaded classes, and opcache would warn that it can't preload it.
+fn anonymous_class_types(codebase: &CodebaseMetadata, mut loaded: HashSet<FileId>) -> BTreeSet<(&'static str, &[u8])> {
+    let mut declared: HashMap<FileId, Vec<&ClassLikeMetadata>> = HashMap::new();
+    for class in codebase.class_likes.values() {
+        declared.entry(class.span.file_id).or_default().push(class);
+    }
+
+    let mut named = BTreeSet::new();
+    let mut unread: Vec<FileId> = loaded.iter().copied().collect();
+    while let Some(file) = unread.pop() {
+        for class in declared.get(&file).into_iter().flatten() {
+            let names =
+                class.direct_parent_class.iter().chain(&class.direct_parent_interfaces).chain(&class.used_traits);
+            let used = names.filter_map(|name| codebase.get_class_like(*name));
+            for used in used.filter(|used| !used.flags.is_built_in()) {
+                if loaded.insert(used.span.file_id) {
+                    unread.push(used.span.file_id);
+                }
+                if class.name_span.is_none() {
+                    let check = match used.kind {
+                        SymbolKind::Trait => "trait_exists",
+                        SymbolKind::Interface => "interface_exists",
+                        SymbolKind::Class | SymbolKind::Enum => "class_exists",
+                    };
+                    named.insert((check, used.original_name.as_bytes()));
+                }
+            }
+        }
+    }
+
+    named
 }
 
 /// Appends `text` to `table` as a PHP single-quoted string.
@@ -2134,20 +2321,18 @@ mod tests {
     fn the_hosts_compile_runs_again_after_an_edit_of_a_vendor_file() {
         let (_directory, root, configuration) = project();
         let folder = tempfile::tempdir().unwrap();
-        assert!(compile_into(&configuration, &root, folder.path()).unwrap().is_some(), "a fresh folder is written");
+        let compile = || compile_in_turn(&configuration, &root, folder.path()).unwrap();
+        assert!(matches!(compile(), HostsChange::Recompiled(_)), "a fresh folder is written");
         // A compile that runs writes its record anew, though every compiled file it writes is the same.
         let recorded = || std::fs::metadata(folder.path().join(INPUTS)).unwrap().modified().unwrap();
         let written = recorded();
-        assert!(compile_into(&configuration, &root, folder.path()).unwrap().is_none(), "nothing changed");
+        assert!(matches!(compile(), HostsChange::Unchanged), "nothing changed");
         assert_eq!(recorded(), written, "the compile had nothing to do");
 
         write(&root, "vendor/acme/rate/src/Rate.php", &rate("string"));
         let paced = std::fs::read(folder.path().join("app/Paced.sharpc")).unwrap();
 
-        assert!(
-            compile_into(&configuration, &root, folder.path()).unwrap().is_some(),
-            "the vendor edit compiles again"
-        );
+        assert!(matches!(compile(), HostsChange::Recompiled(_)), "the vendor edit compiles again");
         assert_ne!(std::fs::read(folder.path().join("app/Paced.sharpc")).unwrap(), paced);
     }
 
@@ -2170,7 +2355,7 @@ mod tests {
         );
         let folder = tempfile::tempdir().unwrap();
 
-        let Err(error) = compile_into(&configuration, &root, folder.path()) else {
+        let Err(error) = compile_in_turn(&configuration, &root, folder.path()) else {
             panic!("the hosts' compile accepted library 0.5.9");
         };
         assert_eq!(

@@ -1,5 +1,5 @@
 --TEST--
-A Map's and a Set's isEmpty and isNotEmpty read it, a change to a copy of one leaves the original as it was, a change through a List element or a property with a set body reaches where it lives, a filter keeps its keys and its type, and a member of a value that may be any collection or an object runs the one the value holds, makes a Map or a Set of that kind's type, and changes a property plain PHP holds a reference to
+A Map's and a Set's isEmpty and isNotEmpty read it, a change to a copy of one leaves the original as it was, a change through a List element or a property with a set body reaches where it lives, a change whose value writes the property it changes keeps that write, a filter keeps its keys and its type, and a member of a value that may be any collection or an object runs the one the value holds, makes a Map or a Set of that kind's type, and changes a property plain PHP holds a reference to
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -80,7 +80,7 @@ for ($round = 0; $round < 3; $round++) {
 
     $memo = new Memo();
     echo $memo->at(10), ' ', Memo::cached(10), ' ', json_encode($memo->stepped()), ' ', json_encode($memo->tagged()), "\n";
-    echo json_encode(Memo::counted(new TableChanges\Basket())), "\n";
+    echo json_encode(Memo::counted(new TableChanges\Basket())), ' ', json_encode(Memo::raised(new TableChanges\Basket())), "\n";
 
     // The statics keep their values from round to round.
     Registry::count('tea', $round);
@@ -120,7 +120,7 @@ bool(true)
 bool(true)
 [1,5] [1,5] {"milk":1} {"milk":1}
 55 55 [5,7] ["first","second"]
-{"z":1,"a":1}
+{"z":1,"a":1} [11,2,9]
 bool(true)
 bool(false)
 2 ["vip0","vip1","vip2"] 6

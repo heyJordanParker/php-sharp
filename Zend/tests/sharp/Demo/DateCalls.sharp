@@ -1,12 +1,13 @@
 namespace Demo;
 
-import Lib.Moments;
+import Carbon.Carbon;
 import Sharp.Time.Date;
 import Sharp.Time.DateTime;
 import Sharp.Time.DateTimeInterfaceMembers;
 import Sharp.Time.Duration;
 import Sharp.Time.Instant;
 import Sharp.Time.TimeZone;
+import Symfony.Component.Clock.MockClock;
 
 class DateCalls
 {
@@ -95,11 +96,12 @@ class DateCalls
         return [hour > shorter, hour >= shorter, hour < shorter, hour <= shorter];
     }
 
-    public static string phpZoned(string local, string zone) => Moments.at(local, zone).toDateTime().toString();
+    public static string phpZoned(string local, string zone) => new MockClock(local, zone).now().toDateTime().toString();
 
-    public static string phpInstant(string local, string zone) => Moments.at(local, zone).toInstant().toString();
+    public static string phpInstant(string local, string zone) => new MockClock(local, zone).now().toInstant().toString();
 
-    public static string mutablePhpZoned(string local, string zone) => Moments.mutableAt(local, zone).toDateTime().toString();
+    // Carbon's own toDateTime() gives PHP's mutable DateTime.
+    public static string mutablePhpZoned(string local, string zone) => Carbon.parse(local, zone).toDateTime().toDateTime().toString();
 
     // A Function type without `uses` takes only code with no effect, so these compile only while no crossing reads the
     // clock.

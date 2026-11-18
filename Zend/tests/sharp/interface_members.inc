@@ -6,19 +6,6 @@ use InterfaceMembers\Rare;
 use InterfaceMembers\Report;
 use InterfaceMembers\Weight;
 
-/** Binds the standard library's dispatcher, as its module does, and loads each of its classes the first time code names it, as events.phpt does. */
-function library(): void
-{
-    $library = dirname(__DIR__, 3) . '/sharp/composer/library';
-    Sharp\Internal\readModule("$library/Sharp/Module.sharp");
-    spl_autoload_register(static function (string $class) use ($library): void {
-        $path = "$library/" . str_replace('\\', '/', $class) . '.sharp';
-        if (str_starts_with($class, 'Sharp\\') && is_file($path)) {
-            require $path;
-        }
-    });
-}
-
 /** A plain PHP class gets a PHP# interface's default bodies and operator by using the trait `<Interface>\Defaults`, spec section 22. */
 final class LegacyBook implements Priced
 {

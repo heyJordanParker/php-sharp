@@ -4,7 +4,6 @@ A PHP# interface's constant reads through the interface and each implementer, it
 <?php
 require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/interface_members.inc';
-library();
 
 run_rows();
 ?>

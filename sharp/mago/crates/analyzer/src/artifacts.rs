@@ -190,6 +190,9 @@ pub struct AnalysisArtifacts {
     variable_definedness_targets: Option<Arc<[bool; NodeKind::COUNT]>>,
     pub(crate) pending_readonly_property_writes: Vec<PendingReadonlyPropertyWrite>,
     pub(crate) static_local_types: Option<WordMap<TUnion>>,
+    /// The value of each static local that `static_local_types` last took in, so a value it already holds is not
+    /// compared and combined again after every expression.
+    static_local_values: WordMap<Rc<TUnion>>,
     /// The number each PHP# `is`, `as` and `match` of the body numbers its hidden variables after, keyed by its span.
     /// Read through [`Self::numbered_php_shape`].
     hidden_variable_starts: RefCell<HashMap<(u32, u32), u32>>,
@@ -251,6 +254,7 @@ impl AnalysisArtifacts {
             variable_definedness_targets: None,
             pending_readonly_property_writes: Vec::new(),
             static_local_types: None,
+            static_local_values: WordMap::default(),
             hidden_variable_starts: RefCell::default(),
             last_hidden_variable: Cell::default(),
         }
@@ -301,6 +305,10 @@ impl AnalysisArtifacts {
             let Some(variable_type) = block_context.locals.get(variable) else {
                 continue;
             };
+            if self.static_local_values.get(variable).is_some_and(|taken| Rc::ptr_eq(taken, variable_type)) {
+                continue;
+            }
+            self.static_local_values.insert(*variable, Rc::clone(variable_type));
 
             if let Some(previous_type) = static_local_types.get_mut(variable) {
                 if previous_type != variable_type.as_ref() {
@@ -636,6 +644,155 @@ impl AnalysisArtifacts {
         T: HasSpan,
     {
         self.expression_types.get(&get_expression_range(expression))
+    }
+
+    /// What the lowering of the file these are the artifacts of reads of them, with each type its own.
+    #[must_use]
+    pub fn into_lowering_input(self) -> LoweringInput {
+        LoweringInput {
+            expression_types: self
+                .expression_types
+                .into_iter()
+                .map(|(range, expression_type)| (range, Rc::unwrap_or_clone(expression_type)))
+                .collect(),
+            inferred_type_arguments: self.inferred_type_arguments,
+            call_targets: self.call_targets,
+            member_calls: self.member_calls,
+            own_member_classes: self.own_member_classes,
+            tested_types: self.tested_types,
+            declared_types: self.declared_types,
+            namespace_constants: self.namespace_constants,
+            ordered_key_types: self.ordered_key_types,
+            resolved_return_types: self.resolved_return_types,
+            widened_parameters: self.widened_parameters,
+        }
+    }
+}
+
+/// The type the analysis gave each expression of a file, as its [`AnalysisArtifacts`] and its [`LoweringInput`] hold
+/// it.
+pub trait ExpressionTypes {
+    /// The type the analysis gave `expression`.
+    fn get_expression_type<T>(&self, expression: &T) -> Option<&TUnion>
+    where
+        T: HasSpan;
+}
+
+impl ExpressionTypes for AnalysisArtifacts {
+    fn get_expression_type<T>(&self, expression: &T) -> Option<&TUnion>
+    where
+        T: HasSpan,
+    {
+        AnalysisArtifacts::get_expression_type(self, expression)
+    }
+}
+
+/// What the lowering of a PHP# file reads of the file's analysis, as [`AnalysisArtifacts::into_lowering_input`] takes
+/// it.
+///
+/// It holds the type of each expression, what each call runs and gives, and the types each test, declaration and
+/// ordering call names. It owns each of its types, so the analysis that made it hands it to the compile, which lowers
+/// the file on any thread once every file is analyzed.
+#[derive(Debug, Clone, Default)]
+pub struct LoweringInput {
+    expression_types: HashMap<(u32, u32), TUnion>,
+    /// The type arguments of each generic call and `new`, keyed by its span, one per template in declaration order.
+    pub inferred_type_arguments: HashMap<(u32, u32), Vec<TUnion>>,
+    call_targets: HashMap<(u32, u32), Vec<CallTarget>>,
+    member_calls: HashMap<((u32, u32), FunctionLikeIdentifier), MemberCall>,
+    own_member_classes: HashMap<(u32, u32), Vec<Word>>,
+    tested_types: HashMap<(u32, u32), TUnion>,
+    declared_types: HashMap<(u32, u32), TUnion>,
+    namespace_constants: HashMap<(u32, u32), Word>,
+    ordered_key_types: HashMap<(u32, u32), TUnion>,
+    resolved_return_types: HashMap<(u32, u32), TUnion>,
+    /// The parameters of a PHP# method that erase to a narrower type than a parameter of a method it overrides or
+    /// implements erases to, keyed by the span of the parameter's name, as [`AnalysisArtifacts`] holds them.
+    pub widened_parameters: HashSet<(u32, u32)>,
+}
+
+impl LoweringInput {
+    /// The type the analysis gave `expression`.
+    #[inline]
+    pub fn get_expression_type<T>(&self, expression: &T) -> Option<&TUnion>
+    where
+        T: HasSpan,
+    {
+        self.expression_types.get(&get_expression_range(expression))
+    }
+
+    /// What the PHP# call `call` runs, as [`AnalysisArtifacts::get_callees`] gives it.
+    pub fn get_callees<T>(&self, call: &T) -> impl Iterator<Item = &CallTarget>
+    where
+        T: HasSpan,
+    {
+        self.call_targets.get(&get_expression_range(call)).into_iter().flatten()
+    }
+
+    /// What the method `callee` gives, of the several the PHP# method call `call` runs, as
+    /// [`AnalysisArtifacts::get_member_call`] gives it.
+    pub fn get_member_call<T>(&self, call: &T, callee: &FunctionLikeIdentifier) -> Option<&MemberCall>
+    where
+        T: HasSpan,
+    {
+        self.member_calls.get(&(get_expression_range(call), *callee))
+    }
+
+    /// The classes of the receiver's parts whose own member the PHP# call or read `access` runs, as
+    /// [`AnalysisArtifacts::get_own_member_classes`] gives them.
+    pub fn get_own_member_classes<T>(&self, access: &T) -> Option<&[Word]>
+    where
+        T: HasSpan,
+    {
+        self.own_member_classes.get(&get_expression_range(access)).map(Vec::as_slice)
+    }
+
+    /// The type the PHP# test or `typeof` that writes the type `hint` reads while the code runs, as
+    /// [`AnalysisArtifacts::get_tested_type`] gives it.
+    pub fn get_tested_type(&self, hint: &impl HasSpan) -> Option<&TUnion> {
+        self.tested_types.get(&get_expression_range(hint))
+    }
+
+    /// The type the declaration's type `hint` writes, or that `hint` takes, as
+    /// [`AnalysisArtifacts::get_declared_type`] gives it.
+    pub fn get_declared_type(&self, hint: &impl HasSpan) -> Option<&TUnion> {
+        self.declared_types.get(&get_expression_range(hint))
+    }
+
+    /// The full name of the plain PHP constant the PHP# read `read` reaches through its namespace, as
+    /// [`AnalysisArtifacts::get_namespace_constant`] gives it.
+    pub fn get_namespace_constant<T>(&self, read: &T) -> Option<Word>
+    where
+        T: HasSpan,
+    {
+        self.namespace_constants.get(&get_expression_range(read)).copied()
+    }
+
+    /// The type of the keys the PHP# call `call` of a collection member orders by, as
+    /// [`AnalysisArtifacts::get_ordered_key_type`] gives it.
+    pub fn get_ordered_key_type<T>(&self, call: &T) -> Option<&TUnion>
+    where
+        T: HasSpan,
+    {
+        self.ordered_key_types.get(&get_expression_range(call))
+    }
+
+    /// The type the PHP# call `call` of plain PHP resolved its conditional declared result to, as
+    /// [`AnalysisArtifacts::get_resolved_return_type`] gives it.
+    pub fn get_resolved_return_type<T>(&self, call: &T) -> Option<&TUnion>
+    where
+        T: HasSpan,
+    {
+        self.resolved_return_types.get(&get_expression_range(call))
+    }
+}
+
+impl ExpressionTypes for LoweringInput {
+    fn get_expression_type<T>(&self, expression: &T) -> Option<&TUnion>
+    where
+        T: HasSpan,
+    {
+        LoweringInput::get_expression_type(self, expression)
     }
 }
 
