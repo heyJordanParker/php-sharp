@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A method that a class outside its namespace overrides or implements is never too wide, spec sections 5 and 22. A method must be visible to each class that replaces it, and 0.6.30 counted only the code that calls it. So with an abstract `Base` in `App.Shop` whose `name()` and `invoke()` only `App.Shop` calls, and `One` in `App.Web` that overrides both, it refused each, as "`Base.name` is public, and nothing outside `App.Shop` uses it.", though `One` reaches both from `App.Web`. An override from outside the namespace now counts as a use from there. A method that only its own namespace and the namespaces below it override and call is still refused.
+
 ## [0.6.30] - 2026-11-18
 
 ### Fixed
