@@ -11,6 +11,7 @@ use mago_linter::external::ExternalLinter;
 use mago_php_version::PHPVersion;
 
 use crate::config::extension::ExtensionHostConfiguration;
+use crate::consts::VERSION;
 
 /// Starts every enabled extension host and validates its linter registration.
 pub(crate) fn initialize_external_linter(
@@ -137,7 +138,7 @@ pub(crate) fn initialize_external_analyzer(
         return Ok(None);
     }
 
-    let analyzer = ExternalAnalyzer::initialize(pools, php_version, enabled_plugins, disable_defaults)?;
+    let analyzer = ExternalAnalyzer::initialize(pools, php_version, enabled_plugins, disable_defaults, VERSION)?;
     if let Some(start) = trace_start {
         tracing::trace!(
             extensions = analyzer.extensions().len(),

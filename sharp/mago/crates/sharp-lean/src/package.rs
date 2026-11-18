@@ -379,16 +379,16 @@ impl Package {
     }
 
     /// Writes the package's Lean version, so elan installs it on first use, and asks `lake` for its version there, under
-    /// `library::first_call`'s lock. With no `lake` on the `PATH`, the package uses the `lake` of the elan Mago installs in
-    /// its cache folder.
-    pub(crate) fn toolchain(&mut self) -> io::Result<Toolchain> {
+    /// `library::first_call`'s lock. With no `lake` on the `PATH`, the package uses the `lake` of the elan that mago
+    /// `mago_version` installs in its cache folder.
+    pub(crate) fn toolchain(&mut self, mago_version: &str) -> io::Result<Toolchain> {
         fs::create_dir_all(&self.directory)
             .map_err(|error| DatabaseError::io(IOAction::CreateFolder, &self.directory, error))?;
         write_if_changed(&self.directory.join("lean-toolchain"), library::TOOLCHAIN.as_bytes())?;
 
         let output = match library::first_call(self.lake.command().arg("--version").current_dir(&self.directory)) {
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                self.lake = match library::install() {
+                self.lake = match library::install(mago_version) {
                     Ok(Some(lake)) => lake,
                     Ok(None) => return Ok(Toolchain::Unsupported),
                     Err(error) => return Ok(Toolchain::Failed(error.to_string())),

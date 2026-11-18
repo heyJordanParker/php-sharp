@@ -165,8 +165,9 @@ fn registry(repository: &Path) -> Arc<PluginRegistry> {
 fn registry_of(command: WorkerCommand) -> Arc<PluginRegistry> {
     let pool = WorkerPool::spawn(command, NonZeroUsize::new(2).expect("two workers"), WorkerPoolOptions::default())
         .expect("refinement worker pool should start");
-    let analyzer = ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false)
-        .expect("refinement analyzer should initialize");
+    let analyzer =
+        ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false, env!("CARGO_PKG_VERSION"))
+            .expect("refinement analyzer should initialize");
     let mut registry = PluginRegistry::with_library_providers();
     registry.set_external_analyzer(Arc::new(ExternalAnalyzerHandle::ready(analyzer)));
     Arc::new(registry)

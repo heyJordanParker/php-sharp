@@ -84,8 +84,9 @@ fn selected_declarations_refresh_every_worker_incrementally() {
         .with_environment("MAGO_SCAN_AUDIT_LOG", &audit_log);
     let pool = WorkerPool::spawn(command, NonZeroUsize::new(3).expect("three workers"), WorkerPoolOptions::default())
         .expect("scan worker pool should start");
-    let analyzer = ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false)
-        .expect("scan analyzer should initialize");
+    let analyzer =
+        ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false, env!("CARGO_PKG_VERSION"))
+            .expect("scan analyzer should initialize");
     let mut registry = PluginRegistry::with_library_providers();
     registry.set_external_analyzer(Arc::new(ExternalAnalyzerHandle::ready(analyzer)));
 
@@ -190,8 +191,9 @@ fn attribute_scan(database: &Database<'static>, audit_log: &Path) -> Option<Incr
         .with_environment("MAGO_SCAN_AUDIT_LOG", audit_log);
     let pool = WorkerPool::spawn(command, NonZeroUsize::MIN, WorkerPoolOptions::default())
         .expect("scan worker pool should start");
-    let analyzer = ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false)
-        .expect("scan analyzer should initialize");
+    let analyzer =
+        ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false, env!("CARGO_PKG_VERSION"))
+            .expect("scan analyzer should initialize");
     let mut registry = PluginRegistry::with_library_providers();
     registry.set_external_analyzer(Arc::new(ExternalAnalyzerHandle::ready(analyzer)));
 

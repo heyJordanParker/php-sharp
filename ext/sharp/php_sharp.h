@@ -6,8 +6,6 @@
 extern zend_module_entry sharp_module_entry;
 #define phpext_sharp_ptr &sharp_module_entry
 
-#define PHP_SHARP_VERSION "0.6.27"
-
 #define SHARP_FILE_EXTENSION ".sharp"
 
 /* Whether `filename` names a PHP# source file, which ends in `.sharp`. Each fetch of a property a PHP# type covers asks

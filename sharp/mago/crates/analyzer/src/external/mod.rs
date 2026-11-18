@@ -1723,7 +1723,8 @@ impl Drop for ExternalAnalyzerHandle {
 }
 
 impl ExternalAnalyzer<WorkerPool> {
-    /// Discovers and validates the analyzer plugins exposed by worker pools.
+    /// Discovers and validates the analyzer plugins exposed by worker pools. `mago_version` is the release of the
+    /// `mago` binary, which a refused handshake names.
     ///
     /// # Errors
     ///
@@ -1734,8 +1735,10 @@ impl ExternalAnalyzer<WorkerPool> {
         php_version: PHPVersion,
         enabled_plugins: &[String],
         disable_defaults: bool,
+        mago_version: &str,
     ) -> Result<Self, ExternalAnalyzerError> {
-        let analyzer = Self::initialize_transports(pools, php_version, enabled_plugins, disable_defaults)?;
+        let analyzer =
+            Self::initialize_transports(pools, php_version, enabled_plugins, disable_defaults, mago_version)?;
         for backend in &analyzer.backends {
             if backend.registration.has_worker_reducer {
                 backend.transport.enable_worker_reduction();
@@ -3431,6 +3434,7 @@ where
         php_version: PHPVersion,
         enabled_plugins: &[String],
         disable_defaults: bool,
+        mago_version: &str,
     ) -> Result<Self, ExternalAnalyzerError> {
         let trace_enabled = tracing::enabled!(tracing::Level::TRACE);
         let started_at = trace_enabled.then(Instant::now);
@@ -3468,7 +3472,8 @@ where
                 "Describing external analyzer backend."
             );
 
-            let responses = transport.broadcast(&describe).map_err(protocol::refused_handshake)?;
+            let responses =
+                transport.broadcast(&describe).map_err(|error| protocol::refused_handshake(error, mago_version))?;
             let response_bytes = responses.iter().map(Vec::len).sum::<usize>();
             let mut decoded = responses.iter().map(|response| protocol::decode_registration(response));
             let Some(first) = decoded.next() else {
@@ -4140,13 +4145,14 @@ mod tests {
         }
     }
 
-    /// The error initialization gives when a worker refuses Mago's first request with `refusal`.
+    /// The error initialization gives when a worker refuses the first request of mago 1.2.3 with `refusal`.
     fn handshake_error(refusal: &str) -> String {
         ExternalAnalyzer::initialize_transports(
             [Arc::new(RefusingTransport(refusal.as_bytes().to_vec()))],
             PHPVersion::PHP85,
             &[],
             false,
+            "1.2.3",
         )
         .expect_err("a refused handshake should fail initialization")
         .to_string()
@@ -4157,7 +4163,7 @@ mod tests {
     #[test]
     fn a_worker_on_an_sdk_before_0_6_1_that_refuses_the_handshake_names_the_package_to_require() {
         let speaks = format!("{}.{}", protocol::ANALYZER_PROTOCOL_MAJOR, protocol::ANALYZER_PROTOCOL_MINOR);
-        let version = env!("CARGO_PKG_VERSION");
+        let version = "1.2.3";
 
         assert_eq!(
             handshake_error(&format!("Unsupported analyzer protocol version {speaks}.")),
@@ -4191,7 +4197,7 @@ mod tests {
     #[test]
     fn registration_is_decoded_and_filtered() {
         let transport = Arc::new(TestTransport { requests: Mutex::new(Vec::new()) });
-        let analyzer = ExternalAnalyzer::initialize_transports([transport], PHPVersion::PHP85, &[], false)
+        let analyzer = ExternalAnalyzer::initialize_transports([transport], PHPVersion::PHP85, &[], false, "1.2.3")
             .expect("registration should succeed");
 
         assert_eq!(analyzer.extensions().len(), 1);
@@ -4207,8 +4213,9 @@ mod tests {
     #[test]
     fn a_property_or_forwarded_call_request_sends_the_receiver_as_its_file_sees_it() {
         let transport = Arc::new(DecliningTransport::default());
-        let analyzer = ExternalAnalyzer::initialize_transports([Arc::clone(&transport)], PHPVersion::PHP85, &[], false)
-            .expect("registration should succeed");
+        let analyzer =
+            ExternalAnalyzer::initialize_transports([Arc::clone(&transport)], PHPVersion::PHP85, &[], false, "1.2.3")
+                .expect("registration should succeed");
         let sharp =
             Arc::new(File::ephemeral(Cow::Borrowed(b"src/App/Report.sharp"), Cow::Borrowed(b"namespace App;\n")));
         let php = Arc::new(File::ephemeral(Cow::Borrowed(b"src/App/Report.php"), Cow::Borrowed(b"<?php\n")));
@@ -4254,8 +4261,9 @@ mod tests {
     #[test]
     fn a_provider_request_is_named_by_its_kind_and_plugin() {
         let transport = Arc::new(DecliningTransport::default());
-        let analyzer = ExternalAnalyzer::initialize_transports([Arc::clone(&transport)], PHPVersion::PHP85, &[], false)
-            .expect("registration should succeed");
+        let analyzer =
+            ExternalAnalyzer::initialize_transports([Arc::clone(&transport)], PHPVersion::PHP85, &[], false, "1.2.3")
+                .expect("registration should succeed");
         let php = Arc::new(File::ephemeral(Cow::Borrowed(b"src/App/Report.php"), Cow::Borrowed(b"<?php\n")));
         let session = ExternalAnalysisSession::from_files([Arc::clone(&php)]);
         let codebase = CodebaseMetadata::new();
@@ -4289,7 +4297,7 @@ mod tests {
     #[test]
     fn providers_of_several_plugins_are_named_by_each_plugin_once() {
         let transport = Arc::new(DecliningTransport::default());
-        let analyzer = ExternalAnalyzer::initialize_transports([transport], PHPVersion::PHP85, &[], false)
+        let analyzer = ExternalAnalyzer::initialize_transports([transport], PHPVersion::PHP85, &[], false, "1.2.3")
             .expect("registration should succeed");
         let backend = &analyzer.backends[0];
         let mut routes = backend.registration.plugins[0].clone();
@@ -4330,9 +4338,14 @@ mod tests {
         use crate::invocation::MethodInvocationKind;
         use crate::invocation::MethodTargetContext;
 
-        let analyzer =
-            ExternalAnalyzer::initialize_transports([Arc::new(HangingTransport)], PHPVersion::PHP85, &[], false)
-                .expect("registration should succeed");
+        let analyzer = ExternalAnalyzer::initialize_transports(
+            [Arc::new(HangingTransport)],
+            PHPVersion::PHP85,
+            &[],
+            false,
+            "1.2.3",
+        )
+        .expect("registration should succeed");
         let arena = mago_allocator::LocalArena::new();
         let file =
             Arc::new(File::ephemeral(Cow::Borrowed(b"src/Route.php"), Cow::Borrowed(b"<?php\nmissing_route();\n")));
@@ -4534,8 +4547,9 @@ mod tests {
     #[test]
     fn default_plugins_can_be_disabled_and_reenabled_by_alias() {
         let disabled_transport = Arc::new(TestTransport { requests: Mutex::new(Vec::new()) });
-        let disabled = ExternalAnalyzer::initialize_transports([disabled_transport], PHPVersion::PHP85, &[], true)
-            .expect("registration should succeed");
+        let disabled =
+            ExternalAnalyzer::initialize_transports([disabled_transport], PHPVersion::PHP85, &[], true, "1.2.3")
+                .expect("registration should succeed");
         assert!(disabled.backends[0].registration.function_providers.is_empty(), "expected no function providers");
 
         let enabled_transport = Arc::new(TestTransport { requests: Mutex::new(Vec::new()) });
@@ -4544,6 +4558,7 @@ mod tests {
             PHPVersion::PHP85,
             &["EXAMPLE".to_string()],
             true,
+            "1.2.3",
         )
         .expect("registration should succeed");
         assert_eq!(enabled.backends[0].registration.function_providers.len(), 1);
@@ -4557,7 +4572,7 @@ mod tests {
             &["StD"],
         )));
 
-        let result = ExternalAnalyzer::initialize_transports([transport], PHPVersion::PHP85, &[], false);
+        let result = ExternalAnalyzer::initialize_transports([transport], PHPVersion::PHP85, &[], false, "1.2.3");
 
         assert!(matches!(
             result,
@@ -4579,7 +4594,7 @@ mod tests {
             &["SHARED"],
         )));
 
-        let result = ExternalAnalyzer::initialize_transports([first, second], PHPVersion::PHP85, &[], false);
+        let result = ExternalAnalyzer::initialize_transports([first, second], PHPVersion::PHP85, &[], false, "1.2.3");
 
         assert!(matches!(
             result,
@@ -4596,8 +4611,9 @@ mod tests {
             initialization_responses: vec![response.clone(), response],
         });
 
-        let analyzer = ExternalAnalyzer::initialize_transports([Arc::clone(&transport)], PHPVersion::PHP85, &[], false)
-            .expect("initialization should succeed");
+        let analyzer =
+            ExternalAnalyzer::initialize_transports([Arc::clone(&transport)], PHPVersion::PHP85, &[], false, "1.2.3")
+                .expect("initialization should succeed");
 
         let files = analyzer.initialization_files();
         assert_eq!(*transport.broadcasts.lock().unwrap(), 2);
@@ -4618,7 +4634,7 @@ mod tests {
             ],
         });
 
-        let result = ExternalAnalyzer::initialize_transports([transport], PHPVersion::PHP85, &[], false);
+        let result = ExternalAnalyzer::initialize_transports([transport], PHPVersion::PHP85, &[], false, "1.2.3");
 
         assert!(matches!(result, Err(ExternalAnalyzerError::InconsistentInitialization)));
     }
@@ -4627,8 +4643,9 @@ mod tests {
     fn disabled_plugins_are_not_initialized() {
         let transport =
             Arc::new(InitializationTransport { broadcasts: Mutex::new(0), initialization_responses: Vec::new() });
-        let analyzer = ExternalAnalyzer::initialize_transports([Arc::clone(&transport)], PHPVersion::PHP85, &[], true)
-            .expect("registration should succeed");
+        let analyzer =
+            ExternalAnalyzer::initialize_transports([Arc::clone(&transport)], PHPVersion::PHP85, &[], true, "1.2.3")
+                .expect("registration should succeed");
 
         assert_eq!(*transport.broadcasts.lock().unwrap(), 1);
         assert!(analyzer.initialization_files().is_empty(), "expected no initialization files");

@@ -40,6 +40,8 @@ pub struct FormatterConfig {
     /// Supported placeholders: `%file%` (absolute path), `%rel_file%` (workspace-relative path), `%line%`, `%column%`.
     /// Example: `"phpstorm://open?file=%file%&line=%line%"`
     pub editor_url: Option<String>,
+    /// The release of the `mago` binary that reports, which a SARIF report names as its tool's version.
+    pub mago_version: &'static str,
 }
 
 /// Trait for formatting issues to a writer.

@@ -59,8 +59,9 @@ fn server_with(repository: &Path, database: Database<'static>, analyzer_settings
         .with_current_directory(repository);
     let pool = WorkerPool::spawn(command, NonZeroUsize::MIN, WorkerPoolOptions::default())
         .expect("server proof worker pool should start");
-    let analyzer = ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false)
-        .expect("server proof analyzer should initialize");
+    let analyzer =
+        ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false, env!("CARGO_PKG_VERSION"))
+            .expect("server proof analyzer should initialize");
     let mut registry = PluginRegistry::with_library_providers();
     registry.set_external_analyzer(Arc::new(ExternalAnalyzerHandle::ready(analyzer)));
 

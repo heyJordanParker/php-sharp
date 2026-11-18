@@ -61,6 +61,9 @@ pub struct ReporterConfig {
     /// Supported placeholders: `%file%` (absolute path), `%rel_file%` (workspace-relative path), `%line%`, `%column%`.
     /// Example: `"phpstorm://open?file=%file%&line=%line%"`
     pub editor_url: Option<String>,
+
+    /// The release of the `mago` binary that reports, which a SARIF report names as its tool's version.
+    pub mago_version: &'static str,
 }
 
 /// Status information returned after reporting issues.
@@ -195,6 +198,7 @@ impl Reporter {
             minimum_level: self.config.minimum_report_level,
             filter_fixable: self.config.filter_fixable,
             editor_url: self.config.editor_url.clone(),
+            mago_version: self.config.mago_version,
         };
 
         // Dispatch to the appropriate formatter
@@ -239,6 +243,7 @@ mod tests {
                 sort: false,
                 minimum_report_level: None,
                 editor_url: None,
+                mago_version: "1.2.3",
             },
         )
     }
@@ -362,6 +367,7 @@ mod tests {
         };
 
         assert_eq!(value["version"], "2.1.0");
+        assert_eq!(value["runs"][0]["tool"]["driver"]["version"], "1.2.3");
         assert!(value["runs"][0]["results"].as_array().is_some_and(Vec::is_empty));
     }
 

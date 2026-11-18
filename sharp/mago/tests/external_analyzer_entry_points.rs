@@ -140,7 +140,8 @@ fn service(
         .with_argument(repository.join("composer/tests/Sdk/Fixtures/analyzer-entry-point-worker.php"))
         .with_current_directory(repository);
     let pool = WorkerPool::spawn(command, NonZeroUsize::MIN, WorkerPoolOptions::default())?;
-    let external = ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false)?;
+    let external =
+        ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false, env!("CARGO_PKG_VERSION"))?;
     let mut registry = PluginRegistry::with_library_providers();
     registry.set_external_analyzer(Arc::new(ExternalAnalyzerHandle::ready(external)));
 

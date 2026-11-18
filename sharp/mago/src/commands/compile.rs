@@ -359,6 +359,7 @@ fn compile_into(configuration: &Configuration, root: &Path, folder: &Path) -> Re
             sort: false,
             minimum_report_level: None,
             editor_url: None,
+            mago_version: VERSION,
         },
     )
     .report(refused, None)?;
@@ -613,7 +614,7 @@ fn compile(configuration: &Configuration, color_choice: ColorChoice) -> Result<C
         None => None,
     };
     let read_database = server.database().read_only();
-    let lean = Lean::new(&root);
+    let lean = Lean::new(&root, VERSION);
     let mut stamped = Vec::new();
     let compilations = server.compile(
         |path| {
@@ -871,6 +872,7 @@ impl Outcome {
                     sort: false,
                     minimum_report_level: None,
                     editor_url: configuration.editor_url.clone(),
+                    mago_version: VERSION,
                 },
             );
             reporter.report(self.issues, None)?;

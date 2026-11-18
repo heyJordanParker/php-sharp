@@ -1112,7 +1112,8 @@ fn analyze_files_with_fixture(
         command = command.with_environment(switch, "1");
     }
     let pool = WorkerPool::spawn(command, NonZeroUsize::MIN, WorkerPoolOptions::default())?;
-    let external = ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false)?;
+    let external =
+        ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false, env!("CARGO_PKG_VERSION"))?;
     let mut registry = PluginRegistry::with_library_providers();
     registry.set_external_analyzer(Arc::new(ExternalAnalyzerHandle::ready(external)));
 

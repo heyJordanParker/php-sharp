@@ -233,8 +233,9 @@ fn external_analyzer_lifecycle_is_exact_across_workers_and_incremental_runs() {
     let pool =
         WorkerPool::spawn(command, NonZeroUsize::new(3).expect("three is non-zero"), WorkerPoolOptions::default())
             .expect("PHP lifecycle worker pool should start");
-    let analyzer = ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false)
-        .expect("PHP lifecycle analyzer should initialize");
+    let analyzer =
+        ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false, env!("CARGO_PKG_VERSION"))
+            .expect("PHP lifecycle analyzer should initialize");
     let initialization_sources = analyzer
         .initialization_files()
         .into_iter()
@@ -391,8 +392,9 @@ fn orchestrator_loads_initialization_stubs_into_the_source_database() {
         .with_environment("MAGO_LIFECYCLE_AUDIT_LOG", &audit_log);
     let pool = WorkerPool::spawn(command, NonZeroUsize::MIN, WorkerPoolOptions::default())
         .expect("PHP lifecycle worker pool should start");
-    let analyzer = ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false)
-        .expect("PHP lifecycle analyzer should initialize");
+    let analyzer =
+        ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false, env!("CARGO_PKG_VERSION"))
+            .expect("PHP lifecycle analyzer should initialize");
     let orchestrator = Orchestrator::new(OrchestratorConfiguration {
         php_version: PHPVersion::PHP85,
         paths: vec![],
@@ -583,8 +585,9 @@ fn deadline_registry(source: &str, directory: &Path) -> PluginRegistry {
     let options =
         WorkerPoolOptions { host: "acme".to_owned(), request_timeout: DEADLINE, ..WorkerPoolOptions::default() };
     let pool = WorkerPool::spawn(command, NonZeroUsize::MIN, options).expect("PHP host pool should start");
-    let analyzer = ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false)
-        .expect("PHP host analyzer should initialize");
+    let analyzer =
+        ExternalAnalyzer::initialize([Arc::new(pool)], PHPVersion::PHP85, &[], false, env!("CARGO_PKG_VERSION"))
+            .expect("PHP host analyzer should initialize");
     let mut registry = PluginRegistry::with_library_providers();
     registry.set_external_analyzer(Arc::new(ExternalAnalyzerHandle::ready(analyzer)));
     registry

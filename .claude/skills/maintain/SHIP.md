@@ -9,9 +9,7 @@ A change to `sharp/bin/spec` goes in a PR that carries nothing else but Markdown
 ## 1. Bump the version as the batch's last commit
 
 These files change, and nothing else:
-- what `php sharp/mago/scripts/set-version.php <version>` writes
-- `PHP_SHARP_VERSION` in `ext/sharp/php_sharp.h`
-- the version `Zend/tests/sharp/ri_sharp.phpt` expects
+- what `php sharp/mago/scripts/set-version.php <version>` writes: the root package's `version` in `sharp/mago/Cargo.toml`, the one place the release version lives, its line in `sharp/mago/Cargo.lock`, and the versioned docs
 - in `sharp/CHANGELOG.md`, the `## [<version>] - <YYYY-MM-DD>` heading over the notes, the `[Unreleased]` link from `v<version>`, and a `[<version>]` link from the last tag
 
 Stage those files by name, never with `git add -A`, because builders' work in progress shares the tree. Commit with `chore: release <version>`.
@@ -30,7 +28,7 @@ gh pr merge <number> --repo heyJordanParker/php-sharp --merge --match-head-commi
 
 ## 4. Publish
 
-The merge commit's push publishes, and nobody tags by hand. Wait until its `PHP#` run passes: its `RELEASE` job publishes the GitHub release, which tags the merge commit `v<version>`, and `COMPOSER` tags both Composer packages. If a later merge replaced that push run, the next PR is a release's PR too, and its merge publishes.
+The merge commit's push builds the release from the tree the PR's run passed, and publishes it, and nobody tags by hand. Wait until its `PHP#` run passes: `RELEASE_ASSETS` and `IMAGE` build the assets and the image, `IMAGE_ARM64` runs a compiled class on the arm64 image, `RELEASE` publishes the GitHub release, which tags the merge commit `v<version>`, and `COMPOSER` tags both Composer packages. A failed build there is fixed forward on a new PR, which is a release's PR too, since the version still has no tag. If a later merge replaced that push run, the next PR is a release's PR too, and its merge publishes.
 
 ## 5. Verify what users install
 

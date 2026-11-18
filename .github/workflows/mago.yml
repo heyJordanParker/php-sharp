@@ -194,10 +194,9 @@ jobs:
   # The run's one Linux build of the workspace's tests, in the sharp/docker image on the target sharp/bin/build-mago
   # builds there, which sharp.yml's BUILD_LINUX saves on master and its own BUILD_LINUX restores, so Linux keeps one dev
   # build of Mago and one cache. The tests jobs run its test binaries with sharp/bin/test --no-build, where each of 4
-  # jobs built them itself for 2.5 to 3 minutes on release pull request #363's run. It then runs the last of 5 slices of
-  # the tests itself, with the doc tests and the property tests, which cargo builds, so they need its target. A job
-  # starts once every job it needs has ended, so the tests jobs wait for this slice too: on release pull request #379's
-  # run, the fourth of 4 slices held them 4.2 minutes, and a fifth of the tests holds them less.
+  # jobs built them itself for 2.5 to 3 minutes on release pull request #363's run. A job starts once every job it needs
+  # has ended, so this job only builds: on test pull request #381's run, the slice it also ran held the tests jobs 5.3
+  # of its 6.9 minutes.
   #
   # A crate whose build script compiles C, such as ring or tree-sitter, rebuilds with every crate above it when CC or
   # CXX differs from the build the target holds, so the job sets the ccache compilers sharp.yml's BUILD_LINUX builds the
@@ -264,12 +263,8 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-      - name: Test the last fifth of the workspace's tests, the doc tests and the property tests
-        run: sharp/bin/test --linux --mago --shard 5/5
-
   # The workspace's tests on Linux, every fifth test of every test binary, by exact name, with sharp/bin/test --mago
-  # --shard, so a set of slow tests spreads over the jobs, on the build job's test binaries. The build job runs the
-  # fifth slice.
+  # --shard, so a set of slow tests spreads over the jobs, on the build job's test binaries.
   tests:
     name: tests (${{ matrix.shard }}/5)
     needs: [CHANGES, build]
@@ -284,7 +279,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
 
     defaults:
       run:
@@ -314,6 +309,51 @@ jobs:
 
       - name: Test every fifth test of the workspace
         run: sharp/bin/test --linux --mago --no-build --shard ${{ matrix.shard }}/5
+
+  # The doc tests and mago-codex's property tests, which cargo builds as it runs them, so they can't run from the build
+  # job's binaries. They build on the same restored target as the build job, beside it and the tests jobs, so no job
+  # waits for them. They took 31 seconds after the build job's build on test pull request #381's run. It sets the
+  # build job's compilers, as the build job explains.
+  doc-and-property-tests:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.mago == 'true' && !needs.CHANGES.outputs.passed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      packages: read
+
+    defaults:
+      run:
+        working-directory: .
+
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+      CC: ccache gcc
+      CXX: ccache g++
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Rust and Mago caches
+        uses: ./.github/actions/mago-cache
+        with:
+          name: SHARP_LINUX
+          rust: SHARP_LINUX
+          rust-paths: |
+            sharp/build/cargo
+            sharp/build/rustup
+
+      - name: Test the doc tests and the property tests
+        run: sharp/bin/test --linux --doc-and-property
 
   # The workspace's tests on macOS arm64, which covers the few lines of Mago that differ there, such as the watch mode's
   # FSEvents, on the self-hosted Mac runners, for a release's pull request and a push whose tree no pull request's run
@@ -535,7 +575,7 @@ jobs:
   # pull request and a push whose tree no pull request's run passed, as CHANGES explains.
   ci-passed:
     if: always()
-    needs: [CHANGES, checks, build, tests, tests-macos, release-build, plain-php, patch-coverage]
+    needs: [CHANGES, checks, build, tests, doc-and-property-tests, tests-macos, release-build, plain-php, patch-coverage]
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -555,7 +595,7 @@ jobs:
       - name: Every job passed, or skipped a change that leaves Mago alone
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: checks, build, tests, tests-macos, release-build, plain-php, patch-coverage
+          allowed-skips: checks, build, tests, doc-and-property-tests, tests-macos, release-build, plain-php, patch-coverage
           jobs: ${{ toJSON(needs) }}
 
       # As .github/actions/red-master-issue explains.

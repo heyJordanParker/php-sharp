@@ -9,8 +9,8 @@ set -euo pipefail
 # WORKFLOWS the workflows, and mago.yml's checks and plain-php theirs.
 #
 # With --changes <base>, it prints what the change since <base> needs, as CI's CHANGES jobs write it to $GITHUB_OUTPUT,
-# sharp/mago/Cargo.toml's version, and bump: whether origin has no tag yet for that version, so the change releases
-# it. A release runs every check, so a bump's code and mago are true.
+# the release version, which is the root package's in sharp/mago/Cargo.toml, and bump: whether origin has no tag yet
+# for that version, so the change releases it. A release runs every check, so a bump's code and mago are true.
 usage() {
   echo "usage: sharp/bin/check [workflows | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php | patch-coverage]..." >&2
   echo "       sharp/bin/check --changes <base>" >&2
@@ -210,6 +210,14 @@ no_notify() {
   fi
   grep -q "did not match any packages" <<< "$output"
 }
+# Every workspace crate keeps version 0.0.0, which a release never bumps, so a bump rebuilds only the root package. A
+# crate's own CARGO_PKG_VERSION is that 0.0.0, so a crate takes the release version from the mago binary instead.
+no_crate_version() {
+  if grep -rn --include='*.rs' CARGO_PKG_VERSION crates docs; then
+    echo "A workspace crate reads its own version, always 0.0.0. Pass it the binary's version, crate::consts::VERSION." >&2
+    return 1
+  fi
+}
 # cargo install puts typos in the folder cargo keeps installed tools in, which cargo finds its own subcommands in, such
 # as cargo-llvm-cov, but which a Mac with Homebrew's rustup leaves off PATH. That folder can hold an older rustup's
 # rustc, so it never joins PATH.
@@ -235,6 +243,7 @@ gate_mago_checks() {
   # The fuzz crate is a workspace of its own, which fuzz.yml builds only when it changes.
   step rustup run "$rust" cargo metadata --locked --format-version 1 --manifest-path crates/syntax/fuzz/Cargo.toml > /dev/null
   step no_notify
+  step no_crate_version
   step unchanged_by php scripts/regen-sdk-node-kinds.php
   step rustup run "$rust" cargo fmt --all -- --check
   step rustup run "$rust" cargo clippy --workspace --all-targets --all-features -- -D warnings

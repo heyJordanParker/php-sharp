@@ -5,10 +5,10 @@ php --ri sharp prints the PHP# version
 
 echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n --ri sharp');
 ?>
---EXPECT--
+--EXPECTF--
 sharp
 
-Version => 0.6.27
+Version => %d.%d.%d
 
 Directive => Local Value => Master Value
 sharp.compile_command => no value => no value

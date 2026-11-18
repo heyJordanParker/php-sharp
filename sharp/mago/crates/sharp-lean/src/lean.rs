@@ -41,6 +41,7 @@ const PROOF_STEPS: &str = "Sharp.Lean.Proof";
 #[derive(Debug)]
 pub struct Lean {
     root: PathBuf,
+    mago_version: &'static str,
 }
 
 /// Every law of the workspace, in an order where each comes after each law it calls.
@@ -102,10 +103,11 @@ impl<'laws> Laws<'laws> {
 }
 
 impl Lean {
-    /// The Lean step of the workspace at `root`.
+    /// The Lean step of the workspace at `root`, for mago `mago_version`, which installs the law checker when no `lake`
+    /// is on the `PATH`.
     #[must_use]
-    pub fn new(root: &Path) -> Lean {
-        Lean { root: root.to_path_buf() }
+    pub fn new(root: &Path, mago_version: &'static str) -> Lean {
+        Lean { root: root.to_path_buf(), mago_version }
     }
 
     /// Proves the laws of `translations`, which hold every accepted `.sharp` file, and returns the issues that refuse
@@ -190,7 +192,7 @@ impl Lean {
             return Ok(issues);
         }
 
-        let toolchain = package.toolchain()?;
+        let toolchain = package.toolchain(self.mago_version)?;
         if !matches!(toolchain, Toolchain::Ready) {
             if let Toolchain::Failed(failure) = &toolchain {
                 tracing::debug!("The law checker could not be installed: {failure}");
