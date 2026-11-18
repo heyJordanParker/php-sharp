@@ -1,0 +1,6 @@
+namespace Billing;
+
+public interface HasDesign
+{
+    string designKey();
+}

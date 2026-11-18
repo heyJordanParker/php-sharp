@@ -1,0 +1,8 @@
+namespace Billing;
+
+public enum Status
+{
+    case Active;
+    case Paused;
+    case Closed;
+}

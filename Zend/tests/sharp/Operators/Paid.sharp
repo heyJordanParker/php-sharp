@@ -1,0 +1,6 @@
+namespace Billing;
+
+public class Paid : Payment
+{
+    public Paid(public int amount { get; }) { }
+}

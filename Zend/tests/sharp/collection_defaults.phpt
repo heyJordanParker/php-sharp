@@ -18,11 +18,22 @@ for ($round = 0; $round < 100; $round++) {
 }
 echo $output;
 
-require __DIR__ . '/harness/PlainDefault.inc';
+// Plain PHP still writes no new in a property's initial value: only a PHP# Map or Set field starts as an object.
+$plain = sys_get_temp_dir() . '/sharp-plain-default-' . getmypid() . '.php';
+file_put_contents($plain, <<<'PHP'
+<?php
+
+class PlainDefault
+{
+    public Sharp\Map $prices = new Sharp\Map();
+}
+PHP);
+register_shutdown_function(static fn () => unlink($plain));
+require $plain;
 ?>
 --EXPECTF--
 each object its own Map: {"tea":2} {"jam":1}
 each object its own Set: ["start","tea","pie"] ["start","bun"]
 a static Map starts empty: [] []
 
-Fatal error: New expressions are not supported in this context in %sPlainDefault.inc on line 6
+Fatal error: New expressions are not supported in this context in %ssharp-plain-default-%d.php on line 5

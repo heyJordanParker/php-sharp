@@ -13,7 +13,6 @@ namespace {
     use Billing\Order;
 
     require __DIR__ . '/attempt.inc';
-    require __DIR__ . '/harness/Billing.inc';
     require __DIR__ . '/vendor/autoload.php';
 
     $amount = static fn (Money $money): string => "$money->cents $money->currency";

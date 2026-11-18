@@ -1,0 +1,6 @@
+namespace Demo;
+
+public interface HasLabel
+{
+    string label();
+}

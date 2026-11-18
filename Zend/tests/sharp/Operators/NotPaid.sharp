@@ -1,0 +1,8 @@
+namespace Billing;
+
+import Exception;
+
+public class NotPaid : Exception
+{
+    public NotPaid(public Any? result { get; }) : super("not paid") { }
+}

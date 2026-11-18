@@ -4,8 +4,6 @@ A PHP# enum runs from PHP# and plain PHP, and a PHP# class runs a plain PHP enum
 <?php
 
 require __DIR__ . '/harness/Attributes.inc';
-require __DIR__ . '/harness/Priority.inc';
-require __DIR__ . '/harness/HasLabel.inc';
 require __DIR__ . '/vendor/autoload.php';
 
 use Demo\CheckoutState;

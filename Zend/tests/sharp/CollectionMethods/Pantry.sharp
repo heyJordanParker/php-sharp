@@ -1,7 +1,5 @@
 namespace Demo;
 
-import Lib.Basket;
-
 class Pantry
 {
     public List<int> sizes { get; private set; } = [];

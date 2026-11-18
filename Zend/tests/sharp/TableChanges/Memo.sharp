@@ -1,7 +1,5 @@
 namespace TableChanges;
 
-import Lib.Basket;
-
 // A change whose key, value or argument changes the same place first, as a memo does, runs that code before it takes
 // the place, so the change lands on the place as the code left it.
 public class Memo
@@ -41,7 +39,7 @@ public class Memo
         return this.tags.toList();
     }
 
-    // A `??=` into a `Map` a hooked plain PHP property holds runs its value only for a missing key, and keeps what the
+    // A `??=` into a `Map` another object's property holds runs its value only for a missing key, and keeps what the
     // value wrote to the same property.
     public static Map<string, int> counted(Basket basket)
     {

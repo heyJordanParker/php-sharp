@@ -5,8 +5,7 @@ The checker refuses each operator, equality, condition and pattern line PHP# giv
 require __DIR__ . '/project.inc';
 
 $files = [
-    'mago.toml' => "[source]\npaths = [\".\"]\nextensions = [\"sharp\", \"inc\"]\n",
-    'Billing.inc' => file_get_contents(__DIR__ . '/harness/Billing.inc'),
+    'mago.toml' => "[source]\npaths = [\".\"]\nextensions = [\"sharp\"]\n",
     // The fixtures sort Lists and read Maps, whose members the standard library declares, a List's members call an
     // int's, and an int's take a ByteOrder.
     'vendor/heyjordanparker/php-sharp-composer/composer.json' => '{"name": "heyjordanparker/php-sharp-composer"}',

@@ -5,7 +5,6 @@ PHP# collection methods change a List or Map where it lives, and leave objects t
 
 namespace {
     require __DIR__ . '/attempt.inc';
-    require __DIR__ . '/harness/Basket.inc';
     require __DIR__ . '/vendor/autoload.php';
 
     for ($round = 0; $round < 100; $round++) {
@@ -22,7 +21,7 @@ namespace {
         attempt(fn () => Demo\Pantry::rows([[1, 2]]));
         attempt(fn () => Demo\Pantry::setPast([1, 2]));
 
-        $basket = new Lib\Basket();
+        $basket = new Demo\Basket();
         $pantry = new Demo\Pantry($basket);
         attempt(fn () => $pantry->restock('tea'));
         attempt(fn () => $pantry->restock('none'));
@@ -59,7 +58,7 @@ namespace {
         attempt(fn () => Demo\Pantry::cleared([1, 2]));
         attempt(fn () => Demo\Pantry::reordered());
         // A change to a property with a set hook runs the hook once; a remove that finds nothing runs it never.
-        $shelf = new Lib\Basket();
+        $shelf = new Demo\Basket();
         $shelf->lines = [3, 4];
         attempt(function () use ($shelf) { Demo\Pantry::front($shelf, 1); return [$shelf->lines, $shelf->writes]; });
         attempt(fn () => [Demo\Pantry::take($shelf, 3), $shelf->lines, $shelf->writes]);
@@ -106,14 +105,14 @@ namespace {
     attempt(fn () => Demo\Pantry::shared(false, ['tea', 'pie'], ['tea' => 1, 'pie' => 2], ['cake']));
 
     // A call that changes a property lets go of the object when it returns.
-    $basket = new Lib\Basket();
+    $basket = new Demo\Basket();
     Demo\Pantry::fill($basket, 5);
     $kept = WeakReference::create($basket);
     unset($basket);
     var_dump($kept->get());
 
     // So does one whose call never ran because an argument threw.
-    $basket = new Lib\Basket();
+    $basket = new Demo\Basket();
     $kept = WeakReference::create($basket);
     attempt(fn () => Demo\Pantry::share($basket, 5, 0));
     unset($basket);
@@ -159,7 +158,7 @@ array(1) {
     int(2)
   }
 }
-OutOfRangeException: Undefined array key 2 in Pantry.sharp on line 54
+OutOfRangeException: Undefined array key 2 in Pantry.sharp on line 52
 array(1) {
   ["pie"]=>
   int(7)
@@ -227,8 +226,8 @@ array(3) {
   [2]=>
   int(9)
 }
-OutOfRangeException: Undefined array key 3 in Pantry.sharp on line 120
-OutOfRangeException: Undefined array key -1 in Pantry.sharp on line 120
+OutOfRangeException: Undefined array key 3 in Pantry.sharp on line 118
+OutOfRangeException: Undefined array key -1 in Pantry.sharp on line 118
 bool(true)
 bool(false)
 array(3) {
@@ -302,11 +301,11 @@ array(2) {
   int(4)
 }
 int(5)
-OutOfRangeException: The list is empty. in Pantry.sharp on line 166
+OutOfRangeException: The list is empty. in Pantry.sharp on line 164
 int(5)
 int(-9)
+OutOfRangeException: The list is empty. in Pantry.sharp on line 167
 OutOfRangeException: The list is empty. in Pantry.sharp on line 169
-OutOfRangeException: The list is empty. in Pantry.sharp on line 171
 int(3)
 int(1)
 int(1)
@@ -363,5 +362,5 @@ array(1) {
 string(13) "true 1 true 0"
 string(14) "true 1 false 0"
 NULL
-DivisionByZeroError: Modulo by zero in Pantry.sharp on line 78
+DivisionByZeroError: Modulo by zero in Pantry.sharp on line 76
 NULL
