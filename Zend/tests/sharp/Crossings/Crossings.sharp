@@ -1,5 +1,6 @@
 namespace Demo;
 
+import Countable;
 import Illuminate.Container.Attributes.Config;
 import Illuminate.Database.Events.MigrationsStarted;
 import Illuminate.Support.Arr;
@@ -7,7 +8,9 @@ import Illuminate.Support.Collection;
 import Illuminate.Support.Fluent;
 import Illuminate.Support.LazyCollection;
 import Illuminate.Support.ServiceProvider;
+import JsonSerializable;
 import Lib.Probe;
+import Sharp.Interop.Import;
 import Symfony.Component.EventDispatcher.EventDispatcher;
 
 class Crossings
@@ -71,6 +74,24 @@ class Crossings
     }
 
     public static Map<string, int> received(Map<string, int> counts) => counts;
+
+    // PHP's own count(), iterator_count() and json_encode() take a Countable, an iterable and a JsonSerializable, and
+    // Collection's constructor documents an iterable.
+    [Import("count")]
+    public static int countable(Countable values);
+
+    [Import("iterator_count")]
+    public static int iterated(Iterable<string> values);
+
+    [Import("json_encode")]
+    public static string|bool json(JsonSerializable value);
+
+    public static List<string> interfaces(Map<string, int> prices, Set<string> tags) => [
+        `${Crossings.countable(prices)}`,
+        `${Crossings.iterated(tags)}`,
+        `${Crossings.json(prices)}`,
+        Arr.query(new Collection<string, int>(prices).all()),
+    ];
 
     // EventDispatcher::dispatch() takes an object and returns it.
     public static string dispatched(Map<string, int> prices, Set<string> tags)

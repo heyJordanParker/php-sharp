@@ -1,6 +1,6 @@
 namespace IterableKinds;
 
-import Lib.Cursor;
+import Illuminate.Support.LazyCollection;
 
 public static class Reads
 {
@@ -15,7 +15,10 @@ public static class Reads
 
     public static List<int> counted(Countdown countdown) => countdown.map(n => n * 10).toList();
 
-    public static List<int> cursor(Cursor cursor) => cursor.filter(n => n > 4).take(1).toList();
+    // LazyCollection's own filter() and take() win over the lazy operations.
+    public static List<int> cursor(LazyCollection<int, int> cursor) => cursor.filter((n, position) => n > 4).take(1).toList();
+
+    public static LazyCollection<int, int> filtered(LazyCollection<int, int> cursor) => cursor.filter((n, position) => n > 4);
 
     // `[]` is an empty `List`, which an `Iterable` holds.
     public static Iterable<Object> none() => [];

@@ -4,7 +4,6 @@ A PHP# class calls every member of Sharp.Time's Date, Instant, DateTime and Dura
 date.timezone=America/New_York
 --FILE--
 <?php
-require __DIR__ . '/harness/Moments.inc';
 require __DIR__ . '/vendor/autoload.php';
 
 use Demo\DateCalls;

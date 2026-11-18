@@ -18,6 +18,8 @@
         "heyjordanparker/php-sharp-composer": "*",
         "illuminate/collections": "^13.43",
         "illuminate/database": "^13.43",
+        "nesbot/carbon": "^3.15",
+        "symfony/clock": "^8.1",
         "symfony/event-dispatcher": "^8.1"
     },
     "minimum-stability": "dev",

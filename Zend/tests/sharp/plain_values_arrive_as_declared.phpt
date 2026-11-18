@@ -1,8 +1,7 @@
 --TEST--
-A plain PHP value arrives in PHP# as its declared type says wherever PHP# holds it: a bare array is a Map, read straight or through a local, whose values() is a List, and a list its PHPDoc declares is a List, and a plain PHP override of a PHP# method, a generated test double's included, gives its PHP array as the Map the method declares where the call is written, as an argument, a constructor's argument, a literal's element, a spread, a static call through Self or a class value, and a null-safe call, and a plain PHP interface's array spreads into a Map and a List literal, and Sharp\Internal\returned refuses a type text plain PHP passes that is no list the calling code spells
+A plain PHP value arrives in PHP# as its declared type says wherever PHP# holds it: a bare array is a Map, read straight or through a local, whose values() is a List, and a list its PHPDoc declares is a List, read from Give and UniqueConstraintViolationException, and a plain PHP override of a PHP# method, a generated test double's included, gives its PHP array as the Map the method declares where the call is written, as an argument, a constructor's argument, a literal's element, a spread, a static call through Self or a class value, and a null-safe call, and Arrayable's and Collection's arrays spread into a Map and a List literal, and Sharp\Internal\returned refuses a type text plain PHP passes that is no list the calling code spells
 --FILE--
 <?php
-require __DIR__ . '/harness/Folder.inc';
 require __DIR__ . '/vendor/autoload.php';
 
 // A plain PHP override of a PHP# method and of a static method that return a `Map`, which give their PHP arrays.
@@ -19,15 +18,13 @@ final class MovedSource extends Arrivals\Source
     }
 }
 
-require __DIR__ . '/harness/Feed.inc';
-
-$folder = new Lib\Folder();
-$folder->records = [['type' => 'TXT', 'name' => 'x']];
-$folder->listed = [['type' => 'TXT', 'name' => 'x']];
+$give = new Illuminate\Container\Attributes\Give('records', [['type' => 'TXT', 'name' => 'x']]);
+$violation = new Illuminate\Database\UniqueConstraintViolationException('sqlite', 'insert', [], new Exception('unique'));
+$violation->columns = ['email'];
 $reader = new Arrivals\Reader();
-var_dump($reader->records($folder), $reader->heldRecords($folder), $reader->heldRecordsAfterNull($folder));
-var_dump($reader->recordsMap($folder));
-var_dump($reader->listed($folder), $reader->heldListed($folder));
+var_dump($reader->records($give), $reader->heldRecords($give), $reader->heldRecordsValues($give));
+var_dump($reader->recordsMap($give));
+var_dump($reader->listed($violation), $reader->heldListed($violation));
 
 // A double PHPUnit's createMock or Mockery generates while the tests run is a plain PHP subclass made by eval.
 eval('namespace Lib; class SourceDouble extends \Arrivals\Source { public function status(): array { return ["status" => "doubled"]; } }');
@@ -38,8 +35,7 @@ foreach ([new Arrivals\Source(), new MovedSource(), new Lib\SourceDouble()] as $
     echo $reader->argument($source), ' ', $reader->constructed($source), ' ', $reader->element($source), ' ',
         $reader->spread($source), ' ', $reader->late($source), ' ', $reader->ofClass($source), "\n";
 }
-$feed = new Lib\ArrayFeed();
-var_dump($reader->fed($feed), $reader->named($feed));
+var_dump($reader->fed(new Illuminate\Support\Collection(['status' => 'fed'])), $reader->named(new Illuminate\Support\Collection(['first', 'second'])));
 // A null-safe call on null gives null, and on an override the `Map` its array crosses into.
 var_dump($reader->maybe(null), $reader->maybe(new MovedSource()));
 foreach (['List<', 'List<$0>'] as $types) {

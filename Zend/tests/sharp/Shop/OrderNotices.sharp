@@ -1,7 +1,7 @@
 namespace Shop;
 
-import Lib.JobFailed;
-extern event JobFailed;
+import Symfony.Contracts.EventDispatcher.Event;
+extern event Event;
 
 public class OrderNotices
 {
@@ -22,8 +22,8 @@ public class OrderNotices
         OrderNotices.heard.add(`audit ${e.orderId}`);
     }
 
-    public void alert(JobFailed e) on JobFailed
+    public void alert(Event e) on Event
     {
-        OrderNotices.heard.add(`alert ${e.job}`);
+        OrderNotices.heard.add(`alert ${e.isPropagationStopped()}`);
     }
 }

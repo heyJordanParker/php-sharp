@@ -149,6 +149,7 @@ for ($round = 0; $round < 100; $round++) {
     echo 'a plain PHP result in a local without a type: ', Crossings::untypedLocal($plain), "\n";
     echo 'a loop over a plain PHP result keyed by string: ', implode(' ', Crossings::plainLoops($plain)), "\n";
     echo 'a PHP array into a Map<string, int> parameter: ', show(Crossings::received(['5' => 1, 'x' => 2])), "\n";
+    echo 'a Map or a Set into a Countable, an iterable, a JsonSerializable and a documented iterable parameter: ', implode(' / ', Crossings::interfaces(new Map(['tea', 3, '5', 1]), new Set(['a', 'b']))), "\n";
     echo 'a Map and a Set into an object parameter: ', Crossings::dispatched(new Map(['tea', 3]), new Set(['a', 'b'])), "\n";
     echo 'a plain PHP closure behind a PHP# function type: ', Crossings::applied(fn ($values) => get_debug_type($values), new Map(['a', 1])), "\n";
     echo 'a PHP# lambda behind a PHP# function type takes the same Map: ', Crossings::appliedOwn(new Map(['a', 1])), "\n";
@@ -393,6 +394,7 @@ Map methods on a plain PHP result: 3 / 1 / true / tea,5 / 2
 a plain PHP result in a local without a type: true 1 true array
 a loop over a plain PHP result keyed by string: true:tea=3 true:5=1 true:tea=3 true:5=1 true:tea true:5
 a PHP array into a Map<string, int> parameter: 5 => 1, 'x' => 2
+a Map or a Set into a Countable, an iterable, a JsonSerializable and a documented iterable parameter: 2 / 2 / {"tea":3,"5":1} / tea=3&5=1
 a Map and a Set into an object parameter: Sharp\Map Sharp\Set
 a plain PHP closure behind a PHP# function type: array
 a PHP# lambda behind a PHP# function type takes the same Map: true

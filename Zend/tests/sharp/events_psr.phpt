@@ -24,8 +24,6 @@ namespace Lib {
 }
 
 namespace {
-    require __DIR__ . '/harness/JobFailed.inc';
-
     final class Unheard {}
 
     $dispatcher = new Lib\Dispatcher(new Sharp\Psr\ListenerProvider());
@@ -38,7 +36,7 @@ namespace {
         echo $case, ': ', implode(', ', Shop\OrderNotices::$heard) ?: 'nothing', "\n";
     }
 
-    heard('an extern event', new Lib\JobFailed('mail'));
+    heard('an extern event', new Symfony\Contracts\EventDispatcher\Event());
     heard('a PHP# event', new Shop\OrderPaid(1, 5));
     [$first] = Shop\Shipping::$made;
     heard('again', new Shop\OrderPaid(2, 5));
@@ -53,7 +51,7 @@ namespace {
 }
 ?>
 --EXPECT--
-an extern event: alert mail
+an extern event: alert false
 a PHP# event: send 1, refresh, audit 1, deliver 1, ship 1
 again: send 2, refresh, audit 2, deliver 2, ship 2
 a new object for every event: true
