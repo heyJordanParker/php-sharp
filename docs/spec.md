@@ -4264,7 +4264,7 @@ const paid = result as PaymentResult.Paid ?? throw new NotPaid(result);
 ```
 
 - **`is`** tests a value against any pattern, and creates the pattern's variables when it matches.
-- **Narrowing:** after `is` without a name, a local variable or parameter counts as the tested type for the rest of the block. Assigning to it inside the block ends the narrowing. A local or parameter that a lambda assigns is never narrowed, because the lambda may run between the test and the use. A lambda keeps the narrowing of a local it reads only when no assignment can run after the lambda is created. A property never narrows, a stored one included, because each read may give another value. To use the tested value of a property, or of such a local, bind it to a name, as in `is int t`.
+- **Narrowing:** after `is`, with a name or without one, a local variable or parameter counts as the tested type for the rest of the block, and after a branch that leaves when the test holds, as the types the test did not match. Assigning to it inside the block ends the narrowing. A local or parameter that a lambda assigns is never narrowed, because the lambda may run between the test and the use. A lambda keeps the narrowing of a local it reads only when no assignment can run after the lambda is created. A property never narrows, a stored one included, because each read may give another value. To use the tested value of a property, or of such a local, bind it to a name, as in `is int t`.
 
 <!-- example narrowing: statements
 Any? entity = new Page();
