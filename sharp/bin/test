@@ -262,6 +262,14 @@ if $clashed; then
   exit 1
 fi
 
+# The tests load their PHP# fixtures through Composer's autoloader and the PHP# package's, as an application does, from
+# the packages Zend/tests/sharp/composer.lock pins.
+echo "== composer install in Zend/tests/sharp"
+if ! composer install --no-interaction --no-progress --quiet --working-dir="$root/Zend/tests/sharp"; then
+  echo "composer install failed in Zend/tests/sharp, and the tests load their fixtures through its autoloader." >&2
+  exit 1
+fi
+
 echo "== mago compile, built from sharp/mago"
 if ! "$mago" --no-version-check --colors never --workspace "$root" --config "$root/Zend/tests/sharp/mago.toml" compile; then
   echo "mago compile refused a PHP# test fixture, and the engine runs only compiled files." >&2
