@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.30] - 2026-11-18
+
 ### Fixed
 
 - With extension hosts, `mago analyze --watch` compiles each edit for its hosts from its last compile. 0.6.29 compiled the whole project again for the hosts after every edit, with a new analysis, every input stamped and every folder listed, 1.2 to 1.9 seconds of every recheck. The watch now keeps that analysis and the record of the compiled files, analyzes and lowers again only the edited files and the files whose record lists a read of a declaration the edit changed, stamps only their inputs, and keeps unread each compiled file whose key and input stamps hold and which is the file the last compile wrote. On a 1,628-file PHP# project with an extension host, a body edit of one class now takes 0.43 to 0.49 seconds of `mago`'s processor time instead of 2.59 to 3.13, a signature edit 0.83 to 0.93 instead of 3.09 to 3.39, or 2.39 to 2.69 instead of 4.63 to 4.94 with a host whose hooks read the edited classes, and an edit of 188 files 2.28 to 2.79 instead of 4.31 to 4.75. Each round writes the hosts' folder a fresh compile of the tree writes, `compiled.bin` byte for byte included, and reports the same issues. `mago compile` keeps each such compiled file unread too.
@@ -1302,7 +1304,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.29...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.30...HEAD
+[0.6.30]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.29...v0.6.30
 [0.6.29]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.28...v0.6.29
 [0.6.28]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.27...v0.6.28
 [0.6.27]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.26...v0.6.27
