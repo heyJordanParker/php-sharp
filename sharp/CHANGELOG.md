@@ -4,6 +4,12 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.29] - 2026-11-18
+
+### Changed
+
+- `mago analyze` and `mago compile` do less work for the same output, byte for byte. On the same machine against 0.6.28: analyzing a 1,536-file PHP# app retires 7.8-8.0 G instructions instead of 14.8-15.2 G, compiling it 18.9-19.9 G instead of 27.7-28.4 G, analyzing it with an extension host after an edit 30.8-31.3 G instead of 50.9-51.5 G, and analyzing 14,861 plain PHP files 159.2-159.7 G instead of 171.9-172.5 G. Names are looked up by their interned word, with no interning or lowercasing per lookup and no lock; the codebase's signatures and types are filled on every thread; a compile walks the project once, reads only what it needs from the disk, and writes and stamps its files on every thread; a file's imports merge into place; and a one-shot `mago analyze` exits without freeing its analysis value by value.
+
 ### Added
 
 - `mago compile` writes `.sharp/preload.php`, which preloads every type it compiled, spec section 27. A production `php.ini` names it in `opcache.preload`. It requires the project's Composer autoloader, then each accepted `.sharp` file that declares a type, the packages' in `vendor/` included, so each type gets its parents from the autoloader, as in a request. It then loads each type an anonymous class names in a file it loads, as the one `illuminate/reflection`'s `helpers.php` declares over `ReflectsClosures`, so opcache links the class and warns of nothing. A test in an `autoload-dev` folder stays out. Until now a project that preloaded PHP# classes wrote and kept its own list of files.
@@ -1276,7 +1282,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.28...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.29...HEAD
+[0.6.29]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.28...v0.6.29
 [0.6.28]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.27...v0.6.28
 [0.6.27]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.26...v0.6.27
 [0.6.26]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.25...v0.6.26
