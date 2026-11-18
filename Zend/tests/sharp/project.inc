@@ -53,11 +53,11 @@ function overwrite(string $file, int $offset, string $bytes): void
     file_put_contents($file, substr_replace(file_get_contents($file), $bytes, $offset, strlen($bytes)));
 }
 
-// Writes the hash of a compiled file's sections, every byte after its 144-byte header, into the header's
+// Writes the hash of a compiled file's sections, every byte after its 160-byte header, into the header's
 // sections_hash at 124, as mago writes it, so the engine reads a tree a test changed past that check.
 function rehash_sections(string $file): void
 {
-    overwrite($file, 124, hash('xxh128', substr(file_get_contents($file), 144), true));
+    overwrite($file, 124, hash('xxh128', substr(file_get_contents($file), 160), true));
 }
 
 // The paths load in one process of their own, without opcache, so a class an earlier load declared or cached is not

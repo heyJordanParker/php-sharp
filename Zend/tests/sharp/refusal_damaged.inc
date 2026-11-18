@@ -10,7 +10,7 @@ $root = compile_project('damaged', ['Shop.sharp' => SHOP, 'Counter.sharp' => COU
 $compiled = "$root/.sharp/Shop.sharpc";
 $bytes = file_get_contents($compiled);
 ['inputs' => $inputs, 'nodes' => $nodes, 'children' => $children, 'root' => $top] = unpack('Vinputs/Vnodes/Vchildren/Vroot', $bytes, 80);
-$first_node = 144 + 40 * $inputs;
+$first_node = 160 + 56 * $inputs;
 $first_child = $first_node + 56 * $nodes;
 $texts = $first_child + 4 * $children;
 // The fields of node $index the cases change: its kind, its children, its value's tag and its text.

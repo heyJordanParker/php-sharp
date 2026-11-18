@@ -12,7 +12,7 @@
 #endif
 
 #define SHARP_UNIT_MAGIC "\x53\x48\x41\x52\x50\x43\x00\x00"
-#define SHARP_UNIT_ABI "\x38\xd1\xdf\x7c\xda\x68\xc0\xd0\x8e\x1a\x0f\x87\xd5\x38\xf3\x8d"
+#define SHARP_UNIT_ABI "\xcf\x5d\xbe\x41\xbe\x0b\x62\x79\xb7\x3c\x65\x3d\x00\x7e\x45\x62"
 
 #define SHARP_KINDS(X) \
   X(ZVAL) \
@@ -341,6 +341,9 @@ typedef struct {
   // The hash of every byte after the header: the inputs, the tree and the texts. The engine refuses a file whose
   // sections changed after it was written, as a damaged or partly written one.
   uint8_t sections_hash[16];
+  // The hash of the file's declarations, as [`declarations_hash`] gives it, which each file that reads this one
+  // records and the engine compares instead of the source's stamp.
+  uint8_t declarations_hash[16];
 } sharp_unit_header;
 
 // A file whose edit makes the compiled file's source due for a check.
@@ -350,6 +353,10 @@ typedef struct {
   uint64_t size;
   int64_t mtime_ns;
   uint8_t hash[16];
+  // For a `.sharp` file of the project whose declarations or bodies the compiled file reads, the
+  // `declarations_hash` of that file's compiled file, so an edit that changes none of its declarations leaves the
+  // input current. All zero for every other input, which holds while its stamp does.
+  uint8_t declarations_hash[16];
 } sharp_input;
 
 typedef struct {
