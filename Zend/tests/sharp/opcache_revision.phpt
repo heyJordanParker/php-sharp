@@ -1,5 +1,5 @@
 --TEST--
-Opcache keeps a .sharp file's op array while its compiled file stays current, new stamps and an input's body edit included, and drops it when an input goes missing or the file's own source changes, making the compiled file out of date
+Opcache keeps a .sharp file's op array while its compiled file stays current, new stamps and an input's body edit included, while the edited input itself is refused when it loads, and drops it when an input goes missing or the file's own source changes, making the compiled file out of date
 --EXTENSIONS--
 opcache
 --CONFLICTS--
@@ -12,10 +12,17 @@ include __DIR__ . '/../../../sapi/cli/tests/php_cli_server.inc';
 
 $root = compile_project('opcache-revision', ['Shop.sharp' => SHOP, 'Counter.sharp' => COUNTER]);
 $shop = var_export("$root/Shop.sharp", true);
+$counter = var_export("$root/Counter.sharp", true);
 php_cli_server_start(<<<PHP
+    spl_autoload_register(function (string \$class): void {
+        if (\$class === 'Demo\\\\Counter') {
+            require $counter;
+        }
+    });
     try {
         require $shop;
-        echo 'ran';
+        \$total = \Demo\Shop::run(1);
+        echo "ran, Shop.run(1) gives \$total";
     } catch (CompileError \$e) {
         echo \$e->getMessage();
     }
@@ -66,13 +73,13 @@ request('compiled once more');
 remove_project($root);
 ?>
 --EXPECT--
-first: ran, cached with 0 hits
-again: ran, cached with 1 hits
-an input with a new stamp: ran, cached with 2 hits
-an input with a new comment, compiled again: ran, cached with 3 hits
-an input with a new body: ran, cached with 4 hits
-compiled again: ran, cached with 5 hits
+first: ran, Shop.run(1) gives 1, cached with 0 hits
+again: ran, Shop.run(1) gives 1, cached with 1 hits
+an input with a new stamp: ran, Shop.run(1) gives 1, cached with 2 hits
+an input with a new comment, compiled again: ran, Shop.run(1) gives 1, cached with 3 hits
+an input with a new body: Counter.sharp is out of date (Counter.sharp changed). Run vendor/bin/mago compile., cached with 4 hits
+compiled again: ran, Shop.run(1) gives 2, cached with 5 hits
 an input went missing: Shop.sharp is out of date (Counter.sharp changed). Run vendor/bin/mago compile., not cached
-the input back, compiled again: ran, cached with 0 hits
+the input back, compiled again: ran, Shop.run(1) gives 1, cached with 0 hits
 its own source changed: Shop.sharp is out of date (Shop.sharp changed). Run vendor/bin/mago compile., not cached
-compiled once more: ran, cached with 0 hits
+compiled once more: ran, Shop.run(1) gives 2, cached with 0 hits
