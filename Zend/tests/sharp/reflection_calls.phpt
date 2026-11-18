@@ -2,8 +2,7 @@
 Method.invoke, Property.get, Property.set and Field.get reach a member as a direct use from the calling code would, check each argument and value against its PHP# type in strict mode, run an override and a computed property's get, and refuse a receiver of another class
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('ReflectionCalls');
+require __DIR__ . '/vendor/autoload.php';
 
 use App\Calls\Calls;
 use App\Calls\Register;

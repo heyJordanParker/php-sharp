@@ -1,11 +1,8 @@
 <?php
 
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Math.sharp';
 require __DIR__ . '/harness/Row.inc';
 require __DIR__ . '/harness/Words.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Accessors');
-require __DIR__ . '/Parcel.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 // Each run repeats, so the JIT variants compile the accessors and methods before the second run.
 for ($run = 0; $run < 2; $run++) {

@@ -3,8 +3,7 @@ A PHP# class that declares operator == with hash() keys a Map and joins a Set: t
 --FILE--
 <?php
 require __DIR__ . '/Pass.sharp';
-require __DIR__ . '/harness/fixture.inc';
-fixture('ClassKeys');
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\ClassKeys;
 

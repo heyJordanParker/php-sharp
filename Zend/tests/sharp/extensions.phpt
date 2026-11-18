@@ -8,9 +8,7 @@ use Lib\AuditedWallet;
 use Lib\Wallet;
 
 require __DIR__ . '/harness/Wallet.inc';
-require __DIR__ . '/WalletExtensions.sharp';
-require __DIR__ . '/AuditExtensions.sharp';
-require __DIR__ . '/WalletReport.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 // The checker never saw this subclass, and the extension runs on it all the same.
 class HookedWallet extends Wallet

@@ -2,7 +2,7 @@
 An int a plain PHP closure returns becomes a float where PHP# calls it through a function type whose result is a float
 --FILE--
 <?php
-require __DIR__ . '/FloatResults.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Floats\FloatResults;
 
