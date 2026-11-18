@@ -5,12 +5,11 @@
  * the type in the namespace it declares, as the Composer plugin's classmap maps a project's files. A `.sharp` file
  * declares one type, spec section 27, so a fixture of several types is a folder, and its files load in whatever order
  * the code reaches them. A class a type declares inside its name, as an interface's `HasDesign\Defaults` trait or an
- * enum case's `Verdict\Ruled`, spec section 22, loads from its type's file. With `$extension` `inc`, it loads each
- * type's plain PHP twin beside its file instead. The standard library's `Sharp\ListMembers`, `Sharp\MapMembers`,
- * `Sharp\SetMembers`, `Sharp\IterableMembers`, `Sharp\ClassMembers`, the reflection classes it makes and
- * `Sharp\Visibility` load as a project's do.
+ * enum case's `Verdict\Ruled`, spec section 22, loads from its type's file. The standard library's `Sharp\ListMembers`,
+ * `Sharp\MapMembers`, `Sharp\SetMembers`, `Sharp\IterableMembers`, `Sharp\ClassMembers`, the reflection classes it
+ * makes and `Sharp\Visibility` load as a project's do.
  */
-function fixture(string $name, string $extension = 'sharp'): void
+function fixture(string $name): void
 {
     $folder = dirname(__DIR__) . "/$name";
     if (!is_dir($folder)) {
@@ -22,7 +21,7 @@ function fixture(string $name, string $extension = 'sharp'): void
         $namespace = preg_match('{^namespace\s+([\w.]+)\s*;}m', file_get_contents($file), $match) === 1
             ? strtr($match[1], '.', '\\') . '\\'
             : '';
-        $files[$namespace . basename($file, '.sharp')] = substr($file, 0, -strlen('sharp')) . $extension;
+        $files[$namespace . basename($file, '.sharp')] = $file;
     }
     // A collection's member a call can't run in place, as a member's value, runs on the standard library's class of
     // the collection's members, and a class value's on `ClassMembers`, which makes each `Property`, `Field`, `Method`,

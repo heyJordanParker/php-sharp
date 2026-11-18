@@ -1,0 +1,42 @@
+namespace Opcodes;
+
+public class Sites
+{
+    public Box<int> newGeneric() => new Box<int>();
+
+    public Sites newPlain() => new Sites();
+
+    public T genericMethod<T>(T item) => item;
+
+    public int listParameter(List<int> items) => items.count();
+
+    public int intParameter(int item) => item;
+
+    public bool isTypeParameter<T>(Any? value) => value is T;
+
+    public bool isClass(Any? value) => value is Sites;
+
+    public Class<T> typeOfParameter<T>() => typeof(T);
+
+    public Class<Sites> typeOfClass() => typeof(Sites);
+
+    public int leaveOnNull(int? value) => value ?? return -1;
+
+    public int defaultOnNull(int? value) => value ?? -1;
+
+    public Map<string, int> returnsMap() => ["a": 1];
+
+    public List<int> returnsList() => [1];
+
+    public Map<string, int> callsInterface(Source source) => source.counts();
+
+    public static Map<string, int> staticMap() => ["b": 2];
+
+    public Map<string, int> callsStaticMethod() => Sites.staticMap();
+
+    public int callsGenericInterface(Source source) => source.first<int>([1]);
+
+    public int callsOwnGeneric() => this.genericMethod<int>(1);
+
+    public int callsOwnMethod() => this.intParameter(1);
+}
