@@ -13,16 +13,21 @@ fi
 # it pulls the build base-images.yml pushes under that hash each day and on each change, and uses it when it is built
 # for the Docker server's architecture. A run that can't pull one, as without a login to ghcr.io, builds the image
 # here. Docker pulls an image of one architecture onto any server, so an amd64 image pulled on arm64 failed every
-# command with "Exec format error". sharp/bin/bench runs php-sharp-linux by that name.
+# command with "Exec format error". sharp/bin/bench runs php-sharp-linux by that name. Each pull and build prints how
+# long it took, since every CI job on Linux starts with one.
 hash="$(git -C "$root" hash-object sharp/docker/Dockerfile)"
 image="php-sharp-linux:$hash"
 published="ghcr.io/heyjordanparker/php-sharp-linux:$hash"
 if ! docker image inspect "$image" > /dev/null 2>&1; then
+  started=$SECONDS
   if docker pull --quiet "$published" > /dev/null 2>&1 \
     && [[ "$(docker image inspect --format '{{.Architecture}}' "$published")" == "$(docker version --format '{{.Server.Arch}}')" ]]; then
     docker tag "$published" "$image"
+    echo "sharp/docker/run pulled $published in $((SECONDS - started)) seconds." >&2
   else
+    pulled=$((SECONDS - started))
     docker build --quiet --build-arg BASE_IMAGE --build-arg GOLANG_IMAGE --tag "$image" "$root/sharp/docker" >/dev/null
+    echo "sharp/docker/run found no $published for this server in $pulled seconds, and built $image in $((SECONDS - started - pulled))." >&2
   fi
 fi
 docker tag "$image" php-sharp-linux

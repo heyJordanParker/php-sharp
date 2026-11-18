@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - master
-      - ci/360-r3-release-push
+      - ci/360-r5-release-push
   pull_request:
     branches:
       - master
@@ -24,18 +24,18 @@ jobs:
   # runs their examples. sharp/bin/check --changes holds these rules, so sharp/bin/check on a machine chooses its gates
   # as this job does.
   #
-  # A pull request runs the Linux suites, each job on 4 cores. A release's pull request, whose sharp/mago/Cargo.toml
-  # version has no tag yet, also runs what needs the Mac, so every check of the tree runs before the merge, on the tree
-  # that merges. GitHub runs 20 of the account's hosted jobs at once, across all its repositories, and a job past them
-  # waits: a pull request's runs hold 15 at most, and mago.yml's checks run beside patch-coverage, since one after the
-  # other they took 13.4 minutes on pull request #337.
+  # A pull request runs the Linux suites alone, each job on 4 cores, a release's pull request too, so every pull
+  # request ends in under 10 minutes. GitHub runs 20 of the account's hosted jobs at once, across all its
+  # repositories, and a job past them waits: a pull request's runs hold 16 at most, and mago.yml's checks run beside
+  # patch-coverage, since one after the other they took 13.4 minutes on pull request #337.
   #
   # A tree runs the checks once, as bors's "not rocket science" rule tests the exact tree that lands once. A push to
-  # master runs none of them when a pull request's run passed CI_PASSED on its tree, as .github/actions/passed-tree
-  # explains, and links that run: it saves the caches every pull request's run restores. A push whose tree no pull
-  # request's run passed runs every check, the Mac's among them, as the check of the merge. A release's push builds the
-  # release from its tree, as RELEASE_ASSETS explains, and publishes it. A red push opens an issue, as CI_PASSED does,
-  # for a pull request that fixes it forward.
+  # master runs none of the Linux checks when a pull request's run passed CI_PASSED on its tree, as
+  # .github/actions/passed-tree explains, and links that run: it saves the caches every pull request's run restores. A
+  # push whose tree no pull request's run passed runs every check, the Mac's among them, as the check of the merge. A
+  # release's push, whose sharp/mago/Cargo.toml version has no tag yet, runs the Mac's checks beside the release's
+  # build, as RELEASE_ASSETS explains, and RELEASE publishes the release only once they passed. A red push opens an
+  # issue, as CI_PASSED does, for a pull request that fixes it forward.
   CHANGES:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
@@ -50,10 +50,11 @@ jobs:
       code: ${{ steps.diff.outputs.code }}
       passed: ${{ steps.passed.outputs.run }}
       version: ${{ steps.diff.outputs.version }}
-      # A release's pull request, or a push whose tree no pull request's run passed, runs every check.
+      # A push runs the checks a pull request leaves out, the Mac's and the image's, when no pull request's run passed
+      # its tree, or when it is a release's.
       full: >-
-        ${{ (github.event_name == 'pull_request' && steps.diff.outputs.bump == 'true'
-        || github.event_name == 'push' && !steps.passed.outputs.run) && 'true' || '' }}
+        ${{ github.event_name == 'push' && (!steps.passed.outputs.run || steps.diff.outputs.bump == 'true')
+        && 'true' || '' }}
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -183,6 +184,18 @@ jobs:
           save: ${{ github.event_name == 'push' }}
       - name: Build mago and its test binaries
         run: sharp/docker/run sharp/bin/build-mago --quiet
+      # The Lean toolchain mago.yml's tests jobs prove laws with, in sharp/build/elan, the ELAN_HOME sharp/docker/run
+      # sets, saved on master under the hash of the lean-toolchain file that pins it, as the other caches are. Every
+      # pull request's tests jobs restore it, so none downloads Lean.
+      - name: Lean cache, saved on master
+        if: github.ref == 'refs/heads/master'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/elan
+          key: SHARP_LEAN-${{ runner.arch }}-${{ hashFiles('sharp/mago/crates/sharp-lean/lean/lean-toolchain') }}
+      - name: Install the pinned Lean toolchain into the Lean cache
+        if: github.ref == 'refs/heads/master'
+        run: sharp/docker/run elan toolchain install "$(cat sharp/mago/crates/sharp-lean/lean/lean-toolchain)"
       # What the suites run: the CLI, phpdbg, which run-tests.php finds beside it for the tests that need it, the install
       # sharp/bin/hosts builds FrankenPHP against, and mago. An artifact keeps no file's mode, so the files travel in a
       # tar, compressed here, since Actions would compress them on one thread.
@@ -205,9 +218,8 @@ jobs:
   # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in three slices, each without opcache, in
   # shared memory twice per process, and under the tracing JIT production runs with the opcache. The slices balance by
   # the seconds sharp/baseline/seconds lists, as sharp/bin/test explains. mago convert's whole-project proof weighs most,
-  # so it always lands in the first slice, which also runs the census, the differential and PHPUnit: on test pull
-  # request #390's run, the slice with the proof ran its tests and the proof in 3.4 minutes, and the other of two slices
-  # its tests in 5.1.
+  # so it always lands in the first slice: on test pull request #393's run, the proof took 2.8 minutes and that slice's
+  # tests 0.6. The second slice also runs the census, the differential and PHPUnit, which took 0.7.
   LINUX:
     name: LINUX (${{ matrix.shard }}/3)
     needs: [CHANGES, BUILD_LINUX]
@@ -242,7 +254,7 @@ jobs:
       - name: Test PHP#
         run: >-
           sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/3
-          ${{ matrix.shard == 1 && '--census --differential --phpunit' || '' }}
+          ${{ matrix.shard == 2 && '--census --differential --phpunit' || '' }}
   # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before, and
   # sharp/bin/spec's self-test. Each took 155 and 54 seconds on release pull request #379's run, where LINUX (1/2), which
   # ran the self-test after its slice, took 377 seconds, the longest suite job.
@@ -427,12 +439,12 @@ jobs:
         uses: ./.github/actions/red-master-issue
         with:
           title: The nightly ASAN run failed
-  # The run's one macOS build, which MACOS runs on: the engine and mago, as BUILD_LINUX builds Linux's. A release's pull
-  # request runs it, and a push whose tree no pull request's run passed. A job never installs on the self-hosted Mac
+  # The run's one macOS build, which MACOS runs on: the engine and mago, as BUILD_LINUX builds Linux's. A release's push
+  # runs it, and a push whose tree no pull request's run passed. A job never installs on the self-hosted Mac
   # runners, so it checks that Homebrew already has the build's formulae, ccache among them. The engine builds through
   # ccache, as BUILD_LINUX's does: a change to a file configure reads configures again and compiles every file, which
-  # took 24.5 minutes on release pull request #379's run. Each runner keeps its build in its own folder, so ccache
-  # hashes paths below the workspace, and not the folder a compile runs in, so the three runners share their compiles.
+  # took 24.5 minutes on release pull request #379's run. Each runner has a HOME of its own, so each keeps its own
+  # ccache, as it keeps its own build.
   #
   # The 12-core Mac runs this job beside the other runners' jobs and the work the suite checks, and two or three jobs
   # that each took every core held its load between 200 and 480 for hours. So every job on the self-hosted Macs caps its
@@ -449,8 +461,6 @@ jobs:
       FORMULAE: autoconf bison ccache curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
       CC: ccache cc
       CXX: ccache c++
-      CCACHE_BASEDIR: ${{ github.workspace }}
-      CCACHE_NOHASHDIR: 'true'
       CARGO_BUILD_JOBS: 4
       RUST_TEST_THREADS: 4
       RAYON_NUM_THREADS: 4
@@ -741,9 +751,7 @@ jobs:
   # ends with its slowest job: each took 12 to 14 minutes on release pull request #379's run.
   IMAGE:
     name: IMAGE (${{ matrix.platform }})
-    if: >-
-      github.event_name == 'push' && needs.CHANGES.outputs.code == 'true'
-      && (needs.CHANGES.outputs.full == 'true' || needs.CHANGES.outputs.bump == 'true')
+    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.full == 'true'
     needs: CHANGES
     runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 45

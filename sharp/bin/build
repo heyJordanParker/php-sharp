@@ -83,11 +83,29 @@ elif [[ -f "$status" && ( ! -f "$root/configure" || " $("$status" --config) " !=
   find "$build_dir" -mindepth 1 -maxdepth 1 ! -name mago -exec rm -rf {} +
 fi
 
-# A change to an input configure reads, such as a *.in file it writes a file from, configures again.
-if [[ ! -f "$status" || "$0" -nt "$status" || "$root/sharp/docker/Dockerfile" -nt "$status" || "$root/Zend/zend_modules.h" -nt "$status" || -n "$(find "$root" \( -path "$root/.git" -o -path "$root/sharp" \) -prune -o \( -name configure.ac -o -name '*.m4' -o -name '*.in' -o -name Makefile.frag -o -name Makefile.global \) -newer "$status" -print -quit)" ]]; then
+# The build configures again when what configure reads changed: its flags, the compilers in CC and CXX, which
+# configure writes into the Makefile, so ccache's wrapper joins a build only through it, and the content of each
+# tracked file configure reads, such as a *.in file it writes a file from. On Linux the build runs in the sharp/docker
+# image, so the image's Dockerfile is one of them. The content counts, not the time: a checkout of another branch gives
+# every file it rewrites a new time, which says nothing of what the build was configured from, and on the self-hosted
+# Macs, whose jobs of every branch share one build, a configure took 12 of BUILD_MACOS's 50.5 minutes on release pull
+# request #395's run.
+inputs=(configure.ac '*.m4' '*.in' '*Makefile.frag' '*Makefile.global' Zend/zend_modules.h ':(exclude)sharp')
+if [[ "$(uname -s)" == Linux ]]; then
+  inputs+=(sharp/docker/Dockerfile)
+fi
+configured="$(
+  printf '%s\n' "${flags[@]}" "CC=${CC:-}" "CXX=${CXX:-}"
+  cd "$root"
+  git ls-files -- "${inputs[@]}"
+  git ls-files -z -- "${inputs[@]}" | xargs -0 git hash-object --
+)"
+stamp="$build_dir/configured-from"
+if [[ ! -f "$status" || ! -f "$stamp" || "$(< "$stamp")" != "$configured" ]]; then
   (cd "$root" && ./buildconf --force)
   mkdir -p "$build_dir"
   (cd "$build_dir" && "$root/configure" "${flags[@]}")
+  printf '%s\n' "$configured" > "$stamp"
 fi
 
 # The cargo build of ext/sharp's Rust library, which make runs, reads CARGO_BUILD_JOBS as its jobs.
