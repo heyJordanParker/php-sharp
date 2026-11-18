@@ -252,7 +252,7 @@ gate_mago_checks() {
   fi
 }
 
-# The PHP# suite on the thread-safe engine, in the sharp/docker image, in the three modes, with the census, the
+# The PHP# suite on the thread-safe engine, in the sharp/docker image, in the four modes, with the census, the
 # differential, PHPUnit, the whole-project proof of mago convert, and every rule and example of sharp/bin/spec, which
 # CI's LINUX and SPEC jobs share.
 gate_linux() {

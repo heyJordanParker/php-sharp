@@ -179,7 +179,7 @@ if $upstream; then
   tests=(Zend/tests ext/reflection ext/tokenizer ext/opcache)
 elif [[ -n $shard ]]; then
   # The slices balance by the seconds sharp/baseline/seconds lists, from CI's slow-test summaries: a test's seconds
-  # summed over the three modes, and the proof's own, which hold the whole slice while it runs, so it weighs them times
+  # summed over the modes, and the proof's own, which hold the whole slice while it runs, so it weighs them times
   # the workers. A test the file doesn't list ran under a second in each mode, so it weighs 1. Each item, heaviest
   # first, goes to the slice that weighs least so far, so every slice computes the same split.
   declare -A seconds=()
@@ -292,13 +292,15 @@ if $upstream; then
     failed+=("the comparison with $baseline")
   fi
 else
-  # The PHP# suite runs in the three ways production runs the engine: without opcache, in opcache shared memory with
-  # each test twice in one process, and under the tracing JIT, the one production runs with the opcache, with every
-  # hot counter at 1, so it compiles the code the tests run as soon as it runs. Each expects the output of the run
-  # without opcache. Apple silicon has no thread-safe JIT, as ext/opcache/config.m4 warns, so macOS runs the first two.
+  # The PHP# suite runs in the four ways production runs the engine: without opcache, in opcache shared memory with
+  # each test twice in one process, under the function JIT, which compiles each function of a file as the file loads,
+  # and under the tracing JIT, with every hot counter at 1, so it compiles the code the tests run as soon as it runs.
+  # Each expects the output of the run without opcache. Apple silicon has no thread-safe JIT, as ext/opcache/config.m4
+  # warns, so macOS runs the first two.
   run_tests "without opcache"
   run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
   if [[ $os == linux ]]; then
+    run_tests "with the function JIT" -d opcache.enable_cli=1 -d opcache.jit=function -d opcache.jit_buffer_size=32M
     run_tests "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
       -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
   fi
