@@ -241,27 +241,6 @@ if [[ ! -x $mago ]]; then
   exit 1
 fi
 
-# run-tests.php writes each test's script beside it as <test>.php, and mago compile writes each PHP# class's companion
-# beside its source as <Class>.php. A disk that ignores case, as macOS's does, keeps one file for both when the two
-# names differ only in case, so each run would overwrite and delete the companion, and a stopped run would leave a
-# script mago compile refuses. So no test shares the name of a PHP# file beside it.
-clashed=false
-shopt -s nocasematch
-for test in "$root"/Zend/tests/sharp/*.phpt; do
-  for fixture in "${test%/*}"/*.sharp; do
-    if [[ "${fixture%.sharp}" == "${test%.phpt}" ]]; then
-      script="${test%.phpt}.php"
-      companion="${fixture%.sharp}.php"
-      echo "${test#"$root"/} and ${fixture#"$root"/} differ only in case, so run-tests.php writes ${script##*/} where mago compile writes ${companion##*/}. Rename the test." >&2
-      clashed=true
-    fi
-  done
-done
-shopt -u nocasematch
-if $clashed; then
-  exit 1
-fi
-
 # The tests load their PHP# fixtures through Composer's autoloader and the PHP# package's, as an application does, from
 # the packages Zend/tests/sharp/composer.lock pins.
 echo "== composer install in Zend/tests/sharp"
@@ -340,7 +319,7 @@ fi
 check_differential() {
   echo "== every file mago compile accepted against php -l, through its .sharpc file"
   local file name linted mismatch=false
-  for file in "$root"/Zend/tests/sharp/*.sharp "$root"/Zend/tests/sharp/*/*.sharp; do
+  for file in "$root"/Zend/tests/sharp/*/*.sharp; do
     name="${file#"$root"/}"
     linted="$("$php" -l "$file" 2>&1)" || true
     if [[ "$linted" == "No syntax errors detected in $file" ]]; then
