@@ -1,5 +1,5 @@
 --TEST--
-Opcache keeps a .sharp file's op array while its compiled file stays current, new stamps included, and drops it when an input or the file's own source makes the compiled file out of date
+Opcache keeps a .sharp file's op array while its compiled file stays current, new stamps and an input's body edit included, and drops it when an input goes missing or the file's own source changes, making the compiled file out of date
 --EXTENSIONS--
 opcache
 --CONFLICTS--
@@ -46,10 +46,17 @@ run_mago($root);
 request('an input with a new comment, compiled again');
 
 file_put_contents("$root/Counter.sharp", str_replace('return this.count;', 'return this.count + 1;', COUNTER));
-request('an input changed');
+request('an input with a new body');
 
 run_mago($root);
 request('compiled again');
+
+unlink("$root/Counter.sharp");
+request('an input went missing');
+
+file_put_contents("$root/Counter.sharp", COUNTER);
+run_mago($root);
+request('the input back, compiled again');
 
 file_put_contents("$root/Shop.sharp", str_replace('return counter.add(amount);', 'return counter.add(amount + 1);', SHOP));
 request('its own source changed');
@@ -63,7 +70,9 @@ first: ran, cached with 0 hits
 again: ran, cached with 1 hits
 an input with a new stamp: ran, cached with 2 hits
 an input with a new comment, compiled again: ran, cached with 3 hits
-an input changed: Shop.sharp is out of date (Counter.sharp changed). Run vendor/bin/mago compile., not cached
-compiled again: ran, cached with 0 hits
+an input with a new body: ran, cached with 4 hits
+compiled again: ran, cached with 5 hits
+an input went missing: Shop.sharp is out of date (Counter.sharp changed). Run vendor/bin/mago compile., not cached
+the input back, compiled again: ran, cached with 0 hits
 its own source changed: Shop.sharp is out of date (Shop.sharp changed). Run vendor/bin/mago compile., not cached
 compiled once more: ran, cached with 0 hits
