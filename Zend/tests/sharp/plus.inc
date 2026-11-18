@@ -1,7 +1,7 @@
 <?php
 
 require __DIR__ . '/harness/Probe.inc';
-require __DIR__ . '/Plus.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 for ($round = 0; $round < 100; $round++) {
     $plus = new Demo\Plus();

@@ -3,8 +3,7 @@ PHP# creates an object with new
 --FILE--
 <?php
 
-require __DIR__ . '/Counter.sharp';
-require __DIR__ . '/Shop.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 echo Demo\Shop::run(4), "\n";
 ?>

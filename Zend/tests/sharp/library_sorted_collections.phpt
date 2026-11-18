@@ -2,17 +2,7 @@
 PHP# SortedMap and SortedSet keep their keys in order, as Rust's BTreeMap and BTreeSet, with every member a Map and a Set have and first, last, floor, ceiling and range, by the key's operator <=> or a comparison, and PriorityQueue gives the lowest priority first, as .NET's
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Math.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/ListMembers.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/MapMembers.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Text/StringMembers.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Collections/SortedMap.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Collections/SortedSet.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Collections/PriorityQueue.sharp';
-require __DIR__ . '/SortedKeys/Version.sharp';
-require __DIR__ . '/SortedKeys/Crate.sharp';
-require __DIR__ . '/SortedQueries.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\SortedQueries;
 

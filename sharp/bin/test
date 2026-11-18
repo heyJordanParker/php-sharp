@@ -2,13 +2,16 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: sharp/bin/test [--linux] [--census] [--spec] [--differential] [--phpunit] [--upstream | --mago | --shard <i>/<n> | paths...]" >&2
-  echo "       sharp/bin/test [--linux] --mago [--shard <i>/<n>]" >&2
+  echo "usage: sharp/bin/test [--linux] [--no-build] [--census] [--spec] [--differential] [--phpunit] [--upstream | --mago | --shard <i>/<n> | paths...]" >&2
+  echo "       sharp/bin/test [--linux] [--no-build] --mago [--shard <i>/<n>]" >&2
   exit 2
 }
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 linux=false
+# --no-build runs on the mago and the test binaries an earlier sharp/bin/build-mago made, as CI's suites run on their
+# build job's, and builds nothing.
+build=true
 census=false
 spec=false
 differential=false
@@ -23,6 +26,7 @@ for ((a = 0; a < ${#args[@]}; a++)); do
   arg="${args[a]}"
   case "$arg" in
     --linux) linux=true; continue ;;
+    --no-build) build=false ;;
     --shard) a=$((a + 1)); shard="${args[a]:-}"; container_command+=(--shard "$shard"); continue ;;
     --census) census=true ;;
     --spec) spec=true ;;
@@ -95,19 +99,26 @@ finish() {
   exit 0
 }
 
-# sharp/mago's workspace tests: every test binary sharp/bin/build-mago builds, run from its package's folder as cargo
-# test runs it, then the doc tests and the property tests of mago-codex, which builds with a feature of its own. With
-# --shard, every n-th test of all the binaries' tests, in binary and name order, from the i-th, so a set of slow tests,
-# such as the compile:: tests of tests/main.rs, spreads over the slices, and the last slice also runs the doc and the
-# property tests. A test binary runs the tests of its slice by skipping the others by exact name, which both libtest
-# and libtest-mimic's harnesses take as often as needed.
+# sharp/mago's workspace tests: every test binary the build.json of sharp/bin/build-mago names, run from its package's
+# folder as cargo test runs it, then the doc tests and the property tests of mago-codex, which builds with a
+# feature of its own. With --shard, every n-th test of all the binaries' tests, in binary and name order, from the i-th,
+# so a set of slow tests, such as the compile:: tests of tests/main.rs, spreads over the slices, and the last slice also
+# runs the doc and the property tests. A test binary runs the tests of its slice by skipping the others by exact name,
+# which both libtest and libtest-mimic's harnesses take as often as needed. With --no-build, cargo runs nothing, so the
+# doc and the property tests, which cargo builds, are left to a run that builds.
 if $mago; then
-  cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
   # The tests run a PHP SDK worker from sharp/mago's vendor folder, and lake, which mago compile proves laws with:
   # installing the pinned Lean first keeps the tests that run lake at once from each installing it.
   composer install --no-interaction --no-progress --quiet --working-dir="$root/sharp/mago"
   elan toolchain install "$(cat "$root/sharp/mago/crates/sharp-lean/lean/lean-toolchain")"
-  "$root/sharp/bin/build-mago" --quiet --message-format=json > "$TMPDIR/build.json"
+  if $build; then
+    "$root/sharp/bin/build-mago" --quiet
+  fi
+  messages="$build_dir/mago/build.json"
+  if [[ ! -f $messages ]]; then
+    echo "$messages is missing. Run sharp/bin/build-mago first." >&2
+    exit 1
+  fi
   binaries=()
   while read -r line; do
     if [[ $line == *'"reason":"compiler-artifact"'* && $line =~ \"profile\":\{[^}]*\"test\":true &&
@@ -116,8 +127,11 @@ if $mago; then
       [[ $line =~ \"manifest_path\":\"([^\"]+)\" ]]
       binaries+=("$executable"$'\t'"$(dirname "${BASH_REMATCH[1]}")")
     fi
-  done < "$TMPDIR/build.json"
+  done < "$messages"
   mapfile -t binaries < <(printf '%s\n' "${binaries[@]}" | LC_ALL=C sort -u)
+  # The tests write below the folder cargo names CARGO_TARGET_TMPDIR, which a build makes and a copy of the binaries
+  # alone leaves out.
+  mkdir -p "$build_dir/mago/tmp"
 
   index=0
   for binary in "${binaries[@]}"; do
@@ -138,7 +152,8 @@ if $mago; then
       run_step "${executable##*/}" "$folder" "$executable" --exact --test-threads "$jobs" "${skips[@]}"
     fi
   done
-  if [[ -z $shard ]] || (( shard_index == shard_count )); then
+  if $build && { [[ -z $shard ]] || (( shard_index == shard_count )); }; then
+    cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
     echo "== the doc tests"
     run_step "the doc tests" "$root" env PATH="$(dirname "$cargo"):$PATH" "$cargo" test --workspace --locked --doc \
       --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" --jobs "$jobs" -- --test-threads "$jobs"
@@ -164,7 +179,7 @@ if $upstream; then
   tests=(Zend/tests ext/reflection ext/tokenizer ext/opcache)
 elif [[ -n $shard ]]; then
   # The slices balance by the seconds sharp/baseline/seconds lists, from CI's slow-test summaries: a test's seconds
-  # summed over the three modes, and the proof's own, which hold the whole slice while it runs, so it weighs them times
+  # summed over the modes, and the proof's own, which hold the whole slice while it runs, so it weighs them times
   # the workers. A test the file doesn't list ran under a second in each mode, so it weighs 1. Each item, heaviest
   # first, goes to the slice that weighs least so far, so every slice computes the same split.
   declare -A seconds=()
@@ -217,27 +232,20 @@ if [[ "$engine_version" != "$version" || "$("$php" -n -r 'echo PHP_ZTS;')" != 1 
   exit 1
 fi
 
-"$root/sharp/bin/build-mago" --quiet
+if $build; then
+  "$root/sharp/bin/build-mago" --quiet
+fi
 mago="$build_dir/mago/debug/mago"
+if [[ ! -x $mago ]]; then
+  echo "$mago is missing. Run sharp/bin/build-mago first." >&2
+  exit 1
+fi
 
-# run-tests.php writes each test's script beside it as <test>.php, and mago compile writes each PHP# class's companion
-# beside its source as <Class>.php. A disk that ignores case, as macOS's does, keeps one file for both when the two
-# names differ only in case, so each run would overwrite and delete the companion, and a stopped run would leave a
-# script mago compile refuses. So no test shares the name of a PHP# file beside it.
-clashed=false
-shopt -s nocasematch
-for test in "$root"/Zend/tests/sharp/*.phpt; do
-  for fixture in "${test%/*}"/*.sharp; do
-    if [[ "${fixture%.sharp}" == "${test%.phpt}" ]]; then
-      script="${test%.phpt}.php"
-      companion="${fixture%.sharp}.php"
-      echo "${test#"$root"/} and ${fixture#"$root"/} differ only in case, so run-tests.php writes ${script##*/} where mago compile writes ${companion##*/}. Rename the test." >&2
-      clashed=true
-    fi
-  done
-done
-shopt -u nocasematch
-if $clashed; then
+# The tests load their PHP# fixtures through Composer's autoloader and the PHP# package's, as an application does, from
+# the packages Zend/tests/sharp/composer.lock pins.
+echo "== composer install in Zend/tests/sharp"
+if ! composer install --no-interaction --no-progress --quiet --working-dir="$root/Zend/tests/sharp"; then
+  echo "composer install failed in Zend/tests/sharp, and the tests load their fixtures through its autoloader." >&2
   exit 1
 fi
 
@@ -284,13 +292,15 @@ if $upstream; then
     failed+=("the comparison with $baseline")
   fi
 else
-  # The PHP# suite runs in the three ways production runs the engine: without opcache, in opcache shared memory with
-  # each test twice in one process, and under the tracing JIT, the one production runs with the opcache, with every
-  # hot counter at 1, so it compiles the code the tests run as soon as it runs. Each expects the output of the run
-  # without opcache. Apple silicon has no thread-safe JIT, as ext/opcache/config.m4 warns, so macOS runs the first two.
+  # The PHP# suite runs in the four ways production runs the engine: without opcache, in opcache shared memory with
+  # each test twice in one process, under the function JIT, which compiles each function of a file as the file loads,
+  # and under the tracing JIT, with every hot counter at 1, so it compiles the code the tests run as soon as it runs.
+  # Each expects the output of the run without opcache. Apple silicon has no thread-safe JIT, as ext/opcache/config.m4
+  # warns, so macOS runs the first two.
   run_tests "without opcache"
   run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
   if [[ $os == linux ]]; then
+    run_tests "with the function JIT" -d opcache.enable_cli=1 -d opcache.jit=function -d opcache.jit_buffer_size=32M
     run_tests "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
       -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
   fi
@@ -311,7 +321,7 @@ fi
 check_differential() {
   echo "== every file mago compile accepted against php -l, through its .sharpc file"
   local file name linted mismatch=false
-  for file in "$root"/Zend/tests/sharp/*.sharp "$root"/Zend/tests/sharp/*/*.sharp; do
+  for file in "$root"/Zend/tests/sharp/*/*.sharp; do
     name="${file#"$root"/}"
     linted="$("$php" -l "$file" 2>&1)" || true
     if [[ "$linted" == "No syntax errors detected in $file" ]]; then

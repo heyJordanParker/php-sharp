@@ -2,8 +2,7 @@
 PHP# Base64 writes and reads the URL-safe alphabet of RFC 4648 with urlSafe: true, as .NET's Base64Url: - and _ for + and /, no padding written, and padding read or not, while the standard alphabet stays as it was
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Base64.sharp';
-require __DIR__ . '/EncodingQueries.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\EncodingQueries;
 

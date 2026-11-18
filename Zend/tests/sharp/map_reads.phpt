@@ -2,9 +2,7 @@
 A Map's count() gives its size as PHP's count gives the array it crosses into, and its values().join() the text PHP's implode gives, on the same data, an empty Map included
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Text/StringMembers.sharp';
-require __DIR__ . '/harness/fixture.inc';
-fixture('MapReads');
+require __DIR__ . '/vendor/autoload.php';
 
 foreach ([['b' => 'two', 'a' => 'one', 'c' => 'three'], []] as $array) {
     var_dump(MapReads\Reads::count($array) === count($array));

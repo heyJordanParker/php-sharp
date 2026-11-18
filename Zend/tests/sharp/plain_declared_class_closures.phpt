@@ -3,8 +3,7 @@ A plain PHP closure's `static` result is its called class and its `self` result 
 --FILE--
 <?php
 require __DIR__ . '/harness/Linked.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Linking');
+require __DIR__ . '/vendor/autoload.php';
 
 var_dump(App\Linking\Report::tests());
 ?>

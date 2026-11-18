@@ -2,8 +2,7 @@
 A PHP# class calls every method of Sharp.Security.Password, and Password.hash throws ValueError on a password with a NUL byte
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Security/Password.sharp';
-require __DIR__ . '/PasswordCalls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\PasswordCalls;
 

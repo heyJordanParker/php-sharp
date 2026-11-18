@@ -2,10 +2,7 @@
 A PHP# class calls Sharp.Encoding.Serialized, which allows no classes by default and gives null for text it cannot read or with data after the value, with no warning, and Sharp.Encoding.PhpLiteral, which writes a Map, and each Map it holds, as a PHP array literal
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Serialized.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/PhpLiteral.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/ListMembers.sharp';
-require __DIR__ . '/SerializedCalls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\SerializedCalls;
 

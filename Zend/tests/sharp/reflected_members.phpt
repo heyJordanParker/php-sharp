@@ -2,8 +2,7 @@
 Reflection reads and writes a static through its Property and invokes a static method with no receiver, creates an object from a class value and refuses arguments its constructor does not take, reads whether a late property holds a value, gives a computed and an observed property's accessors, which invoke as a read and a write, and none for a stored one, and creates a lazy object that loads at its first read, beside a property written before the load, and each reflection member value keys a Map and joins a Set as the member it reflects, whenever reflection read it, a static that runs accessors is listed, read and written through them as a direct use reaches it, a non-constant initial value is a default each read evaluates anew, and a write before a lazy object loads reaches the property as a direct write would
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('ReflectedMembers');
+require __DIR__ . '/vendor/autoload.php';
 
 var_dump(ReflectedMembers\Report::statics());
 var_dump(ReflectedMembers\Report::created());

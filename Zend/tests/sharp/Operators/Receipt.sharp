@@ -1,0 +1,8 @@
+namespace Billing;
+
+public class Receipt
+{
+    public Receipt(public string line { get; }) { }
+
+    public static Receipt unknownPlan(string plan) => new Receipt(`unknown plan ${plan}`);
+}

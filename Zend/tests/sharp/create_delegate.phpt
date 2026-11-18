@@ -2,9 +2,8 @@
 Method.createDelegate makes a value of a function type that calls the method, an instance one on the receiver it takes first, of its class or one around it such as Object, and a computed property's through getter(), and refuses a method whose parameters, result or effects don't fit the type: a PHP# method's are those its compile solved, one whose result alone it carries may have every effect even when that result is a function type, and a plain PHP method's are those its extern lines declare, or every effect without one
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
 require __DIR__ . '/harness/Helper.inc';
-fixture('Delegates');
+require __DIR__ . '/vendor/autoload.php';
 
 use App\Delegates\Database;
 use App\Delegates\Mailer;

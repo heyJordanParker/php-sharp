@@ -3,8 +3,7 @@ PHP# `a?.b`, `a?.m()` and `f?.(x)` give null when a or f is null, and skip the r
 --FILE--
 <?php
 
-require __DIR__ . '/harness/Box.inc';
-require __DIR__ . '/Nulls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 $nulls = new Demo\Nulls;
 $double = fn (int $n): int => $n * 2;

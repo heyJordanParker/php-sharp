@@ -3,8 +3,7 @@ A PHP# initial value that is not constant runs at the start of the constructor, 
 --FILE--
 <?php
 
-require __DIR__ . '/harness/fixture.inc';
-fixture('Inventory');
+require __DIR__ . '/vendor/autoload.php';
 
 echo (new Demo\Inventory(5))->total(), "\n";
 echo (new Demo\Shelf())->stock->count, "\n";

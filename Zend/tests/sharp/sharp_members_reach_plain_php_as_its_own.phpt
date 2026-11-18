@@ -4,8 +4,7 @@ A PHP# member reaches plain PHP as plain PHP's own does: a Map property overridi
 <?php
 require __DIR__ . '/harness/Caster.inc';
 require __DIR__ . '/harness/Checker.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Departures');
+require __DIR__ . '/vendor/autoload.php';
 
 $invoice = new Departures\Invoice();
 echo json_encode($invoice->getCasts()), ' ', json_encode($invoice->getFormats()), "\n";

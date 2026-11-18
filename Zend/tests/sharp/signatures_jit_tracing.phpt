@@ -36,8 +36,8 @@ string(5) "seven"
 bool(true)
 bool(true)
 int(202)
-Demo\Signatures::sum(): Argument #2 must be of type int, string given, called in %ssignatures_jit.inc on line 27
-Demo\Signatures::label(): Argument #1 ($id) must be of type string|int, array given, called in %ssignatures_jit.inc on line 33
-Demo\Signatures::isSame(): Argument #1 ($other) must be of type Demo\Signatures|int, string given, called in %ssignatures_jit.inc on line 39
+Demo\Signatures::sum(): Argument #2 must be of type int, string given, called in %ssignatures_jit.inc on line 26
+Demo\Signatures::label(): Argument #1 ($id) must be of type string|int, array given, called in %ssignatures_jit.inc on line 32
+Demo\Signatures::isSame(): Argument #1 ($other) must be of type Demo\Signatures|int, string given, called in %ssignatures_jit.inc on line 38
 ADD run by the VM: 0
 ASSIGN_OP run by the VM: 0

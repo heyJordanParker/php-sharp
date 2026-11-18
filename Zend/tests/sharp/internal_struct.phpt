@@ -2,8 +2,7 @@
 PHP# compiles an internal struct, which code of its own namespace creates, reads and compares as any struct, spec sections 5 and 10
 --FILE--
 <?php
-require __DIR__ . '/InternalStructs/CheckoutTotals.sharp';
-require __DIR__ . '/InternalStructs/Checkout.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\InternalStructs\Checkout;
 

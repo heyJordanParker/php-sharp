@@ -2,9 +2,7 @@
 Json.encode writes <, >, &, ' and " inside a string as their codes by default, so the JSON can't close a <script> it is put in, and escapeHtml: false writes the bytes PHP's json_encode writes without JSON_HEX_*
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Json.sharp';
-require __DIR__ . '/harness/fixture.inc';
-fixture('JsonHtml');
+require __DIR__ . '/vendor/autoload.php';
 
 echo JsonHtml\Writes::escaped(), "\n";
 echo JsonHtml\Writes::kept(), "\n";

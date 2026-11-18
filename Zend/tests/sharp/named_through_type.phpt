@@ -2,8 +2,7 @@
 new TItem.fromJson(…) calls the required named constructor of the type argument the code runs with, a subclass's own one for a subclass, through a bound below the class that requires it, and new Self.fromJson(…) the one of the class the code is called on, and plain PHP calls the static method it runs as
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('NamedThroughType');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/named_through_type.inc';
 ?>
 --EXPECT--

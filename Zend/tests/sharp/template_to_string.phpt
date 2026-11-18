@@ -2,8 +2,7 @@
 PHP# a template shows what toString() returns, and plain PHP's string conversion of the object gives the same text, a toString() an interface's default body gives included
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('Templates');
+require __DIR__ . '/vendor/autoload.php';
 
 $sku = new Templates\Sku('A-12');
 echo (new Templates\Label())->show($sku, Templates\Grade::Gold), "\n";

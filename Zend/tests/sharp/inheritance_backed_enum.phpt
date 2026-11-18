@@ -4,8 +4,7 @@ A PHP# string-backed and int-backed enum implement a plain PHP interface that ex
 <?php
 
 require __DIR__ . '/harness/Traits.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Traits');
+require __DIR__ . '/vendor/autoload.php';
 
 // The interface's own static methods, `from` and `tryFrom` that `BackedEnum` declares, run on any enum that implements it.
 function pick(Lib\Aligned $aligned, int|string $value, int|string $missing): array

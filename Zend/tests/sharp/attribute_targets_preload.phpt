@@ -59,8 +59,7 @@ var_dump($labels($paid->getProperty('transactionId')), $labels($paid->getConstru
 var_dump((new AttributeTargets\Payment\Paid('t1'))->transactionId);
 // PHP has no hooks on a static, so PHP# reflection reads a static's accessors, as it reads a hook: each `getter()`,
 // `setter()` and the `value` its `set` takes.
-require __DIR__ . '/harness/fixture.inc';
-fixture('AttributeTargets');
+require __DIR__ . '/vendor/autoload.php';
 var_dump(AttributeTargets\Report::accessors());
 ?>
 --EXPECT--

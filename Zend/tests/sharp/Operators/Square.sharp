@@ -1,0 +1,6 @@
+namespace Billing;
+
+public class Square
+{
+    public Square(public float side { get; }) { }
+}

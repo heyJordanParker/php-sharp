@@ -3,8 +3,7 @@ extern namespace Blog for Blog_Post gives the folder of a namespace-less library
 --FILE--
 <?php
 require __DIR__ . '/harness/Blog/blog.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Publishing');
+require __DIR__ . '/vendor/autoload.php';
 
 use Publishing\Feed;
 

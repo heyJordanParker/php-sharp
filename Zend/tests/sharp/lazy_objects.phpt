@@ -7,8 +7,7 @@ opcache.enable_cli=1
 opcache
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('LazyObjects');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/lazy_objects.inc';
 ?>
 --EXPECT--

@@ -2,10 +2,8 @@
 A member's type, read through properties(), methods() and parameters(), is its declared type whole, which the class value's own members take apart: a Class<T>'s argument, a function type's parameters and result, a union's and an intersection's members, a nullable type argument's arguments and its ?, a tuple's element names, and a type parameter with its bound
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Text/StringMembers.sharp';
 require __DIR__ . '/harness/Attributes.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('ReflectedTypes');
+require __DIR__ . '/vendor/autoload.php';
 
 foreach (ReflectedTypes\Report::members(ReflectedTypes\Holder::class) as $line) {
     echo $line, "\n";

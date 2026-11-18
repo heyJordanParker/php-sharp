@@ -2,8 +2,7 @@
 A method declared to return Self reads, through reflection on a class value, as that class value's class, with its type arguments: an inherited one as the subclass, as static binds in PHP, inside a nullable and a List too
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('SelfResults');
+require __DIR__ . '/vendor/autoload.php';
 
 foreach (SelfResults\Report::all() as $line) {
     echo $line, "\n";

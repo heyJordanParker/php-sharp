@@ -7,8 +7,7 @@ production --force
 --FILE--
 <?php
 
-require __DIR__ . '/../../../sharp/composer/library/Sharp/System/Environment.sharp';
-require __DIR__ . '/Deploy.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 $deploy = new Demo\Deploy(new Sharp\System\Environment());
 var_dump($deploy->variable('SHARP_REGION'), $deploy->variable('SHARP_UNSET_REGION'));
@@ -45,8 +44,7 @@ try {
     echo $e->getMessage(), "\n";
 }
 
-$code = 'require ' . var_export(__DIR__ . '/../../../sharp/composer/library/Sharp/System/Environment.sharp', true) . ';'
-    . ' require ' . var_export(__DIR__ . '/Deploy.sharp', true) . ';'
+$code = 'require ' . var_export(__DIR__ . '/vendor/autoload.php', true) . ';'
     . ' try { (new Demo\Deploy(new Sharp\System\Environment()))->target(); } catch (OutOfRangeException $e) { echo get_class($e), "\n"; }';
 echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' ' . getenv('TEST_PHP_EXTRA_ARGS') . ' -r ' . escapeshellarg($code) . ' 2>&1');
 

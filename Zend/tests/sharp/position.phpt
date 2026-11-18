@@ -3,12 +3,12 @@ PHP# Position.current() gives the file, directory, line, column and dotted funct
 --FILE--
 <?php
 
-require __DIR__ . '/../sharp/Positions.sharp';
+require __DIR__ . '/Demo/Positions.sharp';
 
 $here = (new Demo\Positions())->here();
-var_dump($here->file === realpath(__DIR__ . '/Positions.sharp'));
+var_dump($here->file === realpath(__DIR__ . '/Demo/Positions.sharp'));
 var_dump($here->file === (new ReflectionClass(Demo\Positions::class))->getFileName());
-var_dump($here->directory === __DIR__);
+var_dump($here->directory === __DIR__ . '/Demo');
 echo $here->line, ':', $here->column, ' ', $here->function, "\n";
 $folder = (new Demo\Positions())->folder;
 echo $folder->line, ':', $folder->column, ' ', $folder->function, "\n";

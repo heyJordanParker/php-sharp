@@ -3,7 +3,7 @@ PHP# `a ?? b` gives b when a is null
 --FILE--
 <?php
 
-require __DIR__ . '/Nulls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 $nulls = new Demo\Nulls;
 var_dump($nulls->either(1, 2), $nulls->either(null, 2), $nulls->either(null, null), $nulls->either(0, 2));

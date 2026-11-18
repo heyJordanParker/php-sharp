@@ -4,9 +4,7 @@ A plain PHP trait is a PHP# type: is, as, a match arm, a parameter from plain PH
 <?php
 
 require __DIR__ . '/harness/Traits.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Traits');
-fixture('Inheritance');
+require __DIR__ . '/vendor/autoload.php';
 
 trait Wraps
 {

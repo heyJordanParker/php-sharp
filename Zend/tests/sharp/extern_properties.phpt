@@ -3,8 +3,7 @@ An extern property of a PHP# class is the one its plain PHP parent's __get gives
 --FILE--
 <?php
 require __DIR__ . '/harness/Catalog.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('ExternProperties');
+require __DIR__ . '/vendor/autoload.php';
 
 $shop = new ExternProperties\Shop();
 var_dump(property_exists($shop, 'featured'), $shop->name(), $shop->relation(), $shop->featured->name);

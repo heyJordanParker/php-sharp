@@ -4,8 +4,7 @@ A PHP# class imports PHP 8.4's XML DOM, which the standard library names, and re
 dom
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('XmlDocuments');
+require __DIR__ . '/vendor/autoload.php';
 
 use XmlDocuments\Feed;
 

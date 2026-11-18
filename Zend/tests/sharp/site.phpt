@@ -4,8 +4,7 @@ A PHP# class extends a PHP class, replaces its methods, implements a PHP interfa
 <?php
 
 require __DIR__ . '/harness/SiteLib.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Site');
+require __DIR__ . '/vendor/autoload.php';
 
 $page = new Site\Page();
 var_dump($page instanceof Lib\Resource, $page instanceof Lib\Linkable, $page->id(), $page->link());

@@ -2,8 +2,7 @@
 
 namespace Plain;
 
-require_once __DIR__ . '/harness/fixture.inc';
-\fixture('CallerChecked');
+require __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/harness/CallerChecked.inc';
 
 use CallerChecked\Article;

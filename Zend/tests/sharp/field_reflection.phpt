@@ -2,8 +2,7 @@
 Class<T>.fields() lists each field and each closed accessor-less auto-property's storage, and no other property, properties() lists no field, and a Field reads and writes the storage as a direct use from the calling code would, refuses an `init` storage that holds a value, and refuses a lazy object that has not loaded rather than load it
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('Fields');
+require __DIR__ . '/vendor/autoload.php';
 
 var_dump(Fields\Report::listed());
 var_dump(Fields\Report::facts());

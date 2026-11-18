@@ -3,8 +3,7 @@ Class<T>.methods() reads a plain PHP method's `static` as the class value's clas
 --FILE--
 <?php
 require __DIR__ . '/harness/Linked.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Linking');
+require __DIR__ . '/vendor/autoload.php';
 
 foreach (App\Linking\Report::describeMethods() as $line) {
     echo $line, "\n";

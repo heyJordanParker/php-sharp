@@ -2,9 +2,7 @@
 Sharp.Encoding.Json.encode's indent, spec section 24: 0 writes one line, and 2 or 4 write each nested value on its own line that many spaces deeper than its parent, with ": " after a key and [] and {} for an empty value, so indent 4 writes the bytes of PHP's JSON_PRETTY_PRINT with the flags Json.encode's defaults give, and a negative indent throws ValueError
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Json.sharp';
-require __DIR__ . '/harness/fixture.inc';
-fixture('JsonCalls');
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\JsonCalls;
 

@@ -2,8 +2,7 @@
 A plain PHP write into a PHP# property already holds the declared type, from a file without strict_types too: an assignment, ReflectionProperty::setValue() and a write through a reference each throw the TypeError that names the property and its type where PHP's weak mode would convert, and store a value of the type, an int a float takes included
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('Writes');
+require __DIR__ . '/vendor/autoload.php';
 
 $order = new Writes\Order();
 $number = new ReflectionProperty(Writes\Order::class, 'number');

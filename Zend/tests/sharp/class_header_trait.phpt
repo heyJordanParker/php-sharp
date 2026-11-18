@@ -4,8 +4,7 @@ A PHP# class or enum header lists a plain PHP trait, alone or beside its base cl
 <?php
 
 require __DIR__ . '/harness/Traits.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Traits');
+require __DIR__ . '/vendor/autoload.php';
 
 $essay = new Demo\Essay();
 var_dump($essay->link(), $essay->name(), $essay->key(), get_parent_class($essay), Demo\Essay::ROOT);

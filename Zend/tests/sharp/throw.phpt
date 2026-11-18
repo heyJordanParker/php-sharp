@@ -3,7 +3,7 @@ PHP# throws an exception from a statement and from an expression
 --FILE--
 <?php
 
-require __DIR__ . '/Expressions.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 foreach ([fn() => Demo\Expressions::positive(-1), fn() => Demo\Expressions::known(-1)] as $call) {
     try {

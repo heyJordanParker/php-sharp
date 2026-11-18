@@ -3,8 +3,7 @@ A PHP# attribute target puts its list on the part of a declaration it names, and
 --FILE--
 <?php
 require __DIR__ . '/harness/Attributes.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('AttributeTargets');
+require __DIR__ . '/vendor/autoload.php';
 
 $labels = fn (Reflector $reflector) => implode(',', array_map(
     fn (ReflectionAttribute $attribute) => $attribute->newInstance()->label,

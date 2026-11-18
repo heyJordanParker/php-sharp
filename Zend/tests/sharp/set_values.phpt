@@ -2,8 +2,7 @@
 Two Sets are == when they hold equal elements in any order, also in a List, a Map, a Set, a struct and a union, a List of Sets searches by ==, a list literal is a Set wherever one is expected, and an event's, a case's and a struct's Set, nested or not, holds the object, also when plain PHP passes an array
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('SetValues');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/set_values.inc';
 library();
 

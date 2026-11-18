@@ -1,7 +1,6 @@
 <?php
 
-require __DIR__ . '/harness/fixture.inc';
-fixture('Defaults');
+require __DIR__ . '/vendor/autoload.php';
 
 use Defaults\Counter;
 

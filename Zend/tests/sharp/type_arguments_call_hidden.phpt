@@ -3,7 +3,7 @@ A generic method keeps its type arguments in a local that get_defined_vars, whic
 --FILE--
 <?php
 require __DIR__ . '/type_arguments_calls.inc';
-require __DIR__ . '/LibraryProbe/Locals.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use App\Order;
 use Calls\Repository;

@@ -8212,6 +8212,20 @@ const SCROLL_INTERACTION: (&str, &str) = (
     "namespace App;\n\npublic class ScrollInteraction : Interaction\n{\n    public string name() => \"scroll\";\n}\n",
 );
 
+/// A branch that always leaves, by `return`, `throw` or a call that never returns, leaves the rest of the block the
+/// value's type without what its test matched, whether the test names the value or not. With an enum and a sealed
+/// interface in a union written in either order, or an `int` and an interface, a value that leaves when it `is Level
+/// level` is an `Interaction` after, so `name()` is the interface's method; one that leaves when it `is Interaction` is a
+/// `Level` after, whose `name` is the case's name. Where the test holds, the value is of the type it names too, and
+/// after a branch that leaves when it `is not Level level`, both the value and `level` are a `Level`.
+#[test]
+fn a_branch_that_leaves_on_a_type_test_narrows_the_rest_of_the_block_to_the_other_types() {
+    let level = ("src/App/Level.sharp", "namespace App;\n\npublic enum Level\n{\n    case Low;\n    case High;\n}\n");
+    let sharp = "namespace App;\n\npublic class Shop\n{\n    public static string returned(Level|Interaction audience)\n    {\n        if (audience is Level level) {\n            return level.name;\n        }\n        return audience.name();\n    }\n\n    public static string thrown(Interaction|Level audience)\n    {\n        if (audience is Level level) {\n            throw new Exception(level.name);\n        }\n        return audience.name();\n    }\n\n    public static string ended(Level|Interaction audience)\n    {\n        if (audience is Level level) {\n            Shop.fail(level);\n        }\n        return audience.name();\n    }\n\n    public static string level(Interaction|Level audience)\n    {\n        if (audience is Interaction interaction) {\n            return interaction.name();\n        }\n        return audience.name;\n    }\n\n    public static string plain(Level|Interaction audience)\n    {\n        if (audience is Level) {\n            return \"level\";\n        }\n        return audience.name();\n    }\n\n    public static string scalar(int|Interaction audience)\n    {\n        if (audience is int count) {\n            return \"count\";\n        }\n        return audience.name();\n    }\n\n    public static string inside(Level|Interaction audience)\n    {\n        if (audience is Interaction interaction) {\n            return audience.name() + interaction.name();\n        }\n        return \"level\";\n    }\n\n    public static string kept(Level|Interaction audience)\n    {\n        if (audience is not Level level) {\n            return \"interaction\";\n        }\n        return level.name + audience.name;\n    }\n\n    public static never fail(Level level) => throw new Exception(level.name);\n}\n";
+
+    assert_eq!(issues(("src/App/Shop.sharp", sharp), &[INTERACTION, POPUP_INTERACTION, level]), Vec::<String>::new());
+}
+
 /// Spec section 20.1: a sealed interface's implementers sit in its namespace. A class of another namespace that
 /// implements it is an error that names the namespace, and an implementer in it is not.
 #[test]
@@ -30905,8 +30919,8 @@ fn a_delegate_has_the_effects_its_function_type_lists() {
 
 /// Spec sections 25 and 29: `Property.isInitialized` and `Property.hasDefaultValue` read PHP's reflection only through
 /// members that run no code a project wrote, which `Builtins.sharp` declares pure, so a method held to `uses Database`
-/// calls them. `Property.get` runs a computed property's `get`, and `Property.defaultValue` runs an initial value that
-/// is not constant, so each may still have every effect.
+/// calls them, and `Property.defaultValue` of a program whose initial values are all constant. `Property.get` runs a
+/// computed property's `get`, so it may still have every effect.
 #[test]
 fn a_reflection_read_that_runs_no_project_code_is_pure() {
     let ledger = (
@@ -30932,7 +30946,6 @@ fn a_reflection_read_that_runs_no_project_code_is_pure() {
         effect_issues(&[loaded, computed, defaulted, ledger, a, b, c, d, e, f, g]),
         [
             "app/Shop/Computed.sharp:7:28 incompatible-effects: `Computed.check` reaches `Property.get`, which may have every effect, so `uses Database` on `Ledger.check` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
-            "app/Shop/Defaulted.sharp:7:28 incompatible-effects: `Defaulted.check` reaches `Property.defaultValue`, which may have every effect, so `uses Database` on `Ledger.check` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
         ]
     );
 }
@@ -30940,8 +30953,8 @@ fn a_reflection_read_that_runs_no_project_code_is_pure() {
 /// Spec sections 6, 25 and 29: a field is storage, and so is an auto-property's that is neither `virtual` nor
 /// `abstract`, so `Field.get`, `Field.set` and `Field.isInitialized` run no code a project wrote, and a method held to
 /// `uses Database` reads and writes a declared field and an auto-property's storage through `fields()`. `Field` reads
-/// through members `Property` never calls, so `Property.get`, `Property.set` and `Property.defaultValue()` still may
-/// have every effect, and so does `Field.defaultValue()`, which runs an initial value that is not constant.
+/// through members `Property` never calls, so `Property.get` and `Property.set` still may have every effect. The
+/// program's initial values are all constant, so `Property.defaultValue()` and `Field.defaultValue()` are pure.
 #[test]
 fn a_field_read_or_write_runs_no_project_code() {
     let store = (
@@ -30980,8 +30993,210 @@ fn a_field_read_or_write_runs_no_project_code() {
         [
             "app/Shop/PropertyRead.sharp:5:34 incompatible-effects: `PropertyRead.sync` reaches `Property.get`, which may have every effect, so `uses Database` on `Store.sync` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
             "app/Shop/PropertyWrite.sharp:7:9 incompatible-effects: `PropertyWrite.sync` reaches `Property.set`, which may have every effect, so `uses Database` on `Store.sync` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
-            "app/Shop/PropertyDefault.sharp:5:34 incompatible-effects: `PropertyDefault.sync` reaches `Property.defaultValue`, which may have every effect, so `uses Database` on `Store.sync` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
-            "app/Shop/FieldDefault.sharp:5:34 incompatible-effects: `FieldDefault.sync` reaches `Field.defaultValue`, which may have every effect, so `uses Database` on `Store.sync` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
+        ]
+    );
+}
+
+/// Spec sections 25 and 29: `defaultValue()` runs the default it reads, so it has the effects of every default the
+/// program declares that is not constant, and no other. A constant default runs no code, so with only constant ones a
+/// method held to `uses Database, Environment` reads a parameter's, a property's and a field's default. A default that
+/// creates a `Stamp`, whose constructor has the effect `Clock`, gives each read of its kind `Clock`. A plain PHP
+/// parameter's default that creates an object runs code no `uses` names, so while the program declares one a parameter's
+/// read may have every effect, and a property's and a field's reads keep none.
+#[test]
+fn a_default_value_read_has_the_effects_of_the_defaults_it_can_run() {
+    let ledger = (
+        "app/Shop/Ledger.sharp",
+        "namespace App.Shop;\n\npublic interface Ledger\n{\n    bool check() uses Database, Environment;\n}\n",
+    );
+    let parameter = (
+        "app/Shop/ParameterRead.sharp",
+        "namespace App.Shop;\n\npublic class ParameterRead : Ledger\n{\n    public bool check() => typeof(ParameterRead).methods()[1].parameters()[0].defaultValue() is int;\n\n    public int scaled(int by = 2, Status? reason = null, List<int> steps = [], Status status = Status.Open) => by;\n}\n",
+    );
+    let property = (
+        "app/Shop/PropertyRead.sharp",
+        "namespace App.Shop;\n\npublic class PropertyRead : Ledger\n{\n    public int count { get; set; } = 0;\n\n    public bool check() => typeof(PropertyRead).properties()[0].defaultValue() is int;\n}\n",
+    );
+    let field = (
+        "app/Shop/FieldRead.sharp",
+        "namespace App.Shop;\n\npublic class FieldRead : Ledger\n{\n    private int total = 0;\n\n    public bool check() => this.total == 0 && typeof(FieldRead).fields()[0].defaultValue() is int;\n}\n",
+    );
+    let status = (
+        "app/Shop/Status.sharp",
+        "namespace App.Shop;\n\npublic enum Status\n{\n    case Open;\n    case Closed;\n}\n",
+    );
+    let stamp = (
+        "app/Shop/Stamp.sharp",
+        "namespace App.Shop;\n\nimport Acme.Chrono;\n\npublic class Stamp\n{\n    public Stamp()\n    {\n        Chrono.now();\n    }\n}\n",
+    );
+    let stamped_call = (
+        "app/Shop/Stamped.sharp",
+        "namespace App.Shop;\n\npublic class Stamped\n{\n    public void touch(Stamp stamp = new Stamp()) { }\n}\n",
+    );
+    let stamped_value = (
+        "app/Shop/Kept.sharp",
+        "namespace App.Shop;\n\npublic class Kept\n{\n    public Stamp stamp { get; set; } = new Stamp();\n}\n",
+    );
+    let plain_default = (
+        "src/Lib/Calendar.php",
+        "<?php\n\nnamespace Lib;\n\nfinal class Calendar\n{\n    public function on(\\DateTimeImmutable $day = new \\DateTimeImmutable()): void\n    {\n    }\n}\n",
+    );
+    let readers = [parameter, property, field, ledger, status];
+    let [a, b, c, d, e, f, g] = REFLECTION;
+    let reflection = [a, b, c, d, e, f, g];
+    let with = |extra: &[(&'static str, &'static str)]| -> Vec<(&'static str, &'static str)> {
+        readers.iter().chain(extra).chain(&reflection).copied().collect()
+    };
+
+    for reader in [parameter, property, field] {
+        assert_eq!(issues(reader, &[ledger, status, a, b, c, d, e, f, g]), Vec::<String>::new());
+    }
+    assert_eq!(effect_issues(&with(&[])), Vec::<String>::new());
+    assert_eq!(
+        effect_issues(&with(&[stamp, stamped_call, NOW, CLOCK_STUB])),
+        [
+            "app/Shop/ParameterRead.sharp:5:28 incompatible-effects: `ParameterRead.check` reaches `Stamp.Stamp`, which calls `Chrono.now` with the effect `Clock`, so `uses Database, Environment` on `Ledger.check` cannot accept it."
+        ]
+    );
+    assert_eq!(
+        effect_issues(&with(&[stamp, stamped_value, NOW, CLOCK_STUB])),
+        [
+            "app/Shop/PropertyRead.sharp:7:28 incompatible-effects: `PropertyRead.check` reaches `Stamp.Stamp`, which calls `Chrono.now` with the effect `Clock`, so `uses Database, Environment` on `Ledger.check` cannot accept it.",
+            "app/Shop/FieldRead.sharp:7:47 incompatible-effects: `FieldRead.check` reaches `Stamp.Stamp`, which calls `Chrono.now` with the effect `Clock`, so `uses Database, Environment` on `Ledger.check` cannot accept it.",
+        ]
+    );
+    assert_eq!(
+        effect_issues(&with(&[plain_default])),
+        [
+            "app/Shop/ParameterRead.sharp:5:28 incompatible-effects: `ParameterRead.check` reaches `Parameter.defaultValue`, which may have every effect, so `uses Database, Environment` on `Ledger.check` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects."
+        ]
+    );
+}
+
+/// Spec sections 7 and 29: a default runs each time a call leaves its argument out, so the call has the default's
+/// effects, as if it wrote the default itself, and a call that passes the argument has only the argument's. A method's
+/// call, a constructor's and a `: super()` leave out a `Stamp` default, whose constructor has the effect `Clock`, and
+/// each is refused at the call that reaches it. A call through a class runs the default of the override it reaches, of a parameter the override adds
+/// too, and an implementation's default is held to the `uses` of the declaration it implements. A constant default adds
+/// nothing.
+#[test]
+fn a_call_that_leaves_an_argument_out_has_the_effects_of_its_default() {
+    let ledger = (
+        "app/Shop/Ledger.sharp",
+        "namespace App.Shop;\n\npublic interface Ledger\n{\n    bool check(Stamp given) uses Database;\n}\n",
+    );
+    let stamp = (
+        "app/Shop/Stamp.sharp",
+        "namespace App.Shop;\n\nimport Acme.Chrono;\n\npublic class Stamp\n{\n    public Stamp()\n    {\n        Chrono.now();\n    }\n}\n",
+    );
+    let stamped = (
+        "app/Shop/Stamped.sharp",
+        "namespace App.Shop;\n\npublic class Stamped\n{\n    public void touch(Stamp stamp = new Stamp(), int times = 1) { }\n}\n",
+    );
+    let shelf = (
+        "app/Shop/Shelf.sharp",
+        "namespace App.Shop;\n\npublic class Shelf\n{\n    public Shelf(Stamp stamp = new Stamp()) { }\n}\n",
+    );
+    let plain = (
+        "app/Shop/Plain.sharp",
+        "namespace App.Shop;\n\npublic class Plain\n{\n    public virtual void touch(Stamp? stamp = null) { }\n}\n",
+    );
+    let timed = (
+        "app/Shop/Timed.sharp",
+        "namespace App.Shop;\n\npublic class Timed : Plain\n{\n    public override void touch(Stamp? stamp = new Stamp()) { }\n}\n",
+    );
+    let toucher = (
+        "app/Shop/Toucher.sharp",
+        "namespace App.Shop;\n\npublic interface Toucher\n{\n    void touch(Stamp? stamp = null);\n}\n",
+    );
+    let stamping = (
+        "app/Shop/Stamping.sharp",
+        "namespace App.Shop;\n\npublic class Stamping : Toucher\n{\n    public void touch(Stamp? stamp = new Stamp()) { }\n}\n",
+    );
+    let leaving = (
+        "app/Shop/Leaving.sharp",
+        "namespace App.Shop;\n\npublic class Leaving : Ledger\n{\n    public bool check(Stamp given)\n    {\n        new Stamped().touch();\n\n        return true;\n    }\n}\n",
+    );
+    let building = (
+        "app/Shop/Building.sharp",
+        "namespace App.Shop;\n\npublic class Building : Ledger\n{\n    public bool check(Stamp given)\n    {\n        new Shelf();\n\n        return true;\n    }\n}\n",
+    );
+    let through = (
+        "app/Shop/Through.sharp",
+        "namespace App.Shop;\n\npublic class Through : Ledger\n{\n    public bool check(Stamp given)\n    {\n        new Plain().touch();\n\n        return true;\n    }\n}\n",
+    );
+    let kiosk = (
+        "app/Shop/Kiosk.sharp",
+        "namespace App.Shop;\n\npublic class Kiosk : Shelf\n{\n    public Kiosk() : super() { }\n}\n",
+    );
+    let opening = (
+        "app/Shop/Opening.sharp",
+        "namespace App.Shop;\n\npublic class Opening : Ledger\n{\n    public bool check(Stamp given)\n    {\n        new Kiosk();\n\n        return true;\n    }\n}\n",
+    );
+    let wide = (
+        "app/Shop/Wide.sharp",
+        "namespace App.Shop;\n\npublic class Wide\n{\n    public virtual void touch(Stamp stamp) { }\n}\n",
+    );
+    let wider = (
+        "app/Shop/Wider.sharp",
+        "namespace App.Shop;\n\npublic class Wider : Wide\n{\n    public override void touch(Stamp stamp, Stamp? extra = new Stamp()) { }\n}\n",
+    );
+    let across = (
+        "app/Shop/Across.sharp",
+        "namespace App.Shop;\n\npublic class Across : Ledger\n{\n    public bool check(Stamp given)\n    {\n        new Wide().touch(given);\n\n        return true;\n    }\n}\n",
+    );
+    let passing = (
+        "app/Shop/Passing.sharp",
+        "namespace App.Shop;\n\npublic class Passing : Ledger\n{\n    public bool check(Stamp given)\n    {\n        new Stamped().touch(given);\n        new Stamped().touch(stamp: given);\n        new Stamped().touch(...[given, 2]);\n        new Shelf(given);\n        new Plain().touch(given);\n\n        return true;\n    }\n}\n",
+    );
+
+    assert_eq!(
+        effect_issues(&[passing, ledger, stamp, stamped, shelf, plain, wide, NOW, CLOCK_STUB]),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        effect_issues(&[across, opening, ledger, stamp, wide, wider, shelf, kiosk, NOW, CLOCK_STUB]),
+        [
+            "app/Shop/Across.sharp:7:9 incompatible-effects: `Across.check` reaches `Stamp.Stamp`, which calls `Chrono.now` with the effect `Clock`, so `uses Database` on `Ledger.check` cannot accept it.",
+            "app/Shop/Opening.sharp:7:9 incompatible-effects: `Opening.check` reaches `Stamp.Stamp`, which calls `Chrono.now` with the effect `Clock`, so `uses Database` on `Ledger.check` cannot accept it.",
+        ]
+    );
+    assert_eq!(
+        effect_issues(&[
+            leaving, building, through, stamping, ledger, stamp, stamped, shelf, plain, timed, toucher, NOW, CLOCK_STUB
+        ]),
+        [
+            "app/Shop/Leaving.sharp:7:9 incompatible-effects: `Leaving.check` reaches `Stamp.Stamp`, which calls `Chrono.now` with the effect `Clock`, so `uses Database` on `Ledger.check` cannot accept it.",
+            "app/Shop/Building.sharp:7:9 incompatible-effects: `Building.check` reaches `Stamp.Stamp`, which calls `Chrono.now` with the effect `Clock`, so `uses Database` on `Ledger.check` cannot accept it.",
+            "app/Shop/Through.sharp:7:9 incompatible-effects: `Through.check` reaches `Stamp.Stamp`, which calls `Chrono.now` with the effect `Clock`, so `uses Database` on `Ledger.check` cannot accept it.",
+            "app/Shop/Stamping.sharp:5:38 incompatible-effects: `Stamping.touch(stamp)` reaches `Stamp.Stamp`, which calls `Chrono.now` with the effect `Clock`, so the pure `Toucher.touch` cannot accept it.",
+        ]
+    );
+}
+
+/// Spec sections 1 and 29: creating an attribute runs its constructor's defaults for the arguments it leaves out, so a
+/// default of an attribute's constructor has no effects, as its body and its initial values have none, and one that
+/// has one is refused at the default. A constant default runs no code.
+#[test]
+fn an_attribute_constructor_s_default_has_no_effects() {
+    let stamp = (
+        "app/Shop/Stamp.sharp",
+        "namespace App.Shop;\n\nimport Acme.Chrono;\n\npublic class Stamp\n{\n    public Stamp()\n    {\n        Chrono.now();\n    }\n}\n",
+    );
+    let column = (
+        "app/Shop/Column.sharp",
+        "namespace App.Shop;\n\n[Attribute]\npublic class Column\n{\n    public Column(string name = \"\", Stamp? stamp = new Stamp()) { }\n}\n",
+    );
+    let label = (
+        "app/Shop/Label.sharp",
+        "namespace App.Shop;\n\n[Attribute]\npublic class Label\n{\n    public Label(string name = \"\", int width = 0) { }\n}\n",
+    );
+
+    assert_eq!(effect_issues(&[label, stamp, NOW, CLOCK_STUB]), Vec::<String>::new());
+    assert_eq!(
+        effect_issues(&[column, stamp, NOW, CLOCK_STUB]),
+        [
+            "app/Shop/Column.sharp:6:52 incompatible-effects: The default of `stamp` in the constructor of `Column` reaches `Stamp.Stamp`, which calls `Chrono.now` with the effect `Clock`, and an attribute has no effects. Help: Give the attribute constants, and do the work in the code that reads it.",
         ]
     );
 }

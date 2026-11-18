@@ -2,9 +2,7 @@
 PHP# int.toBytes gives an int's 8 bytes in a ByteOrder, Big by default, as Rust's to_be_bytes and to_le_bytes, a negative one in two's complement, and Int.fromBytes reads them back at both ends of the range, refusing any length but 8
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/ByteOrder.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
-require __DIR__ . '/EncodingQueries.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\EncodingQueries;
 use Sharp\ByteOrder;

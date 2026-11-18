@@ -1,6 +1,5 @@
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Math.sharp';
-require __DIR__ . '/Signatures.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 for ($round = 0; $round < 100; $round++) {
     $values = [$round, 2, 3];

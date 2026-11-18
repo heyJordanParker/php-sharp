@@ -3,7 +3,7 @@ PHP# runs expression-bodied methods and reads computed properties on each read
 --FILE--
 <?php
 
-require __DIR__ . '/Page.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 $page = new Demo\Page('About Us');
 echo $page->slug, "\n";

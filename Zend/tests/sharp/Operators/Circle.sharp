@@ -1,0 +1,6 @@
+namespace Billing;
+
+public class Circle
+{
+    public Circle(public float radius { get; }) { }
+}

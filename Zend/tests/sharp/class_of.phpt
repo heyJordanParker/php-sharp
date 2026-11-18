@@ -4,8 +4,7 @@ PHP# Class.of(value) gives the class of the object a value holds, a subclass inc
 <?php
 
 require __DIR__ . '/harness/Factory.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('ClassValues');
+require __DIR__ . '/vendor/autoload.php';
 
 $gold = new Classes\GoldBadge();
 var_dump(Classes\ClassValues::of($gold));

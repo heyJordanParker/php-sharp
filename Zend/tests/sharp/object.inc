@@ -1,8 +1,7 @@
 <?php
 
-require __DIR__ . '/harness/fixture.inc';
 require __DIR__ . '/harness/Probe.inc';
-fixture('Ids');
+require __DIR__ . '/vendor/autoload.php';
 
 use Holders\Ids;
 use Holders\Ticket;

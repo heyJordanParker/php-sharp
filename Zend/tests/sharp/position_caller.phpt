@@ -2,8 +2,7 @@
 A Position.current() default gives each direct PHP# call its own position, and a call through a function value or plain PHP the position of the parameter's declaration
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('Callers');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/position_caller.inc';
 ?>
 --EXPECT--

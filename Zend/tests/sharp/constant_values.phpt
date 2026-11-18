@@ -3,9 +3,8 @@ A PHP# constant's value is built from constants: a ternary, an index, a template
 --FILE--
 <?php
 require __DIR__ . '/harness/Attributes.inc';
-require __DIR__ . '/harness/fixture.inc';
 require __DIR__ . '/constant_values.inc';
-fixture('ConstantValues');
+require __DIR__ . '/vendor/autoload.php';
 
 echo constant_values(), "\n";
 echo constant_values(), "\n";

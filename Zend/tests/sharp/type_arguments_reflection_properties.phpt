@@ -63,9 +63,6 @@ foreach (['count', $statics] as $name) {
 }
 
 echo "The methods the compile makes\n";
-fixture('ReflectedClasses');
-fixture('ReflectedMembers');
-fixture('Indexers');
 $made = [
     [new ReflectedClasses\Point(1), ['#fields', '#json']],
     [new ReflectedMembers\Counter(), ['hidden#get', '#statics']],

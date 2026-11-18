@@ -2,8 +2,7 @@
 A plain PHP closure answers `is Function<…>` by its declared PHP signature, spec section 21: an undeclared parameter type takes anything, a declared result fits a wider one, an undeclared result is `Any?`, and no effects, as the checker gives a PHP signature none
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('PlainClosures');
+require __DIR__ . '/vendor/autoload.php';
 
 use App\PlainClosures\Holder;
 use App\PlainClosures\Item;

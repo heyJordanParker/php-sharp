@@ -5,8 +5,8 @@ set -euo pipefail
 # the change since the merge base with origin/master needs, as CI's CHANGES jobs choose the jobs, fastest first, and
 # prints each gate's time. Every build and test runs the jobs sharp/bin/jobs prints. A gate CI runs in the sharp/docker
 # image runs there, and one CI runs on the runner itself runs on this machine, so each check meets the platform it meets
-# in CI. CI's jobs run the gates no other script holds through this script: LINUX the generated files, WORKFLOWS the
-# workflows, and mago.yml's checks and plain-php theirs.
+# in CI. CI's jobs run the gates no other script holds through this script: BUILD_LINUX the generated files,
+# WORKFLOWS the workflows, and mago.yml's checks and plain-php theirs.
 #
 # With --changes <base>, it prints what the change since <base> needs, as CI's CHANGES jobs write it to $GITHUB_OUTPUT,
 # sharp/mago/Cargo.toml's version, and bump: whether origin has no tag yet for that version, so the change releases
@@ -252,7 +252,7 @@ gate_mago_checks() {
   fi
 }
 
-# The PHP# suite on the thread-safe engine, in the sharp/docker image, in the three modes, with the census, the
+# The PHP# suite on the thread-safe engine, in the sharp/docker image, in the four modes, with the census, the
 # differential, PHPUnit, the whole-project proof of mago convert, and every rule and example of sharp/bin/spec, which
 # CI's LINUX and SPEC jobs share.
 gate_linux() {
@@ -288,17 +288,17 @@ sharp_kinds() {
   sharp/docker/run php sharp/mago/scripts/regen-sharp-kinds.php Zend/zend_ast.h Zend/zend_language_parser.h \
     | diff -u sharp/mago/crates/sharp-bridge/src/kind.rs -
 }
-# cargo builds nothing for the mago sharp/bin/test built, and names the out_dir of the bridge it links. `-p
-# mago-sharp-bridge` resolves other features, so it built a second bridge and its dependencies beside it.
+# cargo builds nothing for the mago sharp/bin/test built, and its build.json names the out_dir of the bridge it links.
+# `-p mago-sharp-bridge` resolves other features, so it built a second bridge and its dependencies beside it.
 sharp_unit_header() {
   local line
-  sharp/docker/run sharp/bin/build-mago --quiet --message-format=json > "$TMPDIR/build.json"
+  sharp/docker/run sharp/bin/build-mago --quiet
   while read -r line; do
     if [[ $line == *'"reason":"build-script-executed"'* && $line == *mago-sharp-bridge* && $line =~ \"out_dir\":\"/src/([^\"]+)\" ]]; then
       diff -u ext/sharp/sharp_unit.h "${BASH_REMATCH[1]}/sharp_unit.h"
       return
     fi
-  done < "$TMPDIR/build.json"
+  done < "sharp/build/linux-$(sharp/docker/run uname -m)/mago/build.json"
   echo "cargo reported no out_dir for mago-sharp-bridge." >&2
   return 1
 }

@@ -3,8 +3,7 @@ PHP# Self is the class a static method is called on: new Self(…) creates it an
 --FILE--
 <?php
 
-require __DIR__ . '/harness/fixture.inc';
-fixture('SelfReturn');
+require __DIR__ . '/vendor/autoload.php';
 
 foreach (['Classes\Ledger', 'Classes\Archive'] as $class) {
     $made = $class::fromSchema('r1');

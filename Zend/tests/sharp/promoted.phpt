@@ -3,7 +3,7 @@ PHP# constructor parameters with an access modifier declare fields and propertie
 --FILE--
 <?php
 
-require __DIR__ . '/Ticket.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 foreach ((new ReflectionClass(Demo\Ticket::class))->getProperties() as $property) {
     $set = match (true) {

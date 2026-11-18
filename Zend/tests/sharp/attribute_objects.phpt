@@ -3,8 +3,7 @@ A PHP# attribute argument creates plain PHP and PHP# objects, one inside another
 --FILE--
 <?php
 require __DIR__ . '/harness/Attributes.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('AttributeObjects');
+require __DIR__ . '/vendor/autoload.php';
 
 $route = fn (Reflector $reflector) => $reflector->getAttributes(Lib\Route::class)[0]->newInstance();
 $class = $route(new ReflectionClass(AttributeObjects\Orders::class));

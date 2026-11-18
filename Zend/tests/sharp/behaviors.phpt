@@ -3,9 +3,7 @@ PHP# behaviors run set in the order they are written and get the other way, the 
 --FILE--
 <?php
 
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Behavior.sharp';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Behaviors');
+require __DIR__ . '/vendor/autoload.php';
 
 // The initial values went through each `set`, so `Trimmed` trimmed one and each `Counted` counted one write.
 $first = new Behaviors\Profile();

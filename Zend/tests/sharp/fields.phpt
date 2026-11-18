@@ -3,7 +3,7 @@ PHP# fields are private or protected typed properties with their initial values,
 --FILE--
 <?php
 
-require __DIR__ . '/Counter.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 final class Plain
 {

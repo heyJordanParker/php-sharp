@@ -4,8 +4,7 @@ A PHP# class calls every method of Sharp.Encoding.Compression, and Compression.u
 zlib
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Compression.sharp';
-require __DIR__ . '/CompressionCalls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\CompressionCalls;
 

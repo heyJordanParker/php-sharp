@@ -4,7 +4,7 @@ PHP# throws ArithmeticError when +=, -=, *= or **= overflows, even when its resu
 <?php
 
 require __DIR__ . '/attempt.inc';
-require __DIR__ . '/Overflow.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 attempt(fn () => Demo\Overflow::addAssign(PHP_INT_MAX - 1, 1));
 attempt(fn () => Demo\Overflow::addAssign(PHP_INT_MAX, 1));

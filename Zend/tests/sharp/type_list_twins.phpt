@@ -3,8 +3,7 @@ A .sharp file names a class as written, spec section 24, so its type `Parcel.Box
 --FILE--
 <?php
 
-require __DIR__ . '/harness/fixture.inc';
-fixture('TypeTwins');
+require __DIR__ . '/vendor/autoload.php';
 
 var_dump(Twins\Parcel::label(new Twins\Parcel\Box(1)), Twins\Parcel::label(new Twins\Parcel\BOX(9)));
 var_dump((string) (new ReflectionMethod(Twins\Parcel::class, 'label'))->getParameters()[0]->getType());

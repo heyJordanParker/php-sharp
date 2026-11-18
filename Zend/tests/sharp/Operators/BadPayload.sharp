@@ -1,0 +1,8 @@
+namespace Billing;
+
+import Exception;
+
+public class BadPayload : Exception
+{
+    public BadPayload(string field) : super(field) { }
+}

@@ -2,8 +2,7 @@
 PHP# an indexer is a property that takes a parameter, as C#'s: cart[0] runs its get, cart[0] = x its set, cart[0] += x both, cart[i] ?? x and an interface's indexer read through get, and plain PHP's $cart[0], isset and a write reach it through ArrayAccess, checked against its types, where a get-only indexer's set and every unset throw LogicException
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('Indexers');
+require __DIR__ . '/vendor/autoload.php';
 
 echo json_encode(Indexers\Cart::run()), "\n";
 $cart = new Indexers\Cart();

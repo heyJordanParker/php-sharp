@@ -8,7 +8,7 @@ use Demo\Wallets\WalletExtensions;
 use Lib\Wallet;
 
 require __DIR__ . '/harness/Wallet.inc';
-require __DIR__ . '/WalletExtensions.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 // Each run repeats, so the JIT variants compile the calls before the second run.
 for ($run = 0; $run < 2; $run++) {

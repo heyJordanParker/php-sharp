@@ -3,7 +3,7 @@ PHP# PhpGlobals sets a PHP global variable and a key of $_SERVER, runs a PHP fil
 --FILE--
 <?php
 require __DIR__ . '/effect_classes.inc';
-require __DIR__ . '/GlobalQueries.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 $page = sys_get_temp_dir() . '/sharp-legacy-page-' . getmypid() . '.php';
 file_put_contents($page, <<<'PHP'

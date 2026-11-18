@@ -2,11 +2,7 @@
 A PHP# class calls the text members of Kotlin, Rust and .NET that PHP# lacked: isEmpty and isNotEmpty, compareTo, equals, indexOf, lastIndexOf, contains, startsWith and endsWith ignoring case, titlecase, replace of the first n, a code point's character, a list of bytes as text, the character classes and Unicode normalization, with each edge case. normalized runs on intl, which every engine builds, so sharp/bin/test --installed runs it on each runtime image
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/ListMembers.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Text/StringMembers.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Text/NormalizationForm.sharp';
-require __DIR__ . '/TextQueries.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\TextQueries;
 

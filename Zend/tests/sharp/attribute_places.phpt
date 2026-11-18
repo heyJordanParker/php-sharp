@@ -3,8 +3,7 @@ PHP# attributes on an interface, its methods with or without a default body and 
 --FILE--
 <?php
 require __DIR__ . '/harness/Attributes.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('AttributePlaces');
+require __DIR__ . '/vendor/autoload.php';
 
 $limits = new AttributePlaces\Limits();
 $places = [

@@ -109,6 +109,7 @@ fn compile_writes_each_accepted_file_into_the_sharp_folder_at_its_source_path() 
         files_under(&root.join(".sharp")),
         [
             Path::new("app/Order.sharpc"),
+            Path::new("compiled.bin"),
             Path::new("inputs.json"),
             Path::new("listeners.php"),
             Path::new("vendor/acme/money/src/Money.sharpc")
@@ -761,11 +762,9 @@ fn a_compile_with_a_host_enabled_runs_every_time() {
         ),
     );
     compile_succeeds(root);
-    let written = compiled_at(root, "app/Order.sharp");
-
     compile_succeeds(root);
 
-    assert_ne!(compiled_at(root, "app/Order.sharp"), written);
+    assert_eq!(std::fs::read_to_string(root.join("host.log")).unwrap(), "first\nfirst\n", "each compile ran its host");
 }
 
 /// An extension host that deletes `app/Gone.sharp` as its analysis starts, once the compile has read the file, as an
@@ -969,8 +968,9 @@ fn a_linter_host_sees_each_php_sharp_file_compiled_on_a_fresh_tree() {
     assert!(!root.join(".sharp").exists());
 }
 
-/// An extension host that appends its process id and the word the compiled `app/Word.sharp` holds to `host.log` as
-/// each analysis starts.
+/// An extension host that loads `App\Word`, the class of `app/Word.sharp`, and appends its process id and the word the
+/// compiled file holds to `host.log` as each analysis starts. The `php` the tests run is plain PHP, which never declares
+/// a PHP# class, so the worker fails to load it, which counts as loading it.
 const HOST_LOGGING_ITS_PROCESS: &str = r#"<?php
 
 declare(strict_types=1);
@@ -999,6 +999,7 @@ final class LogsItsProcess implements Plugin, BeforeAnalysisHook
 
     public function beforeAnalysis(BeforeAnalysisContext $context): void
     {
+        class_exists('App\Word');
         $compiled = (string) @file_get_contents(getenv('SHARP_COMPILED') . '/app/Word.sharpc');
         $word = str_contains($compiled, 'second') ? 'second' : (str_contains($compiled, 'first') ? 'first' : 'nothing');
         file_put_contents('host.log', getmypid() . " {$word}\n", FILE_APPEND);
@@ -1008,9 +1009,8 @@ final class LogsItsProcess implements Plugin, BeforeAnalysisHook
 (new Worker(new Extension('logger', 'Logger', '0.0.0', analyzerPlugins: [new LogsItsProcess()])))->run();
 "#;
 
-/// A host's worker keeps each class it loaded, as PHP declares a class once, so `mago analyze --watch` starts the
-/// hosts' workers again when a PHP# file they load changes, as a dev server restarts a worker when a module it loaded
-/// changes.
+/// A host's worker keeps each class it loaded, as PHP declares a class once, so `mago analyze --watch` starts a host's
+/// worker again when the compiled file of a class it loaded changes.
 #[test]
 fn a_watch_starts_the_hosts_again_when_a_php_sharp_file_changes() {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -1065,6 +1065,111 @@ fn a_watch_starts_the_hosts_again_when_a_php_sharp_file_changes() {
     assert_eq!(runs[0].1, "first", "{failure}");
     assert_eq!(runs[1].1, "second", "{failure}");
     assert_ne!(runs[0].0, runs[1].0, "{failure}");
+}
+
+/// An extension host whose worker loads only its own rule class, as a framework's rules do, and appends its process id
+/// to `host.log` as each file's hooks run.
+const HOST_LOADING_ONLY_ITS_RULE: &str = r#"<?php
+
+declare(strict_types=1);
+
+use Mago\Sdk\Analyzer\AfterFileAnalysisContext;
+use Mago\Sdk\Analyzer\AfterFileAnalysisHook;
+use Mago\Sdk\Analyzer\Plugin;
+use Mago\Sdk\Analyzer\PluginDefinition;
+use Mago\Sdk\Analyzer\PluginRegistry;
+use Mago\Sdk\Extension;
+use Mago\Sdk\Worker;
+
+require $argv[1];
+
+final class LogsEachFile implements Plugin, AfterFileAnalysisHook
+{
+    public function getDefinition(): PluginDefinition
+    {
+        return new PluginDefinition('logs-each-file', 'Logs each file', 'Logs its process id for each file.');
+    }
+
+    public function register(PluginRegistry $registry): void
+    {
+        $registry->registerAfterFileAnalysisHook($this);
+    }
+
+    public function getRequirements(): array
+    {
+        return [];
+    }
+
+    public function afterFileAnalysis(AfterFileAnalysisContext $context): void
+    {
+        file_put_contents('host.log', getmypid() . " {$context->analysis->file}\n", FILE_APPEND);
+    }
+}
+
+(new Worker(new Extension('rule', 'Rule', '0.0.0', analyzerPlugins: [new LogsEachFile()])))->run();
+"#;
+
+/// A worker that never loaded an app class keeps running through an edit of one: `mago analyze --watch` checks the
+/// edit as any other edit, with no restart of the watch and no new worker, so its hooks run again on the edited file
+/// alone, in the same process.
+#[test]
+fn a_watch_keeps_a_worker_that_never_loaded_the_edited_class() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the worker keeping watch test") {
+        return;
+    }
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    let word = |word: &str| {
+        format!("namespace App;\n\npublic class Word\n{{\n    public static string text() => \"{word}\";\n}}\n")
+    };
+    write(root, "app/Word.sharp", &word("first"));
+    write(root, "tools/host.php", HOST_LOADING_ONLY_ITS_RULE);
+    write(
+        root,
+        "mago.toml",
+        &format!(
+            "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n\n[extension-hosts.rule]\nworkers = 1\ncommand = [\"php\", \"tools/host.php\", {:?}]\n",
+            repository.join("vendor/autoload.php").display().to_string()
+        ),
+    );
+    let log = || std::fs::read_to_string(root.join("host.log")).unwrap_or_default();
+    let watch_log = tempfile::NamedTempFile::new().unwrap();
+    let seen = || std::fs::read_to_string(watch_log.path()).unwrap();
+    let within = |done: &dyn Fn() -> bool| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+        while !done() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        done()
+    };
+
+    let mut watch = process::spawn(
+        Command::new(env!("CARGO_BIN_EXE_mago"))
+            .args(["--no-version-check", "--colors", "never", "analyze", "--watch"])
+            .env("MAGO_LOG", "info")
+            .env("XDG_CACHE_HOME", Path::new(env!("CARGO_TARGET_TMPDIR")).join("cache"))
+            .current_dir(root)
+            .stdout(Stdio::null())
+            .stderr(watch_log.reopen().unwrap()),
+    )
+    .unwrap();
+    let started = within(&|| seen().contains("Initial analysis complete"));
+    let first = log();
+    write(root, "app/Word.sharp", &word("second"));
+    let rechecked = within(&|| seen().contains("Analysis complete."));
+    watch.kill().unwrap();
+    watch.wait().unwrap();
+
+    let failure = format!("{}\n{}", log(), seen());
+    assert!(started && rechecked, "{failure}");
+    assert!(!seen().contains("Restarting analysis"), "{failure}");
+    let after = log();
+    let recheck: Vec<&str> = after.strip_prefix(first.as_str()).unwrap_or_default().lines().collect();
+    let process = first.lines().next().and_then(|line| line.split_once(' ')).map(|(process, _)| process);
+    assert!(process.is_some(), "{failure}");
+    let edited = format!("{} app/Word.sharp", process.unwrap_or_default());
+    assert_eq!(recheck, [edited.as_str()], "the same worker checks the edited file alone: {failure}");
 }
 
 /// A watch reports what the one-shot command reports where an issue points into a vendor file Composer's autoload maps
@@ -1135,6 +1240,98 @@ fn a_watch_reports_an_issue_that_points_into_a_vendor_file_the_autoload_maps_ser
     assert!(rechecked && running, "{failure}");
     let second = std::fs::read_to_string(reports.path()).unwrap().split_off(first.len());
     assert!(second.contains("Rate::of(6)") && second.contains("vendor/acme/rate/src/Rate.php"), "{failure}");
+}
+
+/// `mago analyze --watch` keeps reporting the issues that point into a vendor file Composer's autoload maps served, round
+/// after round, while files are deleted, created, renamed and edited, as agents change a tree. Deleting a class's file
+/// analyzes the project from scratch inside the round, and 0.6.27's watch then lost the served files and stopped with
+/// "Files error: file missing". Each round's report is the one-shot command's on the same tree.
+#[test]
+fn a_watch_reports_the_vendor_files_the_autoload_maps_served_through_deletes_creates_renames_and_edits() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    write(root, "mago.toml", "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n");
+    write(
+        root,
+        "vendor/composer/autoload_psr4.php",
+        "<?php\n\n$vendorDir = dirname(__DIR__);\n\nreturn array(\n    'Acme\\\\Rate\\\\' => array($vendorDir . '/acme/rate/src'),\n);\n",
+    );
+    write(
+        root,
+        "vendor/acme/rate/src/Rate.php",
+        "<?php\n\nnamespace Acme\\Rate;\n\nfinal class Rate\n{\n    private static function of(int $percent): int\n    {\n        return $percent;\n    }\n}\n",
+    );
+    let calling = |function: &str, percent: u8| {
+        format!(
+            "<?php\n\nnamespace App;\n\nuse Acme\\Rate\\Rate;\n\nfunction {function}(): int\n{{\n    return Rate::of({percent});\n}}\n"
+        )
+    };
+    write(root, "app/Order.php", &calling("total", 5));
+    write(root, "app/Extra.php", "<?php\n\nnamespace App;\n\nfinal class Extra\n{\n}\n");
+    let analyze = |watch: bool| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_mago"));
+        command
+            .args(["--no-version-check", "--colors", "never", "analyze", "--reporting-format", "rich"])
+            .args(watch.then_some("--watch"))
+            .env("MAGO_LOG", "info")
+            .env("XDG_CACHE_HOME", Path::new(env!("CARGO_TARGET_TMPDIR")).join("cache"))
+            .current_dir(root);
+        command
+    };
+    let once = || String::from_utf8_lossy(&process::output(&mut analyze(false)).unwrap().stdout).into_owned();
+
+    let reports = tempfile::NamedTempFile::new().unwrap();
+    let watch_log = tempfile::NamedTempFile::new().unwrap();
+    let mut watch =
+        process::spawn(analyze(true).stdout(reports.reopen().unwrap()).stderr(watch_log.reopen().unwrap())).unwrap();
+    let seen = || std::fs::read_to_string(watch_log.path()).unwrap();
+    let reported = || std::fs::read_to_string(reports.path()).unwrap();
+    let within = |done: &dyn Fn() -> bool| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+        while !done() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        done()
+    };
+    let started = within(&|| seen().contains("Initial analysis complete") || seen().contains("ERROR"));
+    let mut rounds: Vec<(&str, bool, String, String)> = Vec::new();
+    let changes: [(&str, &dyn Fn()); 4] = [
+        ("delete app/Extra.php", &|| std::fs::remove_file(root.join("app/Extra.php")).unwrap()),
+        ("create app/Added.php", &|| write(root, "app/Added.php", &calling("added", 7))),
+        ("rename app/Added.php", &|| std::fs::rename(root.join("app/Added.php"), root.join("app/Moved.php")).unwrap()),
+        ("edit app/Order.php", &|| write(root, "app/Order.php", &calling("total", 6))),
+    ];
+    let completed = || seen().matches("Analysis complete.").count();
+    for (change, apply) in changes {
+        let (before, rounds_before) = (reported().len(), completed());
+        apply();
+        let done = within(&|| completed() > rounds_before || seen().contains("ERROR"));
+        // A change can reach the watch in two batches, as a rename's delete and create, each a round of its own.
+        let mut settled = completed();
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            let now = completed();
+            if now == settled {
+                break;
+            }
+            settled = now;
+        }
+        let running = watch.try_wait().unwrap().is_none();
+        rounds.push((change, done && running && !seen().contains("ERROR"), reported().split_off(before), once()));
+    }
+    watch.kill().unwrap();
+    watch.wait().unwrap();
+
+    let failure = format!("{}{}", reported(), seen());
+    assert!(started, "{failure}");
+    for (change, kept_watching, report, cold) in rounds {
+        assert!(kept_watching, "the watch kept watching after `{change}`: {failure}");
+        assert!(report.contains("vendor/acme/rate/src/Rate.php"), "after `{change}`: {failure}");
+        assert!(
+            report.ends_with(&cold),
+            "after `{change}` the watch reports what the one-shot command reports: {failure}"
+        );
+    }
 }
 
 /// A batch of changes that holds a deleted file removes it from the watch's tree: `mago analyze --watch`, with a host
@@ -1682,7 +1879,12 @@ fn compile_deletes_the_compiled_file_of_a_renamed_or_removed_source() {
     compile_succeeds(root);
     assert_eq!(
         files_under(&root.join(".sharp")),
-        [Path::new("inputs.json"), Path::new("listeners.php"), Path::new("vendor/acme/money/src/Money.sharpc")]
+        [
+            Path::new("compiled.bin"),
+            Path::new("inputs.json"),
+            Path::new("listeners.php"),
+            Path::new("vendor/acme/money/src/Money.sharpc")
+        ]
     );
 }
 
@@ -1756,7 +1958,12 @@ fn compile_reports_a_link_to_a_file_outside_the_project_and_writes_no_compiled_f
     assert!(printed(&output).contains("vendor/acme/money/src/Money.sharp is a link to"), "{}", printed(&output));
     assert_eq!(
         files_under(&root.join(".sharp")),
-        [Path::new("app/Order.sharpc"), Path::new("inputs.json"), Path::new("listeners.php")]
+        [
+            Path::new("app/Order.sharpc"),
+            Path::new("compiled.bin"),
+            Path::new("inputs.json"),
+            Path::new("listeners.php")
+        ]
     );
 }
 
@@ -2445,7 +2652,7 @@ fn compile_deletes_the_php_file_of_a_source_whose_folder_moved_to_autoload_dev()
 }
 
 /// The deprecated `perform-heuristic-checks`, which serde never writes back, changes the analysis, so a change of it
-/// makes the compile run.
+/// makes the compile run and write its record again.
 #[test]
 fn compile_runs_again_after_a_change_of_perform_heuristic_checks() {
     let directory = project(ORDER, MONEY);
@@ -2455,31 +2662,34 @@ fn compile_runs_again_after_a_change_of_perform_heuristic_checks() {
             "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n\n[analyzer]\nperform-heuristic-checks = {checks}\n"
         )
     };
+    let record = || std::fs::read(root.join(".sharp/inputs.json")).unwrap();
     write(root, "mago.toml", &configured(true));
     compile_succeeds(root);
-    let written = compiled_at(root, "app/Order.sharp");
+    let written = record();
 
     write(root, "mago.toml", &configured(false));
     compile_succeeds(root);
 
-    assert_ne!(compiled_at(root, "app/Order.sharp"), written);
+    assert_ne!(record(), written);
 }
 
-/// Another build of the checker lowers to other code, so a record another build wrote makes the compile run.
+/// Another build of the checker lowers to other code, so a record another build wrote makes the compile run and
+/// write the record of this build.
 #[test]
 fn compile_runs_again_after_another_build_of_the_checker_compiled() {
     let directory = project(ORDER, MONEY);
     let root = directory.path();
     compile_succeeds(root);
-    let written = compiled_at(root, "app/Order.sharp");
     let record = root.join(".sharp/inputs.json");
-    let mut inputs: serde_json::Value = serde_json::from_slice(&std::fs::read(&record).unwrap()).unwrap();
-    inputs["build"][0] = serde_json::json!(inputs["build"][0].as_u64().unwrap() ^ 1);
-    std::fs::write(&record, serde_json::to_vec(&inputs).unwrap()).unwrap();
+    let inputs = || serde_json::from_slice::<serde_json::Value>(&std::fs::read(&record).unwrap()).unwrap();
+    let mut written = inputs();
+    let build = written["build"].clone();
+    written["build"][0] = serde_json::json!(build[0].as_u64().unwrap() ^ 1);
+    std::fs::write(&record, serde_json::to_vec(&written).unwrap()).unwrap();
 
     compile_succeeds(root);
 
-    assert_ne!(compiled_at(root, "app/Order.sharp"), written);
+    assert_eq!(inputs()["build"], build);
 }
 
 #[test]
@@ -3012,7 +3222,7 @@ fn compile_keeps_the_php_files_out_of_git_with_no_git_to_run() {
         assert!(checkout.join("app/Order.php").exists());
         assert_eq!(
             untracked(checkout),
-            "?? .sharp/app/Order.sharpc\n?? .sharp/inputs.json\n?? .sharp/listeners.php\n?? .sharp/vendor/acme/money/src/Money.sharpc\n",
+            "?? .sharp/app/Order.sharpc\n?? .sharp/compiled.bin\n?? .sharp/inputs.json\n?? .sharp/listeners.php\n?? .sharp/vendor/acme/money/src/Money.sharpc\n",
             "{}",
             checkout.display()
         );
@@ -3994,6 +4204,34 @@ fn compile_reports_an_unavailable_law_checker_on_each_file_that_needs_it_and_who
     assert!(!root.join(".sharp/inputs.json").exists(), "the next compile tries to install the law checker again");
 }
 
+/// A law's proof ends once while its key holds, passed or failed: the next compile reports a failed proof from
+/// `.sharp/proofs.json`, so it needs no Lean, and an edit no law reaches proves nothing again.
+#[test]
+fn a_proof_is_not_attempted_again_while_its_law_is_unchanged() {
+    let broken =
+        LAWFUL_MONEY.replace("this.amount + other.amount, this.currency", "this.amount + other.amount, other.currency");
+    let directory = lawful_project(&[("app/Shared/Money.sharp", &broken)]);
+    let root = directory.path();
+    let unproven = "app/Shared/Money.sharp:8:5:error - law-unproven: law addKeepsCurrency is not proven";
+    let first = compile_lines(root);
+    assert!(printed(&first).contains(unproven), "{}", printed(&first));
+
+    let output = compile_without_lean(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(printed(&output).contains(unproven), "the failed proof is reported again: {}", printed(&output));
+    assert!(!printed(&output).contains("law-checker-unavailable"), "{}", printed(&output));
+
+    write(root, "app/Shared/Money.sharp", LAWFUL_MONEY);
+    compile_succeeds(root);
+    let unread = "    public int pages() => 1;\n\n    law addKeepsCurrency";
+    write(root, "app/Shared/Money.sharp", &LAWFUL_MONEY.replace("    law addKeepsCurrency", unread));
+    let output = compile_without_lean(root);
+
+    assert!(output.status.success(), "the proof ran again: {}", printed(&output));
+    assert!(compiled(root, "app/Shared/Money.sharp").exists());
+}
+
 #[test]
 fn compile_needs_no_lean_for_a_project_with_no_law() {
     let directory = project(ORDER, MONEY);
@@ -4030,7 +4268,10 @@ fn compile_deletes_the_lean_package_once_no_law_remains() {
 
     assert!(output.status.success(), "{}", printed(&output));
     assert!(!root.join(".sharp/.lean").exists());
-    assert_eq!(files_under(&root.join(".sharp")), [Path::new("app/Order.sharpc"), Path::new("listeners.php")]);
+    assert_eq!(
+        files_under(&root.join(".sharp")),
+        [Path::new("app/Order.sharpc"), Path::new("compiled.bin"), Path::new("listeners.php")]
+    );
 }
 
 /// A `Money.lean` a 0.4.2 compile left beside `Money.sharp` is an ordinary unused file: the compile builds none of it,
@@ -4089,11 +4330,9 @@ fn compile_proves_a_law_whose_calls_go_from_one_file_to_another_and_back_with_no
 
     assert!(output.status.success(), "{}", printed(&output));
     assert!(compiled(root, "app/Shared/Alpha.sharp").exists());
-    assert_eq!(
-        generated_module(lake.path(), "Code.App.Shared.Beta"),
-        "-- Generated by mago compile. Do not edit.\nimport Code.App.Shared.Alpha\n"
-    );
-    assert!(!generated_module(lake.path(), "Code.App.Shared.Alpha").contains("import Code."));
+    let alpha = generated_module(lake.path(), "Code.App.Shared.Alpha");
+    assert!(alpha.contains("def App.Shared.Beta.middle"), "the group's module holds Beta's declaration: {alpha}");
+    assert!(!alpha.contains("import Code."), "{alpha}");
 }
 
 /// A call through the class, as `ShapeMath.doubled(s)`, is that static call already, as in C#, so it compiles and its
@@ -4622,12 +4861,14 @@ fn stalling_lake(folder: &Path, work: &str) -> std::ffi::OsString {
 /// Lean work that runs past the processor-time limit, or waits until the deadline, stops there once instead of holding
 /// the compile, and refuses the law whose code it was checking with what stopped it. Each row runs after a compile that
 /// built the runtime library. Work that never ends runs under a limit of 2 seconds, and costs the compile less than two
-/// limits, which leaves room for the rest of the compile on a slow machine. It writes a line every million steps, as
-/// the runner reports each module and check it starts, so the deadline, which counts from the last thing written, never
-/// stops it: on a machine busy enough to give it less than a quarter of a core, it would reach the deadline of 8 seconds
-/// before its 2 processor seconds. Work that waits runs under a limit of 2 seconds, so its deadline is 8 seconds. It
-/// uses almost no processor time, so it runs on its own thread meanwhile. Each limit holds the whole compile too, so it
-/// stays above the processor seconds the compile itself uses.
+/// limits, which leaves room for the rest of the compile on a slow machine. It spins, and an alarm on the clock makes
+/// it write a line each second, as the runner reports each module and check it starts, so the deadline, which counts
+/// from the last thing written, never stops it, however little of a core a busy machine gives it. It spins with no
+/// system call, since macOS lets a process that spends its time in system calls run past its limit. It ends with no
+/// answer once it has used 10 processor seconds, so a limit that no longer stops it fails the row. Work that waits runs
+/// under a limit of 2 seconds, so its deadline is 8 seconds, and it ends with no answer after 60 seconds, so a deadline
+/// that no longer stops it fails the row. It uses almost no processor time, so it runs on its own thread meanwhile.
+/// Each limit holds the whole compile too, so it stays above the processor seconds the compile itself uses.
 #[cfg(unix)]
 #[test]
 fn lean_work_that_never_ends_stops_once_at_its_limit_or_deadline() {
@@ -4650,10 +4891,10 @@ fn lean_work_that_never_ends_stops_once_at_its_limit_or_deadline() {
     };
 
     std::thread::scope(|scope| {
-        let waits = scope.spawn(|| stops(2, "sleep 4000", &refused("it did not finish within 8 seconds")));
+        let waits = scope.spawn(|| stops(2, "sleep 60", &refused("it did not finish within 8 seconds")));
         stops(
             2,
-            "exec awk 'BEGIN { while (1) if (++step % 1000000 == 0) { print step; fflush() } }'",
+            "exec perl -e '$| = 1; $SIG{ALRM} = sub { exit if (times)[0] + (times)[1] >= 10; print time, qq(\\n); alarm 1 }; alarm 1; 1 while 1'",
             &refused("it ran past 2 processor seconds, the limit the checker sets on each check"),
         );
         waits.join().unwrap();

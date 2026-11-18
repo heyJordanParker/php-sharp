@@ -2,8 +2,7 @@
 PHP# writes through `?.` with `=`, every compound assignment, `++`, `--` and an index write happen only when every `?.` receiver is not null, run the right side and a `set` body only then, and run each receiver once
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('NullSafeWrites');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/null_safe_writes.inc';
 ?>
 --EXPECT--

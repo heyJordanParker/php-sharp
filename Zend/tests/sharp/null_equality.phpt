@@ -3,7 +3,7 @@ PHP# `== null` and `!= null` hold for null alone, never for 0, "", "0" or false
 --FILE--
 <?php
 
-require __DIR__ . '/Nulls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 $nulls = new Demo\Nulls;
 var_dump(

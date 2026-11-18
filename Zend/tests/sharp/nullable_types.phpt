@@ -4,8 +4,7 @@ PHP# nullable types take and return null, a parameter or a field whose default i
 <?php
 
 require __DIR__ . '/harness/Helper.inc';
-require __DIR__ . '/Nulls.sharp';
-require __DIR__ . '/NullReturned.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 $nulls = new Demo\Nulls;
 $returned = new Demo\NullReturned;

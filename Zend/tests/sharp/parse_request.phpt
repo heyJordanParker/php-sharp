@@ -3,9 +3,7 @@ PHP# parses request strings with Int and Float, which throw for the .sharp line 
 --FILE--
 <?php
 
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Float.sharp';
-require __DIR__ . '/Checkout.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\Checkout;
 

@@ -1,0 +1,6 @@
+namespace Billing;
+
+public class Tab
+{
+    public Tab(public Any? total { get; }) { }
+}

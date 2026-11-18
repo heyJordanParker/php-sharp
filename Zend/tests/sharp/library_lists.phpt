@@ -2,8 +2,7 @@
 A PHP# class calls every member of List in Sharp: reversed, distinct, slice, chunked, all and fold, slice throws OutOfRangeException for a range outside the list, and chunked throws ValueError for a size below 1
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/ListMembers.sharp';
-require __DIR__ . '/ListCalls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\ListCalls;
 

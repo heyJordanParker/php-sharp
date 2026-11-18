@@ -3,9 +3,22 @@ A plain PHP value arrives in PHP# as its declared type says wherever PHP# holds 
 --FILE--
 <?php
 require __DIR__ . '/harness/Folder.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Arrivals');
-require __DIR__ . '/harness/MovedSource.inc';
+require __DIR__ . '/vendor/autoload.php';
+
+// A plain PHP override of a PHP# method and of a static method that return a `Map`, which give their PHP arrays.
+final class MovedSource extends Arrivals\Source
+{
+    public function status(): array
+    {
+        return ['status' => 'moved'];
+    }
+
+    public static function made(): array
+    {
+        return ['status' => 'remade'];
+    }
+}
+
 require __DIR__ . '/harness/Feed.inc';
 
 $folder = new Lib\Folder();
@@ -18,7 +31,7 @@ var_dump($reader->listed($folder), $reader->heldListed($folder));
 
 // A double PHPUnit's createMock or Mockery generates while the tests run is a plain PHP subclass made by eval.
 eval('namespace Lib; class SourceDouble extends \Arrivals\Source { public function status(): array { return ["status" => "doubled"]; } }');
-foreach ([new Arrivals\Source(), new Lib\MovedSource(), new Lib\SourceDouble()] as $source) {
+foreach ([new Arrivals\Source(), new MovedSource(), new Lib\SourceDouble()] as $source) {
     echo $reader->status($source), ' ', $reader->heldStatus($source), ' ', $reader->typedStatus($source), "\n";
     // The call crosses where it is written: as an argument, a constructor's argument, a literal's element, a spread,
     // and a static method `Self.` or a class value reaches on the class the object is of.
@@ -28,7 +41,7 @@ foreach ([new Arrivals\Source(), new Lib\MovedSource(), new Lib\SourceDouble()] 
 $feed = new Lib\ArrayFeed();
 var_dump($reader->fed($feed), $reader->named($feed));
 // A null-safe call on null gives null, and on an override the `Map` its array crosses into.
-var_dump($reader->maybe(null), $reader->maybe(new Lib\MovedSource()));
+var_dump($reader->maybe(null), $reader->maybe(new MovedSource()));
 foreach (['List<', 'List<$0>'] as $types) {
     try {
         \Sharp\Internal\returned([], null, '', $types, 'x');

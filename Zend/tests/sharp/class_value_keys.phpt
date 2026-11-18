@@ -2,8 +2,7 @@
 PHP# a class value keys a Map and joins a Set by its whole type, so two type arguments of one class are two keys
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('ClassKeys');
+require __DIR__ . '/vendor/autoload.php';
 
 echo ClassKeys\Registry::handlers(), "\n";
 echo ClassKeys\Registry::kinds(), "\n";

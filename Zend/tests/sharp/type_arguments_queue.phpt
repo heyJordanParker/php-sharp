@@ -1,5 +1,9 @@
 --TEST--
 A PHP# object keeps its type arguments through serialize and unserialize, as a queued job does, in the default, __serialize and __sleep forms, and r: and R: after it still name the right value
+--SKIPIF--
+<?php
+if (is_file(__DIR__ . '/COMPOSER.JSON')) die('skip the disk ignores case, so the autoloader finds a class in any case');
+?>
 --FILE--
 <?php
 require __DIR__ . '/type_arguments.inc';

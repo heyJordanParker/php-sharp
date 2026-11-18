@@ -1,0 +1,6 @@
+namespace TableChanges;
+
+public class Basket
+{
+    public Map<string, int> counts { get; set; } = [:];
+}

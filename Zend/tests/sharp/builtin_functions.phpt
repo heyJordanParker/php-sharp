@@ -1,5 +1,5 @@
 --TEST--
-PHP# reaches PHP's built-in levenshtein through a project's plain PHP class that wraps it, and a library member that runs a PHP function runs PHP's own, never a namespace function of the same name
+A library member that runs a PHP function runs PHP's own, never a namespace function of the same name
 --FILE--
 <?php
 
@@ -11,8 +11,7 @@ namespace Demo {
 }
 
 namespace {
-    require __DIR__ . '/harness/Words.inc';
-    require __DIR__ . '/Expressions.sharp';
+    require __DIR__ . '/vendor/autoload.php';
 
     echo Demo\Expressions::describe("cart", new ArrayObject([1, 2, 3]), "carts"), "\n";
 }

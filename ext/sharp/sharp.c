@@ -11867,6 +11867,7 @@ static ZEND_COLD void sharp_throw_invalid_fields(zval *problems)
 	zend_class_entry *ce = zend_lookup_class(name);
 	zval exception;
 
+	zend_string_release(name);
 	if (!ce || object_init_with_constructor(&exception, ce, 1, problems, NULL) == FAILURE) {
 		return;
 	}

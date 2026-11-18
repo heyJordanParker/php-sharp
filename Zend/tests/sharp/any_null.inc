@@ -1,6 +1,6 @@
 <?php
 
-require __DIR__ . '/NonNull.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Strict\NonNull;
 

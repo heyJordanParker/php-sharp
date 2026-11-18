@@ -1,0 +1,28 @@
+namespace Lib;
+
+/** A test helper with the string work the fixtures call. */
+public static class Words
+{
+    /** How many single-byte inserts, deletes and replacements turn `from` into `to`, as PHP's levenshtein() counts. */
+    public static int distance(string from, string to)
+    {
+        List<int> previous = [];
+        for (let column = 0; column <= to.byteLength(); column++) {
+            previous.add(column);
+        }
+        for (let row = 1; row <= from.byteLength(); row++) {
+            List<int> current = [row];
+            for (let column = 1; column <= to.byteLength(); column++) {
+                const replaced = from.byteSubstring(row - 1, row) == to.byteSubstring(column - 1, column) ? 0 : 1;
+                current.add(Math.min(previous[column] + 1, current[column - 1] + 1, previous[column - 1] + replaced));
+            }
+            previous = current;
+        }
+
+        return previous[to.byteLength()];
+    }
+
+    public static string capitalized(string text) => text.capitalized();
+
+    public static string repeated(string text, int times) => text.repeat(times);
+}

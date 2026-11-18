@@ -3,8 +3,7 @@ A .sharp file names a class as written, spec section 24, so a plain PHP override
 --FILE--
 <?php
 
-require __DIR__ . '/harness/fixture.inc';
-fixture('TypeTwins');
+require __DIR__ . '/vendor/autoload.php';
 
 eval('final class Courier extends Twins\Shipper
 {

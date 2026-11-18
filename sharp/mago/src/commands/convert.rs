@@ -57,6 +57,7 @@ use mago_database::matcher::contains_glob_metacharacters;
 use mago_names::resolver::NameResolver;
 use mago_orchestrator::Orchestrator;
 use mago_orchestrator::service::incremental_analysis::compile::Compilation;
+use mago_orchestrator::service::incremental_analysis::compile::CompiledFiles;
 use mago_orchestrator::service::incremental_analysis::compile::LOWERING_PANIC;
 use mago_reporting::CompiledIgnoreSet;
 use mago_reporting::IssueCollection;
@@ -73,6 +74,7 @@ use mago_syntax::parser::parse_file;
 use crate::baseline::unserialize_baseline;
 use crate::commands::analyze::decode_prelude;
 use crate::commands::analyze::server_settings;
+use crate::commands::compile::HostsChange;
 use crate::commands::compile::compile_for_hosts;
 use crate::commands::compile::project_database;
 use crate::commands::compile::standard_library;
@@ -616,8 +618,8 @@ impl<'configuration> Prover<'configuration> {
     /// files add, is logged as an error, as git holds their plain PHP.
     fn prove_written(&self, plain: &Proof, written: &[&Candidate]) -> bool {
         match compile_for_hosts(self.configuration) {
-            Ok((_, false)) => return true,
-            Ok((_, true)) => {}
+            Ok((_, HostsChange::Unchanged)) => return true,
+            Ok(_) => {}
             Err(error) => {
                 tracing::error!(
                     "The converted files could not be compiled for the extension hosts, so no hosts that load them proved the project, and git holds their plain PHP: {error}"
@@ -665,9 +667,11 @@ impl<'configuration> Session<'configuration> {
         let analysis = self.server.analyze()?;
         let database = self.server.database().read_only();
         let issues = keys(&self.server, prover.hidden.shown(analysis.issues, &database));
-        let compilations = self.server.compile(
+        let (compilations, _) = self.server.compile(
+            &CompiledFiles::default(),
+            |_| Ok(None),
             |path| unit::stamp(&prover.root, path),
-            |_| Ok(Default::default()),
+            |_, _| Ok(Default::default()),
             &prover.standard_library,
             |issues| prover.hidden.shown(issues, &database),
         )?;

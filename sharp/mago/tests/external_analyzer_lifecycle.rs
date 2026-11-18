@@ -35,6 +35,7 @@ use mago_php_version::PHPVersion;
 use mago_reporting::IssueCollection;
 use mago_syntax::settings::ParserSettings;
 use mago_text_edit::Safety;
+use mago_word::word;
 use serde::Deserialize;
 
 use crate::common;
@@ -573,6 +574,48 @@ final class HungFile implements Plugin, AfterFileAnalysisHook
 (new Worker(new Extension('acme/file', 'File', '1.0.0', analyzerPlugins: [new HungFile()])))->run();
 "#;
 
+/// An extension host whose plugin `routes` has an after-file hook that looks up the class the file is named after, as
+/// `App\Route` for `src/Route.php`, which no file declares, so its worker logs the class as one it was asked for.
+const HOST_LOOKING_UP_A_CLASS: &str = r#"<?php
+
+declare(strict_types=1);
+
+use Mago\Sdk\Analyzer\AfterFileAnalysisContext;
+use Mago\Sdk\Analyzer\AfterFileAnalysisHook;
+use Mago\Sdk\Analyzer\Plugin;
+use Mago\Sdk\Analyzer\PluginDefinition;
+use Mago\Sdk\Analyzer\PluginRegistry;
+use Mago\Sdk\Extension;
+use Mago\Sdk\Worker;
+
+require $argv[1];
+
+final class LooksUpARoute implements Plugin, AfterFileAnalysisHook
+{
+    public function getDefinition(): PluginDefinition
+    {
+        return new PluginDefinition('routes', 'Routes', 'Looks up the route class.');
+    }
+
+    public function register(PluginRegistry $registry): void
+    {
+        $registry->registerAfterFileAnalysisHook($this);
+    }
+
+    public function getRequirements(): array
+    {
+        return [];
+    }
+
+    public function afterFileAnalysis(AfterFileAnalysisContext $context): void
+    {
+        class_exists('App\\' . basename($context->analysis->file, '.php'));
+    }
+}
+
+(new Worker(new Extension('acme/routes', 'Routes', '1.0.0', analyzerPlugins: [new LooksUpARoute()])))->run();
+"#;
+
 /// The plugin registry of an extension host `acme` of one worker that runs `source`, a PHP worker script written into
 /// `directory`, with `DEADLINE` as its `request-timeout-ms`.
 fn deadline_registry(source: &str, directory: &Path) -> PluginRegistry {
@@ -696,4 +739,46 @@ fn an_after_file_hook_that_never_finishes_fails_at_the_deadline_naming_its_file(
         error.to_string(),
         "Analysis error: Plugin Error: External plugin error: external analyzer worker failed: extension host `acme` made no progress for 3000 ms on the hooks of src/Route.php (worker 0): raise its `request-timeout-ms` for hooks that run that long"
     );
+}
+
+/// A file whose hook looked up a class is analyzed again once the class changes, and the worker that looked it up
+/// starts again, so the hook meets the class as it is now. The analysis keeps the worker's class log across analyses:
+/// a later analysis adds the classes the worker went on to load after the ones it had. So a class no hook looked up
+/// leaves every file as it was, and a file reads every class its worker loaded before its hook ran.
+#[test]
+fn a_file_whose_hook_looked_up_a_class_is_analyzed_again_when_the_class_changes() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the class reload test") {
+        return;
+    }
+
+    let temporary = tempfile::tempdir().expect("temporary host directory should be created");
+    let registry = deadline_registry(HOST_LOOKING_UP_A_CLASS, temporary.path());
+    let mut database = deadline_database();
+    let mut service = IncrementalAnalysisService::new(
+        database.read_only(),
+        Default::default,
+        Settings::new(PHPVersion::PHP85),
+        ParserSettings::default(),
+        Arc::new(registry),
+    );
+    service.analyze().expect("the analysis should succeed");
+
+    let order = database.add(File::new(
+        Cow::Borrowed(b"src/Order.php"),
+        FileType::Host,
+        None,
+        Cow::Borrowed(b"<?php\n\nfinal class Order {}\n"),
+    ));
+    service.update_database(database.read_only());
+    service.analyze_incremental(Some(&[order])).expect("the analysis of the new file should succeed");
+
+    let other = service.reload_classes(&[word(b"app\\other")].into_iter().collect()).expect("no worker loaded it");
+    let ordered = service.reload_classes(&[word(b"app\\order")].into_iter().collect()).expect("the worker reloads");
+    let route = service.reload_classes(&[word(b"app\\route")].into_iter().collect()).expect("no worker holds it now");
+
+    assert_eq!(other, Some(Vec::new()));
+    assert_eq!(ordered, Some(vec![order]), "only the hook that looked it up read the later class");
+    let route: HashSet<FileId> = route.expect("no before-analysis hook read it").into_iter().collect();
+    assert_eq!(route, HashSet::from([order, FileId::new(b"src/Route.php")]), "the later hook read the earlier class");
 }

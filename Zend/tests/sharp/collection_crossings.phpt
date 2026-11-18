@@ -4,8 +4,7 @@ A Map or a Set reaches plain PHP as a PHP array at every crossing, and as the ob
 <?php
 require __DIR__ . '/harness/Arrays.inc';
 require __DIR__ . '/harness/Probe.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Crossings');
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\Crossings;
 use Demo\Envelope;

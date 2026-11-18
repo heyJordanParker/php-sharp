@@ -4,8 +4,7 @@ PHP# a Map keyed by a backed enum reaches a plain PHP array parameter with each 
 <?php
 require __DIR__ . '/harness/Standing.inc';
 require __DIR__ . '/harness/Tally.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('BackedKeys');
+require __DIR__ . '/vendor/autoload.php';
 
 $roll = new BackedKeys\Roll();
 echo $roll->described(), "\n";

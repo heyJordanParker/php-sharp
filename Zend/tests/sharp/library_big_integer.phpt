@@ -2,9 +2,7 @@
 PHP# BigInteger holds an integer of any size, as .NET's BigInteger: past Int.MAX it goes on, toIntOrNull gives null outside an int's range, / and % round toward 0 as an int's do, pow refuses a negative exponent, and toString writes any base from 2 to 36
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/BigInteger.sharp';
-require __DIR__ . '/NumberQueries.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\NumberQueries;
 

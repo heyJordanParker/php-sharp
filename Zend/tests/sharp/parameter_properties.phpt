@@ -2,9 +2,7 @@
 PHP# a constructor parameter's property takes a default after its accessors, runs its set body on the argument and on the default, runs its observers after the constructor and not during it, and runs its behaviors, generic ones too, in the order written
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Behavior.sharp';
-require __DIR__ . '/harness/fixture.inc';
-fixture('ParameterProperties');
+require __DIR__ . '/vendor/autoload.php';
 
 $named = new ParameterProperties\Ledger('  ada  ', 5, 'gold', 'vip');
 var_dump($named->name, $named->total, $named->label, $named->tag, $named->changes);

@@ -3,8 +3,7 @@ PHP# a struct and an interface name Iterable<T>, the lazy operations reach a pla
 --FILE--
 <?php
 require __DIR__ . '/harness/Cursor.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('IterableKinds');
+require __DIR__ . '/vendor/autoload.php';
 
 $stream = new IterableKinds\Stream();
 echo IterableKinds\Reads::fed($stream), "\n";

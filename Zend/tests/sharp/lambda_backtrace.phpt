@@ -3,7 +3,7 @@ A backtrace taken inside a PHP# collection member's lambda shows the engine func
 --FILE--
 <?php
 require __DIR__ . '/harness/Inspector.inc';
-require __DIR__ . '/Inspection.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 // Plain PHP keeps every frame it got, and uses any object in them after the call returned.
 function show(array $frames): void

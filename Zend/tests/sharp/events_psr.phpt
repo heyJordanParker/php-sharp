@@ -2,17 +2,8 @@
 Sharp\Psr\ListenerProvider gives a plain PHP library's PSR-14 dispatcher every listener of the events it dispatches: an extern event and a PHP# event reach each on method on a new object, then each scoped listener, in emit's order, and an event no listener hears gets none
 --FILE--
 <?php
-namespace Psr\EventDispatcher {
-    // psr/event-dispatcher 1.0's interfaces, which Composer loads in a project.
-    interface EventDispatcherInterface
-    {
-        public function dispatch(object $event);
-    }
-
-    interface ListenerProviderInterface
-    {
-        public function getListenersForEvent(object $event): iterable;
-    }
+namespace {
+    require __DIR__ . '/vendor/autoload.php';
 }
 
 namespace Lib {
@@ -33,13 +24,7 @@ namespace Lib {
 }
 
 namespace {
-    require dirname(__DIR__, 3) . '/sharp/composer/src/Psr/ListenerProvider.php';
     require __DIR__ . '/harness/JobFailed.inc';
-    require __DIR__ . '/OrderEvent.sharp';
-    require __DIR__ . '/OrderPaid.sharp';
-    require __DIR__ . '/OrderNotices.sharp';
-    require __DIR__ . '/Receipts.sharp';
-    require __DIR__ . '/Shipping.sharp';
 
     final class Unheard {}
 

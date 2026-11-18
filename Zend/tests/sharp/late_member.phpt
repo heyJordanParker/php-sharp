@@ -2,8 +2,7 @@
 A late member stays unset after the constructor: ReflectionProperty::isInitialized() gives false until its first write, and a read before that write throws an Error that names it as PHP# writes it, from PHP# code and from plain PHP
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('Late');
+require __DIR__ . '/vendor/autoload.php';
 
 $order = new Late\Order();
 $number = new ReflectionProperty(Late\Order::class, 'number');

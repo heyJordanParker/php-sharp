@@ -2,12 +2,7 @@
 A PHP# class calls the collection members of Kotlin, Rust and .NET that PHP# lacked: firstOrNull on a List, a Map and a Set, indexOfFirst, minBy and maxBy, sortedByDescending, sortedWith, sortedBy by a tuple, zip, windowed, partition, binarySearch, partitionPoint, removeAll, getOrPut, and the union, intersection, difference and subset of two Sets, with each edge case
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/ListMembers.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/MapMembers.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/SetMembers.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Text/StringMembers.sharp';
-require __DIR__ . '/Operators/Money.sharp';
-require __DIR__ . '/CollectionQueries.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Billing\Money;
 use Demo\CollectionQueries;

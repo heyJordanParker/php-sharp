@@ -3,8 +3,7 @@ PHP# an override of a typed plain PHP parent property may narrow its type: the c
 --FILE--
 <?php
 require __DIR__ . '/harness/Gauge.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('NarrowedOverrides');
+require __DIR__ . '/vendor/autoload.php';
 
 $meter = new NarrowedOverrides\Meter();
 echo $meter->read(), ' | ', $meter->describe(), "\n";

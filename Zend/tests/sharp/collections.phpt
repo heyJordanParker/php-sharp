@@ -13,9 +13,8 @@ final class Summary
     }
 }
 
-require __DIR__ . '/harness/fixture.inc';
 require __DIR__ . '/harness/Slots.inc';
-fixture('Collections');
+require __DIR__ . '/vendor/autoload.php';
 
 $cart = new \Demo\Cart();
 echo $cart->fill([new \Demo\Item('pie', 7)]), "\n";

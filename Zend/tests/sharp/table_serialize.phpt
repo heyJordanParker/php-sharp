@@ -2,10 +2,8 @@
 A Map or a Set serializes and reads back as itself, alone or inside a List, a struct or a class, in the same process or a fresh one, as a queued job or a cached value does, and tampered data fails with an error
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
 require __DIR__ . '/harness/Probe.inc';
-fixture('Queued');
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Serialized.sharp';
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/table_serialize.inc';
 
 run_rows();

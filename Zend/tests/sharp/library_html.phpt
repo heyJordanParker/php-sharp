@@ -2,8 +2,7 @@
 A PHP# class calls every method of Sharp.Text.Html, none of which can fail
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Text/Html.sharp';
-require __DIR__ . '/HtmlCalls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\HtmlCalls;
 

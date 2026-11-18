@@ -3,8 +3,7 @@ A class value reads its class's constants, its own first and then those it inher
 --FILE--
 <?php
 require __DIR__ . '/harness/Attributes.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('ReflectedConstants');
+require __DIR__ . '/vendor/autoload.php';
 
 var_dump(ReflectedConstants\Reads::listed(ReflectedConstants\Limits::class));
 var_dump(ReflectedConstants\Reads::listed(ReflectedConstants\Sized::class));

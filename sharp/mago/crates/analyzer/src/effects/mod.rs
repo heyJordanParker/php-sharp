@@ -101,15 +101,17 @@ impl Changed {
 pub(crate) type Roots = BTreeSet<Changed>;
 
 /// A PHP# body: a method by its lowercase class and method names, an accessor by its lowercase class, its
-/// property's PHP name (`$total`) and `get` or `set`, a lambda by the name its function value's `source` gives it, or
-/// an initial value that is not constant, which runs in the constructor, or a static's on the first use of its class's
-/// statics, by its lowercase class and its property's PHP name.
+/// property's PHP name (`$total`) and `get` or `set`, a lambda by the name its function value's `source` gives it, an
+/// initial value that is not constant, which runs in the constructor, or a static's on the first use of its class's
+/// statics, by its lowercase class and its property's PHP name, or a parameter's default that is not constant, which
+/// runs each time a call leaves the argument out, by its method's lowercase class and method names and its PHP name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) enum Body {
     Method(Word, Word),
     Accessor(Word, Word, Word),
     Lambda(Word),
     InitialValue(Word, Word),
+    Default(Word, Word, Word),
 }
 
 /// What a function value runs.
@@ -350,19 +352,37 @@ impl Effects {
             index.entry(summary.body).or_insert(position);
         }
 
-        // A call to a method that can be overridden runs any override, so it reaches every override's body.
-        let mut overrides: HashMap<(Word, Word), Vec<usize>> = HashMap::default();
+        // A call to a method that can be overridden runs any override, so it reaches every override's body. A call
+        // that leaves out an argument runs the default of the override it reaches at that place, and a parameter an
+        // override adds after the method's own is one every call through the method leaves out.
+        let mut overrides: HashMap<Body, Vec<usize>> = HashMap::default();
         for (position, summary) in summaries.iter().enumerate() {
-            if let Body::Method(class, method) = summary.body
-                && index.get(&summary.body) == Some(&position)
-                && let Some(metadata) = codebase.get_class_like(class.as_bytes())
+            let (Body::Method(class, method) | Body::Default(class, method, _)) = summary.body else {
+                continue;
+            };
+            let place = |parameter: Word| {
+                codebase
+                    .get_method(class.as_bytes(), method.as_bytes())
+                    .and_then(|own| own.parameters.iter().position(|own| own.name.0 == parameter))
+            };
+            for parent in
+                codebase.get_class_like(class.as_bytes()).into_iter().flat_map(|class| &class.all_parent_classes)
             {
-                for parent in &metadata.all_parent_classes {
-                    overrides.entry((codebase.class_key(parent.as_bytes()), method)).or_default().push(position);
-                }
+                let parent = codebase.class_key(parent.as_bytes());
+                let overridden = match summary.body {
+                    Body::Default(_, _, parameter) => place(parameter)
+                        .and_then(|place| {
+                            codebase.get_method(parent.as_bytes(), method.as_bytes())?.parameters.get(place)
+                        })
+                        .map_or(Body::Method(parent, method), |at| Body::Default(parent, method, at.name.0)),
+                    _ => Body::Method(parent, method),
+                };
+                overrides.entry(overridden).or_default().push(position);
             }
         }
 
+        // A callee with no summary contributes nothing but its overrides. A call of a method without a body has the
+        // effects its `uses` lists instead of a callee.
         let targets: Vec<Vec<Vec<usize>>> = summaries
             .iter()
             .map(|summary| {
@@ -370,17 +390,12 @@ impl Effects {
                     .calls
                     .iter()
                     .map(|call| {
-                        // A callee with no summary contributes nothing. A call of a method without a body has the
-                        // effects its `uses` lists instead of a callee.
-                        let Some(&callee) = index.get(&call.callee) else {
-                            return Vec::new();
-                        };
-                        let mut targets = vec![callee];
-                        if let Body::Method(class, method) = call.callee {
-                            targets.extend(overrides.get(&(class, method)).into_iter().flatten());
-                        }
-
-                        targets
+                        index
+                            .get(&call.callee)
+                            .into_iter()
+                            .chain(overrides.get(&call.callee).into_iter().flatten())
+                            .copied()
+                            .collect()
                     })
                     .collect()
             })
@@ -429,16 +444,20 @@ impl Effects {
             names: summaries
                 .iter()
                 .map(|summary| match summary.body {
-                    Body::Method(class, _) | Body::Accessor(class, _, _) | Body::InitialValue(class, _) => {
-                        (class, summary.member)
-                    }
+                    Body::Method(class, _)
+                    | Body::Accessor(class, _, _)
+                    | Body::InitialValue(class, _)
+                    | Body::Default(class, _, _) => (class, summary.member),
                     Body::Lambda(_) => (empty_word(), summary.member),
                 })
                 .collect(),
             standard_library: summaries
                 .iter()
                 .map(|summary| match summary.body {
-                    Body::Method(class, _) | Body::Accessor(class, _, _) | Body::InitialValue(class, _) => codebase
+                    Body::Method(class, _)
+                    | Body::Accessor(class, _, _)
+                    | Body::InitialValue(class, _)
+                    | Body::Default(class, _, _) => codebase
                         .get_class_like(class.as_bytes())
                         .is_some_and(|metadata| codebase.is_standard_library_file(metadata.span.file_id)),
                     Body::Lambda(_) => false,
@@ -480,18 +499,18 @@ impl Effects {
     }
 
     /// The files whose PHP# bodies a call in each file reaches, an override a call can run included, so an edit of
-    /// one can change the effects of the calling file's functions. A method is in its file, and an accessor and a
-    /// static's initial value in its class's.
+    /// one can change the effects of the calling file's functions. A method and a parameter's default are in the
+    /// method's file, and an accessor and an initial value in its class's.
     #[must_use]
     pub fn callee_files(&self, codebase: &CodebaseMetadata) -> HashMap<FileId, HashSet<FileId>> {
         let file_of = |body: Body| match body {
-            Body::Method(class, method) => {
+            Body::Method(class, method) | Body::Default(class, method, _) => {
                 codebase.get_method(class.as_bytes(), method.as_bytes()).map(|method| method.span.file_id)
             }
             Body::Accessor(class, _, _) | Body::InitialValue(class, _) => {
                 codebase.get_class_like(class.as_bytes()).map(|class| class.span.file_id)
             }
-            Body::Lambda(_) => unreachable!("a call reaches a method, an accessor or a static's initial value"),
+            Body::Lambda(_) => unreachable!("a call reaches a method, an accessor, an initial value or a default"),
         };
 
         let mut files: HashMap<FileId, HashSet<FileId>> = HashMap::default();
@@ -720,8 +739,9 @@ impl Effects {
         })
     }
 
-    /// Each PHP# method with the first method without a body it implements whose `uses` does not list one of its
-    /// effects: its class and member as messages name them, the declaration's class and metadata, the imports and the
+    /// Each PHP# method, or default of one, with the first method without a body it implements whose `uses` does not
+    /// list one of its effects, since a call of the declaration runs the defaults of the implementation it reaches:
+    /// its class and member as messages name them, the declaration's class and metadata, the imports and the
     /// scope of its file, and the call that has the effect. An implementation of `Sharp\Dispatcher::dispatch` is held
     /// to nothing, spec section 15: it runs the listeners of every event, which may reach any effect.
     fn unfit_implementations<'effects>(
@@ -739,7 +759,7 @@ impl Effects {
     > + 'effects {
         self.bodies.iter().enumerate().filter(|(position, body)| self.index.get(body) == Some(position)).filter_map(
             move |(position, body)| {
-                let Body::Method(class, method) = *body else {
+                let (Body::Method(class, method) | Body::Default(class, method, _)) = *body else {
                     return None;
                 };
                 let metadata = codebase.get_class_like(class.as_bytes())?;

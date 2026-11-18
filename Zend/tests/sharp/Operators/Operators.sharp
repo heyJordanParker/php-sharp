@@ -152,10 +152,10 @@ public class Operators
 
     public int paid(Payment result)
     {
+        const paid = result as Paid;
         if (result is Paid p) {
             return p.amount;
         }
-        const paid = result as Paid;
         return paid?.amount ?? 0;
     }
 

@@ -2,8 +2,7 @@
 A List<int> property a `ref` member changed stays checked: PHP# reads what plain PHP wrote into it, or into an element a change went through, after the change, and what plain PHP wrote while the change ran through a reference it took by iterating the object, a lazy proxy of it or an ArrayIterator over it or over a plain PHP subclass's object, or through a copy of the property whose element the change held, and throws TypeError at the bad element
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('ListChanges');
+require __DIR__ . '/vendor/autoload.php';
 
 use ListChanges\Ledger;
 

@@ -1,0 +1,6 @@
+namespace Demo;
+
+public class Box
+{
+    public Box(public int size { get; set; }) { }
+}

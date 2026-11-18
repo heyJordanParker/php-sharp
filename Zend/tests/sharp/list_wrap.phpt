@@ -3,8 +3,7 @@ PHP# List.wrap gives a list holding the value, a Map or a Set included, or the l
 --FILE--
 <?php
 
-require __DIR__ . '/Tags.sharp';
-require __DIR__ . '/Wraps.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 var_dump(Demo\Tags::of('sale'));
 $tags = ['sale', 'new'];

@@ -5,8 +5,7 @@ error_reporting=E_ALL & ~E_DEPRECATED
 --FILE--
 <?php
 require __DIR__ . '/harness/Stored.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Shelves');
+require __DIR__ . '/vendor/autoload.php';
 
 $shelf = Shelves\Shelves::numbers('front');
 $serialized = serialize($shelf);

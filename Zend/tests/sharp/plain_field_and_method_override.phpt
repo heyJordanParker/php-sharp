@@ -3,8 +3,7 @@ A PHP# class overrides the method or the field of a plain PHP parent that declar
 --FILE--
 <?php
 require __DIR__ . '/harness/Casting.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Casts');
+require __DIR__ . '/vendor/autoload.php';
 
 $order = new App\Casts\Order();
 var_dump($order->getCasts(), $order->called(), $order->read());

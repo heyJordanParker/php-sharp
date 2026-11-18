@@ -5,7 +5,7 @@ pdo_sqlite
 --FILE--
 <?php
 require __DIR__ . '/effect_classes.inc';
-require __DIR__ . '/Ledger.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Sharp\Time\Duration;
 

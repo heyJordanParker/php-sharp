@@ -2,8 +2,7 @@
 Self.name reads and writes a constant or a static member of the class the code is called on, a subclass's own one when the call ran on the subclass, in a body, a parameter default and a pattern, and the statics of each type argument of a generic class, which a static method's value keeps, and plain PHP reads the same values
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('SelfMembers');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/self_members.inc';
 ?>
 --EXPECT--

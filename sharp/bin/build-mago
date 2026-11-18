@@ -6,7 +6,7 @@ set -euo pipefail
 # Mago, and the binary is the mago the tests run, sharp/build/<os>-<arch>/mago/debug/mago. A build of mago alone would
 # resolve its dependencies' features without the tests' dev-dependencies and compile most crates a second time.
 # sharp/bin/test, sharp/bin/hosts and sharp/bin/bench build it here alone, with the jobs sharp/bin/jobs prints. Every
-# argument goes to cargo test, such as --quiet or --message-format=json.
+# argument goes to cargo test, such as --quiet.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
 target="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago"
@@ -75,6 +75,15 @@ if [[ -z ${GITHUB_ACTIONS:-} && ! -e $target/sources && -d $target ]]; then
   shopt -u nullglob
 fi
 
-PATH="$(dirname "$cargo"):$PATH" exec "$cargo" test --workspace --locked --no-run \
+# $target/build.json holds cargo's messages about the build, one JSON object per line, among them every test binary it
+# made and the folder each build script wrote, while the diagnostics print as cargo prints them. sharp/bin/test runs the
+# test binaries it names, as does a CI job that runs them on another job's build with sharp/bin/test --no-build. A
+# failed build leaves no build.json, so no run takes a build that failed for one that passed.
+messages="$target/build.json"
+rm -f "$messages"
+mkdir -p "$target"
+PATH="$(dirname "$cargo"):$PATH" "$cargo" test --workspace --locked --no-run \
   --manifest-path "$root/sharp/mago/Cargo.toml" \
-  --target-dir "$target" --jobs "$("$root/sharp/bin/jobs")" "$@"
+  --target-dir "$target" --jobs "$("$root/sharp/bin/jobs")" --message-format=json-render-diagnostics "$@" \
+  > "$messages.part"
+mv "$messages.part" "$messages"

@@ -2,8 +2,7 @@
 A PHP# class calls every method of Sharp.IO.Path, none of which can fail
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/IO/Path.sharp';
-require __DIR__ . '/PathCalls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\PathCalls;
 

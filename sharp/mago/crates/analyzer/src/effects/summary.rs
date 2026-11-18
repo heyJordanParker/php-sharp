@@ -17,6 +17,8 @@ use mago_codex::ttype::atomic::object::TObject;
 use mago_codex::ttype::get_array_parameters;
 use mago_codex::ttype::union::TUnion;
 use mago_names::CREATES_ATTRIBUTES;
+use mago_names::RUNS_DEFAULTS;
+use mago_names::RUNS_INITIAL_VALUES;
 use mago_names::binding::Binding;
 use mago_names::binding::Local;
 use mago_names::binding::php_variable_name;
@@ -77,9 +79,9 @@ use crate::utils::names::display_function_holder;
 use crate::utils::names::display_sharp_type;
 use crate::utils::names::is_prelude_stub;
 
-/// Records the summary of the method, accessor or initial value `body`, which messages name by `member`, and whose
-/// parameters are declared at `parameters`, into `artifacts`, with the summary of each lambda written in it, and with
-/// the function values the analysis gave places since the last body. A constructor's `initializer` runs before `code`.
+/// Records the summary of the method, accessor, initial value or default `body`, which messages name by `member`, and
+/// whose parameters are declared at `parameters`, into `artifacts`, with the summary of each lambda written in it, and
+/// with the function values the analysis gave places since the last body. A constructor's `initializer` runs before `code`.
 pub(crate) fn record<'ast, 'arena, A>(
     context: &Context<'_, 'arena, A>,
     artifacts: &mut AnalysisArtifacts,
@@ -92,7 +94,10 @@ pub(crate) fn record<'ast, 'arena, A>(
     A: Arena,
 {
     let class = match body {
-        Body::Method(class, _) | Body::Accessor(class, _, _) | Body::InitialValue(class, _) => class,
+        Body::Method(class, _)
+        | Body::Accessor(class, _, _)
+        | Body::InitialValue(class, _)
+        | Body::Default(class, _, _) => class,
         Body::Lambda(_) => empty_word(),
     };
 
@@ -1013,6 +1018,7 @@ where
                 } => {
                     if type_arguments
                         .is_some_and(|written| self.creates_attributes(declaring_class, method_name, written))
+                        || self.runs_defaults(declaring_class, method_name, span)
                     {
                         continue;
                     }
@@ -1060,6 +1066,50 @@ where
 
         written_in_sharp(attribute)
             && codebase.get_all_descendants(attribute).iter().all(|descendant| written_in_sharp(descendant.as_bytes()))
+    }
+
+    /// Records the call at `span` of `method` of `class` as calls of the code it runs, when the standard library marks
+    /// it as running a parameter's default, `RunsDefaults`, as `Parameter.defaultValue()`, or a property's initial
+    /// value, `RunsInitialValues`, as `Property.defaultValue()` and `Field.defaultValue()`: it reaches every one the
+    /// program declares that is not constant, spec section 29, and a constant one runs no code. A plain PHP default
+    /// that is not constant runs code no summary records, so then the call stays the method's own, which may have
+    /// every effect. Gives whether it recorded the call.
+    fn runs_defaults(&mut self, class: Word, method: Word, span: Span) -> bool {
+        let codebase = self.codebase();
+        let marked = |mark: &str| {
+            codebase
+                .get_method(class.as_bytes(), method.as_bytes())
+                .is_some_and(|marked| marked.has_attribute(codebase, mark.as_bytes()))
+        };
+        let mut callees = Vec::new();
+        if marked(RUNS_DEFAULTS) {
+            let methods = codebase.function_likes.iter().filter(|(_, metadata)| metadata.kind.is_method());
+            for (&(class, method), metadata) in methods {
+                for parameter in metadata.parameters.iter().filter(|parameter| parameter.flags.default_runs_code()) {
+                    if !metadata.flags.is_sharp() {
+                        return false;
+                    }
+                    callees.push(Body::Default(class, method, parameter.get_name().0));
+                }
+            }
+        } else if marked(RUNS_INITIAL_VALUES) {
+            for class_like in codebase.class_likes.values().filter(|class_like| class_like.flags.is_sharp()) {
+                for (property, metadata) in &class_like.properties {
+                    if metadata.flags.has_default() {
+                        callees.push(Body::InitialValue(class_like.name, *property));
+                    }
+                }
+            }
+        } else {
+            return false;
+        }
+
+        callees.sort_unstable();
+        for callee in callees {
+            self.summary.calls.push(Call { callee, span, receiver: Roots::new(), arguments: Vec::new() });
+        }
+
+        true
     }
 
     /// Records a call of the property `property` of `class` that holds a function. A PHP# class declares it with a
@@ -1139,19 +1189,16 @@ where
         let receiver_roots = receiver.map(|receiver| self.roots(receiver)).unwrap_or_default();
         // An extension's member takes its receiver as its first parameter, as its method value does, and the call's
         // arguments fill the parameters after it.
-        let (receiver_roots, roots) = match metadata.parameters.split_first() {
-            Some((_, parameters)) if metadata.flags.is_extension_method() => {
-                let roots = self.argument_roots(arguments, parameters);
-                self.passed_functions(arguments, parameters, &receiver_roots, &roots);
-
-                (Roots::new(), std::iter::once(receiver_roots).chain(roots).collect())
-            }
-            _ => {
-                let roots = self.argument_roots(arguments, &metadata.parameters);
-                self.passed_functions(arguments, &metadata.parameters, &receiver_roots, &roots);
-
-                (receiver_roots, roots)
-            }
+        let (parameters, extension) = match metadata.parameters.split_first() {
+            Some((_, parameters)) if metadata.flags.is_extension_method() => (parameters, true),
+            _ => (metadata.parameters.as_slice(), false),
+        };
+        let roots = self.argument_roots(arguments, parameters);
+        self.passed_functions(arguments, parameters, &receiver_roots, &roots);
+        let (receiver_roots, roots) = if extension {
+            (Roots::new(), std::iter::once(receiver_roots).chain(roots).collect())
+        } else {
+            (receiver_roots, roots)
         };
         if let Some(effect) = foreign_class(codebase, class) {
             self.summary.effects.push((Effect::Foreign(effect), span, cause));
@@ -1170,8 +1217,14 @@ where
             }
 
             let declaring_class = codebase.class_key(declaring_class.as_bytes());
-            let callee = Body::Method(declaring_class, codebase.method_key(declaring_class, method_name.as_bytes()));
-            self.summary.calls.push(Call { callee, span, receiver: receiver_roots, arguments: roots });
+            let method = codebase.method_key(declaring_class, method_name.as_bytes());
+            self.left_out_defaults(declaring_class, method, parameters, Some(arguments), span);
+            self.summary.calls.push(Call {
+                callee: Body::Method(declaring_class, method),
+                span,
+                receiver: receiver_roots,
+                arguments: roots,
+            });
 
             return;
         }
@@ -1184,6 +1237,60 @@ where
             let declaration = codebase.extern_of(class, ascii_lowercase_word(method_name.as_bytes()));
             self.plain_php(declaration, span, cause);
             self.callbacks(arguments);
+        }
+    }
+
+    /// Records the call at `span` of each default of `parameters`, of the PHP# method `method` of `class`, that
+    /// `arguments` leave out: it runs at the call, spec section 7, so the call has its effects. A spread fills as many
+    /// parameters as its list surely holds. A constant default has no body of its own, so its call reaches only the
+    /// default an override declares at its place.
+    fn left_out_defaults(
+        &mut self,
+        class: Word,
+        method: Word,
+        parameters: &[FunctionLikeParameterMetadata],
+        arguments: Option<&ArgumentList<'arena>>,
+        span: Span,
+    ) {
+        let mut given = vec![false; parameters.len()];
+        let mut position = 0;
+        for argument in arguments.into_iter().flat_map(|arguments| arguments.arguments.iter()) {
+            let filled = match argument {
+                Argument::Named(named) => {
+                    let name = php_variable_name(named.name.value);
+                    if let Some(index) = parameters.iter().position(|parameter| parameter.name.0 == name) {
+                        given[index] = true;
+                    }
+
+                    continue;
+                }
+                Argument::Positional(positional) if positional.ellipsis.is_some() => self
+                    .artifacts
+                    .get_expression_type(positional.value)
+                    .and_then(|spread| {
+                        spread
+                            .types
+                            .iter()
+                            .map(|atomic| match atomic {
+                                TAtomic::Array(array) => array.get_minimum_size(),
+                                _ => 0,
+                            })
+                            .min()
+                    })
+                    .unwrap_or(0),
+                Argument::Positional(_) => 1,
+            };
+            for parameter in given.iter_mut().skip(position).take(filled) {
+                *parameter = true;
+            }
+            position += filled;
+        }
+
+        for (parameter, given) in parameters.iter().zip(given) {
+            if !given && parameter.flags.has_default() {
+                let callee = Body::Default(class, method, parameter.get_name().0);
+                self.summary.calls.push(Call { callee, span, receiver: Roots::new(), arguments: Vec::new() });
+            }
         }
     }
 
@@ -1286,6 +1393,8 @@ where
                 roots = self.argument_roots(arguments, &metadata.parameters);
                 self.passed_functions(arguments, &metadata.parameters, &Roots::new(), &roots);
             }
+            let arguments = instantiation.argument_list.as_ref();
+            self.left_out_defaults(declaring.name, constructor, &metadata.parameters, arguments, span);
             let callee = Body::Method(declaring.name, constructor);
             self.summary.calls.push(Call { callee, span, receiver: Roots::new(), arguments: roots });
         } else if !is_prelude_stub(class.name) {

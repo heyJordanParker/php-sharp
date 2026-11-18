@@ -2,8 +2,7 @@
 emit new Saved<Order> runs the listeners on Saved<Order> and on the interface Saved implements, never those on Saved<Invoice>, and so do Events.on, plain PHP's emit and a PSR-14 dispatcher
 --FILE--
 <?php
-require __DIR__ . '/harness/fixture.inc';
-fixture('GenericEvents');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/generic_events.inc';
 ?>
 --EXPECT--

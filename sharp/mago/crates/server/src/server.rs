@@ -18,6 +18,7 @@ use mago_database::file::FileId;
 use mago_orchestrator::error::OrchestratorError;
 use mago_orchestrator::service::incremental_analysis::IncrementalAnalysisService;
 use mago_orchestrator::service::incremental_analysis::compile::Compilation;
+use mago_orchestrator::service::incremental_analysis::compile::CompiledFiles;
 use mago_orchestrator::service::incremental_analysis::compile::DispatcherModule;
 use mago_orchestrator::service::incremental_analysis::compile::ExternAttributes;
 use mago_orchestrator::service::incremental_analysis::compile::ExternEffects;
@@ -28,7 +29,9 @@ use mago_reporting::IssueCollection;
 use mago_sharp_bridge::InlineForms;
 use mago_sharp_bridge::unit::Input;
 use mago_sharp_bridge::unit::Library;
+use mago_sharp_lean::Reach;
 use mago_sharp_lean::Translation;
+use mago_word::Word;
 
 use crate::error::ServerError;
 use crate::settings::Settings;
@@ -145,23 +148,43 @@ impl Server {
         }
     }
 
-    /// Compile each `.sharp` file of the last analysis into the bytes of its `.sharpc` file, or the errors that
-    /// refuse it. `stamp` gives the size, modification time and hash of the file at a workspace-relative path, or
-    /// none when no file is there. `check` gets the Lean translation of every accepted file, and returns the issues of
-    /// each file whose law is not proved. Each compiled file's header names `standard_library`, the standard library
-    /// the workspace compiles against. `refusing` keeps the analysis's errors that refuse their file.
+    /// Take in that the compiled files of `classes`, each a lowercase class name, changed: start again each extension
+    /// worker that loaded one, and give up what the last pass found in each file whose extension callbacks read one.
+    /// Returns those files, for the next [`Self::analyze_incremental`] to analyze again, or `None` when only a pass
+    /// over the whole workspace is exact.
     ///
     /// # Errors
     ///
-    /// Returns [`ServerError`] when no analysis ran yet, or when re-analyzing a file, `stamp` or `check` fails.
+    /// Returns [`ServerError`] when a worker cannot answer whether it loaded one, or cannot start again.
+    pub fn reload_classes(
+        &mut self,
+        classes: impl IntoIterator<Item = Word>,
+    ) -> Result<Option<Vec<FileId>>, ServerError> {
+        Ok(self.service.reload_classes(&classes.into_iter().collect())?)
+    }
+
+    /// Compile each `.sharp` file of the last analysis into the bytes of its `.sharpc` file, or the errors that
+    /// refuse it, and give the [`CompiledFiles`] the next compile keeps files by. A file whose key `last` holds keeps
+    /// its compiled file, which `compiled` gives, and is not lowered again. `stamp` gives the size, modification time
+    /// and hash of the file at a workspace-relative path, or none when no file is there. `check` gets the Lean
+    /// translation of each file whose laws are checked again and of each file they reach, with the reach, and returns
+    /// the issues of each file whose law is not proved. Each compiled file's header names `standard_library`, the
+    /// standard library the workspace compiles against. `refusing` keeps the analysis's errors that refuse their file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError`] when no analysis ran yet, or when re-analyzing a file, `compiled`, `stamp` or `check`
+    /// fails.
     pub fn compile(
         &mut self,
+        last: &CompiledFiles,
+        compiled: impl FnMut(&File) -> Result<Option<Vec<u8>>, DatabaseError>,
         stamp: impl FnMut(&[u8]) -> Result<Option<Input>, DatabaseError>,
-        check: impl FnOnce(Vec<Translation>) -> std::io::Result<HashMap<FileId, IssueCollection>>,
+        check: impl FnOnce(Vec<Translation>, &Reach) -> std::io::Result<HashMap<FileId, IssueCollection>>,
         standard_library: &Library,
         refusing: impl FnOnce(IssueCollection) -> IssueCollection,
-    ) -> Result<Vec<(FileId, Compilation)>, ServerError> {
-        self.service.compile(stamp, check, standard_library, refusing).map_err(ServerError::from)
+    ) -> Result<(Vec<(FileId, Compilation)>, CompiledFiles), ServerError> {
+        self.service.compile(last, compiled, stamp, check, standard_library, refusing).map_err(ServerError::from)
     }
 
     /// The standard library's inline forms, which `mago convert` reads to find the library member that runs a PHP

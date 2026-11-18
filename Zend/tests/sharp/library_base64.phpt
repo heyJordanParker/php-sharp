@@ -2,8 +2,7 @@
 A PHP# class calls every method of Sharp.Encoding.Base64, and Base64.decode throws ValueError on text that is not base64
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Base64.sharp';
-require __DIR__ . '/Base64Calls.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 use Demo\Base64Calls;
 

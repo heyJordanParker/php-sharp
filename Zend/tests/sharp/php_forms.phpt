@@ -8,12 +8,12 @@ production --force
 <?php
 
 require __DIR__ . '/effect_classes.inc';
-require __DIR__ . '/PhpForms.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 $forms = new Demo\PhpForms(new Sharp\System\Environment(), new Sharp\IO\Console(), new Sharp\System\Process());
 $forms->report(3);
 $code = 'require ' . var_export(__DIR__ . '/effect_classes.inc', true) . ';'
-    . ' require ' . var_export(__DIR__ . '/PhpForms.sharp', true) . ';'
+    . ' require ' . var_export(__DIR__ . '/vendor/autoload.php', true) . ';'
     . ' (new Demo\PhpForms(new Sharp\System\Environment(), new Sharp\IO\Console(), new Sharp\System\Process()))->warn("Prune failed");';
 echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' ' . getenv('TEST_PHP_EXTRA_ARGS') . ' -r ' . escapeshellarg($code) . ' 2>&1 1>/dev/null');
 
@@ -21,14 +21,14 @@ echo $forms->setting('SHARP_REGION'), ' ', $forms->setting('SHARP_UNSET_REGION')
 echo $forms->target(), "\n";
 var_dump($forms->folder() === getcwd());
 
-var_dump($forms->stubs() === __DIR__ . '/stubs');
+var_dump($forms->stubs() === __DIR__ . '/Demo/stubs');
 [$file, $line, $column, $function] = $forms->here();
-var_dump($file === realpath(__DIR__ . '/PhpForms.sharp'));
+var_dump($file === realpath(__DIR__ . '/Demo/PhpForms.sharp'));
 echo $line, ':', $column, ' ', $function, "\n";
 $origin = $forms->origin;
 echo $origin->line, ':', $origin->column, ' ', $origin->function, "\n";
 $located = $forms->located();
-var_dump($located->file === $file, $located->directory === __DIR__);
+var_dump($located->file === $file, $located->directory === __DIR__ . '/Demo');
 echo $located->line, ':', $located->column, ' ', $located->function, "\n";
 
 echo $forms->kind(), "\n";

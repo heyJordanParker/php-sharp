@@ -2,8 +2,7 @@
 
 require __DIR__ . '/attempt.inc';
 require __DIR__ . '/harness/RowSet.inc';
-require __DIR__ . '/Grid.sharp';
-require __DIR__ . '/Point.sharp';
+require __DIR__ . '/vendor/autoload.php';
 
 for ($round = 0; $round < 100; $round++) {
     ob_start();

@@ -3,10 +3,8 @@ PHP# type.attributes<TAttribute>() gives the attributes a class value's class de
 --FILE--
 <?php
 
-require __DIR__ . '/../../../sharp/composer/library/Sharp/ClassMembers.sharp';
 require __DIR__ . '/harness/Factory.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('ClassValues');
+require __DIR__ . '/vendor/autoload.php';
 
 var_dump(Classes\ClassValues::topics(Classes\Badge::class));
 var_dump(Classes\ClassValues::topics(Classes\GoldBadge::class));

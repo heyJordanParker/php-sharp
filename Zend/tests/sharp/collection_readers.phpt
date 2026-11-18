@@ -4,8 +4,7 @@ Plain PHP sorts, references and loops by reference over a PHP# Map or Set proper
 <?php
 require __DIR__ . '/harness/Arrays.inc';
 require __DIR__ . '/harness/Probe.inc';
-require __DIR__ . '/harness/fixture.inc';
-fixture('Crossings');
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/collection_readers.inc';
 echo readers_rounds();
 ?>
