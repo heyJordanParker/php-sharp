@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.28] - 2026-11-18
+
 ### Fixed
 
 - `mago compile` after an edit lowers again only the `.sharp` files whose key the edit changed, and proves again only the laws whose key it changed. A file's key is its source and the declarations, inferred returns, sets of names, library forms and effects its check read, and `.sharp/compiled.bin` keeps them, so the next compile checks them without lowering the file. A law's key is its statement and proof, those of each law it calls, and the text of every declaration they reach, and `.sharp/proofs.json` keeps how each proof ended, so an unproven law is reported again without Lean. A compile writes a compiled file only when its bytes change, and an edit of a plain PHP file a `.sharp` file never reads, as a test, no longer makes that file's compiled file out of date for the engine. In a 1,610-file project with 20 laws, a body edit of one class lowered 1 file instead of 1,610 and proved 1 law instead of 6, and a signature edit of a class 46 files import lowered 52. Each compiled file is byte for byte the one a fresh compile writes. 0.6.27 lowered every file and proved every law of every file an edit reached on each compile. A file the analysis refuses is refused with the analysis's errors, without the second analysis its lowering runs.
@@ -1265,7 +1267,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.27...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.28...HEAD
+[0.6.28]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.27...v0.6.28
 [0.6.27]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.26...v0.6.27
 [0.6.26]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.25...v0.6.26
 [0.6.25]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.24...v0.6.25
