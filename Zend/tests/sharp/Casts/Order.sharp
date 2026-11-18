@@ -1,8 +1,8 @@
 namespace App.Casts;
 
-import Lib.Casting;
+import Illuminate.Database.Eloquent.Model;
 
-public class Order : Casting
+public class Order : Model
 {
     protected override Map<string, string> casts() => ["paid": "bool"];
 

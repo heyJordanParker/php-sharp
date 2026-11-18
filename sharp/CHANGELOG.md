@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Added
+
+- `mago compile` writes `.sharp/preload.php`, which preloads every type it compiled, spec section 27. A production `php.ini` names it in `opcache.preload`. It requires the project's Composer autoloader, then each accepted `.sharp` file that declares a type, the packages' in `vendor/` included, so each type gets its parents from the autoloader, as in a request. It then loads each type an anonymous class names in a file it loads, as the one `illuminate/reflection`'s `helpers.php` declares over `ReflectsClosures`, so opcache links the class and warns of nothing. A test in an `autoload-dev` folder stays out. Until now a project that preloaded PHP# classes wrote and kept its own list of files.
+
 ## [0.6.28] - 2026-11-18
 
 ### Fixed

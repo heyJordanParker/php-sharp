@@ -1,8 +1,7 @@
 --TEST--
-A PHP# class overrides the method or the field of a plain PHP parent that declares both with one name, as Eloquent's $casts and casts(), and a call runs the method and a read reads the field, from the parent's code and from PHP# code
+A PHP# class overrides the method or the field of Eloquent's Model, which declares both with one name as $casts and casts(), and a call runs the method and a read reads the field, from the parent's code and from PHP# code
 --FILE--
 <?php
-require __DIR__ . '/harness/Casting.inc';
 require __DIR__ . '/vendor/autoload.php';
 
 $order = new App\Casts\Order();
@@ -23,10 +22,12 @@ array(1) {
   string(4) "bool"
 }
 array(1) {
+  ["paid"]=>
+  string(4) "bool"
+}
+array(2) {
   ["id"]=>
   string(3) "int"
-}
-array(1) {
   ["due"]=>
   string(4) "date"
 }

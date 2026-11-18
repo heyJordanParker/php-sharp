@@ -1,9 +1,23 @@
 namespace Demo;
 
+import Illuminate.Support.Collection;
+
+// Reads each value of a plain PHP collection by the type argument the collection's docblock states, which the object
+// doesn't carry while the code runs.
 class Strict
 {
-    public static int run()
+    public static int run(Collection<int, int> values)
     {
-        return Helper.take(Helper.trusted("5"));
+        return Helper.take(values.firstOrFail());
+    }
+
+    public static int must(Collection<int, int> values)
+    {
+        return values.firstOrFail();
+    }
+
+    public static int at(List<int> counts, Collection<int, int> keys)
+    {
+        return counts[keys.firstOrFail()];
     }
 }

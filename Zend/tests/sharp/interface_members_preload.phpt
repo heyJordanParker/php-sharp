@@ -13,8 +13,8 @@ if (PHP_OS_FAMILY == 'Windows') die('skip Preloading is not supported on Windows
 ?>
 --FILE--
 <?php
+require __DIR__ . '/vendor/autoload.php';
 require __DIR__ . '/interface_members.inc';
-library();
 
 var_dump(class_exists(InterfaceMembers\Report::class, false), trait_exists(InterfaceMembers\Priced\Defaults::class, false));
 run_rows();

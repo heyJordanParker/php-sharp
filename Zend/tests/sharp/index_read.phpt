@@ -1,15 +1,12 @@
 --TEST--
-A bare PHP# index read throws OutOfRangeException on a missing key, ?? and ?. read it as null, and an object key throws PHP's TypeError
+A bare PHP# index read throws OutOfRangeException on a missing key, and ?? and ?. read it as null
 --FILE--
 <?php
 
 use Lib\Slots;
-use Lib\Standing;
 
 require __DIR__ . '/attempt.inc';
-require __DIR__ . '/harness/Helper.inc';
 require __DIR__ . '/harness/Slots.inc';
-require __DIR__ . '/harness/Standing.inc';
 require __DIR__ . '/vendor/autoload.php';
 
 for ($round = 0; $round < 100; $round++) {
@@ -30,9 +27,6 @@ for ($round = 0; $round < 100; $round++) {
     attempt(fn () => Demo\IndexRead::size(['a' => new Slots(4)], 'b'));
     attempt(fn () => Demo\IndexRead::count(['a' => [1, 2]], 'a'));
     attempt(fn () => Demo\IndexRead::count(['a' => [1, 2]], 'b'));
-    attempt(fn () => Demo\IndexRead::standing([3], 0));
-    attempt(fn () => Demo\IndexRead::standing([3], 'closed'));
-    attempt(fn () => Demo\IndexRead::standing([3], Standing::Active));
     $output = ob_get_clean();
 }
 
@@ -59,8 +53,5 @@ int(4)
 NULL
 int(2)
 NULL
-int(3)
-OutOfRangeException: Undefined array key "closed" in IndexRead.sharp on line 46
-TypeError: Cannot access offset of type Lib\Standing on array in IndexRead.sharp on line 46
 NULL
 string(37) "Trying to access array offset on null"

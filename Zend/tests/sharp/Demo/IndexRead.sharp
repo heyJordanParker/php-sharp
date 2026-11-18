@@ -41,11 +41,6 @@ class IndexRead
         return arrays[key]?.getSize();
     }
 
-    public static int standing(List<int> counts, Any key)
-    {
-        return counts[Helper.trusted(key)];
-    }
-
     public static int? count(Map<string, List<int>> lists, string key)
     {
         return lists[key]?.count();

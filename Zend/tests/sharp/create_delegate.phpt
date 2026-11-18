@@ -2,7 +2,6 @@
 Method.createDelegate makes a value of a function type that calls the method, an instance one on the receiver it takes first, of its class or one around it such as Object, and a computed property's through getter(), and refuses a method whose parameters, result or effects don't fit the type: a PHP# method's are those its compile solved, one whose result alone it carries may have every effect even when that result is a function type, and a plain PHP method's are those its extern lines declare, or every effect without one
 --FILE--
 <?php
-require __DIR__ . '/harness/Helper.inc';
 require __DIR__ . '/vendor/autoload.php';
 
 use App\Delegates\Database;
@@ -59,7 +58,7 @@ attempt('a closure of a function result is its result', fn () => Walk::isCounter
 attempt('the function a function result gives is its type', fn () => Walk::isCounter($order->counter()));
 attempt('declared pure', fn () => Walk::declaredPure()(new RuntimeException('boom')));
 attempt('declared effect', fn () => Walk::declaredEffect());
-attempt('declared effect allowed', fn () => Walk::declaredEffectAllowed()(7));
+attempt('declared effect allowed', fn () => Walk::declaredEffectAllowed()(new Sharp\Psr\Container(), 'mailer'));
 ?>
 --EXPECT--
 rows: 3
@@ -86,7 +85,7 @@ no receiver: ValueError: `App.Delegates.Order.add` takes a receiver of `App.Dele
 other receiver: ValueError: `App.Delegates.Order.add` takes a receiver of `App.Delegates.Order` first, and `Function<int(string, int)>` passes `string`.
 too few: ValueError: `App.Delegates.Order.add` takes 1 argument, and `Function<int(App.Delegates.Order)>` passes 0.
 no function: ValueError: `createDelegate` makes a value of a function type, and was given `int`.
-plain PHP: ValueError: `Demo.Helper.take` may have every effect, and `Function<int(int)>` allows none.
+plain PHP: ValueError: `Psr.Container.ContainerInterface.get` may have every effect, and `Function<Any?(Psr.Container.ContainerInterface, string)>` allows none.
 rows of any object: 3
 rows of any object on another class: TypeError: `App.Delegates.Order.rows` takes a receiver of `App\Delegates\Order`, and was given stdClass.
 itself: true
@@ -95,5 +94,5 @@ the function a function result gives: 1
 a closure of a function result is its result: false
 the function a function result gives is its type: true
 declared pure: 'boom'
-declared effect: ValueError: `Demo.Helper.trusted` has the effect `App.Delegates.Database`, and `Function<Any?(Any?)>` allows none.
-declared effect allowed: 7
+declared effect: ValueError: `Sharp.Psr.Container.has` has the effect `App.Delegates.Database`, and `Function<bool(Sharp.Psr.Container, string)>` allows none.
+declared effect allowed: false

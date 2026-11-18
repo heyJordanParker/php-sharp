@@ -7,7 +7,7 @@
             "type": "path",
             "url": "../../../sharp/composer",
             "options": {
-                "symlink": true,
+                "symlink": false,
                 "versions": {
                     "heyjordanparker/php-sharp-composer": "dev-master"
                 }
@@ -15,7 +15,9 @@
         }
     ],
     "require": {
-        "heyjordanparker/php-sharp-composer": "*"
+        "heyjordanparker/php-sharp-composer": "*",
+        "illuminate/collections": "^13.43",
+        "illuminate/database": "^13.43"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,

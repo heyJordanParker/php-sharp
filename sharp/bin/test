@@ -241,16 +241,27 @@ if [[ ! -x $mago ]]; then
   exit 1
 fi
 
-# The tests load their PHP# fixtures through Composer's autoloader and the PHP# package's, as an application does, from
-# the packages Zend/tests/sharp/composer.lock pins.
+# Zend/tests/sharp is a project shaped like an application: the tests load their PHP# fixtures through Composer's
+# autoloader and the PHP# package's, from the packages its composer.lock pins, and mago compile checks the project with
+# its vendor folder. The PHP# package is a copy of sharp/composer, as an application installs it, since a compile
+# refuses a link outside the project. Composer keeps the copy an earlier run installed while the lock is unchanged, so
+# a copy that differs from sharp/composer is reinstalled first, and the install then dumps the autoloader, which runs
+# the package's plugin: composer reinstall runs no plugin.
 echo "== composer install in Zend/tests/sharp"
+package="$root/Zend/tests/sharp/vendor/heyjordanparker/php-sharp-composer"
+if [[ -d $package ]] && ! diff -rq "$root/sharp/composer" "$package" > /dev/null \
+  && ! composer reinstall --no-interaction --no-progress --quiet --no-autoloader \
+    --working-dir="$root/Zend/tests/sharp" heyjordanparker/php-sharp-composer; then
+  echo "composer reinstall of heyjordanparker/php-sharp-composer failed in Zend/tests/sharp." >&2
+  exit 1
+fi
 if ! composer install --no-interaction --no-progress --quiet --working-dir="$root/Zend/tests/sharp"; then
   echo "composer install failed in Zend/tests/sharp, and the tests load their fixtures through its autoloader." >&2
   exit 1
 fi
 
 echo "== mago compile, built from sharp/mago"
-if ! "$mago" --no-version-check --colors never --workspace "$root" --config "$root/Zend/tests/sharp/mago.toml" compile; then
+if ! "$mago" --no-version-check --colors never --workspace "$root/Zend/tests/sharp" compile; then
   echo "mago compile refused a PHP# test fixture, and the engine runs only compiled files." >&2
   exit 1
 fi

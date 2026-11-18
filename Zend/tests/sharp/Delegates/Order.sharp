@@ -1,6 +1,6 @@
 namespace App.Delegates;
 
-import Demo.Helper;
+import Illuminate.Support.Arr;
 
 // A method with the effect `Database`, one with `Database` and `Mailer`, a pure one with a parameter, a static one, a
 // virtual one `Rush` gives the effect `Mailer`, a property with a `set`, a computed one and a static computed one, and
@@ -28,7 +28,7 @@ public class Order
     public Order itself() => this;
 
     // Calls plain PHP no `extern` declares, so it may have every effect and carries its result alone.
-    public Function<int()> counter() => Order.counted(Helper.take(1));
+    public Function<int()> counter() => Order.counted(Arr.isList([1]) ? 1 : 0);
 
     static Function<int()> counted(int start) => () => start;
 }

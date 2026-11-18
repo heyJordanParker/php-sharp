@@ -443,7 +443,7 @@ function reader_table_entry_reads_checked(): string
     // Carton's Json and Serialized reads run the standard library's classes, which no fixture loads.
     foreach (['Json' => 'Encoding/Json', 'Serialized' => 'Encoding/Serialized'] as $class => $file) {
         if (!class_exists("Sharp\\Encoding\\$class", false)) {
-            require __DIR__ . "/../../../sharp/composer/library/Sharp/$file.sharp";
+            require __DIR__ . "/vendor/heyjordanparker/php-sharp-composer/library/Sharp/$file.sharp";
         }
     }
     $reads = ['shelvesText', 'shelvesValues', 'shelvesList', 'shelvesFiltered', 'shelvesGrouped', 'shelvesLooped',

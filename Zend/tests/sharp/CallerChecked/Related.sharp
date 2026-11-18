@@ -1,0 +1,8 @@
+namespace CallerChecked;
+
+// Collection's first() declares no return type, so a PHP# class that extends Collection implements this member with
+// the method it inherits from the package.
+public interface Related
+{
+    Relation first();
+}

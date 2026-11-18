@@ -1,8 +1,8 @@
 namespace App.Casts;
 
-import Lib.Casting;
+import Illuminate.Database.Eloquent.Model;
 
-public class Invoice : Casting
+public class Invoice : Model
 {
     protected override Map<string, string> casts { get; set; } = ["due": "date"];
 
