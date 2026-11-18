@@ -315,9 +315,10 @@ jobs:
         run: |
           build="sharp/build/linux-$(uname -m)"
           sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --self-test
-  # Every code example in docs/spec.md and README.md, compared with sharp/baseline/spec, in four slices of the examples.
-  # Each slice runs sharp/bin/spec on BUILD_LINUX's engine and mago, as sharp/bin/test --spec does. Five slices checked
-  # their examples in 123 to 161 seconds on release pull request #343's run.
+  # Every code example in docs/spec.md and README.md, compared with sharp/baseline/spec, in four slices of the examples,
+  # balanced by the seconds sharp/baseline/seconds lists, as sharp/bin/spec explains. Each slice runs sharp/bin/spec on
+  # BUILD_LINUX's engine and mago, as sharp/bin/test --spec does. With every example weighing the same, the slices
+  # checked theirs in 192 to 299 seconds on test pull request #403's first run.
   SPEC:
     name: SPEC (${{ matrix.shard }}/4)
     needs: [CHANGES, BUILD_LINUX]
