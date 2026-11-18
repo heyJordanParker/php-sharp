@@ -7,6 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - A `for` loop's update step reads the locals as the loop's condition narrowed them whenever the body leaves them alone. 0.6.29 refused `for (Node? node = head; node != null; node = node.next) { }` at `node.next`, as "Attempting to access a property on a possibly `null` value.", with an empty body, a body that only calls something, as `node.touch();`, or a body that always breaks, and so it refused an update step that only reads `node`, while the same loop with `total += node.value;` in its body compiled. A body that writes `node` again still leaves the update step a `node` that may be `null`, and it is refused there once, where 0.6.29 refused it twice.
+- An event's parameters are never too wide, spec sections 5 and 15. They are its payload, public get-only properties that take no modifier, so 0.6.29 refused each one no code outside the event's namespace read, as "`Changed.id` is public, and nothing outside `App.Shop` uses it.", and asked for `internal`, which no event parameter can take. An event nothing uses is still refused, as "Nothing uses `Lost`, so it never runs."
 
 ## [0.6.29] - 2026-11-18
 
