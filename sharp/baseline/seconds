@@ -1,6 +1,7 @@
 131	sharp/mago/crates/converter/tests/project.sh
 128	Zend/tests/sharp/laws.phpt
 128	Zend/tests/sharp/library_autoload.phpt
+77	Zend/tests/sharp/opcodes.phpt
 66	Zend/tests/sharp/events_fresh.phpt
 61	Zend/tests/sharp/compile_command_once.phpt
 34	Zend/tests/sharp/library_autoload_changed_body.phpt

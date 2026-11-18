@@ -204,9 +204,8 @@ jobs:
   # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in three slices, each without opcache, in
   # shared memory twice per process, and under the tracing JIT production runs with the opcache. The slices balance by
   # the seconds sharp/baseline/seconds lists, as sharp/bin/test explains. mago convert's whole-project proof weighs most,
-  # so it always lands in the first slice, which also runs the census, the differential and PHPUnit: on test pull
-  # request #390's run, the slice with the proof ran its tests and the proof in 3.4 minutes, and the other of two slices
-  # its tests in 5.1.
+  # so it always lands in the first slice: on test pull request #393's run, the proof took 2.8 minutes and that slice's
+  # tests 0.6. The second slice also runs the census, the differential and PHPUnit, which took 0.7.
   LINUX:
     name: LINUX (${{ matrix.shard }}/3)
     needs: [CHANGES, BUILD_LINUX]
@@ -241,7 +240,7 @@ jobs:
       - name: Test PHP#
         run: >-
           sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/3
-          ${{ matrix.shard == 1 && '--census --differential --phpunit' || '' }}
+          ${{ matrix.shard == 2 && '--census --differential --phpunit' || '' }}
   # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before, and
   # sharp/bin/spec's self-test. Each took 155 and 54 seconds on release pull request #379's run, where LINUX (1/2), which
   # ran the self-test after its slice, took 377 seconds, the longest suite job.
@@ -430,8 +429,8 @@ jobs:
   # request runs it, and a push whose tree no pull request's run passed. A job never installs on the self-hosted Mac
   # runners, so it checks that Homebrew already has the build's formulae, ccache among them. The engine builds through
   # ccache, as BUILD_LINUX's does: a change to a file configure reads configures again and compiles every file, which
-  # took 24.5 minutes on release pull request #379's run. Each runner keeps its build in its own folder, so ccache
-  # hashes paths below the workspace, and not the folder a compile runs in, so the three runners share their compiles.
+  # took 24.5 minutes on release pull request #379's run. Each runner has a HOME of its own, so each keeps its own
+  # ccache, as it keeps its own build.
   #
   # The 12-core Mac runs this job beside the other runners' jobs and the work the suite checks, and two or three jobs
   # that each took every core held its load between 200 and 480 for hours. So every job on the self-hosted Macs caps its
@@ -448,8 +447,6 @@ jobs:
       FORMULAE: autoconf bison ccache curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
       CC: ccache cc
       CXX: ccache c++
-      CCACHE_BASEDIR: ${{ github.workspace }}
-      CCACHE_NOHASHDIR: 'true'
       CARGO_BUILD_JOBS: 4
       RUST_TEST_THREADS: 4
       RAYON_NUM_THREADS: 4
