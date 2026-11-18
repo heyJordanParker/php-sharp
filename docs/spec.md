@@ -23,7 +23,7 @@ Attributes use square brackets, with these rules:
 - no parentheses when there are no arguments: `[Searchable]`
 - explicit targets, which name the part of the declaration a bracket goes on: `type:` on a type, `type:` or `event:` on an event, `method:` on a method, an operator, a named constructor, a lambda, an accessor or an observer, `param:` on a parameter and on the value `set` or `init` takes, `field:` on a field, a constant or an enum case, `property:` and `field:` on a property, and `param:`, `property:` and `field:` on a parameter that declares a property, a constructor's, an event's or a data case's, where an untargeted bracket goes on both the parameter and the property
 - an attribute always describes a declaration, so a return value takes none, and `[return: NotNull]` is a parse error
-- an attribute is data, built only from constants, so the constructor a PHP# attribute class runs, its own or one it inherits, and the initial values of the class and of each class it extends have no effect, a plain PHP call no `extern` declares included, and one that has an effect is a compile error that names it; so reading the attributes of a PHP# class with `attributes<T>()` is pure (section 25)
+- an attribute is data, built only from constants, so the constructor a PHP# attribute class runs, its own or one it inherits, the defaults of its parameters, and the initial values of the class and of each class it extends have no effect, a plain PHP call no `extern` declares included, and one that has an effect is a compile error that names it; so reading the attributes of a PHP# class with `attributes<T>()` is pure (section 25)
 - on every declaration: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, an operator, a named constructor, a parameter, a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`, and an accessor, as in `[Searchable] get;`, a static or get-only auto-property's included
 - on an `extern` line, whose attributes the plain PHP class, method or function it declares carries as its own, `type:` the one target of a class's line and `method:` of a method's or a function's (section 29)
 - on `willSet` and `didSet`, whose attributes go on the `set` they run inside, after its own
@@ -948,7 +948,7 @@ public static never stop(bool urgent)
 }                                                                            // compile error: stop is never, and it reaches its closing brace when no throw runs before it
 ```
 
-**A parameter's default is any expression,** and it runs each time a call leaves the argument out, from PHP# and from plain PHP alike, so `new` gives each call its own object. It runs before the method, so a default that reads `this` or another parameter is a compile error.
+**A parameter's default is any expression,** and it runs each time a call leaves the argument out, from PHP# and from plain PHP alike, so `new` gives each call its own object. It runs before the method, so a default that reads `this` or another parameter is a compile error. A call has the effects of each default it leaves out, as if it wrote the default itself, and a call through a class runs the default of the override it reaches (section 29).
 
 <!-- example parameter-defaults -->
 ```csharp
@@ -7519,7 +7519,7 @@ public class Stamp
 
 **A struct and an enum are pure** (sections 10 and 20). Each method, `get` body and operator of one, a data case's included, has no effects, as a value is the same wherever code reads it. A struct method that calls a `foreign` parameter or a plain PHP method an `extern` gives an effect, and an enum method that emits, is a compile error that names the member and the effect: "`Money.inEuros` has the effect `Http`, and a struct has no effects." The work goes in a class that takes the value. Creating and throwing an exception is no effect, and a plain PHP call that no `extern` declares has no effect a `uses` names, so a struct may validate its fields with `filter_var` and throw a `ValueError`.
 
-**Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types, except the function type of a method's parameter, which takes on what each call passes (below). A declaration that overrides another is held to it: a sub-interface may narrow its parent's `uses`, and a `uses` that widens it is a compile error at the declaration. Every implementation is held to what the declaration allows:
+**Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types, except the function type of a method's parameter, which takes on what each call passes (below). A declaration that overrides another is held to it: a sub-interface may narrow its parent's `uses`, and a `uses` that widens it is a compile error at the declaration. Every implementation is held to what the declaration allows, and so is each default of its parameters, which a call of the declaration that leaves the argument out runs:
 
 <!-- example effectful-declarations: members -->
 ```csharp
