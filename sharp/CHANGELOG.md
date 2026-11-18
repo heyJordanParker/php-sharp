@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A `for` loop's update step reads the locals as the loop's condition narrowed them whenever the body leaves them alone. 0.6.29 refused `for (Node? node = head; node != null; node = node.next) { }` at `node.next`, as "Attempting to access a property on a possibly `null` value.", with an empty body, a body that only calls something, as `node.touch();`, or a body that always breaks, and so it refused an update step that only reads `node`, while the same loop with `total += node.value;` in its body compiled. A body that writes `node` again still leaves the update step a `node` that may be `null`, and it is refused there once, where 0.6.29 refused it twice.
+
 ## [0.6.29] - 2026-11-18
 
 ### Changed
