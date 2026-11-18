@@ -4,6 +4,12 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.99] - 2026-11-18
+
+### Fixed
+
+- A dry run of the release path of #360, which never merges.
+
 ## [0.6.27] - 2026-11-17
 
 ### Fixed
