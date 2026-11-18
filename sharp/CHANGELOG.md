@@ -8,6 +8,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 - `mago compile` proves a project's laws on its threads, in one Lean process. 0.6.29 ran one proof at a time, under a processor-time limit on the whole Lean process, and started Lean through Lake. On a 1,638-file project with 20 laws, fresh compiles that took 381 to 1,236 seconds now take 132 to 247, with the same processor time. Each law's proof now has a budget of Lean's own: 200,000 heartbeats, Lean's default for one command, about 140 processor seconds on an M2 Max. A proof past it is refused alone, as "Law X is not proven: its proof ran out of time before it finished.", and the other laws still prove. Each case of a proof gets half of that budget, so a case that runs out of it is refused with what it still has to show, and the cases after it still run. Lean runs under the limits `mago` runs under, and the `lakefile.toml` and manifest an older `mago` wrote in `.sharp/.lean/` are deleted.
 
+### Fixed
+
+- `mago analyze --watch` gives a class-like it fills again after an edit what `mago analyze` gives it. 0.6.29 filled it again over what its last fill derived and cleared only part of that, so a subclass of a PHP# base class over a plain PHP model whose trait takes type arguments, as Eloquent's `Model` and its `HasCollection` trait, gained another set of the trait's type arguments with each edit of the base class: after one edit, it reached the trait both through `Collection<int, static>` and through a bare `Collection`. The checks of the members a class inherits merge each set they find, so on a subclass the watch had filled again they read other type arguments than `mago analyze` reads. A class-like filled again now starts from its scan, as in a full analysis.
+
 ## [0.6.29] - 2026-11-18
 
 ### Changed
