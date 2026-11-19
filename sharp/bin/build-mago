@@ -128,8 +128,10 @@ build_engine() {
 
   # libtool's static libphp.a holds no object: it takes ext/sharp's libsharp.a for one and drops the rest. So the archive
   # mago links holds the objects the libphp link names, each .lo's .o, and the static archive of each library the link
-  # names, so the linker finds every symbol in one archive whatever order they need each other in. libsharp.a goes beside
-  # it. system-libs names the libraries left to the system, one rustc link-lib per line, which the engine crate links.
+  # names, so the linker finds every symbol in one archive whatever order they need each other in. libsharp.a stays out:
+  # it bundles a Rust standard library of its own, so mago links ext/sharp's crate as a Rust library instead, beside its
+  # own code. system-libs names the libraries left to the system, one rustc link-lib per line, which the engine crate
+  # links.
   library="$engine/install/lib"
   if [[ ! -f "$library/libphp.a" || "$engine/libs/libphp.a" -nt "$library/libphp.a" ]]; then
     mkdir -p "$library"
@@ -137,7 +139,7 @@ build_engine() {
     for object in $(make -s -C "$engine" -f Makefile -f - print-objects <<< 'print-objects: ; @echo $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS)'); do
       case "$object" in
         *.lo) objects+=("$engine/${object%.lo}.o") ;;
-        */libsharp.a) cp "$engine/$object" "$library/libsharp.a.part" && mv "$library/libsharp.a.part" "$library/libsharp.a" ;;
+        */libsharp.a) ;;
         *) echo "the libphp link names $object, which is neither an object nor ext/sharp's library" >&2; exit 1 ;;
       esac
     done
