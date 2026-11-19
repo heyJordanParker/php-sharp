@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.35] - 2026-11-19
+
 ### Added
 
 - A law tells apart the states of a sealed interface and reads the data each state holds, spec section 28. A sealed interface's implementers are every value it has, so `is` and `match` over its value test which implementer it is, and the branch reads that implementer's get-only properties. With `public sealed interface OrderStatus { }`, its implementers `Pending` and `Paid`, and `public OrderStatus settle(int at) => new Paid(at);`, the laws `p.settle(at) is Paid paid ? paid.paidAt == at : false` and `Pending.start() is Pending` prove, and `Pending.start() is Paid` is refused as not proven. 0.6.34 refused each such test as "It reads types while the code runs.". A data case's fields read in a law too: through its pattern, as `PaymentResult.Paid(int paid) => paid > 0`, which 0.6.34 refused as reading types, and as a property of a value a pattern names, as `paid.amount`, which 0.6.34 refused as "A law tells the cases of an enum apart, and reads none of the data a case carries.". A type test of an interface that is not sealed is now refused as "A law tells apart only the implementers of a sealed interface. Declare `Figure` sealed."
@@ -1366,7 +1368,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.34...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.35...HEAD
+[0.6.35]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.34...v0.6.35
 [0.6.34]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.33...v0.6.34
 [0.6.33]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.32...v0.6.33
 [0.6.32]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.31...v0.6.32
