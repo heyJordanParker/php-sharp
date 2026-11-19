@@ -28,6 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
       - name: extract crate information
         id: crate_metadata
         run: |
@@ -75,6 +77,11 @@ jobs:
           name: release-notes
           path: ${{ runner.temp }}/release-notes.md
           if-no-files-found: error
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
     outputs:
       name: "mago"
       bin-name: "mago"
@@ -95,6 +102,9 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
 
       - name: Create source archives
         id: source_package
@@ -138,6 +148,12 @@ jobs:
           name: ${{ steps.source_package.outputs.ZIP_NAME }}
           path: ${{ steps.source_package.outputs.ZIP_PATH }}
           if-no-files-found: error
+
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
 
   build:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
@@ -192,6 +208,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           clean: false
+
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
 
       - name: Remove what an earlier job left, except the builds
         if: runner.environment == 'self-hosted'
@@ -364,6 +383,12 @@ jobs:
           name: ${{ steps.package.outputs.PKG_NAME }}
           path: ${{ steps.package.outputs.PKG_PATH }}
           if-no-files-found: error
+
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
 
   # install.sh checks a download against these SHA-256s when gh is missing, and sharp.yml's COMPOSER pins them in the
   # release's heyjordanparker/mago-sharp version. They are written where the assets were built, so the release

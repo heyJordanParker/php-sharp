@@ -55,6 +55,9 @@ jobs:
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+
       # The notice .github/actions/passed-tree finds a run's tree by, as sharp.yml's CHANGES names it.
       - name: Name the tree this run tests
         run: echo "::notice title=Tested tree::$(git rev-parse 'HEAD^{tree}')"
@@ -123,6 +126,12 @@ jobs:
           RUN: ${{ steps.passed.outputs.run }}
         run: echo "::notice::This tree ran and passed every Mago job in $RUN, so no test runs again."
 
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+
   # The gates on Linux with CHANGES's rust toolchain, the one sharp/mago/Cargo.toml's rust-version names and
   # release.yml builds the binaries with, and the Linux binary plain-php runs. On the push to master it saves its
   # target, which every pull request's run restores.
@@ -140,6 +149,9 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
 
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
@@ -214,6 +226,12 @@ jobs:
           path: ${{ env.CARGO_TARGET_DIR }}/test-run/mago
           if-no-files-found: error
 
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+
   # The run's one Linux build of the workspace's tests, in the sharp/docker image on the target sharp/bin/build-mago
   # builds there, which sharp.yml's BUILD_LINUX saves on master and its own BUILD_LINUX restores, so Linux keeps one dev
   # build of Mago and one cache. The tests jobs run its test binaries with sharp/bin/test --no-build, where each of 4
@@ -253,6 +271,9 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
 
       - name: Log in to ghcr.io
         env:
@@ -311,6 +332,12 @@ jobs:
       - name: Test the last fifth of the workspace's tests, the doc tests and the property tests
         run: sharp/bin/test --linux --mago --shard 5/5
 
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+
   # The workspace's tests on Linux, every fifth test of every test binary, by exact name, with sharp/bin/test --mago
   # --shard, so a set of slow tests spreads over the jobs, on the build job's test binaries. The build job runs the
   # fifth slice.
@@ -342,6 +369,9 @@ jobs:
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+
       - name: Log in to ghcr.io
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -358,6 +388,12 @@ jobs:
 
       - name: Test every fifth test of the workspace
         run: sharp/bin/test --linux --mago --no-build --shard ${{ matrix.shard }}/5
+
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
 
   # The workspace's tests on macOS arm64, which covers the few lines of Mago that differ there, such as the watch mode's
   # FSEvents, on the self-hosted Mac runners, for a release's pull request and a push whose tree no pull request's run
@@ -391,6 +427,9 @@ jobs:
         with:
           clean: false
 
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+
       - name: Remove what an earlier job left, except the builds
         uses: ./.github/actions/clean-kept-build
 
@@ -415,6 +454,12 @@ jobs:
 
       - name: cargo test
         run: cargo test --workspace --locked
+
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
 
   # The macOS binary plain-php runs, in the test-run profile sharp/mago/Cargo.toml explains, since plain-php needs a
   # binary that behaves as release's, not release's fat LTO. It builds in the target folder the self-hosted Macs keep,
@@ -447,6 +492,9 @@ jobs:
         with:
           clean: false
 
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+
       - name: Remove what an earlier job left, except the builds
         uses: ./.github/actions/clean-kept-build
 
@@ -474,6 +522,12 @@ jobs:
           name: mago-${{ runner.os }}
           path: ${{ steps.build.outputs.binary }}
           if-no-files-found: error
+
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
 
   # Installs heyjordanparker/mago-sharp from what git archive ships, the way Packagist ships it, and
   # heyjordanparker/php-sharp-composer from sharp/composer, on the runner's own PHP. A package that requires
@@ -511,6 +565,9 @@ jobs:
         with:
           clean: false
 
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+
       - name: Remove what an earlier job left, except the builds
         if: runner.environment == 'self-hosted'
         uses: ./.github/actions/clean-kept-build
@@ -535,6 +592,12 @@ jobs:
           CARGO_TARGET_DIR: ${{ runner.temp }}/target
         run: sharp/bin/check plain-php
 
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+
   # The one required check of this workflow: it passes only when every job above passed, or skipped a change that
   # leaves Mago alone, so a job added later blocks merges without a change to the repository's rules. It runs always,
   # so it reports on every pull request, even one whose every other job skipped. The macOS jobs skip but on a release's
@@ -558,6 +621,9 @@ jobs:
         with:
           sparse-checkout: .github/actions
 
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+
       - name: Every job passed, or skipped a change that leaves Mago alone
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
@@ -576,3 +642,9 @@ jobs:
       - name: Delete the Mago target caches this run replaced
         if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: ./.github/actions/mago-cache-prune
+
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
