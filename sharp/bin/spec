@@ -1016,7 +1016,7 @@ function runner(string $folder, array $files, array $harness): string
         . "    \$reflection = new ReflectionClass(\$class);\n"
         . "    \$parameters = \$reflection->getConstructor()?->getParameters() ?? [];\n"
         . "    \$services = array_map(static fn (ReflectionParameter \$parameter): mixed => (new \\Sharp\\Container())->get(\$parameter->getType()->getName()), \$parameters);\n"
-        . "    (\$parameters === [] ? \$reflection->newInstanceWithoutConstructor() : \$reflection->newInstanceArgs(\$services))->run();\n"
+        . "    \$reflection->newInstanceArgs(\$services)->run();\n"
         . "}\n"
         . (is_file("$folder/app/functions.php") ? "require __DIR__ . '/app/functions.php';\n" : '')
         . "try {\n    " . implode("\n    ", $entries) . "\n} catch (\\Throwable \$e) {\n    \\App\\Outcome::threw(-1, \$e);\n}\n";
