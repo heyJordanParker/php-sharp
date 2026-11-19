@@ -27,6 +27,7 @@ final class Helper
 PHP);
 symlink("$outside/lib", "$root/lib");
 file_put_contents("$root/mago.toml", "[source]\npaths = [\"src\"]\nincludes = [\"lib\"]\nextensions = [\"sharp\", \"php\"]\n");
+file_put_contents("$root/composer.json", "{\"type\": \"library\"}\n");
 file_put_contents("$root/src/Shop.sharp", <<<'SHARP'
 namespace Demo;
 

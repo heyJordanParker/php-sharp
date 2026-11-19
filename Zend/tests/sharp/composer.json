@@ -1,6 +1,7 @@
 {
     "name": "php-sharp/engine-tests",
-    "description": "The PHP# fixtures of the engine tests, loaded through Composer as an application loads its classes.",
+    "description": "The PHP# fixtures of the engine tests, loaded through Composer as an application loads its classes. A library, since each fixture's code is called by the tests that load it, not by an application.",
+    "type": "library",
     "license": "PHP-3.01",
     "repositories": [
         {

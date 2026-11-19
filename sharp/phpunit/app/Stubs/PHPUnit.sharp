@@ -1,0 +1,10 @@
+namespace App.Stubs;
+
+import PHPUnit.Framework.Attributes.Before;
+import PHPUnit.Framework.Attributes.Test;
+
+[DynamicallyAccessed]
+extern Before;
+
+[DynamicallyAccessed]
+extern Test;

@@ -25,12 +25,15 @@ const BROKEN_MONEY: &str =
     "namespace Acme;\n\npublic class Money\n{\n    public int cents()\n    {\n        return \"one\";\n    }\n}\n";
 const LEGACY: &str = "<?php\n\nnamespace App;\n\nfinal class Legacy {}\n";
 const MONEY_PATH: &str = "vendor/acme/money/src/Money.sharp";
+const LIBRARY: &str = "{\"type\": \"library\"}\n";
 
-/// A project with `app/Order.sharp`, `app/Legacy.php` and the package file `vendor/acme/money/src/Money.sharp`.
+/// A library with `app/Order.sharp`, `app/Legacy.php` and the package file `vendor/acme/money/src/Money.sharp`. It is
+/// a library so that spec section 5's strict rules, which run on a project, stay out of the tests about something else.
 fn project(order: &str, money: &str) -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
     write(root, "mago.toml", "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n");
+    write(root, "composer.json", LIBRARY);
     write(root, "composer.lock", "{}\n");
     write(root, "app/Order.sharp", order);
     write(root, "app/Legacy.php", LEGACY);
@@ -138,7 +141,7 @@ fn compile_writes_a_preload_script_that_requires_the_autoloader_and_every_accept
     write(
         root,
         "composer.json",
-        "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}, \"autoload-dev\": {\"psr-4\": {\"Tests\\\\\": \"tests/\"}}}\n",
+        "{\"type\": \"library\", \"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}, \"autoload-dev\": {\"psr-4\": {\"Tests\\\\\": \"tests/\"}}}\n",
     );
     write(root, "tests/Shop/CheckoutTest.sharp", "namespace Tests.Shop;\n\npublic class CheckoutTest\n{\n}\n");
     write(
@@ -2379,7 +2382,7 @@ fn compile_writes_no_php_file_beside_a_source_in_an_autoload_dev_folder() {
     write(
         root,
         "composer.json",
-        "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}, \"autoload-dev\": {\"psr-4\": {\"Tests\\\\\": \"tests/\"}}}\n",
+        "{\"type\": \"library\", \"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}, \"autoload-dev\": {\"psr-4\": {\"Tests\\\\\": \"tests/\"}}}\n",
     );
     write(root, "tests/Shop/CheckoutTest.sharp", "namespace Tests.Shop;\n\npublic class CheckoutTest\n{\n}\n");
     write(
@@ -2837,11 +2840,11 @@ fn compile_writes_each_compiled_file_again_once_a_module_file_appears_at_the_roo
 fn compile_deletes_the_php_file_of_a_source_whose_folder_moved_to_autoload_dev() {
     let directory = project(ORDER, MONEY);
     let root = directory.path();
-    write(root, "composer.json", "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n");
+    write(root, "composer.json", "{\"type\": \"library\", \"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n");
     compile_succeeds(root);
     assert!(root.join("app/Order.php").exists());
 
-    write(root, "composer.json", "{\"autoload-dev\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n");
+    write(root, "composer.json", "{\"type\": \"library\", \"autoload-dev\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n");
     compile_succeeds(root);
 
     assert!(!root.join("app/Order.php").exists());
@@ -3962,7 +3965,7 @@ fn compile_quotes_each_input_path_of_the_listener_table() {
     write(
         root,
         "composer.json",
-        "{\n    \"autoload\": {\n        \"psr-4\": {\n            \"App\\\\\": \"it's\\\\here/\"\n        }\n    }\n}\n",
+        "{\n    \"type\": \"library\",\n    \"autoload\": {\n        \"psr-4\": {\n            \"App\\\\\": \"it's\\\\here/\"\n        }\n    }\n}\n",
     );
 
     compile_succeeds(root);
@@ -3982,7 +3985,7 @@ fn source_lean_files(root: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// A project whose `composer.json` maps `App\` to `app/`, holding `files`.
+/// A library whose `composer.json` maps `App\` to `app/`, holding `files`.
 fn lawful_project(files: &[(&str, &str)]) -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
@@ -3990,7 +3993,7 @@ fn lawful_project(files: &[(&str, &str)]) -> tempfile::TempDir {
     write(
         root,
         "composer.json",
-        "{\n    \"autoload\": {\n        \"psr-4\": {\n            \"App\\\\\": \"app/\"\n        }\n    }\n}\n",
+        "{\n    \"type\": \"library\",\n    \"autoload\": {\n        \"psr-4\": {\n            \"App\\\\\": \"app/\"\n        }\n    }\n}\n",
     );
     write(root, "composer.lock", "{}\n");
     for (name, contents) in files {
@@ -4410,7 +4413,7 @@ fn compile_runs_the_lake_on_the_path_and_installs_no_lean() {
     .unwrap();
 
     assert!(printed(&output).contains("the lake on the PATH ran build"), "{}", printed(&output));
-    assert!(!cache.path().join("mago/elan").exists(), "{}", printed(&output));
+    assert!(!printed(&output).contains("Downloading the law checker"), "{}", printed(&output));
 }
 
 /// A cache folder the law checker can't create, as one a root container left, is named with what failed.
@@ -5027,6 +5030,48 @@ fn a_law_reaching_a_type_test_over_an_open_interface_is_refused() {
         "namespace App.Shared;\n\npublic class Shape : Figure\n{\n    public static bool isShape(Figure figure) => figure is Shape;\n\n    law shapeIsShape(Shape s) => Shape.isShape(s);\n}\n",
         &[("app/Shared/Figure.sharp", "namespace App.Shared;\n\npublic interface Figure\n{\n}\n")],
         "Law shapeIsShape reaches a type test of the interface Figure in Shape.isShape. A law tells apart only the implementers of a sealed interface. Declare `Figure` sealed.",
+    );
+}
+
+/// `mago analyze` refuses a law that reaches a construct the law translation does not model with the issue `mago
+/// compile` refuses it with, and proves no law: it writes no Lean package and no record of proofs, beside a law that
+/// would prove.
+#[test]
+fn analyze_refuses_a_law_that_reaches_an_unmodeled_construct_as_compile_does_and_starts_no_lean() {
+    let directory = library_project(&[
+        (
+            "app/Shared/Shape.sharp",
+            "namespace App.Shared;\n\npublic class Shape : Figure\n{\n    public static bool isShape(Figure figure) => figure is Shape;\n\n    law shapeIsShape(Shape s) => Shape.isShape(s);\n    law sameValue(int value) => value == value;\n}\n",
+        ),
+        ("app/Shared/Figure.sharp", "namespace App.Shared;\n\npublic interface Figure\n{\n}\n"),
+    ]);
+    let root = directory.path();
+    let refusal = "Law shapeIsShape reaches a type test of the interface Figure in Shape.isShape. A law tells apart only the implementers of a sealed interface. Declare `Figure` sealed.";
+
+    let analyzed = process::output(
+        Command::new(env!("CARGO_BIN_EXE_mago"))
+            .args(["--no-version-check", "--colors", "never", "analyze"])
+            .env("MAGO_REPORTING_FORMAT", "medium")
+            .env("XDG_CACHE_HOME", Path::new(env!("CARGO_TARGET_TMPDIR")).join("cache"))
+            .current_dir(root),
+    )
+    .unwrap();
+
+    assert_eq!(analyzed.status.code(), Some(1), "{}", printed(&analyzed));
+    assert!(
+        printed(&analyzed).contains(&format!("app/Shared/Shape.sharp:5:60: error[unmodeled-construct]: {refusal}")),
+        "{}",
+        printed(&analyzed)
+    );
+    assert!(!root.join(".sharp").join(PACKAGE_FOLDER).exists(), "{}", printed(&analyzed));
+    assert!(!root.join(".sharp/proofs.json").exists(), "{}", printed(&analyzed));
+
+    let compiled = compile_without_lean(root);
+
+    assert!(
+        printed(&compiled).contains(&format!("app/Shared/Shape.sharp:5:60:error - unmodeled-construct: {refusal}")),
+        "{}",
+        printed(&compiled)
     );
 }
 

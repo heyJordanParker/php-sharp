@@ -5,6 +5,7 @@ import App.Mail.LogMailer;
 import PHPUnit.Framework.TestCase;
 import PHPUnit.Framework.Attributes.Before;
 import PHPUnit.Framework.Attributes.RunInSeparateProcess;
+import PHPUnit.Framework.Attributes.Test;
 import Tests.Probe;
 
 // The base module binds SmtpMailer. While a test of this file runs, its module binds LogMailer, in PHPUnit's own
@@ -22,12 +23,14 @@ public class CheckoutTest : TestCase
         Probe.before = Probe.mailer();
     }
 
+    [Test]
     public void testUsesTheTestModule()
     {
         TestCase.assertSame("log", Probe.before);
         TestCase.assertSame("log", Probe.mailer());
     }
 
+    [Test]
     [RunInSeparateProcess]
     public void testUsesTheTestModuleInASeparateProcess()
     {

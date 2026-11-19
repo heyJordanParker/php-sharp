@@ -337,6 +337,9 @@ jobs:
           paths = ["src"]
           extensions = ["sharp"]
           TOML
+          # A folder without a composer.json is a project, whose strict rules refuse a class nothing uses, so the one
+          # class here compiles as a library's.
+          echo '{"type": "library"}' > composer.json
           cat > src/App/Counter.sharp <<'SHARP'
           namespace App;
 

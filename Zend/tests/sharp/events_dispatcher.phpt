@@ -129,7 +129,7 @@ $root = container_project('events-dispatcher', [
             }
         }
         SHARP,
-    'vendor/acme/billing/composer.json' => '{"name": "acme/billing"}',
+    'vendor/acme/billing/composer.json' => '{"name": "acme/billing", "type": "library"}',
     'vendor/acme/billing/src/Invoiced.sharp' => <<<'SHARP'
         namespace Acme.Billing;
 

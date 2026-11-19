@@ -4,7 +4,7 @@ Once its folder's Module.sharp gains an imports line that leaves out a namespace
 <?php
 require __DIR__ . '/project.inc';
 
-$root = compile_project('module-imports', ['composer.json' => "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n"]);
+$root = compile_project('module-imports', ['composer.json' => "{\"type\": \"library\", \"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n"]);
 mkdir("$root/app/Shared", recursive: true);
 mkdir("$root/app/Tenant/Store", recursive: true);
 file_put_contents("$root/app/Shared/Ledger.sharp", <<<'SHARP'

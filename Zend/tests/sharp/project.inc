@@ -11,6 +11,8 @@ const LIBRARY_MODULE = [
     'MapMembers', 'SetMembers', 'IterableMembers',
 ];
 
+// A library unless $files holds a composer.json of its own, so spec section 5's strict rules, which an application's
+// code meets, leave alone a test's classes, which only the test itself calls.
 function compile_project(string $name, array $files): string
 {
     // The process ID keeps two test runs on one machine out of each other's projects.
@@ -19,6 +21,7 @@ function compile_project(string $name, array $files): string
     mkdir($root);
     $root = realpath($root);
     file_put_contents("$root/mago.toml", "[source]\npaths = [\".\"]\nextensions = [\"sharp\"]\n");
+    file_put_contents("$root/composer.json", "{\"type\": \"library\"}\n");
     foreach ($files as $path => $contents) {
         is_dir(dirname("$root/$path")) || mkdir(dirname("$root/$path"), recursive: true);
         file_put_contents("$root/$path", $contents);

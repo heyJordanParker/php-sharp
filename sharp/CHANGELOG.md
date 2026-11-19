@@ -4,6 +4,25 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.36] - 2026-11-19
+
+### Added
+
+- `ghcr.io/heyjordanparker/php-sharp:<version>-dev`, the runtime image with the law checker's Lean installed in Mago's cache folder, `/var/cache/mago`, which every user reads and writes. A compile with laws in a container built from it downloads nothing: in a 6-CPU arm64 container, the first compile of a project with 9 laws took 6.6 to 7.7 seconds there, run as root or with `--user`, and 17.9 to 19.1 seconds in `<version>`, where `mago` downloads the Lean first. `ghcr.io/heyjordanparker/php-sharp:<version>` stays the runtime image, at its size, for production.
+- `heyjordanparker/php-sharp-composer` ships the spec its release follows, at `vendor/heyjordanparker/php-sharp-composer/spec.md`, so a project can read each section a refusal or the standard library cites, as `Sharp/Method.sharp` cites section 29. The release copies the release tag's `docs/spec.md` into the package's tag, so the two never differ.
+
+### Changed
+
+- `mago compile` installs the law checker's Lean itself, from Lean's release archive, which it unpacks while it downloads, on threads of their own, into `lean/` in Mago's cache folder. It installs nothing else: 0.6.35 installed elan, which downloaded the whole archive and then unpacked it on one core. The archive's SHA-256 is pinned for each platform, and the Lean moves into place only once the download matches it. In a 6-CPU arm64 container with an empty cache, the first compile of a project with 9 laws took 28.2 to 29.2 seconds on 0.6.35 and takes 17.9 to 19.1. A `lake` on the `PATH` is still used first. The `elan/` folder and `elan.lock` an earlier `mago` left in Mago's cache folder are no longer read: delete them to free about 3 GB.
+- Spec section 5's strict rules run on every package whose `composer.json` does not say `"type": "library"`: a public type or member too wide, a public member whose types hold `Any`, and, from section 24, a string fixed at compile time that selects. 0.6.35 ran them only where `composer.json` said `"type": "project"`, so an application that left the type out, or had no `composer.json`, compiled a public member nothing outside its class used. A package with no type, one with no `composer.json` above it and one whose `composer.json` does not parse are now projects, so no line left out turns a rule off. A library adds `"type": "library"` to its `composer.json`. The standard library and every package installed in `vendor/` stay exempt whatever their type.
+
+### Fixed
+
+- `mago analyze` reports every refusal of a law that `mago compile` reports before the proof, spec section 28: a construct the law reaches that a law cannot reason about, as a type test of an interface that is not sealed or a standard library class, a declaration it reaches in a file with errors, and a law that calls itself in a cycle. 0.6.35 reported them only at the compile, so a watch showed a file clean while `mago compile` refused it with "Law shapeIsShape reaches a type test of the interface Figure in Shape.isShape. A law tells apart only the implementers of a sealed interface. Declare `Figure` sealed.". `mago analyze` and its watch now report it, in each round, and never start the law checker, so a law's proof is still checked only at the compile.
+- An `Any` joined with an `Any` is an `Any`, spec section 12, where one of them is an element read that may be past the end of its `List`. 0.6.35 joined such a pair as `Any?`, so `List<Any> write = written < request.byteLength() ? [this.streams[0]] : [];`, with `streams` a `List<Any>`, was refused as "Invalid assignment to `write`: it is declared as `List<Any>`.", though 0.6.34 compiled it, and so was `Any picked = flag ? this.streams[0] : held;`. Both now compile. An `Any` joined with an `Any?` is still an `Any?`.
+- `mago convert` writes a class, an interface or an enum of a project that nothing outside its namespace uses `internal`, spec section 5, as it already gave each member the narrowest access its uses need. 0.6.35 wrote every converted type `public`, so the compile refused one only its namespace used, as "`Basket` is public, and nothing outside `App` uses it.", and the conversion's own proof kept the file plain PHP. A type that code outside its namespace uses, or that plain PHP or a framework reaches through an `[Export]` method or a marked attribute, stays `public`, and a library's types stay `public`. The converter and `too-wide-member` read a type's uses through one function, so the two never disagree.
+- A plain PHP call on a side of `??`, in a branch of `? :` or in a `match` arm, whose value goes into a declared `Map` or `Set`, runs with no run-time array test, spec section 12, since the call is already read as the `Map` or `Set` the place declares. 0.6.35 still tested the whole value, so `Map<int, string> named = given ?? Calc.names();` ran `\is_array($crossing = $given ?? \Sharp\Internal\returned(…)) ? \Sharp\Map::from(…) : $crossing` on each evaluation, though that test never held. It now runs `$named = $given ?? \Sharp\Internal\returned(…);`. A plain PHP property, or a call whose result type PHP# can't write, beside it still crosses into the object.
+
 ## [0.6.35] - 2026-11-19
 
 ### Added
@@ -1368,7 +1387,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.35...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.36...HEAD
+[0.6.36]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.35...v0.6.36
 [0.6.35]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.34...v0.6.35
 [0.6.34]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.33...v0.6.34
 [0.6.33]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.32...v0.6.33
