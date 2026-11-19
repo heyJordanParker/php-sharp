@@ -345,6 +345,7 @@ composer_install() {
   cd "$project"
   cat > composer.json << JSON
 {
+    "type": "library",
     "repositories": [
         { "type": "path", "url": "$root/sharp/composer" },
         {

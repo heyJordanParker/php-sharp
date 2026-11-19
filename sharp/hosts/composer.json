@@ -1,6 +1,7 @@
 {
     "name": "heyjordanparker/php-sharp-hosts-fixture",
-    "description": "A PHP# app that php-fpm and FrankenPHP's worker mode each serve, to show each lifetime under each host.",
+    "description": "A PHP# app that php-fpm and FrankenPHP's worker mode each serve, to show each lifetime under each host. A library, since its classes are called by the host scripts that serve them, which the checker never reads.",
+    "type": "library",
     "license": "PHP-3.01",
     "require": {
         "heyjordanparker/php-sharp-composer": "*@dev"
