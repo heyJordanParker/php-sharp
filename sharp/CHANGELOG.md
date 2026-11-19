@@ -4,6 +4,11 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A `new` of a plain PHP class whose `extern` line states its constructor's signature takes the line's parameters, each function type with the effects its `uses` lists, as a call of a method or a function already did, spec sections 23 and 29. 0.6.33 checked the constructor's arguments against the library's own docblock, so with `extern void Registry.__construct(Map<string, Function<Any?(Any?) uses Database>> functions);` over a docblock `array<non-empty-string, callable>`, `new Registry(handlers)` was refused as "expected `Map<string, Function<Any?(Any?)>>`, but possibly received …", and a closure with an effect the line leaves out passed. A closure with `Mail` is now refused as "This lambda calls `Mailer.send`, which has the effect `Mail`, so a `Function<Any?(Any?) uses Database>` cannot hold it.". A write that fits a `Map` or `List` declared with a type keeps that type, so after `handlers[name] = (Any? ...arguments) => …` the local is still `Map<string, Function<Any?(Any?) uses Database>>`, not a union with the closure's own `Function<scalar?(Any?)>`. A loop that fills such a `Map` with closures and passes it to `new Registry(handlers)` now compiles.
+- A union of `string`, `int`, `float` and `bool` keeps its four types, spec section 7. 0.6.33 merged them into `scalar`, which PHP# can't write, so a call of a method declared `(string|int|float|bool)?` stopped the compile of its file with "The lowering of app/Schema/Runner.sharp panicked though the checker accepted it", and errors named the type as `scalar?`. The call now compiles, and an error names it as written, as "expected `int`, but possibly received `(bool|int|float|string)?`". Plain PHP files print the four types where they printed `scalar` too.
+
 ## [0.6.33] - 2026-11-19
 
 ### Changed
