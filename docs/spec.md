@@ -975,6 +975,48 @@ Tickets.take(10);   // 10
 Tickets.take();     // 2
 -->
 
+**`callable` is only the type of a parameter an `extern` line states** (section 23), as plain PHP's `add_action` takes its callback. It takes any function value: a method value such as `this.saved`, a lambda, or a value of any `Function<…>` type. Plain PHP receives the closure the value already is, and nothing is checked once it crosses. Plain PHP calls a string as the function it names, and PHP# never does, so a string passed there is a compile error. Anywhere else, the type of a local, a property, a return type, a PHP# method's parameter or a type argument, `callable` is a compile error, because a PHP# function value has the `Function<…>` type that says what it takes and gives (section 14). A call that leaves out a parameter the line gives a default passes the line's default to plain PHP:
+
+<!-- example extern-callable -->
+```php
+namespace Vendor\Hooks;
+
+function add_action(string $hook_name, callable $callback, int $priority = 10, int $accepted_args = 1): bool { return true; }
+```
+
+<!-- example extern-callable -->
+```csharp
+// app/Stubs/Hooks.sharp
+namespace App.Stubs;
+
+import Vendor.Hooks;
+
+extern bool Hooks.add_action(string hookName, callable callback, int priority = 10, int acceptedArgs = 1);
+```
+
+<!-- example extern-callable -->
+```csharp
+// app/Posts/Saving.sharp
+namespace App.Posts;
+
+import Vendor.Hooks;
+
+public class Saving
+{
+    public void register()
+    {
+        Hooks.add_action("save_post", this.saved, 10, 3);   // compiles: plain PHP receives this.saved as a closure
+        Hooks.add_action("deleted_post", this.deleted);     // compiles: plain PHP receives priority 10 and acceptedArgs 1
+        Hooks.add_action("init", "my_function");            // compile error: a string is never a function value
+        callable later = this.saved;                         // compile error: callable is only the type of an extern line's parameter
+    }
+
+    public void saved(int id, string title, bool update) { }
+
+    public void deleted(int id) { }
+}
+```
+
 ## 8. Functions
 
 There are no top-level functions. Shared code lives in static methods on a class.
@@ -5135,7 +5177,8 @@ public class Links
 
 - **The signature fits the library's native types, never its docblock.** Each stated parameter crosses to the native one, the stated return type takes the native one, and each native parameter after the stated ones has a default. A misfit is a compile error at the `extern` line, as `extern int Routing.route(RouteName name);` is: `route` returns a `string`. A native parameter without a type takes any stated type, so a line corrects a docblock that says `array` where the method reads an object.
 - **A backed case crosses as its value** where the native parameter declares only scalars, as `string $name` does, so plain PHP receives `"checkout"`. A `keyof T` crosses as the member's name (section 11.2).
-- **The line states types alone.** A default is a compile error, since the library's own fills each parameter after the stated ones. A call names an argument by the line's name only when the library's parameter at its place has that name, since PHP reads a named argument by the library's name.
+- **A parameter takes a literal default, as a method's does,** and a call that leaves the parameter out passes the line's default to plain PHP, by the library's name, whatever default the library declares. A literal is a string shorter than 1000 bytes, an `int`, a `float`, `true`, `false` or `null`. A default that runs code, as `int at = Hooks.now()`, is a compile error, and so is one the parameter's type does not take, as `int priority = "10"`. A call names an argument by the line's name only when the library's parameter at its place has that name, since PHP reads a named argument by the library's name.
+- **A `callable` parameter takes any function value** (section 7), and crosses to a native `callable`, `Closure` or untyped parameter as the closure the value is.
 - **A generic class writes its type parameters as it declares them,** as `Builder<TModel>` for Eloquent's `@template TModel`, and other names are a compile error.
 
 **PHP itself is reached only through the standard library** (section 8). A built-in the standard library has no member for is declared with `[Import]`: `import Sharp.Interop.Import;`, then the attribute on a static method without a body makes each call run the PHP function it names. The signature is written in PHP# types, so each argument and the result cross as any plain PHP value does and are checked there, a `Map` argument passing as a PHP array and an array result arriving as the declared `List` or `Map`. The declaration states its effects with `uses`, as any body-less declaration does. A function PHP doesn't declare throws PHP's `Error` that names it at the first call. `[Import]` on an instance method or a method with a body is a compile error, and so is a second `[Import]` of one function in the project, since PHP ignores the case of a function's name:
@@ -7073,6 +7116,7 @@ A law the checker cannot prove is a compile error that names it (section 27).
 - **A list pattern takes one rest, anywhere in it,** and each element names a value or only a type. `[...a, x, ...b]` appends the lists.
 - **A law reaches the standard library from its PHP# source, as it reaches the project's code,** so a type such as `Instant` translates from its declaration and each member a law calls, and a member that calls plain PHP is refused where the law reaches it, as the project's would be. `Math.max` and `Math.min` on ints, and a List's `count()`, `map` and `filter`, keep the checker's own model of what they give.
 - **`<`, `<=`, `>`, `>=` and `<=>` on two values of one class run the class's own `operator <=>`,** so a law that orders two `Instant`s proves through `Instant`'s.
+- **`==` and `!=` on two values of a struct that declares no `operator ==` compare each field with that field's own `==`, and on two values of a class that declares `operator ==` run it,** so a law that compares two `Instant`s proves. A struct with a field whose `==` a law can't read, as an `Instant?`, is refused.
 - **Each refusal names what to write instead,** as these do:
 
 ```text
@@ -7189,7 +7233,7 @@ extern StripeClient uses Http;
 - **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
 - **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern Foundation.now uses Clock;` for a function a library declares outside any namespace, after `import Illuminate.Foundation;` and the `extern namespace` line that gives its folder that namespace (section 23). `extern namespace WordPress for WP_Post;` declares no effect: it gives a library's folder of root names the namespace its functions are declared through, as `extern WordPress.get_post uses Database;` (section 23).
 - **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
-- **An `extern` of a method or a function may state its signature,** as `extern string Routing.route(RouteName name) uses Http;` does, and its `uses` follows the signature (section 23).
+- **An `extern` of a method or a function may state its signature,** as `extern string Routing.route(RouteName name) uses Http;` does, and its `uses` follows the signature (section 23). A function value its `callable` parameter takes (section 7) adds its own effects to the call, as any function plain PHP is given does.
 
 <!-- example extern-functions -->
 ```php

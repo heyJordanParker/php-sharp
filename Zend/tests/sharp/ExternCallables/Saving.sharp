@@ -1,0 +1,18 @@
+namespace ExternCallables;
+
+import Lib.Hooks;
+
+public class Saving
+{
+    public void register()
+    {
+        Function<string(int)> handler = this.deleted;
+        Hooks.add_action("save_post", this.saved, 20, 3);
+        Hooks.add_action("deleted_post", this.deleted);
+        Hooks.add_action("trashed_post", handler, 30);
+    }
+
+    public string saved(int id, string title, bool update) => update ? "updated " + title : "saved " + title;
+
+    public string deleted(int id) => id > 0 ? "deleted" : "none";
+}

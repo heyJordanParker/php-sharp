@@ -4,6 +4,20 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.38] - 2026-11-19
+
+### Added
+
+- An `extern` line's parameter takes the type `callable`, spec sections 7 and 23, so `extern bool WordPress.add_action(string hookName, callable callback, int priority = 10, int acceptedArgs = 1);` states a plain PHP hook's callback, and `WordPress.add_action("save_post", this.saved, 10, 3)` passes any function value, a method value, a lambda or a `Function<…>` value, which plain PHP receives as the closure it is. 0.6.37 refused `callable` as "Unexpected `callable`". Anywhere else, a local, a property, a return type, a PHP# parameter or a type argument, `callable` is refused as "`callable` is only the type of an extern line's parameter.", and a string passed for a function value, as `WordPress.add_action("init", "my_function")`, is refused as "Argument #2 of function `WordPress.add_action` is a string, and a string is never a function value.", for a `Function<…>` parameter too, where 0.6.37 reported "Possible argument type mismatch".
+- An `extern` line's parameter takes a literal default, as a method's does, spec section 23, and a PHP# call that leaves the parameter out passes the line's default to plain PHP by the library's name, whatever default the library declares, so `WordPress.add_action("deleted_post", this.deleted)` passes `priority: 10, accepted_args: 1`. 0.6.37 refused every default on an `extern` line. A default that is no literal is refused as "An `extern` line's default is a literal, which a call that leaves `at` out passes to plain PHP.", and one the parameter's type does not take, as `int priority = "10"`, as "Default value for parameter `priority` is not assignable to its declared type.".
+
+### Fixed
+
+- A call in a law that leaves out an argument passes its parameter's default, as the call does at run time, spec section 28, for a constructor, a static method and a method alike. 0.6.37 refused it as "Law enqueuedHoldsNoError reaches a default argument in Pending.enqueued. Pass every argument, the ones with a default value included.", so with `Pending(string? error = null)`, a factory `Pending.enqueued() => new Pending()` could not appear in a law, and each law restated each default by hand. `Pending.enqueued().error == null` now proves. A default a law can't read is refused, naming its parameter, only where a call leaves its argument out, as "Law cappedAtMax reaches the operator `**` here in the default of `limit` in Shape.capped.".
+- A law compares two values of a struct that declares no `operator ==` field by field, each with that field's own `==`, and two values of a class that declares `operator ==` with it, spec section 19. 0.6.37 refused both as "Law deliveredAt reaches the class operator `==` in Pending.deliveredAt. Compare the values the objects hold, such as their properties.", so a law could not say that `new Pending().deliver(at).doneAt == at` over two `Instant`s. It now proves, and a claim the fields break is not proven. A struct with a field whose `==` a law can't read, as an `Instant?`, keeps that refusal.
+- A law orders two values of a class that declares no `<=>` through the `operator <=>` of the sealed interface it implements, the one the checker runs, spec sections 19 and 28. 0.6.37 refused `new Book(low) < new Book(high)` over a `Priced` interface's `<=>` as "Law cheaperFirst reaches the operator `<` here in Book.cheaperFirst.", though the code compiled and ran it. It now proves, and a false order is not proven. An operator's use now records a reference to the operator, as a call records one to its method, so a law reaches exactly the operators it applies.
+- `mago analyze --scan-only` refuses no law, spec section 28. A scan reads no method body, and 0.6.37 still translated each law over the methods it reaches, so with `public bool meets(Level other) => this.rank >= other.rank;` and `law meetsItself(Level a) => a.meets(a);` it refused the law as "Law meetsItself reaches the method Level.meets in Level.meetsItself. A law reads a method's body, and this method has none it can read." and exited 1, which stopped a project that builds its class list from a scan. The scan now prints no issue, and `mago analyze` and `mago compile` refuse laws as before.
+
 ## [0.6.37] - 2026-11-19
 
 ### Upgrading from 0.6.36
@@ -1407,7 +1421,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.37...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.38...HEAD
+[0.6.38]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.37...v0.6.38
 [0.6.37]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.36...v0.6.37
 [0.6.36]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.35...v0.6.36
 [0.6.35]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.34...v0.6.35

@@ -106,6 +106,7 @@
             "ExactNames\\": "ExactNames/",
             "Exports\\": "Exports/",
             "Extended\\": "Extended/",
+            "ExternCallables\\": "ExternCallables/",
             "ExternProperties\\": "ExternProperties/",
             "Fields\\": "Fields/",
             "FixedStrings\\": "FixedStrings/",
