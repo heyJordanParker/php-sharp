@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.34] - 2026-11-19
+
 ### Changed
 
 - A `public` type that nothing outside its namespace uses is too wide, spec section 5, as a member is: a class, an interface, a struct, an enum and an event alike, so `public event Quiet(int id);`, which only `App.Shop` creates, is refused as "`Quiet` is public, and nothing outside `App.Shop` uses it." 0.6.33 checked only members, so a public type that only its namespace used compiled. Declare such a type `internal`. A use of the type or of a member of it counts, an `extends` or an `implements` included, and so do plain PHP calling one of its `[Export]` methods and a framework reading a marked attribute. A class whose only reach is a listener, a method written with `on`, is refused too, since PHP# creates it whatever its access.
@@ -1352,7 +1354,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.33...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.34...HEAD
+[0.6.34]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.33...v0.6.34
 [0.6.33]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.32...v0.6.33
 [0.6.32]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.31...v0.6.32
 [0.6.31]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.30...v0.6.31
