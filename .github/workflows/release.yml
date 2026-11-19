@@ -191,11 +191,6 @@ jobs:
           - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, smoke: true }
           - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, smoke: true }
 
-    # The build goes to sharp/mago/target, which clean-kept-build removes, so each release builds from nothing, and
-    # never into the folder sharp/.cargo's config names for the Mac's dev builds.
-    env:
-      CARGO_TARGET_DIR: ${{ github.workspace }}/sharp/mago/target
-
     steps:
       # The self-hosted Mac runner keeps sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout source code
@@ -209,6 +204,16 @@ jobs:
       - name: Remove what an earlier job left, except the builds
         if: runner.environment == 'self-hosted'
         uses: ./.github/actions/clean-kept-build
+
+      # The build goes to a target folder of its own beside the dev builds sharp/.cargo's config names, which the Mac's
+      # runner keeps between jobs, as clean-kept-build explains, so a build compiles only the crates that changed and
+      # links. In sharp/mago/target, which clean-kept-build removes, the profile-guided build compiled every crate twice
+      # from nothing: on run 44571273633 the instrumented build took 22.9 minutes, the profiling run 0.8 and the
+      # optimized build 12.9. cargo keeps a copy of a crate for each set of RUSTFLAGS, so the instrumented and the
+      # optimized builds each keep their own. A GitHub-hosted runner starts empty, so it builds from nothing there too.
+      - name: Point CARGO_TARGET_DIR at the release target
+        shell: bash
+        run: echo "CARGO_TARGET_DIR=$GITHUB_WORKSPACE/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago-release" >> "$GITHUB_ENV"
 
       - name: set version env variable
         id: version
@@ -226,7 +231,7 @@ jobs:
           toolchain: ${{ needs.crate_metadata.outputs.msrv }}
           targets: ${{ matrix.job.target }}
 
-      # No cache: a bump's pull request run builds the assets once, and the merge publishes them.
+      # cargo install puts cargo-pgo in the runner's CARGO_HOME, which the Mac's runner keeps, so it installs it once.
       - name: install PGO tools
         if: matrix.job.pgo
         shell: bash
@@ -287,7 +292,7 @@ jobs:
         shell: bash
         run: |
           BIN_NAME="${{ needs.crate_metadata.outputs.bin-name }}"
-          BIN_PATH="target/${{ matrix.job.target }}/release/${BIN_NAME}"
+          BIN_PATH="$CARGO_TARGET_DIR/${{ matrix.job.target }}/release/${BIN_NAME}"
 
           echo "BIN_PATH=${BIN_PATH}" >> "$GITHUB_OUTPUT"
           echo "BIN_NAME=${BIN_NAME}" >> "$GITHUB_OUTPUT"
@@ -307,7 +312,7 @@ jobs:
         env:
           VERSION: ${{ needs.crate_metadata.outputs.version }}
         run: |
-          mago="$PWD/${{ steps.bin.outputs.BIN_PATH }}"
+          mago="${{ steps.bin.outputs.BIN_PATH }}"
           output=$("$mago" --version)
           if [[ "$output" != "mago $VERSION" ]]; then
             echo "::error::The built mago prints \"$output\", not \"mago $VERSION\"."
