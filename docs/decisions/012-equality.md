@@ -11,6 +11,7 @@
 ```csharp
 public abstract class DatabaseEntity
 {
+    public int id { get; set; } = 0;
     public static bool operator ==(DatabaseEntity a, DatabaseEntity b) => a.id == b.id;
     public int hash() => this.id;
 }

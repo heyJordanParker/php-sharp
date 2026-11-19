@@ -1,6 +1,6 @@
 # 90. A plain PHP class's `__toString()` is its `toString()`
 
-Jordan's ruling of 11-11.
+The language owner's ruling of 11-11.
 
 ## Decision
 

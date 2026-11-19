@@ -1,7 +1,7 @@
 namespace App.Calls;
 
 // A member at each access level, a static method, a method the subclass `Register` overrides, and a stored, a
-// get-only, a computed and a typed collection property, for `Method.invoke`, `Property.get` and `Property.set`.
+// get-only, a computed and a typed collection property, for `Method.createInvoker`, `Property.get` and `Property.set`.
 public class Till
 {
     int count = 1;

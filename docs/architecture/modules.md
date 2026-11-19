@@ -6,17 +6,30 @@ A module tells the container how to build the app's objects. PHP# creates the cl
 
 ### Syntax
 
-A module is `module`, an optional parent header, and its members in braces. A member is a law or a binding:
+A module is `module`, an optional parent header, and its members in braces. The parent header, as in `module : App.Shop`, makes it an environment or test module. A member is a binding, a law or the one `imports` line (spec section 32):
 
 ```csharp
-module : App.Shop                                              // parent header: an environment or test module
+// app/Shop/Module.sharp
+namespace App.Shop;
+
+import App.Mail.Mailer;
+import App.Mail.SmtpMailer;
+import App.Mail.QueueMailer;
+import App.Pricing.PriceRule;
+import App.Pricing.TaxRule;
+import App.Pricing.DiscountRule;
+import App.Cache.RedisStore;
+import Sharp.System.Environment;
+
+module
 {
+    imports App.Mail, App.Pricing, App.Cache;                  // the namespaces this namespace's code imports from
     singleton Mailer = SmtpMailer;                             // lifetime, service, value: a class
     singleton Mailer for SendReceipt = QueueMailer;            // `for` names the one class this binding serves
     singleton List<PriceRule> = [TaxRule, DiscountRule];       // a list of classes, for a List service
     singleton RedisStore(Environment environment) = new RedisStore(environment.require("REDIS_URL"));   // parameters and one expression
-    transient Checkout = Checkout;                             // a class bound to itself, so PHP# creates it
-    law same(int a) => a == a;                                 // a law, as before
+    transient SendReceipt = SendReceipt;                       // a class bound to itself, so PHP# creates it
+    law same(int a) => a == a;                                 // a law that spans the namespace's classes
 }
 ```
 
@@ -28,7 +41,7 @@ module : App.Shop                                              // parent header:
 - `Module.sharp` holds its folder's module, with no parent header.
 - `Module.<Environment>.sharp` holds an environment module. Its header names its own folder's namespace.
 - Any other file may hold a test module beside its classes. Its header names the module it overrides.
-- The standard library's `Sharp/Module.sharp` serves the root namespace, so its bindings reach every class after the class's own namespaces. It binds `Environment` and `Dispatcher`.
+- The standard library's `Sharp/Module.sharp` serves the root namespace, so its bindings reach every class after the class's own namespaces. It binds `Environment` and the other effect classes of spec section 29, and `Dispatcher` to `ImmediateDispatcher` (spec section 15).
 
 ### Each binding
 
@@ -69,7 +82,7 @@ return [
     ['app\shop', 'app\mail\mailer', 'App\Shop\SendReceipt', 'singleton', 'App\Mail\QueueMailer'],
     ['app\shop', 'list<app\pricing\pricerule>', null, 'singleton', ['App\Pricing\TaxRule', 'App\Pricing\DiscountRule']],
     ['app\shop', 'app\cache\redisstore', null, 'singleton',
-        static fn (\Sharp\Environment $environment) => new \App\Cache\RedisStore($environment->require('REDIS_URL'))],
+        static fn (\Sharp\System\Environment $environment) => new \App\Cache\RedisStore($environment->require('REDIS_URL'))],
     ['app\shop', 'app\shop\checkout', null, 'transient', 'App\Shop\Checkout'],
 ];
 ```
@@ -124,7 +137,7 @@ public static T run<T>(Function<T()> body) => Internal.runScoped(body);
 
 **PSR-11.** `Sharp\Psr\Container` implements `Psr\Container\ContainerInterface` over `Sharp\Container`. It throws `Sharp\Psr\NotFoundException` for an id no module binds, and `Sharp\Psr\ContainerException`, with the engine's `Sharp\ContainerError` as its previous, for a service the container can't build. A constructor's own exception passes through unchanged. The engine can't implement an interface Composer loads after it starts, so the adapter is PHP, and the Composer package requires `psr/container`.
 
-`environment.require(name)`, a method of the standard library's `foreign` class `Sharp\Environment`, gives a variable a binding needs, and throws `ValueError` when it is not set.
+`environment.require(name)`, a method of the standard library's `foreign` class `Sharp\System\Environment`, gives a variable a binding needs, and throws `ValueError` when it is not set.
 
 ## Files
 
@@ -152,7 +165,7 @@ sharp/composer/
 ├── composer.json                       requires psr/container, and psr/event-dispatcher for slices/15-events.md;
 │                                       maps Sharp\Psr\ to src/Psr/
 ├── autoload.php                        names the library's module, which the container reads at its first lookup
-├── library/Sharp/Module.sharp          new: binds Environment and Dispatcher for every namespace
+├── library/Sharp/Module.sharp          new: binds the effect classes and Dispatcher for every namespace
 ├── library/Sharp/Scope.sharp           Scope.run, which a long-running host calls for each unit of work
 ├── src/Psr/Container.php               new: Sharp\Psr\Container, PSR-11 over Sharp\Container
 ├── src/Psr/ContainerException.php      new: PSR-11's error for a service the container can't build

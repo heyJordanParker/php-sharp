@@ -1,6 +1,6 @@
 # 80. `global.` calls of functions the standard library replaces
 
-Superseded by [decision 83](083-php-through-the-standard-library.md): `global.` does not exist in PHP# code, so every `global.` call below is the error an unknown name gets, and a bare call of a PHP function names no function, with no message that names a member to write.
+Superseded: [section 8, Functions](../spec.md#8-functions) and [section 23, Namespaces and imports](../spec.md#23-namespaces-and-imports) hold the current rule, from [decision 83](083-php-through-the-standard-library.md): `global.` does not exist in PHP# code, so every `global.` call below is the error an unknown name gets, and a bare call of a PHP function names no function, with no message that names a member to write.
 
 ## Decision
 

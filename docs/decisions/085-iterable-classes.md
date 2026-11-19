@@ -1,6 +1,6 @@
 # 85. Iterable classes
 
-Jordan's ruling of 11-11.
+The language owner's ruling of 11-11.
 
 ## Decision
 

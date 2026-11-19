@@ -56,7 +56,7 @@ bool(true)
 active active active
 active active active active made made
 moved moved moved
-moved moved moved moved remade remade
+moved moved moved moved remade `MovedSource.made` may have every effect, and `Function<Any?(List<Any?>)>` allows none.
 doubled doubled doubled
 doubled doubled doubled doubled made made
 string(3) "fed"

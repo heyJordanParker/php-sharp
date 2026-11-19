@@ -1,6 +1,6 @@
 # 93. `[Import]`
 
-Jordan's ruling of 11-11. It replaces [decision 83](083-php-through-the-standard-library.md)'s rule that a built-in the standard library has no member for is called from a plain PHP class of the project.
+The language owner's ruling of 11-11. It replaces [decision 83](083-php-through-the-standard-library.md)'s rule that a built-in the standard library has no member for is called from a plain PHP class of the project.
 
 ## Decision
 

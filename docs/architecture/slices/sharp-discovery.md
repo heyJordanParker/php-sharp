@@ -1,5 +1,7 @@
 # Slice: PHP# discovery and the first compile
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Two fixes found by moving part of a real Laravel app to PHP#. Spec section 27, and section 32 where the standard library's module is read. This note is the design only. team-lead approves it before anyone builds.
 
 Every state below was observed on master 754ab7ce08, in the `php-sharp:754ab7ce08` image, with the `mago` built from that commit's `sharp/mago/`, in neutral fixture projects. The fixtures, commands and outputs are under [Evidence](#evidence).
@@ -106,7 +108,7 @@ The engine's plain-files stream wrapper would list `<Name>.php` for each `<Name>
 
 - **A symbolic link `<Name>.php` to `<Name>.sharp`.** Observed: every scanner resolves it to `Name.sharp`, and Composer loads the link as PHP, so the engine prints the PHP# source as output.
 - **PHP# files named `.php`.** It reverses section 27, where the engine, Composer, editors and the checker choose the grammar from the extension.
-- **Teaching each library about `.sharp`,** as a Spatie or Laravel patch. Jordan rejects it.
+- **Teaching each library about `.sharp`,** as a Spatie or Laravel patch. The language owner rejects it.
 - **Pointing scanners at `.sharp/`.** Every library would need its own setting, and the class name derived from `.sharp/app/…` is wrong.
 
 ## The first compile: the options and their cost
@@ -215,7 +217,7 @@ The extension-host probe's worker exits with status 1 after it loads `vendor/aut
    Recommended: `addModule`, because the sentence stays true whenever the read happens. Runner-up: keep `readModule`, since only `autoload.php` and two test helpers call it.
 4. **A new decision file** records Solution A, because it puts generated files in a user's source folders, which is hard to reverse.
 
-## Questions for Jordan
+## Questions for the language owner
 
 Each one decides what appears in a user's project. The note recommends and decides none.
 

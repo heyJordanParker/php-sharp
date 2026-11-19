@@ -1,23 +1,23 @@
 # How we work
 
-One Architect, one CTO agent and a team of agents build PHP#. This file says how the team works. Cass owns it, and it changes only through a PR, so git keeps its history.
+The language owner, the maintainer and a team of builders build PHP#. This file says how the team works. The maintainer owns it, and it changes only through a PR, so git keeps its history.
 
 ## Who does what
 
-- **Jordan, the Architect,** owns the language: `docs/spec.md` and the proposals in `docs/decisions/`. He approves or corrects proposals. He doesn't review code or plan work.
-- **Cass, the CTO agent,** owns everything else: the plan, the order of work, the architecture, and this file. Cass starts every agent, reviews each task's architecture and capabilities before it starts, and checks that what lands meets its Verification.
+- **The language owner** decides the language: `docs/spec.md` and the proposals in `docs/decisions/`. The language owner approves or corrects proposals, and doesn't review code or plan work.
+- **The maintainer** owns everything else: the plan, the order of work, the architecture, and this file. It starts every agent, reviews each task's architecture and capabilities before it starts, and checks that what lands meets its Verification.
 - **A builder** is an agent that does one task: one PR, from a new branch to its approval.
-- **A helper** is an agent that reads, searches or researches for Cass, and changes nothing.
+- **A helper** is an agent that reads, searches or researches for the maintainer, and changes nothing.
 
 ## A PR's path to master
 
 No agent reviews code. The review happens before the code exists, and the check after it is the task's Verification.
 
-0. Before Cass founds the builder, Cass reviews the task's architecture and capabilities: every file and public API it changes, every capability it must keep, and the Verification that proves it. Verification names each case where the change could give a wrong result, a crash or a cost, as an input and the output it must give, in every mode CI runs. It is the check a code reviewer would have made.
+0. Before the maintainer founds the builder, it reviews the task's architecture and capabilities: every file and public API it changes, every capability it must keep, and the Verification that proves it. Verification names each case where the change could give a wrong result, a crash or a cost, as an input and the output it must give, in every mode CI runs. It is the check a code reviewer would have made.
 1. The builder opens the PR, CI must pass, and its report shows each Verification condition met, with the command and the output it observed.
-2. Cass checks that Evidence against each condition, and checks the PR's shape against the task: the files and public APIs it changes, and no stopgap. A miss goes back to the same builder, and Cass checks its fix the same way.
-3. When every condition is met, Cass posts an approval on the PR.
-4. Cass merges with `gh pr merge --merge --match-head-commit <full head SHA>`.
+2. The maintainer checks that Evidence against each condition, and checks the PR's shape against the task: the files and public APIs it changes, and no stopgap. A miss goes back to the same builder, and the maintainer checks its fix the same way.
+3. When every condition is met, the maintainer posts an approval on the PR.
+4. The maintainer merges with `gh pr merge --merge --match-head-commit <full head SHA>`.
 
 A PR that finishes spec sections says so in its body, on its own line, exactly as `Completes: §6.1, §9`. The `COMPLETES` check fails while `sharp/baseline/spec` still lists an example of a named section.
 
@@ -31,7 +31,7 @@ A PR merges when its own required checks pass: `CI_PASSED`, `ci-passed`, `SPEC_G
 
 Each platform builds once per run, and the suites of that platform wait for that build and run on it. `sharp.yml`'s `BUILD_LINUX` and `BUILD_MACOS` build the engine and `mago`, and `mago.yml`'s `build` builds the workspace's test binaries, and each suite takes their files with `sharp/bin/test --no-build`. This reverses the earlier rule that no job waits for another job's build: each job built for itself so that no build's minutes stood before every suite, but a release's version bump rebuilt every Mago crate in every one of them, and release PR #363's run built the same code in 8 Linux jobs, 4 `mago.yml` jobs and 3 Mac jobs, 238 of its 404 job-minutes on the three Mac runners. One build per platform costs its minutes once, before the suites, and frees the runners the copies held.
 
-Only a release's PR runs the jobs on the Architect's Mac: `BUILD_MACOS` and `MACOS` in `sharp.yml`, `MACOS` in three slices, one per Mac runner, and `tests (macOS)`, `release-build` and `plain-php (macos-arm64-local)` in `mago.yml`. It also builds the runtime image's `IMAGE` jobs and the release's assets. Master runs one push at a time, and a newer push replaces the one still waiting. A push runs no check when a PR's run passed `CI_PASSED` and `ci-passed` on the same tree, which it has when master hasn't moved since that run started. A push whose tree no PR's run passed runs every check, the Mac's among them, on every change since master's last push run that wasn't cancelled. `ASAN` runs nightly. So between releases, seven kinds of defect land on master, and the next release's PR finds them:
+Only a release's PR runs the jobs on the language owner's Mac: `BUILD_MACOS` and `MACOS` in `sharp.yml`, `MACOS` in three slices, one per Mac runner, and `tests (macOS)`, `release-build` and `plain-php (macos-arm64-local)` in `mago.yml`. It also builds the runtime image's `IMAGE` jobs and the release's assets. Master runs one push at a time, and a newer push replaces the one still waiting. A push runs no check when a PR's run passed `CI_PASSED` and `ci-passed` on the same tree, which it has when master hasn't moved since that run started. A push whose tree no PR's run passed runs every check, the Mac's among them, on every change since master's last push run that wasn't cancelled. `ASAN` runs nightly. So between releases, seven kinds of defect land on master, and the next release's PR finds them:
 
 - one on a disk that ignores case
 - one in Mago code that only macOS runs, such as the watch mode's FSEvents
@@ -53,12 +53,12 @@ A release is one PR. Its run tests and builds everything the release ships, and 
 
 ## Every mistake becomes a check
 
-Agents make mistakes, and a rule written only in prose gets broken again. So when Cass or CI finds a mistake, the fix comes in two parts:
+Agents make mistakes, and a rule written only in prose gets broken again. So when the maintainer or CI finds a mistake, the fix comes in two parts:
 
 1. Fix the mistake.
 2. Add the check that would have caught it: a test, a lint, a CI step or a Claude Code hook. The check fails on the mistake and passes on the fix, and the PR shows both runs.
 
-A mistake that no check can catch yet goes in `docs/architecture/guards.md`, with what a check for it would need. Each entry becomes a task, and it runs before any new feature work in the same area. Until `docs/architecture/guards.md` exists, Cass writes each such mistake straight into a task file.
+A mistake that no check can catch yet goes in `docs/architecture/guards.md`, with what a check for it would need. Each entry becomes a task, and it runs before any new feature work in the same area. Until `docs/architecture/guards.md` exists, the maintainer writes each such mistake straight into a task file.
 
 ## Test runs
 
@@ -75,9 +75,9 @@ PHP# supports macOS on Apple silicon, for development, and glibc Linux on arm64 
 
 ## Where things are written
 
-- `docs/spec.md`: the language, as the Architect approved it. CI compiles and runs its examples, and `sharp/baseline/spec` lists the ones that fail today, which is the distance to v1. Git keeps no empty folder, so when none fails the folder is missing, and `sharp/bin/spec` reads a missing folder as an empty list.
+- `docs/spec.md`: the language, as the language owner approved it. CI compiles and runs its examples, and `sharp/baseline/spec` lists the ones that fail today, which is the distance to v1. Git keeps no empty folder, so when none fails the folder is missing, and `sharp/bin/spec` reads a missing folder as an empty list.
 - `docs/decisions/`: each approved language proposal, with the options it chose between.
 - `docs/architecture/`: how the checker and the engine are built, and why, once the change lands on master.
-- `~/Developer/php-sharp/sharp/agents/architecture.md`: the architecture of the change in flight, which Cass writes for builders. Git ignores it, and it moves into `docs/architecture/` with the PR.
+- `~/Developer/php-sharp/sharp/agents/architecture.md`: the architecture of the change in flight, which the maintainer writes for builders. Git ignores it, and it moves into `docs/architecture/` with the PR.
 - `docs/how-we-work.md`: this file.
 - `~/Developer/php-sharp/sharp/agents/`: task files. Git ignores them, so they exist only in that checkout.

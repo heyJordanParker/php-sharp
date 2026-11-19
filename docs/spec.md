@@ -6133,7 +6133,7 @@ constants[2].value();                                         // throws Error
 **`constructor()`, `createInstance` and `createLazy` reach a class's constructor through its class value.** `constructor()` gives a `Constructor`, with its `visibility`, `parameters()` and `attributes<TAttribute : Object>()`, or null for a class without one. `createInstance(arguments)` creates an object of the class, with the class value's type arguments, by its constructor with the `List<Any?>` of arguments, which the calling code reaches as a direct `new` would. `createLazy(initialize)` creates one empty, with no constructor run, as PHP 8.4's `newLazyGhost` does, and `initialize` runs on it at its first property read or write, as Doctrine loads an entity. Each throws `InvalidArgumentException` for an abstract class, an interface or an enum, and `createInstance` for arguments the constructor's parameters don't take. A `Property` reads the state of such an object:
 
 - **`isInitialized(receiver)`** holds when the property holds a value, so it is false for a `late` property no code has set and for a lazy object that has not loaded, which the read does not load. A `late` property is set once, so there is no reset.
-- **`getter()` and `setter()`** give the property's `get` and `set` accessors as a `Method`, named `$name::get` and `$name::set` as PHP names a property hook, or null for a plain stored property. That is how code tells a property with accessors apart. Their `invoke` reads and writes the property, as `get` and `set` do.
+- **`getter()` and `setter()`** give the property's `get` and `set` accessors as a `Method`, named `$name::get` and `$name::set` as PHP names a property hook, or null for a plain stored property. That is how code tells a property with accessors apart. Their `createDelegate` and `createInvoker` give a function that reads or writes the property, as `get` and `set` do.
 
 <!-- example reflected-creation -->
 ```csharp
@@ -6219,7 +6219,7 @@ reads[typeof(Ledger).properties()[0]] ?? 0;                   // 1
 
 **A class value of a built-in generic type answers `is` as a user generic's does,** so `typeof(List<string>)` is a `Class<List>`, a `Class<List<Any?>>` and a `Class<Iterable<Any?>>`, and a `Map`'s and a `Set`'s class values are a `Class<Map>`, a `Class<Set>` and a `Class<Iterable<Any?>>`, as `typeof(Crate<Mark>)` is a `Class<Crate>`.
 
-**`invoke`, `get` and `set` use a member through its reflection.** They are the one way PHP# names a member by a value (decision 94). `method.invoke(receiver, arguments)` calls the method on `receiver` with the `List<Any?>` of arguments and gives its result as `Any?`, and a method that isn't private runs the receiver's override. A static method takes a null receiver and runs on the class value `methods()` read it from, as a call through that class does, and an instance method given null throws `InvalidArgumentException`. `property.get(receiver)` gives the property's value as `Any?`, running a computed property's `get`, and `property.set(receiver, value)` writes it. Each reaches the member as a direct use from the calling code would: a private member only from its class, a protected one from the class and its subclasses, and an `internal` one from its namespace and those below it, which plain PHP reaches as a public one. A use the calling code can't make throws `Error`, as do a write of a get-only property and a call of a missing method. Each argument and value is checked against its type as a direct PHP# use's is, so a wrong one throws `TypeError`. More arguments than the method takes throw `ArgumentCountError`, and a receiver that isn't of the member's class throws `TypeError`. `property.isInitialized(receiver)` and `property.hasDefaultValue` only read the declaration and the object, so each is pure. `invoke`, `get` and `set` each run code its caller can't see, a method's body, a `get` or a `set`, so each may have every effect (section 29), and code that must keep to its `uses`, as an implementation of a pure interface method, can't call it. A `Field` is how that code reads and writes what an object stores:
+**`get` and `set` use a property through its reflection, and `createDelegate` and `createInvoker` call a method through its.** They are the one way PHP# names a member by a value (decision 94). `property.get(receiver)` gives the property's value as `Any?`, running a computed property's `get`, and `property.set(receiver, value)` writes it. Each reaches the property as a direct use from the calling code would: a private member only from its class, a protected one from the class and its subclasses, and an `internal` one from its namespace and those below it, which plain PHP reaches as a public one. A use the calling code can't make throws `Error`, as does a write of a get-only property. Each value is checked against its type as a direct PHP# use's is, so a wrong one throws `TypeError`, and so does a receiver that isn't of the property's class. `property.isInitialized(receiver)` and `property.hasDefaultValue` only read the declaration and the object, so each is pure. `get` and `set` each run code its caller can't see, a `get` or a `set`, so each may have every effect (section 29), and code that must keep to its `uses`, as an implementation of a pure interface method, can't call it. A `Field` is how that code reads and writes what an object stores:
 
 <!-- example reflection-calls -->
 ```csharp
@@ -6230,8 +6230,6 @@ public class Counter
 {
     public int count { get; set; } = 1;
     public int doubled => this.count * 2;
-
-    public int add(int amount) => this.count + amount;
 }
 ```
 
@@ -6240,18 +6238,14 @@ import App.Shelf.Counter;
 -->
 ```csharp
 const counter = new Counter();
-const add = typeof(Counter).methods()[0];
 const properties = typeof(Counter).properties();
-add.invoke(counter, [2]);                                     // 3
-add.invoke(counter, ["2"]);                                   // throws TypeError
-add.invoke(counter, [2, 3]);                                  // throws ArgumentCountError
 properties[0].set(counter, 5);
 properties[0].get(counter);                                   // 5
 properties[1].get(counter);                                   // 10
 properties[1].set(counter, 4);                                // throws Error
 ```
 
-**`createDelegate<TFunction>()` makes a method a value of the function type `TFunction`, so a call through reflection keeps to a `uses`.** `method.createDelegate<Function<Relation(Order) uses Database>>()` gives a function that calls the method. An instance method takes its receiver as the type's first parameter, of the class value `methods()` read it from, of a class below it, or of a class it extends, `Object` included, so a base class walks a subclass's methods with its own type, and a call with a receiver of another class throws `TypeError`, as `invoke` does. A static method takes no receiver and runs on that class value. `property.getter()` and `property.setter()` give their accessor's value the same way, so `getter().createDelegate<Function<int(Order)>>()` reads a computed property. The method fits the type as a function assigned to it must (section 21): the type passes each parameter the method needs, each parameter type it passes is within the method's, the method's result is within the type's unless that is `void` or `Any?`, and the type's `uses` lists each effect the method's body has (section 29). A plain PHP method has the effects its `extern` lines declare, read as a call reads them, and may have every effect without one, so `Function<string(RuntimeException)>` holds `getMessage`, which the standard library declares pure. A method that doesn't fit throws `ValueError` that names it and the reason, as "`App.Shop.Order.notify` has the effect `App.Shop.Mailer`, and `Function<int(App.Shop.Order) uses Sharp.Data.Database>` allows only `Sharp.Data.Database`.", and so does a call on a receiver whose override has an effect the type doesn't list. So a call of the value has only the effects its type lists, the checker types the call by the type alone, and `createDelegate` itself is pure. The calling code reaches the method as a direct call would when it makes the value:
+**`createDelegate<TFunction>()` makes a method a value of the function type `TFunction`, so a call through reflection keeps to a `uses`.** `method.createDelegate<Function<Relation(Order) uses Database>>()` gives a function that calls the method. An instance method takes its receiver as the type's first parameter, of the class value `methods()` read it from, of a class below it, or of a class it extends, `Object` included, so a base class walks a subclass's methods with its own type, and a call with a receiver of another class throws `TypeError`. A static method takes no receiver and runs on that class value. `property.getter()` and `property.setter()` give their accessor's value the same way, so `getter().createDelegate<Function<int(Order)>>()` reads a computed property. The method fits the type as a function assigned to it must (section 21): the type passes each parameter the method needs, each parameter type it passes is within the method's, the method's result is within the type's unless that is `void` or `Any?`, and the type's `uses` lists each effect the method's body has (section 29). A plain PHP method has the effects its `extern` lines declare, read as a call reads them, and may have every effect without one, so `Function<string(RuntimeException)>` holds `getMessage`, which the standard library declares pure. A method that doesn't fit throws `ValueError` that names it and the reason, as "`App.Shop.Order.notify` has the effect `App.Shop.Mailer`, and `Function<int(App.Shop.Order) uses Sharp.Data.Database>` allows only `Sharp.Data.Database`.", and so does a call on a receiver whose override has an effect the type doesn't list. So a call of the value has only the effects its type lists, the checker types the call by the type alone, and `createDelegate` itself is pure. The calling code reaches the method as a direct call would when it makes the value:
 
 <!-- example reflection-delegates -->
 ```csharp
@@ -6300,18 +6294,36 @@ public abstract class Model : Relations
 }
 ```
 
-<!-- example reflection-delegates -->
+**`createInvoker<TFunction>()` makes a method a value that takes its arguments as one list, so a dispatcher that calls methods of their own parameters keeps to a `uses`.** `method.createInvoker<Function<Any?(Object, List<Any?>) uses Database>>()` gives a function that calls an instance method on the receiver it takes first with the `List<Any?>` of arguments, and `Function<Any?(List<Any?>)>` one that calls a static method on the class value `methods()` read it from. The method fits `TFunction` as it fits `createDelegate`'s, by its receiver, its result and its effects, and one that doesn't fit throws the same `ValueError`, but the type passes the one list in place of the method's parameters. A call checks each value of the list against the parameter at its place, as a direct call does, so a wrong one throws `TypeError` that names the parameter. A parameter the list leaves out takes its default when the default runs no code, as `Parameter.defaultValue()` reads it. The call throws `ValueError` for a default that runs code, which it never runs, and `ArgumentCountError` for a required parameter the list leaves out or a value past the last parameter. So a call of the value has only the effects its type lists, its result is within the type's, and `createInvoker` itself is pure:
+
+<!-- example reflection-invokers -->
 ```csharp
-// app/Shop/Invoked.sharp
+// app/Shop/Billing.sharp
 namespace App.Shop;
 
-public abstract class Invoked : Relations
+public class Billing
 {
-    public List<Relation> relations()
-        => typeof(Self).methods()
-            .filter(method => method.attributes<Related>().count() > 0)
-            .map(method => method.invoke(this, []) is Relation relation ? relation : new Relation(method.name));   // compile error: relations must keep to Database, and invoke may have every effect
+    public string pause(string reason, int days) => `${reason} for ${days} days`;
+
+    public static string create(string name, string plan = "normal") => `${name} on ${plan}`;
 }
+```
+
+<!-- example reflection-invokers: statements
+import App.Shop.Billing;
+-->
+```csharp
+const billing = new Billing();
+const pause = typeof(Billing).methods().first(method => method.name == "pause");
+const create = typeof(Billing).methods().first(method => method.name == "create");
+const paused = pause.createInvoker<Function<string(Object, List<Any?>) uses Database>>();
+const created = create.createInvoker<Function<string(List<Any?>)>>();
+paused(billing, ["moving", 30]);                              // "moving for 30 days"
+paused(billing, [30, "moving"]);                              // throws TypeError
+paused(billing, ["moving"]);                                  // throws ArgumentCountError
+created(["Acme"]);                                            // "Acme on normal"
+created(["Acme", "pro", 3]);                                  // throws ArgumentCountError
+pause.createInvoker<Function<string(List<Any?>)>>();          // throws ValueError
 ```
 
 **A `Field` reads and writes storage, so it runs no code a project wrote.** `field.get(receiver)` and `field.set(receiver, value)` reach the storage as a direct use from the calling code would, with the access and type checks of `Property.get` and `set`, an auto-property's storage as its `get`, and its `set` or `init`, do. An `init` property's storage takes a write only while it holds no value, as only the object's creation writes it, and a write after that throws `Error`. They run no accessor, so `field.get`, `field.set` and `field.isInitialized` are pure, and a storage layer held to `uses Database` reads and writes a row through `fields()`. A receiver whose class gives the property an accessor, as a PHP 8.4 subclass may by declaring it again, throws `Error` from `get` and `set`, which run neither accessor. A lazy object that has not loaded runs its initializer at its first read, so `get` on one throws `Error` rather than load it. `set` writes its storage without loading it, as PHP 8.4's `setRawValueWithoutLazyInitialization` writes and as Doctrine gives an entity its identifier before it loads, so a later read of that storage never loads it either, and the object keeps the value once it loads. A static's `get` and `set` throw `Error` before its class has run its initial values. `field.defaultValue()` runs an initial value that is not constant, so it has the effects of the initial values it can run, as `property.defaultValue()` has (section 29). Reading the storage never makes a `Property` pure: `property.get` still runs whatever accessor the property has:
@@ -6384,11 +6396,11 @@ public class FormBuilder
         return new (type)(key);                                                // compiles: Element's constructor is required
     }
 
-    public Any? tagFor(string kind)
+    public string tagFor(string kind)
     {
         const type = this.elements[kind] ?? throw new UnknownElement(kind);
         const defaultTag = type.methods().first(method => method.name == "defaultTag");
-        return defaultTag.invoke(null, []);                                    // runs defaultTag on the class type holds
+        return defaultTag.createInvoker<Function<string(List<Any?>)>>()([]);   // runs defaultTag on the class type holds
     }
 
     public TModel? load<TModel : Model>(int id) => TModel.find(id);           // calls find on the type argument's class
@@ -6396,7 +6408,7 @@ public class FormBuilder
 ```
 
 - **`new (type)(…)`** creates an object from a class value. The parentheses around `type` mark it as an expression, not a class name. It needs a `required` constructor, as `new Self(…)` does. For a plain PHP class, such as `Class<Model>`, the checker checks the call against that class's own constructor.
-- **A class value reflects, and reaches no static.** A static is reached through its class's name, `Element.defaultTag()`, or through a type parameter, `TModel.find(id)` (section 11). The static of a class known only while the code runs is reached through `methods()` and `invoke(null, …)`. `type.defaultTag()` is a compile error.
+- **A class value reflects, and reaches no static.** A static is reached through its class's name, `Element.defaultTag()`, or through a type parameter, `TModel.find(id)` (section 11). The static of a class known only while the code runs is reached through `methods()` and `createInvoker`. `type.defaultTag()` is a compile error.
 - **`Class`'s own members are what a class value reaches,** such as `attributes`. Any code may extend `Class<T>`, and `Class`'s own members still win over an extension's.
 - **`attributes<TAttribute : Object>()` reads attributes, which are objects,** so `attributes<int>()` is a compile error.
 - **A class value's type need not be written.** `const type = …` holds a `Class<Element>`.
@@ -7059,7 +7071,8 @@ A law the checker cannot prove is a compile error that names it (section 27).
 - **A method may call itself, or a method of its class that calls it back, only on a smaller value:** a list's rest from a list pattern, or `n - 1` or `n + 1` towards a bound an `if`, `?:`, `&&`, `||` or `match` comparison tested. The bound is an int literal, tested with `<`, `<=`, `>` or `>=`, or another int parameter the call passes on unchanged, tested with `<` or `>`.
 - **A `for (… of …)` loop over a List** reaches a law when its body only adds pure int values to int locals with `+=` or `++`, each under an `if` or not, and never reads a local it adds to.
 - **A list pattern takes one rest, anywhere in it,** and each element names a value or only a type. `[...a, x, ...b]` appends the lists.
-- **The standard library's `Math.max` and `Math.min` on ints reach laws,** since the checker knows they give the largest and the smallest of their arguments.
+- **A law reaches the standard library from its PHP# source, as it reaches the project's code,** so a type such as `Instant` translates from its declaration and each member a law calls, and a member that calls plain PHP is refused where the law reaches it, as the project's would be. `Math.max` and `Math.min` on ints, and a List's `count()`, `map` and `filter`, keep the checker's own model of what they give.
+- **`<`, `<=`, `>`, `>=` and `<=>` on two values of one class run the class's own `operator <=>`,** so a law that orders two `Instant`s proves through `Instant`'s.
 - **Each refusal names what to write instead,** as these do:
 
 ```text
@@ -7204,7 +7217,7 @@ extern now uses Clock;               // compile error: no function now exists
 - **A plain PHP trait's member is one body, so its `extern` line covers every class that takes the member from the trait.** After `extern Dispatchable.dispatch uses Database;`, `ReceiveEvent.dispatch(…)` has the effect `Database` where `ReceiveEvent` lists `Dispatchable` in its header. A class that writes `dispatch` itself runs its own body, which the line does not cover.
 - **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
-- **Reflection has the effects of the code it runs** (section 25). `Method.invoke`, `Property.get` and `Property.set` run a body or an accessor no `uses` can name, so each may have every effect. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` is pure, and a call of the value it gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`.
+- **Reflection has the effects of the code it runs** (section 25). `Property.get` and `Property.set` run an accessor no `uses` can name, so each may have every effect. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` and `Method.createInvoker` are pure, and a call of the value each gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
 - **An `extern` line takes any attribute, which the class, method or function it declares carries as its own,** as every declaration takes one (section 1). The checker reads it as the declaration's, so a `[DynamicallyAccessed]` written on a class's line marks a library's attribute class whose source carries no mark (section 5). At run time PHP#'s `typeof(X).attributes<T>()` and `Method.attributes<T>()`, and plain PHP's `ReflectionClass`, `ReflectionMethod` and `ReflectionFunction` `getAttributes()`, give the declaration's own attributes and then the line's, though no code loads the file that holds the line. A method takes them on the line of the class that declares it, so an attributed line of a method the class only inherits is a compile error that names that class. An `extern namespace` line (section 23) declares nothing, so an attribute on it is a compile error. `import` and `extern` stay separate lines.
 

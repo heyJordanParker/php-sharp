@@ -1,5 +1,7 @@
 # 23. Nullable types
 
+Superseded: [section 14.4, Null operators](../spec.md#144-null-operators) holds the current rule. A `?` or a null check that cannot matter warns and compiles, and a nullable return type on a method that never returns null compiles with no warning.
+
 ## Decision
 
 A type holds null only when it is written with `?`, for parameters, return types, properties and locals alike: `Customer?` may hold null, and `Customer` never does. A `?` or a null check that cannot matter is a compile error, because it misstates the code:

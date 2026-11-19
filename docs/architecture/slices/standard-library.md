@@ -1,5 +1,7 @@
 # The standard library: what a modern standard library does, in PHP#
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 The standard library covers what modern standard libraries cover (decision 96). Each domain below groups its operations and gives the PHP# member or language form that does each one, or **missing**. PHP's built-ins appear only in the last column, as the code a PHP# member runs, and an empty cell there is the engine's own code or PHP#'s. PHP# code reaches PHP only through the standard library (decision 83), and `[Import]` declares a built-in that no member covers (decision 93). The [gap list](#gaps) at the end collects every missing operation.
 
 ## Text
@@ -179,7 +181,7 @@ The standard library covers what modern standard libraries cover (decision 96). 
 | A type's value, a value's type, its name | `typeof(T)`, `Class.of(value)`, `type.name()` (section 25) | |
 | Test a type | `value is T`, `value as T` (section 21) | |
 | Members, their attributes, type arguments | `methods()`, `properties()`, `attributes<T>()`, `typeArguments()` | `ReflectionClass` |
-| Call, read and write a member by its reflection | `method.invoke(receiver, arguments)`, `property.get(receiver)`, `property.set(receiver, value)` | |
+| Call, read and write a member by its reflection | `method.createInvoker<TFunction>()(receiver, arguments)`, `method.createDelegate<TFunction>()`, `property.get(receiver)`, `property.set(receiver, value)` | |
 | Create an instance from a type | `new (type)(arguments)` (section 25) | |
 | A result or an error | `Result<T, E>` with `Ok` and `Err`, and exceptions | |
 | Events | `emit` (section 15), `Events.on<TEvent>(listener)`, a `Dispatcher` | |

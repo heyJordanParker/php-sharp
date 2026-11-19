@@ -13,7 +13,7 @@ import Illuminate.Database.Eloquent.Model;
 
 public class Order : Model
 {
-    public string number { get; set; }
+    public string number { get; set; } = "";
     public Money totalIn(string currency) readonly { … }
     public void markPaid() { … }
 }

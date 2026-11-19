@@ -1,5 +1,7 @@
 # 9. Converting values
 
+Superseded: [section 24, Built-in types and `Any`](../spec.md#24-built-in-types-and-any) holds the current rule. `Int.parse`, `Float.parse` and their `tryParse` take a `string`, so an `Any?` such as `request.input("qty")` is checked with `as string` first, and `(bool)` is a parse error.
+
 ## Decision
 
 `(int)`, `(float)` and `(string)` convert between numbers only. Strings become numbers through `Int.parse` and `Float.parse`, which throw, and `tryParse`, which gives null, all taking `Any?`. Classes narrow with `as`. `(bool)`, `(array)`, `(object)` and PHP's cast aliases do not exist, and `(int)` on an out-of-range float or NaN throws.

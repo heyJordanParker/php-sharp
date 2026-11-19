@@ -34,6 +34,7 @@
             "App\\Delegates\\": "Delegates/",
             "App\\Elsewhere\\": "Elsewhere/",
             "App\\Facts\\": "MemberFacts/",
+            "App\\Invokers\\": "Invokers/",
             "App\\Linking\\": "Linking/",
             "App\\PlainClosures\\": "PlainClosures/",
             "App\\Probe\\": "Probe/",

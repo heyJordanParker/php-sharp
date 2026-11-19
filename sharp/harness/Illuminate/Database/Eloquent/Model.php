@@ -31,6 +31,11 @@ abstract class Model
         return null;
     }
 
+    public function getKey(): mixed
+    {
+        return null;
+    }
+
     public static function find(int $id): ?static
     {
         return null;

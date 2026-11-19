@@ -1,6 +1,8 @@
 # 87. Reading declared types
 
-Jordan's ruling of 11-11.
+Superseded: [section 25, Referring to classes](../spec.md#25-referring-to-classes) holds the current rule. `properties()` gives every property, statics included, and no field, `fields()` gives what the class's objects and the class store, and a `Property` or `Field` holds its declared type whole in `type`, as `typeof(int?)`, with no `nullable` member.
+
+The language owner's ruling of 11-11.
 
 ## Decision
 

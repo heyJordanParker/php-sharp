@@ -1,0 +1,7 @@
+namespace App.Invokers;
+
+public enum Plan
+{
+    case Normal;
+    case Pro;
+}

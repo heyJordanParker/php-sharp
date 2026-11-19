@@ -169,9 +169,9 @@ function constant(string $class, string $name): mixed {}
 
 function createInstance(string $type, array $arguments): object {}
 
-function invoke(?object $receiver, string $class, string $method, array $arguments, string $readOn): mixed {}
-
 function createDelegate(string $readOn, string $class, string $method, string $type): \Closure {}
+
+function createInvoker(string $readOn, string $class, string $method, string $type): \Closure {}
 
 function read(?object $receiver, string $class, string $property): mixed {}
 

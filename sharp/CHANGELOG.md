@@ -4,6 +4,26 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.37] - 2026-11-19
+
+### Upgrading from 0.6.36
+
+- `Method.invoke` is gone, spec section 25. Write `method.invoke(receiver, arguments)` as `method.createInvoker<Function<Any?(Object, List<Any?>) uses …>>()(receiver, arguments)`, with the effects the method has, and a static method's `method.invoke(null, arguments)` as `method.createInvoker<Function<Any?(List<Any?>) uses …>>()(arguments)`. A call of `invoke` is refused as "Method `Method.invoke` does not exist.". A plain PHP method with no `extern` may have every effect, so no invoker holds it, as no delegate does.
+
+### Added
+
+- `Method.createInvoker<TFunction>()` gives a value of the function type `TFunction` that calls the method with its arguments as one `List<Any?>`, after the receiver of an instance method, spec sections 25 and 29. So a dispatcher held to `uses Database` calls `pause(Subscription s, VerifiedUser u)` and `create(string name, Plan plan = Plan.Normal)` by name, each through one invoker, where `invoke` may have every effect and no `uses` accepted it. The method fits `TFunction` as it fits `createDelegate`'s, so a method with `Mail` throws "`App.Billing.notify` has the effect `App.Mailer`, and `Function<Any?(Object, List<Any?>) uses Sharp.Data.Database>` allows only `Sharp.Data.Database`." at `createInvoker`, which is pure. A call checks each value against the parameter at its place and throws `TypeError` naming it, and a parameter the list leaves out takes its default when that runs no code, as `Parameter.defaultValue()` reads it.
+
+### Changed
+
+- `mago convert` writes a static call through a class held at run time, `$kind::label(7)`, and its method value, `$kind::find(...)`, through the method's invoker, spec section 25: `kind.methods().first(method => method.name == nameof(Order.label)).createInvoker<Function<string(List<Any?>) uses Database>>()([7])`. The invoker lists the effects the analysis solves for a PHP# method, or those a plain PHP method's `extern` line declares, and gives the result the method declares where PHP checks it. Where only PHPDoc gives the result, it gives `Any?`, which `as` checks, as 0.6.36 did. A plain PHP method no `extern` declares may have every effect, which no `uses` lists, so the file stays plain PHP, and the refusal names the line to add, as `extern App.Order.label;`.
+
+### Fixed
+
+- The extension SDK tells a member the compiler generates from one the source writes: `FunctionLikeMetadata::$isGenerated` and `PropertyMetadata::$isGenerated` are true for a member no source declares, which `MetadataFlags::GENERATED` marks in `$flags` too. 0.6.36 showed a generated member exactly as a written one, with the same file, a name location and the variant as its class, so a rule over the methods a program declares counted a `[Tag]` variant's `parse` and `tryParse`, or read the source again to skip them. They are now generated, as are a struct's or a PHP# class's `parse` and `tryParse`, an enum's `cases`, `from` and `tryFrom` and its `$name` and `$value`, a case's factory, an `Iterable<T>` type's `getIterator`, an indexer's default `offsetExists`, `offsetUnset` and `offsetSet`, and a constructor the code leaves out. A generated member keeps all its other metadata.
+- A law reaches the standard library from its PHP# source, as it reaches the project's code, spec section 28. 0.6.36 refused every standard library class but a fixed list of members, so a law over one state of a sealed family was refused when another state held an `Instant`, as "Law postponeHoldsTheError reaches the standard library class Instant in Done.", though the law never reads that state. `Instant` now translates from its declaration, and a law that orders two `Instant`s with `<` proves through `Instant`'s own `operator <=>`, as `<`, `<=`, `>`, `>=` and `<=>` on two values of any class that declares `<=>` do. A standard library member that calls plain PHP is refused where the law reaches it, with the reason project code gets, as "Law parses reaches the plain PHP function `global.preg_match` in Instant.tryParse.". `Math.max`, `Math.min` and a List's `count()`, `map` and `filter` keep the checker's own model.
+- A watch keeps an extension rule's error that an after-file hook reports in another file until the hooks of the file that reported it run again, as a one-shot `mago analyze` of the same tree reports it. 0.6.36 kept such an error with the file it points at, so when `src/audit.php`'s hook reported an error in `src/date.php`, an edit of `src/date.php` alone dropped it, and no later round brought it back, since the hook of `src/audit.php` did not run again. An error the hook stops reporting, as after an edit of `src/audit.php`, leaves at that file's next round. The worker now names the file whose hooks reported each after-file error, so the analyzer protocol is 1.16, and an extension host runs the `heyjordanparker/mago-sharp` of the same release as `mago`.
+
 ## [0.6.36] - 2026-11-19
 
 ### Added
@@ -1387,7 +1407,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.36...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.37...HEAD
+[0.6.37]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.36...v0.6.37
 [0.6.36]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.35...v0.6.36
 [0.6.35]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.34...v0.6.35
 [0.6.34]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.33...v0.6.34

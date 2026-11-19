@@ -1,5 +1,7 @@
 # 10. Any number of arguments
 
+Superseded: [section 8, Functions](../spec.md#8-functions) holds the current rule for `max(...prices)`. A bare call of a PHP built-in is the error a misspelled name gets, and PHP is reached only through the standard library. The rest of this decision holds.
+
 ## Decision
 
 A method takes any number of arguments with PHP's `int ...values`, which arrive as a `List<int>`. A call spreads an existing list with `...list`. A spread of unknown length fills only a `...` parameter, and a list literal's spread fills parameters as its elements written out do.

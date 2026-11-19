@@ -1,6 +1,6 @@
 # 88. `nameof` of a method and a class
 
-Jordan's ruling of 11-11. It extends [decision 52](052-nameof.md).
+The language owner's ruling of 11-11. It extends [decision 52](052-nameof.md).
 
 ## Decision
 
@@ -34,7 +34,7 @@ OrdersController.index.name;                                 // OrdersController
 Class.of(row).name();                                        // would be "App\Orders\Counted"
 ```
 
-Jordan left the separator open. The dots are the form PHP# code and the spec write a class name in, as `"App.RushOrder"` and every PHP# error message write it. A plain PHP library that compares PHP's form takes the class value itself, which reaches it as PHP's class-name string (decision 17).
+The language owner left the separator open. The dots are the form PHP# code and the spec write a class name in, as `"App.RushOrder"` and every PHP# error message write it. A plain PHP library that compares PHP's form takes the class value itself, which reaches it as PHP's class-name string (decision 17).
 
 ## Spec
 

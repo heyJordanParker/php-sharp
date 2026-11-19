@@ -9,10 +9,12 @@ A function type lists its effects inside its brackets, after its parameter types
 ### Chosen: `uses` inside the brackets, after the parameter types
 
 ```csharp
-Function<Charge(Cart) uses Http> charge;                        // compiles
-Function<Charge(Cart) uses Http>? fallback;                      // compiles
-Map<string, Function<Charge(Cart) uses Http, Mail>> handlers;    // compiles: Http and Mail are both effects
-Function<int(Function<int(int) uses Http>)> apply;               // compiles
+public void route(
+    Function<Charge(Cart) uses Http> charge,                        // compiles
+    Function<Charge(Cart) uses Http>? fallback,                     // compiles
+    Map<string, Function<Charge(Cart) uses Http, Mail>> handlers,   // compiles: Http and Mail are both effects
+    Function<int(Function<int(int) uses Http>)> apply,              // compiles
+) { }
 ```
 
 The type ends at its `>`, so everything about it sits inside its brackets, and each line reads one way. The `?` stays right after the type, as on every other type. Inside `Map<…>`, `Mail` can only be an effect, because the function type's `>` has not closed yet.

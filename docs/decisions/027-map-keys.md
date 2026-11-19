@@ -28,7 +28,7 @@ public struct Cart
 Map<Cart, int> totals = [:];                        // compile error: Cart holds a Customer, a class instance
 ```
 
-A struct is a value already (section 10), and `==` already compares it field by field (section 19), so its whole value is the key. Nothing is written to make it one. Jordan ruled this on 2026-10-12.
+A struct is a value already (section 10), and `==` already compares it field by field (section 19), so its whole value is the key. Nothing is written to make it one. The language owner ruled this on 2026-10-12.
 
 ### Chosen: a struct holding a class instance can't key a `Map`
 
@@ -42,7 +42,7 @@ public struct Username
     public Username(public string value { get; }) { }
     public string toString() => this.value;
 }
-Json.encode(byUser);                                // {"ada": {…}}: the key text is toString()
+Json.encode(byUser);                                // {"ada":{…}}: the key text is toString()
 Json.encode(bookings);                              // compile error: Slot declares no toString(), so its key has no JSON text
 ```
 
@@ -79,7 +79,7 @@ public struct Username : string
 Map<Username, Order> byUser = [:];                  // keyed by username.value
 ```
 
-This was the rule until 2026-10-12. Jordan rejected the header: "I'm not a massive fan of public struct Pair : string". It also made a key of only one field, so a struct of two fields needed a hand-built text key.
+This was the rule until 2026-10-12. The language owner rejected the header: "I'm not a massive fan of public struct Pair : string". It also made a key of only one field, so a struct of two fields needed a hand-built text key.
 
 ### Rejected: a fixed field name, or a one-field limit
 
@@ -95,7 +95,7 @@ public struct Slot
 Map<Slot, Booking> bookings = [:];                  // compile error under a one-field limit
 ```
 
-Jordan rejected both on 2026-10-12. Either makes a field's name or count decide whether a value can be a key, which no other rule of a struct depends on.
+The language owner rejected both on 2026-10-12. Either makes a field's name or count decide whether a value can be a key, which no other rule of a struct depends on.
 
 ### Rejected: a key through `toString()`
 

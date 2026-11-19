@@ -1,0 +1,6 @@
+namespace App.Invokers;
+
+public class VerifiedUser
+{
+    public VerifiedUser(public string name { get; }) { }
+}

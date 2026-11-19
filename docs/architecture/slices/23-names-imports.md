@@ -1,5 +1,7 @@
 # Slice 23: Namespaces and imports, and keyword case
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 23, and section 2's rule that keywords are lowercase. team-lead approved G1 to G8, the four engine test files and `ParseError::UsesOnImportInSharp`, with the answers below, which replace the proposals of this note wherever they differ.
 
 **Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
@@ -10,7 +12,7 @@ Spec section 23, and section 2's rule that keywords are lowercase. team-lead app
 
 1. **Q1:** no. An alias exists only in a framework's runtime config, so `import Log;` names a class the checker sees, as in `import Illuminate.Support.Facades.Log;`. Its error says there is no class `Log` to import, with no special case for `log()`.
 2. **Q2 and G5:** one source of truth. Every public class the standard library declares directly in `Sharp` is a default name. The list is generated from the library, and a test fails when the two disagree, in place of the checker guard. `ListMethods`, `MapMethods`, `SetMethods` and `IterableMethods` move to `Sharp\Internal`, in the engine, the prelude, the bridge and the tests.
-3. **P1** still waits for Jordan, and master's behavior stays.
+3. **P1** still waits for the language owner, and master's behavior stays.
 
 ## The answer first
 
@@ -25,7 +27,7 @@ Section 23 already holds on master for every example and for most rule lines: do
 - **A plain PHP class named like a PHP# namespace compiles.** `mago analyze` reports it on the `.php` file, and `mago compile` prints only `.sharp` files' errors, so nothing refuses it.
 - **Two errors don't say what the spec says they say:** `Math.floor` without its import is "Method `Math.floor` does not exist." instead of naming the import, and a bare library constant `DEFAULT_DPI` is "Undefined constant" instead of naming `Pdf.DEFAULT_DPI`.
 
-The bridge, the engine and the Composer plugin need no change. The Slice adds one engine test that pins section 23's runtime meaning in every opcache mode. Two questions decide what users write, and one item waits on Jordan.
+The bridge, the engine and the Composer plugin need no change. The Slice adds one engine test that pins section 23's runtime meaning in every opcache mode. Two questions decide what users write, and one item waits on the language owner.
 
 ## Rule by rule
 
@@ -77,7 +79,7 @@ What already suggests the keyword: every statement head (`If`, `IF`, `RETURN`, `
 | C3 | An import collides with a default name | works: `import Cache.Key;` shadows `Key`, so `[Key("cache_key")]` names `Cache.Key` and is "not declared with `#[Attribute]`", the error the spec renames around |
 | C4 | A Laravel facade imported by its alias, `import Log;` | **wrong error**: "An import names a class or a namespace, not a function: call `global.Log(…)`.", because PHP's `log()` matches ignoring case, then "Function `Log.info` does not exist." Question 1 |
 
-### Waiting on Jordan
+### Waiting on the language owner
 
 - **P1. A PHP# override of a plain PHP method whose parameter is named after a PHP# keyword.** Built in the singles PR: `handle(Object @event)` over `handle(object $event)` keeps the parent's name, and a bare `handle(Object event)` is "`event` is a keyword; write `@event`."
 
@@ -229,7 +231,7 @@ Zend/tests/sharp/
 
 Everything else changes function bodies and `pub(crate)` items.
 
-## Questions for Jordan
+## Questions for the language owner
 
 Each one decides what users write. The note recommends and decides none.
 

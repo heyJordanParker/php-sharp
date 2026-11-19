@@ -1,5 +1,7 @@
 # Slice 31: Expected failures as values
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 31: `Result`, the `try` operator and the `Error` interface. This note holds every line of the section, its state on master `39b305352e`, its mechanism and the code it reuses. team-lead approved it with the answers under "Answers in force", which replace the proposals of the questions below wherever they differ.
 
 ## Answers in force
@@ -134,7 +136,7 @@ TEST_MAGO_EXECUTABLE=sharp/build/darwin-arm64/mago/release/mago sharp/build/darw
 
 The spec run ended "Checked 201 examples, ignored 1, and 25 fail.", matching `sharp/baseline/spec`. Its section 31 lines are quoted under each rule.
 
-Every rule without an example of its own was probed in one scratch project, `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-result/ws`: the harness and the standard library laid out as the spec run lays them out, with one probe class per question in `app/Probes/`. `mago compile` checked it with `MAGO_REPORTING_FORMAT=emacs`, and the engine ran the compiled probes through `run.php`, a PSR-4 autoloader that also finds a case class through its enum's file, and the plain PHP driver `drive-master.php`. Three plain PHP files beside it, `php-enum-property.php`, `php-enum-interface.php` and `php-exception-error.php`, show what PHP itself refuses. Each message and value quoted below is that run's output.
+Every rule without an example of its own was probed in one scratch project, `~/.claude/jobs/6affb5f6/tmp/slice-result/ws`: the harness and the standard library laid out as the spec run lays them out, with one probe class per question in `app/Probes/`. `mago compile` checked it with `MAGO_REPORTING_FORMAT=emacs`, and the engine ran the compiled probes through `run.php`, a PSR-4 autoloader that also finds a case class through its enum's file, and the plain PHP driver `drive-master.php`. Three plain PHP files beside it, `php-enum-property.php`, `php-enum-interface.php` and `php-exception-error.php`, show what PHP itself refuses. Each message and value quoted below is that run's output.
 
 # Every rule of section 31, its state and its mechanism
 

@@ -151,5 +151,5 @@ array(4) {
   [2]=>
   string(26) "ReflectedClasses.ValueList"
   [3]=>
-  string(105) "`invoke` calls the instance method ReflectedClasses\ValueList::label() on a receiver, and was given null."
+  string(145) "`ReflectedClasses.ValueList.label` takes a receiver of `ReflectedClasses.Dictionary` first, and `Function<Any?(List<Any?>)>` passes `List<Any?>`."
 }

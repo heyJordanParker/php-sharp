@@ -5,5 +5,6 @@ public class Register : Till
 {
     public override string name() => "register";
 
-    public static Any? guardedFrom(Till till) => Calls.method("guarded").invoke(till, []);
+    public static Any? guardedFrom(Till till)
+        => Calls.method("guarded").createInvoker<Function<Any?(Object, List<Any?>)>>()(till, []);
 }

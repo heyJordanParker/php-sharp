@@ -1,5 +1,7 @@
 # Slice 24: Built-in types and `Any`
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 24, and section 5's rule for a member with no access modifier. This note is the design only. team-lead approves it before anyone builds.
 
 **Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
@@ -61,7 +63,7 @@ The Slice builds all of it in one PR, after #135 and #136.
     - `sharp/spec-self-test.md`'s `refusal` example writes a property with no access modifier after #135. Decision 4 makes that compile, so the example writes a by-reference parameter, which stays "not supported yet".
 14. **A class cast is one parse error.** `(Admin) user` is a refusal today, but it gives two errors, "Parse error encountered during parsing" and "A PHP# field needs a type, as in `private int count = 0;`". The parser reports one, the error a typo gets, at the `(`, where a parenthesized class name is followed by an expression, as line 3044 says.
 
-## Questions for Jordan
+## Questions for the language owner
 
 Each one decides what users write. The note recommends and decides none.
 
@@ -100,7 +102,7 @@ FAIL §24 object-type (docs/spec.md:3120)
   docs/spec.md:3128 expects a compile error, and the checker accepts it
 ```
 
-- **Probes:** the checker probes are in `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-built-in-types/ws/app/Probe/`, a copy of `sharp/bin/spec`'s harness project, compiled by `compile.sh ws` (`mago compile`, or `mago analyze` for warnings) with `MAGO_REPORTING_FORMAT=emacs`. The engine probes are in `run/app/Probe/`, compiled the same way and run by `run.php run probes/<name>.php` on the engine. Every message and value below is their output.
+- **Probes:** the checker probes are in `~/.claude/jobs/6affb5f6/tmp/slice-built-in-types/ws/app/Probe/`, a copy of `sharp/bin/spec`'s harness project, compiled by `compile.sh ws` (`mago compile`, or `mago analyze` for warnings) with `MAGO_REPORTING_FORMAT=emacs`. The engine probes are in `run/app/Probe/`, compiled the same way and run by `run.php run probes/<name>.php` on the engine. Every message and value below is their output.
 
 # Every rule of section 24 and section 5's member rule, its state and its mechanism
 
@@ -291,7 +293,7 @@ Zend/tests/sharp/                             <- added: Ids.sharp and Ids.inc, o
                                                  changed: library_json.phpt (encode), parse.phpt and Checkout.sharp (string only)
 ```
 
-`docs/spec.md` changes only where decision 11 says, and where Jordan's answers change a line.
+`docs/spec.md` changes only where decision 11 says, and where the language owner's answers change a line.
 
 # The tests
 

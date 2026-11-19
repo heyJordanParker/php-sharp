@@ -1,5 +1,7 @@
 # The effect classes
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 The standard library ships one `foreign` class per effect: `Clock`, `Random`, `Console`, `Process`, `Files`, `Http`, `Cache`, `Mail`, `Database` and `Environment`. Each lives in namespace `Sharp`, one file each, beside `sharp/composer/library/Sharp/Environment.sharp`. A module creates the object and passes it down through constructors. Each member calls the plain PHP it stands for.
 
 **Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.

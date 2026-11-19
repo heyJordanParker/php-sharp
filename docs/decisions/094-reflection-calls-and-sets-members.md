@@ -1,6 +1,8 @@
 # 94. Reflection calls and sets members
 
-Jordan's ruling of 11-13. It amends [decision 30](030-class-values.md), which refused a member named by a variable: reflection is the one sanctioned way to name a member by a value.
+Superseded in part by [section 25](../spec.md#25-referring-to-classes): `Method.invoke` is gone, and `Method.createInvoker` calls a method with a list of arguments, with only the effects its function type lists.
+
+The language owner's ruling of 11-13. It amends [decision 30](030-class-values.md), which refused a member named by a variable: reflection is the one sanctioned way to name a member by a value.
 
 ## Decision
 
@@ -16,8 +18,8 @@ public class Importer
     public void fill(Object row, Map<string, Any?> values)
     {
         for (const property of typeof(Row).properties()) {
-            if (values.containsKey(property.name)) {
-                property.set(row, values[property.name]);   // runs; throws TypeError for a value of another type
+            if (values.has(property.name)) {
+                property.set(row, values.get(property.name));   // runs; throws TypeError for a value of another type
             }
         }
     }

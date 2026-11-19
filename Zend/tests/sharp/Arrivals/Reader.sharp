@@ -65,10 +65,20 @@ public class Reader
 
     public string? late(Source source) => source.madeBySelf().get("status");
 
-    // Only the run-time class is known, so its static runs through reflection, spec section 25.
+    // Only the run-time class is known, so its static runs through reflection, spec section 25. An invoker states the
+    // effects the static may have, so a plain PHP override no `extern` line declares, which may have every effect, is
+    // refused.
     public string? ofClass(Source source)
-        => (Class.of(source).methods().first(method => method.name == "made").invoke(null, []) as Map<string, string>)
-            ?.get("status");
+    {
+        try {
+            return (Class.of(source).methods()
+                .first(method => method.name == "made")
+                .createInvoker<Function<Any?(List<Any?>)>>()([]) as Map<string, string>)
+                ?.get("status");
+        } catch (ValueError refused) {
+            return refused.getMessage();
+        }
+    }
 
     public string? maybe(Source? source) => source?.status().get("status");
 

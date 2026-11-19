@@ -1,5 +1,7 @@
 # Slice 12: Collection methods
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 12's collection methods, with the parts of section 19 they reach (`==` on the element type). v1 plan Slice 2. This note is the design only. team-lead approves it before anyone builds.
 
 **Superseded in part by the standard library's collection members:** the engine has no `Sharp\Collection` and no PHP# method-call opcode. Every `List`, `Map`, `Set` and `Iterable` method is a member of the `ListMembers`, `MapMembers`, `SetMembers` or `IterableMembers` extension block in `sharp/composer/library/Sharp`, which calls a `Sharp\Internal` engine function or the engine's `Sharp\Internal\Sequence`, and a member that changes the collection takes it by `ref`. `map[key] = value` runs the `Map`'s `set`, as `list[i] = v` runs the `List`'s. A `Map`'s `filter` runs as `Sharp\Internal\filterEntries`, and `filterValues` and `delete` exist nowhere. Every `Sharp\Collection` method, `IterableMethods` class, `Sharp\Sequence` name, `sharp_collection_*` function, `ZEND_METHOD_CALL_SHARP` mark and `zend_compile_sharp_receiver` arm below describes the engine before that change.
@@ -72,11 +74,11 @@ Section 12 says "A `List` index is a place, so a change through it changes the e
 
 ## How the states were observed
 
-Every state below comes from the `mago` built from mago-sharp `master` at `8818f9550` in slot 1, `/Users/jordan/Developer/sharp-worktrees/1/mago-sharp/target/debug/mago`, built at 01:19 on 2026-10-12 (`stat -f "%Sm"`) with `git status --short` empty. It ran on one scratch project, `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-collection-methods/ws`, whose `composer.json` maps `App\` to `app/` and whose `mago.toml` has `paths = ["app"]`.
+Every state below comes from the `mago` built from mago-sharp `master` at `8818f9550` in slot 1, `~/Developer/sharp-worktrees/1/mago-sharp/target/debug/mago`, built at 01:19 on 2026-10-12 (`stat -f "%Sm"`) with `git status --short` empty. It ran on one scratch project, `~/.claude/jobs/6affb5f6/tmp/slice-collection-methods/ws`, whose `composer.json` maps `App\` to `app/` and whose `mago.toml` has `paths = ["app"]`.
 
 ```sh
-MAGO=/Users/jordan/Developer/sharp-worktrees/1/mago-sharp/target/debug/mago
-P=/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-collection-methods
+MAGO=~/Developer/sharp-worktrees/1/mago-sharp/target/debug/mago
+P=~/.claude/jobs/6affb5f6/tmp/slice-collection-methods
 compile() { env -u FORCE_COLOR XDG_CACHE_HOME=$P/cache MAGO_REPORTING_FORMAT=emacs MAGO_LOG=error \
   $MAGO --no-version-check --colors never --threads 2 --workspace $P/ws compile; }
 ```

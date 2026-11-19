@@ -1,6 +1,6 @@
 # 98. An allow-list is a type
 
-Jordan's ruling of 11-13. This amends [decision 89](089-bytes-exact-json-and-sql-identifiers.md), whose `Sql.identifier` it deletes.
+The language owner's ruling of 11-13. This amends [decision 89](089-bytes-exact-json-and-sql-identifiers.md), whose `Sql.identifier` it deletes.
 
 ## Decision
 

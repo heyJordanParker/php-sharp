@@ -1,6 +1,6 @@
 # 86. `late` members
 
-Jordan's ruling of 11-11.
+The language owner's ruling of 11-11.
 
 ## Decision
 

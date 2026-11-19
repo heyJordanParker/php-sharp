@@ -1,5 +1,7 @@
 # 28. Overriding a plain PHP parent's property
 
+Superseded: [section 6.1, Property features](../spec.md#61-property-features) holds the current rule for the access level. An override's access level is the parent's or wider, as PHP lets an override widen it, and its `set` keeps the parent's. The rest of this decision holds.
+
 ## Decision
 
 A class overrides a plain PHP parent's property with a property marked `override`, and writes its type like every PHP# property: `protected override string? table { get; set; } = "orders";`. The written type must fit the parent's `@var` type, or equal the parent's type when PHP declares one. The access level matches the parent's, `set` included. The override has `set`, because the parent's own code writes the property, and it may give `get` and `set` bodies. When the parent's property has no PHP type, the engine drops the written type as the class links, and runs the accessor bodies as PHP's hooks on the untyped property. Every override is a property: a field with `override` is an error (section 6.1).
@@ -13,7 +15,7 @@ public class Order : Model
 {
     protected override string? table { get; set; } = "orders";                    // compiles; runs: protected $table = 'orders', untyped as in Model
     protected override List<string> fillable { get; set; } = ["number", "total"]; // compiles
-    protected override string? table { get; set => field = value.trim(); }       // compiles; runs as PHP's set hook on $table
+    protected override string? table { get; set => field = value?.trim(); } = "orders";   // compiles; runs as PHP's set hook on $table
     protected override table { get; set; } = "orders";                            // compile error: write the type
     protected override string? table = "orders";                                  // compile error: an override is a property
     protected override string? table { get; } = "orders";                         // compile error: Model's own code writes table, so its override has set

@@ -1,10 +1,12 @@
 # Slice 32: Hosts
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 A PHP# app runs under php-fpm, the CLI, FrankenPHP and Laravel Octane. A long-running host keeps one booted app in memory and serves request after request, or job after job, from it. This slice makes each lifetime mean the same thing under every host: a `scoped` service lives for one unit of work and never reaches the next one, a `singleton` and a static live as long as the app runs.
 
 **Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
 
-Jordan's rulings this slice builds on:
+The language owner's rulings this slice builds on:
 
 - **A static lives as long as the app runs.** Its initial value runs once per app. Under Octane every request sees what the last one left. Under php-fpm nothing changes, because there the app lives for one request.
 - **The host starts and ends each scope through one standard-library call, `Scope.run(body)`,** and PHP# ships no framework code. PHP's own request is the default scope.
@@ -19,12 +21,12 @@ Each claim below ran on master `02c05cb5f1` in slot 3, or was read from the sour
 - **That scope crashes the process when a `Fiber` suspends inside it.** A fiber calls `Container::scope`, suspends inside it, and the main code then calls `Container::scope` and resumes the fiber. The main code's scoped services come from the fiber's scope, and after both scopes end the next `get` reads the destroyed table: exit code 139, a segmentation fault (`scope_fiber_probe.php`). The pointer is one global restored in call order, and fibers end scopes out of that order.
 - **No PHP# code can call the scope today.** The checker's engine stub, `crates/prelude/assets/extensions/sharp.php`, declares no `Sharp\Container`. Only plain PHP reaches `Container::scope`, and only `container_lifetimes.phpt` and `docs/architecture/modules.md` name it.
 - **FrankenPHP's worker mode runs ext/sharp's RINIT once per worker thread, not once per HTTP request.** FrankenPHP v1.13.0's `frankenphp_worker_request_startup` and `frankenphp_worker_request_shutdown` rerun the request hooks of `filter` and `session` only (`MODULES_TO_RELOAD`). So under a worker every `scoped` service is built once and reaches every later HTTP request. This was read from FrankenPHP's source. Running it needs the FrankenPHP image this slice adds, so Phase 2 runs the fixture against master's engine first and records the leak before any engine change.
-- **Statics already live as long as the PHP request.** A static is PHP's own static member (`CE_STATIC_MEMBERS`), and a static initial value runs in the class's hidden `#statics` method when the request first builds the class's statics. `static lazy` is kept in `container_singletons` (`Sharp_Internal_keep`). Under a worker one PHP request serves many HTTP requests, so the engine already does what Jordan ruled. Only the wording says "request".
+- **Statics already live as long as the PHP request.** A static is PHP's own static member (`CE_STATIC_MEMBERS`), and a static initial value runs in the class's hidden `#statics` method when the request first builds the class's statics. `static lazy` is kept in `container_singletons` (`Sharp_Internal_keep`). Under a worker one PHP request serves many HTTP requests, so the engine already does what the language owner ruled. Only the wording says "request".
 - **A PHP# method that takes a function refuses every argument that has an effect.** A probe project declares `static T plain<T>(Function<T()> body) => body();` and `static T carried<T>(Function<T()> body) uses body => body();`, and calls each with `() => this.environment.require("HOME")`. Both are refused: "This lambda calls `Environment.require`, which has the effect `Environment`, so a `Function<string()>` cannot hold it." `uses body` parses but does not let the lambda through. `sharp/baseline/spec/§29/function-effects` lists the spec example of this rule as failing. A `Scope.run` written as a library method would refuse every real request handler until section 29's rule for function parameters holds.
 - **The thread-safe build compiles and passes.** `configure --enable-zts --enable-debug` with `sharp/bin/build`'s flags builds with no warning from ext/sharp. `Zend/tests/sharp` on it: 227 of 278 pass without opcache, and 227 pass with opcache shared memory, each test run twice in one process. The 51 that fail are every `*_jit_*` test, which prints `opcache_get_status()['jit']['on']` and expects `on`. PHP has no JIT for ZTS on Apple Silicon ("JIT not supported on Apple Silicon with ZTS" from configure), so these run on Linux. The same 278 pass on the NTS build.
 - **ext/sharp keeps no unguarded process-wide mutable state.** Every module global is in `ZEND_BEGIN_MODULE_GLOBALS(sharp)` and read through `SHARP_G`, with `GINIT` and `GSHUTDOWN`. The process-wide variables are class entries, handlers and interned keys set once in `MINIT`, and three intern tables, `sharp_types`, `sharp_type_lists` and `sharp_class_values`, which every read and write reaches only under `sharp_types_lock`, a `tsrm_mutex` under ZTS. The Rust library holds no state. PHP#'s changes to `Zend/`, `main/` and `ext/opcache/` against upstream `PHP-8.5.11` add no top-level variable, only `zend_compiled_revision`, a function pointer set once in `MINIT`. `sharp_run_compile_command`'s child calls only `open`, `chdir`, `dup2`, `execl` and `_exit`, which are safe after `fork` in a threaded process. No run so far had several threads in one process. The FrankenPHP fixture runs with several worker threads for that.
 
-## Jordan's answers
+## The language owner's answers
 
 1. **A scope follows the fiber that runs in it.** A fiber started inside `Scope.run` belongs to that scope, and a fiber's own `Scope.run` is its own. Resolving a `scoped` service after its scope ended throws `Sharp\ContainerError`. Section 32 states the rule with an example.
 2. **"A host that runs several workers runs one app in each."** FrankenPHP runs one PHP request per worker thread, and Octane on Swoole runs one per worker process, so each worker has its own statics and singletons.
@@ -136,7 +138,7 @@ public class Worker
 
 ## `docs/v1.md`
 
-A new file with the Goal as Jordan set it: v1 is feature-complete PHP#, the first usable version, measured by the validation app. The validation app compiles and its tests pass on the PHP# engine, then its files move to PHP# one at a time, coordinated with Jordan, and keep working. Feature-complete means every spec example and rule holds, no "not supported yet" is left, PHP# runs under php-fpm, the CLI, FrankenPHP and Octane, and it is released with both runtime images. The file names the validation app by no name and no path.
+A new file with the Goal as the language owner set it: v1 is feature-complete PHP#, the first usable version, measured by the validation app. The validation app compiles and its tests pass on the PHP# engine, then its files move to PHP# one at a time, coordinated with the language owner, and keep working. Feature-complete means every spec example and rule holds, no "not supported yet" is left, PHP# runs under php-fpm, the CLI, FrankenPHP and Octane, and it is released with both runtime images. The file names the validation app by no name and no path.
 
 # The `Scope` API
 
@@ -168,7 +170,7 @@ function runScoped(\Closure $body): mixed {}
 
 `extern Internal.runScoped;` declares it pure, because starting a scope reaches nothing outside the container. Its effects are the body's, which `Scope.run` takes on.
 
-The name of the engine function, at its one callsite, `Internal.runScoped(body)`. `Scope` and `run` are Jordan's and fixed:
+The name of the engine function, at its one callsite, `Internal.runScoped(body)`. `Scope` and `run` are the language owner's and fixed:
 
 - `Internal.runScoped(body)` — what happens to the body; "run body scoped"; close to `run`, which is the point.
 - `Internal.withScope(body)` — the state while it runs; "with a scope, body"; `with` already makes a copy in PHP#.

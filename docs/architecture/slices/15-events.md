@@ -1,5 +1,7 @@
 # Slice 15: Events
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 15, finished across the checker, the bridge and the engine in one php-sharp pull request, `feat/events-engine`. team-lead approved decisions 1 to 7 as written and ruled on the questions, under "Rulings". "What the branch holds" says what is built.
 
 **Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
@@ -39,9 +41,9 @@ Error: Call to undefined function Sharp\Internal\emit()
 team-lead ruled on the five questions the first version of this note asked, each with its spec line:
 
 1. **`Events.on<T>` with a type that isn't an event is refused with the messages the `on` clause gives** (`check_listed_events` in `crates/analyzer/src/statement/class_like/listener.rs`). Spec: "`Events.on<RowImported>(e => …)` starts a listener and returns a handle."
-2. **A new object for every event, whatever lifetime a module gives the listener's class,** as Jordan ruled. Spec: "PHP# creates a new object for every event and passes its constructor's services from the module of its namespace."
+2. **A new object for every event, whatever lifetime a module gives the listener's class,** as the language owner ruled. Spec: "PHP# creates a new object for every event and passes its constructor's services from the module of its namespace."
 3. **`Dispatcher.dispatch` may reach any effect, because the listeners it runs may.** Spec: "`emit` has the effect `Events`" and "An app replaces the dispatcher once at startup, to run listeners later, after a save, with retries".
-4. **A plain PHP library's own events reach PHP# listeners through PSR-14,** as Jordan ruled. PHP# offers its listeners as a PSR-14 listener provider, and builds no adapter for any framework. Drawn under "Plain PHP events through PSR-14", and section 15 of the spec now states the rule.
+4. **A plain PHP library's own events reach PHP# listeners through PSR-14,** as the language owner ruled. PHP# offers its listeners as a PSR-14 listener provider, and builds no adapter for any framework. Drawn under "Plain PHP events through PSR-14", and section 15 of the spec now states the rule.
 5. **The table records its inputs, and the engine checks them only when `sharp.compile_command` is set.** Spec: "Nothing is wired by hand." Corrected after the review, which found a listener in a new folder and an `on` added to a class nothing loads both unheard: the inputs are every PHP# file and the listing of its folder and of each folder above it, and a listing names a folder's namespace folders too. So any new or changed listener makes the next `emit` compile, and a deploy's `mago compile` is exact.
 
 ## What the branch holds
@@ -92,8 +94,8 @@ The old note on `feat/slice-events` was approved, and its decisions on table ord
 - **mago:** a release `mago` built from master `76d220c199` in this worktree, with `CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_LTO=off rustup run 1.97.0 cargo build --release --locked -j 2`, at `sharp/build/darwin-arm64/mago/release/mago`.
 - **engine:** `sharp/bin/build` from the same commit, PHP 8.5.11 NTS DEBUG at `sharp/build/darwin-arm64/sapi/cli/php`.
 - **examples:** `TEST_MAGO_EXECUTABLE=<that mago> <that php> sharp/bin/spec` printed "Checked 180 examples, ignored 1, and 82 fail." Its section 15 lines are quoted below.
-- **single rules:** a probe project at `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-events-engine/probe`, laid out as `sharp/bin/spec` lays out an example: the harness, the standard library at `vendor/heyjordanparker/php-sharp-composer/`, and `app/Probe/` with an interface, two events, an `extern event JobFailed;`, a listener class with a `Mailer` service and four listeners, a `Module.sharp` binding `Mailer`, an emitting `Register`, and one file per refusal. `mago compile` ran on it, and `run.php` ran its compiled `Register.pay` on the engine.
-- **the handle:** `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-events-engine/handle.php`, a destructor in a local nobody reads, on the engine without opcache, with opcache's optimizer, and with the function and tracing JIT.
+- **single rules:** a probe project at `~/.claude/jobs/6affb5f6/tmp/slice-events-engine/probe`, laid out as `sharp/bin/spec` lays out an example: the harness, the standard library at `vendor/heyjordanparker/php-sharp-composer/`, and `app/Probe/` with an interface, two events, an `extern event JobFailed;`, a listener class with a `Mailer` service and four listeners, a `Module.sharp` binding `Mailer`, an emitting `Register`, and one file per refusal. `mago compile` ran on it, and `run.php` ran its compiled `Register.pay` on the engine.
+- **the handle:** `~/.claude/jobs/6affb5f6/tmp/slice-events-engine/handle.php`, a destructor in a local nobody reads, on the engine without opcache, with opcache's optimizer, and with the function and tracing JIT.
 
 # Every line of section 15
 
@@ -247,11 +249,11 @@ The parameter is `emitted`. `event` is a PHP# keyword, so a parameter takes that
 - **These stay as the approved note set them:** an exception from a listener leaves `emit` and the listeners after it don't run (PSR-14), an `emit` inside a listener runs its listeners first, and each `emit` runs the listeners that existed when it started.
 - Precedent: Laravel binds `Illuminate\Contracts\Events\Dispatcher` in its container, which `Event::fake()` swaps.
 
-The default path resolves one `singleton` and calls one PHP# method per `emit`. Measured on the debug engine without opcache, with `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-events-engine/bench.php` over 20,000 runs: an `emit` of the fixtures' `OrderPaid`, which five listeners hear, took 21.7 µs, and the same five listeners called directly on new objects took 4.3 µs, so `emit` adds 3.5 µs per listener. Nothing was added to avoid it, and no profile says which step costs most.
+The default path resolves one `singleton` and calls one PHP# method per `emit`. Measured on the debug engine without opcache, with `~/.claude/jobs/6affb5f6/tmp/slice-events-engine/bench.php` over 20,000 runs: an `emit` of the fixtures' `OrderPaid`, which five listeners hear, took 21.7 µs, and the same five listeners called directly on new objects took 4.3 µs, so `emit` adds 3.5 µs per listener. Nothing was added to avoid it, and no profile says which step costs most.
 
 # Plain PHP events through PSR-14
 
-Jordan ruled ruling 4: a plain PHP library's own events reach PHP# listeners through PSR-14. PHP# offers its listeners as a PSR-14 listener provider, so a library whose dispatcher follows PSR-14 reaches `on` methods with nothing written by hand. A library with its own dispatcher needs one adapter package, and PHP# builds none for any framework.
+The language owner ruled ruling 4: a plain PHP library's own events reach PHP# listeners through PSR-14. PHP# offers its listeners as a PSR-14 listener provider, so a library whose dispatcher follows PSR-14 reaches `on` methods with nothing written by hand. A library with its own dispatcher needs one adapter package, and PHP# builds none for any framework.
 
 ```php
 // sharp/composer/src/Psr/ListenerProvider.php

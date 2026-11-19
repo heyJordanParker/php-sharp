@@ -11,6 +11,8 @@ PHP# has no superglobals. `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, 
 ### Chosen: no superglobals, and a standard `Environment`
 
 ```csharp
+import Sharp.System.Environment;
+
 public class Deploy
 {
     public Deploy(private Environment environment) { }                                   // compiles; Deploy has the Environment effect

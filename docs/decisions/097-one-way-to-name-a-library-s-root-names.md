@@ -1,6 +1,6 @@
 # 97. One way to name a library's root names
 
-Jordan's ruling of 11-13. This amends [decision 83](083-php-through-the-standard-library.md), whose rule that a library's function of PHP's root namespace belongs to the namespace of the classes in its folder it deletes, and [decision 91](091-extern-namespace.md), whose `extern namespace` line becomes the only way to give any root name of a library a namespace.
+The language owner's ruling of 11-13. This amends [decision 83](083-php-through-the-standard-library.md), whose rule that a library's function of PHP's root namespace belongs to the namespace of the classes in its folder it deletes, and [decision 91](091-extern-namespace.md), whose `extern namespace` line becomes the only way to give any root name of a library a namespace.
 
 ## Decision
 

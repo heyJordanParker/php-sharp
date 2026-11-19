@@ -1,5 +1,7 @@
 # Slice: generics R3 to R5
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 R1 and R2 are php-sharp #102 and mago-sharp #152. This note covers what the one R3–R5 PR per repo adds, and fixes the names other Slices build against before the code lands.
 
 **Superseded in part by the standard library's collection members:** the engine has no `Sharp\Collection` and no PHP# method-call opcode. Every `List`, `Map`, `Set` and `Iterable` method is a member of the `ListMembers`, `MapMembers`, `SetMembers` or `IterableMembers` extension block in `sharp/composer/library/Sharp`, which calls a `Sharp\Internal` engine function or the engine's `Sharp\Internal\Sequence`, and a member that changes the collection takes it by `ref`. `map[key] = value` runs the `Map`'s `set`, as `list[i] = v` runs the `List`'s. A `Map`'s `filter` runs as `Sharp\Internal\filterEntries`, and `filterValues` and `delete` exist nowhere. Every `Sharp\Collection` method, `IterableMethods` class, `Sharp\Sequence` name, `sharp_collection_*` function, `ZEND_METHOD_CALL_SHARP` mark and `zend_compile_sharp_receiver` arm below describes the engine before that change.
@@ -273,5 +275,5 @@ A parameter, a plain PHP result and a property write of `Class<PaginatedList<Ord
 
 ### Left as they are
 
-- `Class<…>` has no `is` test, as R3c says, and `==` between class values compares their names until Jordan rules on it.
+- `Class<…>` has no `is` test, as R3c says, and `==` between class values compares their names until the language owner rules on it.
 - A `ReflectionType` prints PHP's erased type: `string` for a `Class<PaginatedList<Order>>` parameter, `App\Box` for a `Box<Order>` return.

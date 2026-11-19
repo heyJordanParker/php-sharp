@@ -13,7 +13,7 @@ Map<string, int> prices = ["basic": 900, "pro": 2900];
 int price = prices["pro"];                                  // compile error: handle a missing "pro" with ??, or read it with get
 int price = prices["pro"] ?? 0;                             // compiles: 0 when "pro" is missing
 int price = prices[plan] ?? throw new UnknownPlan(plan);    // compiles: throws when plan is missing
-if (prices[plan] is int price) { charge(price); }           // compiles: runs only when plan is present
+if (prices[plan] is int price) { this.charge(price); }      // compiles: runs only when plan is present
 ```
 
 Data with fixed keys is a class, so a `Map` holds keys that come from outside, where a missing key is normal. The type makes every read say what happens then.

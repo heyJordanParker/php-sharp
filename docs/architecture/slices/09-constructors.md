@@ -1,5 +1,7 @@
 # Slice 9: Constructors
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 9 and 9.1, with the parts of sections 6, 14.2 and 25 that section 9 reaches. This note is the design only. team-lead approves it before anyone builds.
 
 **Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
@@ -32,20 +34,20 @@ Each one is drawn in full further down.
 
 ## Rulings
 
-team-lead approved decisions 1, 3, 4, 5 and 8, the public names tree, and the PR order. The Architect ruled on the four questions that decide what compiles:
+team-lead approved decisions 1, 3, 4, 5 and 8, the public names tree, and the PR order. The language owner ruled on the four questions that decide what compiles:
 
-1. **No implicit `super()`.** A constructor whose class has a base class with a constructor always writes `: super(…)`. The Architect's words: "better to be always explicit than to be sometimes explicit". PR 2 refuses a constructor without it with `missing-super-call`: "`Child`'s constructor must call `Base`'s with `: super(…)`."
+1. **No implicit `super()`.** A constructor whose class has a base class with a constructor always writes `: super(…)`. The language owner's words: "better to be always explicit than to be sometimes explicit". PR 2 refuses a constructor without it with `missing-super-call`: "`Child`'s constructor must call `Base`'s with `: super(…)`."
 2. **A get-only property is set once.** A named constructor cannot overwrite a get-only property the main constructor set. A property a named constructor must set again is declared `{ get; init; }`. PR 3 refuses the overwrite, and PR 5 builds `init`.
 3. **Braces are always required,** as PSR-12 requires them. The spec writes the guard clause with them: `if (!tenant.active) { throw new InactiveTenant(tenant); }`. mago-sharp #173 refuses every body of `if`, `else` and each loop written without braces, `if (x) return;` included, with "PHP# writes the body of `if`, `else` and each loop in braces." and the braced fix as help.
-4. **`this` in `: super(…)` and `: this(…)` is refused** (the Architect's ruling 12): "`this` is not available before the constructor runs: pass a parameter instead."
+4. **`this` in `: super(…)` and `: this(…)` is refused** (the language owner's ruling 12): "`this` is not available before the constructor runs: pass a parameter instead."
 
 ## How the states were observed
 
-Every state below comes from the `mago` built from #131's branch, `/Users/jordan/Developer/sharp-worktrees/5/mago-sharp/target/debug/mago`, run on one scratch project, `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-constructors/ws`. Its `composer.json` maps `Demo\` to `app/`, and its `mago.toml` has `paths = ["app"]`. Every example file's code is shown where its state is given. Some are shown with one line per class, so a quoted line and column refer to the file on disk.
+Every state below comes from the `mago` built from #131's branch, `~/Developer/sharp-worktrees/5/mago-sharp/target/debug/mago`, run on one scratch project, `~/.claude/jobs/6affb5f6/tmp/slice-constructors/ws`. Its `composer.json` maps `Demo\` to `app/`, and its `mago.toml` has `paths = ["app"]`. Every example file's code is shown where its state is given. Some are shown with one line per class, so a quoted line and column refer to the file on disk.
 
 ```sh
-MAGO=/Users/jordan/Developer/sharp-worktrees/5/mago-sharp/target/debug/mago
-P=/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-constructors
+MAGO=~/Developer/sharp-worktrees/5/mago-sharp/target/debug/mago
+P=~/.claude/jobs/6affb5f6/tmp/slice-constructors
 compile() { env -u FORCE_COLOR XDG_CACHE_HOME=$P/cache MAGO_REPORTING_FORMAT=emacs MAGO_LOG=error \
   $MAGO --no-version-check --colors never --threads 2 --workspace $P/ws compile; }
 ```
@@ -71,7 +73,7 @@ class Field { public Field(public string label { get; }) { } }
 
 **The binary matches master everywhere section 9 reaches.** It was built at 19:17 (`stat -f "%Sm" …/target/debug/mago`), the build the section 28 note records from #131's head `4df706a39`. Slot 5's mago-sharp is at master `9e99ae688`. `git diff --stat 4df706a39 HEAD -- crates/syntax/src/parser crates/semantics/src/internal/checker/sharp.rs crates/sharp-bridge/src/lower.rs crates/names/src crates/codex/src/signature_builder.rs` shows one file, `sharp.rs`, whose diff touches only `as` types, patterns and an empty `match`.
 
-**The engine part of each state is read from code.** No PHP# engine binary is built: `ls …/sapi/cli/php` in slots 1 to 5 and in `/Users/jordan/Developer/php-sharp` finds none. A refused file never runs: `ext/sharp/sharp.c` `sharp_refuse` prints "`<file>` isn't compiled. Run vendor/bin/mago compile.", and `Zend/tests/sharp/compile_command.phpt` shows the checker's errors as "CompileError: `<file>` has N errors:". A compiled file runs the PHP the bridge lowers it to, read from `crates/sharp-bridge/src/lower.rs` and its tests in `crates/sharp-bridge/tests/lower.rs`.
+**The engine part of each state is read from code.** No PHP# engine binary is built: `ls …/sapi/cli/php` in slots 1 to 5 and in `~/Developer/php-sharp` finds none. A refused file never runs: `ext/sharp/sharp.c` `sharp_refuse` prints "`<file>` isn't compiled. Run vendor/bin/mago compile.", and `Zend/tests/sharp/compile_command.phpt` shows the checker's errors as "CompileError: `<file>` has N errors:". A compiled file runs the PHP the bridge lowers it to, read from `crates/sharp-bridge/src/lower.rs` and its tests in `crates/sharp-bridge/tests/lower.rs`.
 
 # Every rule of section 9, its state and its mechanism
 

@@ -1,5 +1,7 @@
 # Slice: the rest of section 11
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 11 and 11.1, every rule line, with the generic statics that properties (#132) left refused. #102 built generics R1 to R5, and `11-generics.md` is its note. This note holds the design team-lead approved, each rule's state on master `55769621b5`, and what this Slice built for it.
 
 ## The answer first

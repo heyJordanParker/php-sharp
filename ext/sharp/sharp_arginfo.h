@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 7f8fd4e845b3fc9d527bda5d83c87603ec55d8a3 */
+ * Stub hash: ef90abd01a00cb14907f76a548ac2704e066e158 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
@@ -163,20 +163,14 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_createInstance, 0
 	ZEND_ARG_TYPE_INFO(0, arguments, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_invoke, 0, 5, IS_MIXED, 0)
-	ZEND_ARG_TYPE_INFO(0, receiver, IS_OBJECT, 1)
-	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
-	ZEND_ARG_TYPE_INFO(0, method, IS_STRING, 0)
-	ZEND_ARG_TYPE_INFO(0, arguments, IS_ARRAY, 0)
-	ZEND_ARG_TYPE_INFO(0, readOn, IS_STRING, 0)
-ZEND_END_ARG_INFO()
-
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_Sharp_Internal_createDelegate, 0, 4, Closure, 0)
 	ZEND_ARG_TYPE_INFO(0, readOn, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, method, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
 ZEND_END_ARG_INFO()
+
+#define arginfo_Sharp_Internal_createInvoker arginfo_Sharp_Internal_createDelegate
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_read, 0, 3, IS_MIXED, 0)
 	ZEND_ARG_TYPE_INFO(0, receiver, IS_OBJECT, 1)
@@ -522,8 +516,8 @@ ZEND_FUNCTION(Sharp_Internal_enumCases);
 ZEND_FUNCTION(Sharp_Internal_constants);
 ZEND_FUNCTION(Sharp_Internal_constant);
 ZEND_FUNCTION(Sharp_Internal_createInstance);
-ZEND_FUNCTION(Sharp_Internal_invoke);
 ZEND_FUNCTION(Sharp_Internal_createDelegate);
+ZEND_FUNCTION(Sharp_Internal_createInvoker);
 ZEND_FUNCTION(Sharp_Internal_read);
 ZEND_FUNCTION(Sharp_Internal_write);
 ZEND_FUNCTION(Sharp_Internal_readField);
@@ -634,8 +628,8 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "constants"), zif_Sharp_Internal_constants, arginfo_Sharp_Internal_constants, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "constant"), zif_Sharp_Internal_constant, arginfo_Sharp_Internal_constant, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "createInstance"), zif_Sharp_Internal_createInstance, arginfo_Sharp_Internal_createInstance, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "invoke"), zif_Sharp_Internal_invoke, arginfo_Sharp_Internal_invoke, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "createDelegate"), zif_Sharp_Internal_createDelegate, arginfo_Sharp_Internal_createDelegate, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "createInvoker"), zif_Sharp_Internal_createInvoker, arginfo_Sharp_Internal_createInvoker, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "read"), zif_Sharp_Internal_read, arginfo_Sharp_Internal_read, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "write"), zif_Sharp_Internal_write, arginfo_Sharp_Internal_write, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "readField"), zif_Sharp_Internal_readField, arginfo_Sharp_Internal_readField, 0, NULL, NULL)

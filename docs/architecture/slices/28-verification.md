@@ -1,5 +1,7 @@
 # Slice 28: Verification
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 28 and 28.1, with the parts of section 27 that section 28 reaches. This note is the design only. team-lead approves it before anyone builds.
 
 **Superseded by [decision 057](../../decisions/057-laws-and-lean-files.md):** a law's proof is its body, in ordinary PHP# in the `.sharp` file, and no `.lean` file of the project is ever read. Every `Money.lean`, gap, missing-proof and deleted-law path this note describes is gone. Structure rules in Lean, which this Slice first designed, are gone too: a module's `imports` line (spec section 32) limits what its namespace imports, and the checker checks it with no Lean. This note keeps only the design that still stands: module laws, the law checker on a user's machine, and the editor.
@@ -20,7 +22,7 @@ Each one is drawn in full further down. These are the choices a builder cannot m
 1. **A module is a class-like named `<Namespace>\Module` in codex, flagged as a module.** The spec already names a module law `App.Tenant.Store.Module.receiptMatchesRefunds`, the name a law of a class `App.Tenant.Store.Module` gets. So every class-law path on master serves module laws unchanged: the scanner, the analyzer's purity check, `Reach`, `translate`, the proof file and the editor lens.
 4. **A broken module law refuses `Module.sharp`.** That follows the class-law precedent: the law's own file is refused. Until section 32 gives `Module.sharp` a job at startup, nothing loads it, so a broken module law fails `mago compile` and every deploy, but a request in development still runs `Receipts.sharp`.
 5. **`mago` installs Lean on first use.** When `lake` is not on the `PATH`, Mago downloads the pinned elan release into its cache folder and runs Lake through it, as the Composer wrapper downloads the pinned `mago` release on first use.
-6. **The editor display ports upstream's language server layer** onto master's `mago-server`, and adds one lens. A VS Code client is a separate question for the Architect.
+6. **The editor display ports upstream's language server layer** onto master's `mago-server`, and adds one lens. A VS Code client is a separate question for the language owner.
 
 ## Rulings
 
@@ -31,11 +33,11 @@ team-lead approved decisions 1, 4, 5 and 6 as written, with these rulings:
 
 ## How the states were observed
 
-Every state below comes from a `mago` built from #131's branch, `/Users/jordan/Developer/sharp-worktrees/5/mago-sharp/target/debug/mago`, run on scratch projects under `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-verification/`.
+Every state below comes from a `mago` built from #131's branch, `~/Developer/sharp-worktrees/5/mago-sharp/target/debug/mago`, run on scratch projects under `~/.claude/jobs/6affb5f6/tmp/slice-verification/`.
 
 ```sh
-MAGO=/Users/jordan/Developer/sharp-worktrees/5/mago-sharp/target/debug/mago
-P=/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-verification
+MAGO=~/Developer/sharp-worktrees/5/mago-sharp/target/debug/mago
+P=~/.claude/jobs/6affb5f6/tmp/slice-verification
 compile() { env XDG_CACHE_HOME=$P/cache MAGO_REPORTING_FORMAT=emacs MAGO_LOG=error \
   $MAGO --no-version-check --colors never --threads 2 --workspace $P/$1 compile; }
 ```
@@ -50,7 +52,7 @@ Each project has `mago.toml` with `paths = ["app"]`, a `composer.json` mapping `
 
 **The binary differs from master only where section 28 does not reach.** It was built at 19:17 from #131's branch, whose head `4df706a39` is master's merge `ffebf4cca`'s second parent. `git diff --stat 8c6cda9d8 ffebf4cca -- crates/sharp-lean crates/syntax crates/semantics crates/sharp-bridge crates/names crates/orchestrator crates/server src` shows only `crates/names/src/lib.rs` and `crates/sharp-bridge/src/lower.rs`, both collection-method changes. `git diff --stat ffebf4cca 4df706a39` shows 29 files in `crates/analyzer` and `crates/codex`, the collection and function-type effect work of #116 and #126. Master keeps the law purity check that `p5` hits: `crates/analyzer/src/effects/check.rs` `laws_must_be_pure` still prints "Laws hold only over pure code". mago-sharp's `master` has since moved to `9e99ae688`, and `git diff --stat ffebf4cca 9e99ae688` touches only pattern and `as` checks.
 
-The engine part of each state is read from `Zend/tests/sharp/compile_command.phpt`, because no PHP# engine binary is built in any slot (`find /Users/jordan/Developer/sharp-worktrees -maxdepth 4 -path "*/sapi/cli/php"` finds none). That test shows the engine printing "`<file>` has N errors:" with one `line N: <message>` per error the checker reported, and "`<file>` isn't compiled. Run vendor/bin/mago compile." for a refused file. A law needs no engine change to reach the same refusal: it is one more error in the checker's report.
+The engine part of each state is read from `Zend/tests/sharp/compile_command.phpt`, because no PHP# engine binary is built in any slot (`find ~/Developer/sharp-worktrees -maxdepth 4 -path "*/sapi/cli/php"` finds none). That test shows the engine printing "`<file>` has N errors:" with one `line N: <message>` per error the checker reported, and "`<file>` isn't compiled. Run vendor/bin/mago compile." for a refused file. A law needs no engine change to reach the same refusal: it is one more error in the checker's report.
 
 # Every rule of section 28, its state and its mechanism
 
@@ -242,7 +244,7 @@ Refused for modules (`p2`).
 
 The lens: `Server::get_lens(file)` returns one `CodeLensItem` above each method that at least one law mentions, listing those laws. "Mention" means the law's own expression references the method, read from the symbol references the analysis records under the law's symbol. Module laws appear the same way.
 
-**An editor still needs a client.** Editors with a generic LSP client (Neovim, Helix, Zed) attach `vendor/bin/mago language-server` to `.sharp` files with a few lines of configuration. VS Code needs an extension that registers `.sharp` and starts the server. None exists. Shipping one is a new package and a Marketplace listing, so it is the Architect's call (open question 1).
+**An editor still needs a client.** Editors with a generic LSP client (Neovim, Helix, Zed) attach `vendor/bin/mago language-server` to `.sharp` files with a few lines of configuration. VS Code needs an extension that registers `.sharp` and starts the server. None exists. Shipping one is a new package and a Marketplace listing, so it is the language owner's call (open question 1).
 
 # Lean on a user's machine
 
@@ -333,7 +335,7 @@ The Slice also refuses what giving `Module.sharp` a meaning requires, with error
 
 Section 32 rules that no syntax marks, so nothing exists to refuse until the container exists: a missing or mistyped service as a compile error, `Factory<T>`, PSR-11, scoped lifetimes, and `foreign` objects created in a module.
 
-# Open questions for the Architect
+# Open questions for the language owner
 
 1. **A VS Code client.** The language server serves any LSP editor. VS Code needs an extension that registers `.sharp` and starts `vendor/bin/mago language-server`, about a hundred lines, published to the Marketplace and Open VSX. Should it ship in this Slice, and in which repository?
 2. **Module laws in development.** With decision 4, a broken module law fails `mago compile` and every deploy, but until section 32 a development request still runs `Receipts.sharp`. Refusing every file the law reaches instead would stop them now, but no class law does that today, and section 32 makes `Module.sharp` load at startup anyway.

@@ -102,10 +102,13 @@ public static class Facts
     public static List<Any?> statics()
     {
         const which = typeof(Dictionary).methods().first(method => method.name == "which");
-        List<Any?> facts = [which.isStatic, which.invoke(null, []), which.declaringClass.name()];
+        List<Any?> facts =
+            [which.isStatic, which.createInvoker<Function<Any?(List<Any?>)>>()([]), which.declaringClass.name()];
         try {
-            typeof(Dictionary).methods().first(method => method.name == "label").invoke(null, []);
-        } catch (InvalidArgumentException failure) {
+            typeof(Dictionary).methods()
+                .first(method => method.name == "label")
+                .createInvoker<Function<Any?(List<Any?>)>>();
+        } catch (ValueError failure) {
             facts.add(failure.getMessage());
         }
         return facts;

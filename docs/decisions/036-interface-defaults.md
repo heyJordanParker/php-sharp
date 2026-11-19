@@ -11,7 +11,7 @@ PHP# declares no traits. An interface can give a method a default body, and a de
 ```csharp
 public interface HasDesign
 {
-    List<string> claims { get; set; }                       // compiles: abstract, each class declares its storage
+    List<string> claims { get; }                            // compiles: abstract, each class declares its storage
     string designColumn { get; }                            // compiles: abstract
     string designKey() => `design:${this.designColumn}`;    // compiles: a default body
     string designId() => `design:${this.id}`;               // compile error: a default body sees only HasDesign's members
