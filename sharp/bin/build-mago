@@ -54,7 +54,8 @@ build_engine() {
   # the system's own libraries. The engine finds each through pkg-config's static flags, which name what each archive
   # needs in turn. Curl and libzip build here from their releases on every platform: a packaged curl's archive needs
   # HTTP/2, IDN, SSH, LDAP and Kerberos archives besides, and no package ships libzip's archive on both. Curl takes
-  # OpenSSL alone, and libzip zlib and OpenSSL alone. Oniguruma builds here on Linux, where Debian ships no archive of it.
+  # OpenSSL alone, and libzip zlib and OpenSSL alone. Oniguruma builds here on Linux, where Debian ships no archive of it,
+  # at 6.9.10, whose callbacks state their parameters, so it compiles as C23, as GCC 15 compiles by default.
   deps="$root/sharp/build/$platform-engine-deps"
   export PKG_CONFIG="pkg-config --static" PKG_CONFIG_PATH="$deps/install/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
   # Builds the library `name` at `version` from the release at `url`, whose SHA-256 is `sha256`, into $deps/install, with
@@ -93,8 +94,8 @@ build_engine() {
       -DENABLE_MBEDTLS=OFF -DBUILD_TOOLS=OFF -DBUILD_REGRESS=OFF -DBUILD_OSSFUZZ=OFF -DBUILD_EXAMPLES=OFF -DBUILD_DOC=OFF \
       && cmake --build build -j$("$root/sharp/bin/jobs") && cmake --install build"
   if [[ "$(uname -s)" == Linux ]]; then
-    static_library oniguruma 6.9.9 https://github.com/kkos/oniguruma/releases/download/v6.9.9/onig-6.9.9.tar.gz \
-      60162bd3b9fc6f4886d4c7a07925ffd374167732f55dce8c491bfd9cd818a6cf \
+    static_library oniguruma 6.9.10 https://github.com/kkos/oniguruma/releases/download/v6.9.10/onig-6.9.10.tar.gz \
+      2a5cfc5ae259e4e97f86b68dfffc152cdaffe94e2060b770cb827238d769fc05 \
       sh -c "./configure --prefix='$deps/install' --disable-shared --enable-static --with-pic \
         && make -j$("$root/sharp/bin/jobs") && make install"
   fi
