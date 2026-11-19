@@ -181,6 +181,8 @@ function readField(?object $receiver, string $class, string $field): mixed {}
 
 function writeField(?object $receiver, string $class, string $field, mixed $value): void {}
 
+function defaultValue(string $class, string $method, int $position): mixed {}
+
 function readModule(string $path): void {}
 
 function testModule(string $class, array $bindings): void {}

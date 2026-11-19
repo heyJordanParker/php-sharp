@@ -5611,6 +5611,85 @@ static const char *sharp_parameter_name(const zend_function *func, uint32_t offs
 	return ((const zend_internal_arg_info *) func->common.arg_info)[offset].name;
 }
 
+/* Whether PHP runs code when it evaluates the constant expression `ast`: a `new`, a call, a closure or an arrow
+ * function, compiled or not, as a .sharp file's computed value, `(static function () { return …; })()`, is. A constant,
+ * a class constant, an enum case and an operator on them run none. */
+static bool sharp_ast_runs_code(zend_ast *ast)
+{
+	if (!ast) {
+		return false;
+	}
+	switch (ast->kind) {
+		case ZEND_AST_ZVAL:
+		case ZEND_AST_CONSTANT:
+			return false;
+		case ZEND_AST_OP_ARRAY:
+		case ZEND_AST_NEW:
+		case ZEND_AST_CALL:
+		case ZEND_AST_STATIC_CALL:
+		case ZEND_AST_METHOD_CALL:
+		case ZEND_AST_NULLSAFE_METHOD_CALL:
+			return true;
+	}
+	if (zend_ast_is_special(ast)) {
+		return zend_ast_is_decl(ast);
+	}
+	if (zend_ast_is_list(ast)) {
+		const zend_ast_list *list = zend_ast_get_list(ast);
+		for (uint32_t i = 0; i < list->children; i++) {
+			if (sharp_ast_runs_code(list->child[i])) {
+				return true;
+			}
+		}
+		return false;
+	}
+	for (uint32_t i = 0; i < zend_ast_get_num_children(ast); i++) {
+		if (sharp_ast_runs_code(ast->child[i])) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/* The default of the parameter at `offset` of `func` into `value`, which the caller releases, as PHP's reflection
+ * reads it before it evaluates it: a user function's from its RECV_INIT, and a PHP function's from its arginfo. False
+ * for a parameter with none, a variadic one included. */
+static bool sharp_parameter_default(const zend_function *func, uint32_t offset, zval *value)
+{
+	if (offset >= func->common.num_args) {
+		return false;
+	}
+	if (func->type == ZEND_INTERNAL_FUNCTION) {
+		return !(func->common.fn_flags & ZEND_ACC_USER_ARG_INFO)
+			&& zend_get_default_from_internal_arg_info(
+				value, (zend_internal_arg_info *) &func->internal_function.arg_info[offset]) == SUCCESS;
+	}
+	const zend_op *op = func->op_array.opcodes;
+	for (const zend_op *end = op + func->op_array.last; op < end; op++) {
+		if (op->opcode == ZEND_RECV_INIT && op->op1.num == offset + 1) {
+			ZVAL_COPY(value, RT_CONSTANT(op, op->op2));
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/* Whether the parameter at `offset` of `func` has a default that runs no code when PHP evaluates it, spec section 25,
+ * which `Parameter.hasConstantDefault` reads. */
+static bool sharp_has_constant_default(const zend_function *func, uint32_t offset)
+{
+	zval value;
+	if (!sharp_parameter_default(func, offset, &value)) {
+		return false;
+	}
+	bool constant = Z_TYPE(value) != IS_CONSTANT_AST || !sharp_ast_runs_code(Z_ASTVAL(value));
+	zval_ptr_dtor(&value);
+
+	return constant;
+}
+
 /* Adds to `entry` the access modifier that declares a member of the PHP flags `flags` and the attributes `attributes`,
  * spec section 5. PHP has no namespace reach, so an `internal` member runs as public, and the bridge marks it with
  * #[\Sharp\Internal\Internal]. */
@@ -5631,8 +5710,8 @@ static void sharp_add_visibility(zval *entry, uint32_t flags, HashTable *attribu
  * `arguments`, spec section 25: first the list of the class that declares it, its name, its result type as
  * sharp_add_declared_type adds it, its modifiers as sharp_method_declared_types gives them, and its access modifier as
  * sharp_add_visibility adds it, then one list per parameter: its name, its type, "optional" for one a call may leave
- * out or "", and "variadic" for the one that takes the rest of a call's arguments or "". False with an exception when
- * no type reads. */
+ * out or "", "variadic" for the one that takes the rest of a call's arguments or "", and "constant" for one whose
+ * default runs no code, see sharp_has_constant_default, or "". False with an exception when no type reads. */
 static bool sharp_method_row(zval *method, const zend_function *func, const zend_class_entry *ce,
 	const sharp_type *arguments)
 {
@@ -5657,12 +5736,13 @@ static bool sharp_method_row(zval *method, const zend_function *func, const zend
 	zend_hash_next_index_insert_new(Z_ARRVAL_P(method), &declared);
 	for (uint32_t i = 0; i < count; i++) {
 		zval parameter;
-		array_init_size(&parameter, 4);
+		array_init_size(&parameter, 5);
 		add_next_index_string(&parameter, sharp_parameter_name(func, i));
 		sharp_add_declared_type(&parameter, types->members[i + 1]);
 		add_next_index_string(&parameter, i >= func->common.required_num_args ? "optional" : "");
 		/* PHP keeps a variadic parameter after the others, outside num_args. */
 		add_next_index_string(&parameter, i == func->common.num_args ? "variadic" : "");
+		add_next_index_string(&parameter, sharp_has_constant_default(func, i) ? "constant" : "");
 		zend_hash_next_index_insert_new(Z_ARRVAL_P(method), &parameter);
 	}
 
@@ -5921,9 +6001,10 @@ ZEND_FUNCTION(Sharp_Internal_accessors)
 		zend_hash_next_index_insert_new(Z_ARRVAL(row), &declared);
 		if (kind == ZEND_PROPERTY_HOOK_SET) {
 			zval parameter;
-			array_init_size(&parameter, 4);
+			array_init_size(&parameter, 5);
 			add_next_index_string(&parameter, "value");
 			sharp_add_declared_type(&parameter, type);
+			add_next_index_string(&parameter, "");
 			add_next_index_string(&parameter, "");
 			add_next_index_string(&parameter, "");
 			zend_hash_next_index_insert_new(Z_ARRVAL(row), &parameter);
@@ -6582,6 +6663,82 @@ ZEND_FUNCTION(Sharp_Internal_writeField)
 	ZEND_PARSE_PARAMETERS_END();
 
 	sharp_storage_use(execute_data, receiver, class_name, name, value, return_value);
+}
+
+/* The function whose parameters `Parameter` reads as the method `name` of `ce`: the method itself, or for an accessor,
+ * named `$total::get` or `$total::set` as PHP names a property hook, a static's hidden method or an instance property's
+ * hook, as `ClassMembers.reflectedMethod` reaches it. NULL for none. */
+static const zend_function *sharp_parameter_function(zend_class_entry *ce, zend_string *name)
+{
+	if (ZSTR_VAL(name)[0] != '$') {
+		return sharp_method_named(ce, name);
+	}
+	const char *separator = strstr(ZSTR_VAL(name), "::");
+	if (!separator) {
+		return NULL;
+	}
+	zend_string *property = zend_string_init(ZSTR_VAL(name) + 1, separator - ZSTR_VAL(name) - 1, false);
+	const char *accessor = separator + strlen("::");
+	int kind = strcmp(accessor, "get") == 0 ? ZEND_PROPERTY_HOOK_GET : ZEND_PROPERTY_HOOK_SET;
+	const zend_function *func = sharp_static_accessor(ce, ZSTR_VAL(property), kind);
+	if (!func) {
+		const zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, property);
+		func = info && info->hooks ? info->hooks[kind] : NULL;
+	}
+	zend_string_release_ex(property, false);
+
+	return func;
+}
+
+/* Spec section 25: `Parameter.defaultValue()`, the default of the parameter at `position` of the method `method` that
+ * `class_name` declares, evaluated as PHP's ReflectionParameter::getDefaultValue evaluates it, in the scope of the
+ * class that declares the method. A default that runs code, see sharp_ast_runs_code, throws ValueError before any of it
+ * runs, so the read is pure, spec section 29, and `Parameter.hasConstantDefault` tells such a default apart first. A
+ * parameter with none, a required or a variadic one, throws OutOfRangeException, as `List.first()` does. */
+ZEND_FUNCTION(Sharp_Internal_defaultValue)
+{
+	zend_string *class_name;
+	zend_string *method;
+	zend_long position;
+
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_STR(class_name)
+		Z_PARAM_STR(method)
+		Z_PARAM_LONG(position)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_class_entry *ce = zend_lookup_class(class_name);
+	if (!ce) {
+		if (!EG(exception)) {
+			zend_throw_error(NULL, "Class \"%s\" not found", ZSTR_VAL(class_name));
+		}
+		RETURN_THROWS();
+	}
+	const zend_function *func = sharp_parameter_function(ce, method);
+	uint32_t count = func ? func->common.num_args + !!(func->common.fn_flags & ZEND_ACC_VARIADIC) : 0;
+	if (position < 0 || (zend_ulong) position >= count) {
+		zend_throw_error(NULL, "PHP# reads no parameter %d of %s::%s. This is a bug in PHP#", (int) position,
+			ZSTR_VAL(ce->name), ZSTR_VAL(method));
+		RETURN_THROWS();
+	}
+	zval value;
+	if (!sharp_parameter_default(func, (uint32_t) position, &value)) {
+		zend_throw_exception_ex(spl_ce_OutOfRangeException, 0,
+			"`defaultValue` reads a parameter that has a default, and `%s` of `%s` has none.",
+			sharp_parameter_name(func, (uint32_t) position), ZSTR_VAL(method));
+		RETURN_THROWS();
+	}
+	if (Z_TYPE(value) == IS_CONSTANT_AST && sharp_ast_runs_code(Z_ASTVAL(value))) {
+		zval_ptr_dtor(&value);
+		zend_value_error("`defaultValue` reads a default that runs no code, and `%s` of `%s` has one that runs code, "
+			"which `defaultValue` never runs", sharp_parameter_name(func, (uint32_t) position), ZSTR_VAL(method));
+		RETURN_THROWS();
+	}
+	if (Z_TYPE(value) == IS_CONSTANT_AST && zval_update_constant_ex(&value, func->common.scope) != SUCCESS) {
+		zval_ptr_dtor(&value);
+		RETURN_THROWS();
+	}
+	RETURN_COPY_VALUE(&value);
 }
 
 /* The interned type `node`, a whole type read into `reader`'s arena, spells, for the request. */

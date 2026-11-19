@@ -56,14 +56,21 @@ public static class Facts
         return refusals;
     }
 
-    // A `new` in a default creates a new object on each read.
-    public static bool readsANewDefaultEachTime()
+    // A default that runs code, PHP#'s `new Tag("first")` and plain PHP's `new Tag('plain')`, is refused, and no `Tag`
+    // is created.
+    public static List<Any?> refusedDefaults()
     {
-        const tag = typeof(Ledger).methods().first(method => method.name == "total").parameters()[1];
-        if (tag.defaultValue() is Tag first && tag.defaultValue() is Tag second) {
-            return first !== second;
+        Tag.made = 0;
+        List<Any?> facts = [];
+        for (const type of [typeof(Ledger), typeof(PlainLedger)]) {
+            try {
+                type.methods().first(method => method.name == "total").parameters()[1].defaultValue();
+            } catch (ValueError failure) {
+                facts.add(failure.getMessage());
+            }
         }
-        return false;
+        facts.add(Tag.made);
+        return facts;
     }
 
     // A parameter a call must give, which has no default value.
@@ -72,18 +79,11 @@ public static class Facts
     private static string parameter(Parameter parameter)
     {
         const variadic = parameter.isVariadic ? "..." : "";
-        const value = parameter.isOptional && !parameter.isVariadic ? ` = ${Facts.shown(parameter.defaultValue())}` : "";
+        const value = parameter.hasConstantDefault
+            ? ` = ${Facts.shown(parameter.defaultValue())}`
+            : parameter.isOptional && !parameter.isVariadic ? " runs code" : "";
         return `${variadic}${parameter.name}${value}`;
     }
 
-    private static string shown(Any? value)
-    {
-        if (value is Tag tag) {
-            return `new Tag(${tag.label})`;
-        }
-        if (value is int number) {
-            return `${number}`;
-        }
-        return "other";
-    }
+    private static string shown(Any? value) => value is int number ? `${number}` : "other";
 }

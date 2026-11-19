@@ -1,7 +1,12 @@
 namespace App.Facts;
 
-// A class whose constructor promotes an `internal` property.
+// A class whose constructor promotes an `internal` property, and counts each object it makes.
 public class Tag
 {
-    public Tag(internal string label { get; }) { }
+    public static int made { get; set; } = 0;
+
+    public Tag(internal string label { get; })
+    {
+        Tag.made += 1;
+    }
 }

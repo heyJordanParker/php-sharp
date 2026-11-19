@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Changed
+
+- `Parameter.defaultValue()` is pure under every `uses`, and throws `ValueError` for a default that runs code, a `new`, a call or a lambda, without running it, spec sections 25 and 29. 0.6.32 gave it the effects of every parameter default the analysis loaded, so with only constant ones a method held to `uses none` read any parameter's default, a plain PHP vendor class's `__construct(Transport $t = new SmtpTransport())` included, and ran `SmtpTransport`'s constructor inside pure code. `Parameter.hasConstantDefault` now tells a default that runs no code apart, so a reader that fills a call's missing arguments reads those and leaves out the others, and the call then runs those defaults under its own effects. A read of such a default now throws "`defaultValue` reads a default that runs no code, and `tag` of `total` has one that runs code, which `defaultValue` never runs". `Property.defaultValue()` and `Field.defaultValue()` keep the effects of the initial values they can run.
+
 ## [0.6.32] - 2026-11-19
 
 ### Changed
