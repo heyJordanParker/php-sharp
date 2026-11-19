@@ -4,7 +4,7 @@ A class whose laws the checker proves runs, and once an edit leaves a case of a 
 <?php
 require __DIR__ . '/project.inc';
 
-$root = compile_project('laws', ['composer.json' => "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n"]);
+$root = compile_project('laws', ['composer.json' => "{\"type\": \"library\", \"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n"]);
 mkdir("$root/app/Shared", recursive: true);
 file_put_contents("$root/app/Shared/Money.sharp", <<<'SHARP'
 namespace App.Shared;
