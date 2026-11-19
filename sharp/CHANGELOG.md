@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.32] - 2026-11-19
+
 ### Changed
 
 - `Field.set` writes a lazy object that has not loaded without loading it, and replaces `Property.setBeforeLoad`, which is gone, spec sections 25 and 29. `setBeforeLoad` ran the property's `set` accessor, so it may have had every effect, and 0.6.31 refused it in every method held to a `uses`, as "`Ghosts.reference` reaches `Property.setBeforeLoad`, which may have every effect, so `uses Database, Events` on `Saves.reference` cannot accept it." So no method with a `uses` could give a `createLazy` ghost its identity before it loads. Write it with `typeof(Row).fields()[0].set(ghost, id)`, which runs no accessor and is pure, as PHP 8.4's `setRawValueWithoutLazyInitialization` writes. A read of that storage never loads the ghost, and the ghost keeps the value once it loads. A call of `setBeforeLoad` is now refused as "Method `Property.setBeforeLoad` does not exist.". `Field.get` on a ghost that has not loaded still throws `Error` rather than load it.
@@ -1323,7 +1325,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.31...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.32...HEAD
+[0.6.32]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.31...v0.6.32
 [0.6.31]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.30...v0.6.31
 [0.6.30]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.29...v0.6.30
 [0.6.29]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.28...v0.6.29
