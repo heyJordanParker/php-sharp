@@ -79,13 +79,13 @@ $files = [
         import Acme.Events.Plain;
 
         [Group("listeners"), Group(Plain.KIND)]
-        extern AsEventListener;
+        extern AsEventListener uses none;
 
         [Group("line send")]
-        extern Mailer.send;
+        extern Mailer.send uses none;
 
         [Group("line sentAt")]
-        extern Events.sentAt;
+        extern Events.sentAt uses none;
 
         public static class Names
         {

@@ -2,4 +2,4 @@ namespace ExternCallables;
 
 import Lib.Hooks;
 
-extern bool Hooks.add_action(string hookName, callable callback, int priority = 10, int acceptedArgs = 1);
+extern bool Hooks.add_action(string hookName, callable callback, int priority = 10, int acceptedArgs = 1) uses none;

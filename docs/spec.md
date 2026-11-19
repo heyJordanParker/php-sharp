@@ -23,7 +23,7 @@ Attributes use square brackets, with these rules:
 - no parentheses when there are no arguments: `[Searchable]`
 - explicit targets, which name the part of the declaration a bracket goes on: `type:` on a type, `type:` or `event:` on an event, `method:` on a method, an operator, a named constructor, a lambda, an accessor or an observer, `param:` on a parameter and on the value `set` or `init` takes, `field:` on a field, a constant or an enum case, `property:` and `field:` on a property, and `param:`, `property:` and `field:` on a parameter that declares a property, a constructor's, an event's or a data case's, where an untargeted bracket goes on both the parameter and the property
 - an attribute always describes a declaration, so a return value takes none, and `[return: NotNull]` is a parse error
-- an attribute is data, built only from constants, so the constructor a PHP# attribute class runs, its own or one it inherits, the defaults of its parameters, and the initial values of the class and of each class it extends have no effect, a plain PHP call no `extern` declares included, and one that has an effect is a compile error that names it; so reading the attributes of a PHP# class with `attributes<T>()` is pure (section 25)
+- an attribute is data, built only from constants, so the constructor a PHP# attribute class runs, its own or one it inherits, the defaults of its parameters, and the initial values of the class and of each class it extends have no effect, and one that has an effect, as a plain PHP call whose `extern` line says `uses any` has, is a compile error that names it; so reading the attributes of a PHP# class with `attributes<T>()` is pure (section 25)
 - on every declaration: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, an operator, a named constructor, a parameter, a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`, and an accessor, as in `[Searchable] get;`, a static or get-only auto-property's included
 - on an `extern` line, whose attributes the plain PHP class, method or function it declares carries as its own, `type:` the one target of a class's line and `method:` of a method's or a function's (section 29)
 - on `willSet` and `didSet`, whose attributes go on the `set` they run inside, after its own
@@ -991,7 +991,7 @@ namespace App.Stubs;
 
 import Vendor.Hooks;
 
-extern bool Hooks.add_action(string hookName, callable callback, int priority = 10, int acceptedArgs = 1);
+extern bool Hooks.add_action(string hookName, callable callback, int priority = 10, int acceptedArgs = 1) uses none;
 ```
 
 <!-- example extern-callable -->
@@ -1899,7 +1899,9 @@ class Shelf
 }
 ```
 
-<!-- example plain-list-arrival: statements -->
+<!-- example plain-list-arrival: statements
+extern Shelf uses none;
+-->
 ```csharp
 for (const line of Shelf.kept()) { … }       // compiles: plain PHP's array<int, Line> is a List<Line>
 List<Line> kept = Shelf.kept();             // compiles: kept[0] is the first kept line, whatever its key was
@@ -2814,7 +2816,7 @@ class Subscription
 ```
 
 <!-- example magic-properties: statements
-extern Subscription.owner;
+extern Subscription uses none;
 Subscription subscription = new Subscription();
 -->
 ```csharp
@@ -3128,10 +3130,10 @@ namespace App.Stubs;
 
 import Illuminate.Queue.Events.JobFailed;
 
-extern event JobFailed;
+extern event JobFailed uses none;
 ```
 
-**`extern event` states the class's effects after `uses`,** as every `extern` does (section 29). `extern event JobFailed;` names no effect, so it declares an event that is pure. With `uses`, a call into the event's class has the effect it names:
+**`extern event` states the class's effects after `uses`,** as every `extern` line does (section 29). `extern event JobFailed uses none;` declares an event that is pure. With effects after `uses`, a call into the event's class has the effects it names:
 
 <!-- example extern-event-effects -->
 ```csharp
@@ -3371,6 +3373,16 @@ final class Html
 
 <!-- example named-variadics -->
 ```csharp
+// app/Stubs/Html.sharp
+namespace App.Stubs;
+
+import App.Html;
+
+extern Html uses none;
+```
+
+<!-- example named-variadics -->
+```csharp
 // app/Catalog.sharp
 namespace App;
 
@@ -3595,6 +3607,8 @@ final class Row {}
 ```
 
 <!-- example plain-to-string: statements
+extern Email uses none;
+extern Row uses none;
 Email email = new Email("ada@example.com");
 Row row = new Row();
 -->
@@ -4402,7 +4416,9 @@ class Legacy
 }
 ```
 
-<!-- example type-tests: statements -->
+<!-- example type-tests: statements
+extern Legacy uses none;
+-->
 ```csharp
 Any? doubled = (int x) => x * 2;
 doubled is Function<int(int)>;               // true
@@ -4412,7 +4428,37 @@ Legacy.doubler() is Function<int(int)>;      // compile error: the type of Legac
 
 **A plain PHP parameter whose native type is `callable` or `Closure` and states no signature takes any function value,** whatever its parameters and its result, so `Template.each(visit)` compiles for a `visit` of none, two or three parameters, a method such as `this.visit` and a lambda.
 
-**A call of a function whose type is unknown compiles,** as a call to plain PHP with no declaration does: its arguments are not checked, its result is `Any?`, and it has an unknown effect (section 29), so `Legacy.doubler()(2)` compiles and a law that reaches it is a compile error. Only a type test of such a function is a compile error.
+**A call of a function whose type is unknown is a compile error** that names the `extern` line that states its type. A function plain PHP gives has no PHP# type, so its effects are unknown even when its docblock states its parameters and its result (section 29): `Legacy.doubler()(2)` is refused until `extern Function<int(int) uses none> Legacy.doubler() uses none;` states what `Legacy.doubler` gives, and then it compiles, checked as a call of any function value is. A function a plain PHP property holds is a member of the class that declares the property, so its call has the effects of that class's `extern` line.
+
+<!-- example unknown-function-calls -->
+```php
+class Legacy
+{
+    public static function doubler(): \Closure { return fn($x) => $x * 2; }
+    public static function tripler(): \Closure { return fn($x) => $x * 3; }
+}
+```
+
+<!-- example unknown-function-calls -->
+```csharp
+// app/Stubs/Legacy.sharp
+namespace App.Stubs;
+
+extern Legacy uses none;
+extern Function<int(int) uses none> Legacy.doubler() uses none;
+```
+
+<!-- example unknown-function-calls -->
+```csharp
+// app/Report.sharp
+namespace App;
+
+public class Report
+{
+    public int doubled() => Legacy.doubler()(2);   // compiles: the line states the function's type
+    public int tripled() => Legacy.tripler()(2);   // compile error: the type of Legacy.tripler()'s function is unknown
+}
+```
 
 **A plain PHP closure's type is its declared PHP signature,** as a plain PHP property's type is its declared one (section 25). A parameter it declares no type for takes anything, and a result it declares no type for is `Any?`, so `fn () => new Order()` is a `Function<Any?()>`, never a `Function<Order?()>`. Its type lists no effects, so it fits every `uses`, as the checker takes a plain PHP callable:
 
@@ -4425,7 +4471,9 @@ class Orders
 }
 ```
 
-<!-- example plain-closure-type-tests: statements -->
+<!-- example plain-closure-type-tests: statements
+extern Orders uses none;
+-->
 ```csharp
 import Sharp.Data.Database;
 
@@ -4929,7 +4977,10 @@ abstract class Record
 class Photo extends Record implements Taggable {}      // compiles: each call of morphClass() checks its result
 ```
 
-<!-- example interface-member-untyped-implementer: statements -->
+<!-- example interface-member-untyped-implementer: statements
+extern Photo uses none;
+extern Record uses none;
+-->
 ```csharp
 Taggable photo = new Photo("photo");
 photo.morphClass();                     // "photo"
@@ -5019,6 +5070,16 @@ function render(string $html): string { return $html; }
 
 <!-- example library-functions -->
 ```csharp
+// app/Stubs/Pdf.sharp
+namespace App.Stubs;
+
+import Vendor.Pdf;
+
+extern Pdf.render uses Files;
+```
+
+<!-- example library-functions -->
+```csharp
 // app/Invoices/Printer.sharp
 namespace App.Invoices;
 
@@ -5059,7 +5120,10 @@ namespace {
 // app/Stubs/Laravel.sharp
 namespace App.Stubs;
 
+import Illuminate.Foundation;
+
 extern namespace Illuminate.Foundation for abort;
+extern Foundation.abort uses none;
 ```
 
 <!-- example library-root-functions -->
@@ -5098,7 +5162,12 @@ namespace {
 // app/Stubs/WordPress.sharp
 namespace App.Stubs;
 
+import WordPress;
+import WordPress.WP_Post;
+
 extern namespace WordPress for WP_Post;
+extern WordPress.add_action uses none;
+extern WP_Post uses none;
 ```
 
 <!-- example extern-namespace -->
@@ -5153,7 +5222,7 @@ import App.Http.RouteName;
 import Vendor.Routing;
 import Vendor.Routing.Builder;
 
-extern string Routing.route(RouteName name);
+extern string Routing.route(RouteName name) uses none;
 extern Builder<TModel> Builder<TModel>.where(keyof TModel column, Any? value) uses Database;
 ```
 
@@ -5175,7 +5244,7 @@ public class Links
 }
 ```
 
-- **The signature fits the library's native types, never its docblock.** Each stated parameter crosses to the native one, the stated return type takes the native one, and each native parameter after the stated ones has a default. A misfit is a compile error at the `extern` line, as `extern int Routing.route(RouteName name);` is: `route` returns a `string`. A native parameter without a type takes any stated type, so a line corrects a docblock that says `array` where the method reads an object.
+- **The signature fits the library's native types, never its docblock.** Each stated parameter crosses to the native one, the stated return type takes the native one, and each native parameter after the stated ones has a default. A misfit is a compile error at the `extern` line, as `extern int Routing.route(RouteName name) uses none;` is: `route` returns a `string`. A native parameter without a type takes any stated type, so a line corrects a docblock that says `array` where the method reads an object.
 - **A backed case crosses as its value** where the native parameter declares only scalars, as `string $name` does, so plain PHP receives `"checkout"`. A `keyof T` crosses as the member's name (section 11.2).
 - **A parameter takes a literal default, as a method's does,** and a call that leaves the parameter out passes the line's default to plain PHP, by the library's name, whatever default the library declares. A literal is a string shorter than 1000 bytes, an `int`, a `float`, `true`, `false` or `null`. A default that runs code, as `int at = Hooks.now()`, is a compile error, and so is one the parameter's type does not take, as `int priority = "10"`. A call names an argument by the line's name only when the library's parameter at its place has that name, since PHP reads a named argument by the library's name.
 - **A `callable` parameter takes any function value** (section 7), and crosses to a native `callable`, `Closure` or untyped parameter as the closure the value is.
@@ -5920,6 +5989,7 @@ final class Handles
 
 <!-- example object-type: statements
 import Vendor.Registry.Handles;
+extern Handles uses none;
 -->
 ```csharp
 public class Ids
@@ -6288,7 +6358,7 @@ properties[1].get(counter);                                   // 10
 properties[1].set(counter, 4);                                // throws Error
 ```
 
-**`createDelegate<TFunction>()` makes a method a value of the function type `TFunction`, so a call through reflection keeps to a `uses`.** `method.createDelegate<Function<Relation(Order) uses Database>>()` gives a function that calls the method. An instance method takes its receiver as the type's first parameter, of the class value `methods()` read it from, of a class below it, or of a class it extends, `Object` included, so a base class walks a subclass's methods with its own type, and a call with a receiver of another class throws `TypeError`. A static method takes no receiver and runs on that class value. `property.getter()` and `property.setter()` give their accessor's value the same way, so `getter().createDelegate<Function<int(Order)>>()` reads a computed property. The method fits the type as a function assigned to it must (section 21): the type passes each parameter the method needs, each parameter type it passes is within the method's, the method's result is within the type's unless that is `void` or `Any?`, and the type's `uses` lists each effect the method's body has (section 29). A plain PHP method has the effects its `extern` lines declare, read as a call reads them, and may have every effect without one, so `Function<string(RuntimeException)>` holds `getMessage`, which the standard library declares pure. A method that doesn't fit throws `ValueError` that names it and the reason, as "`App.Shop.Order.notify` has the effect `App.Shop.Mailer`, and `Function<int(App.Shop.Order) uses Sharp.Data.Database>` allows only `Sharp.Data.Database`.", and so does a call on a receiver whose override has an effect the type doesn't list. So a call of the value has only the effects its type lists, the checker types the call by the type alone, and `createDelegate` itself is pure. The calling code reaches the method as a direct call would when it makes the value:
+**`createDelegate<TFunction>()` makes a method a value of the function type `TFunction`, so a call through reflection keeps to a `uses`.** `method.createDelegate<Function<Relation(Order) uses Database>>()` gives a function that calls the method. An instance method takes its receiver as the type's first parameter, of the class value `methods()` read it from, of a class below it, or of a class it extends, `Object` included, so a base class walks a subclass's methods with its own type, and a call with a receiver of another class throws `TypeError`. A static method takes no receiver and runs on that class value. `property.getter()` and `property.setter()` give their accessor's value the same way, so `getter().createDelegate<Function<int(Order)>>()` reads a computed property. The method fits the type as a function assigned to it must (section 21): the type passes each parameter the method needs, each parameter type it passes is within the method's, the method's result is within the type's unless that is `void` or `Any?`, and the type's `uses` lists each effect the method's body has (section 29). A plain PHP method has the effects its `extern` line declares, read as a call reads them, and every effect when the line says `uses any`, so `Function<string(RuntimeException)>` holds `getMessage`, which the standard library declares pure. A method that doesn't fit throws `ValueError` that names it and the reason, as "`App.Shop.Order.notify` has the effect `App.Shop.Mailer`, and `Function<int(App.Shop.Order) uses Sharp.Data.Database>` allows only `Sharp.Data.Database`.", and so does a call on a receiver whose override has an effect the type doesn't list. So a call of the value has only the effects its type lists, the checker types the call by the type alone, and `createDelegate` itself is pure. The calling code reaches the method as a direct call would when it makes the value:
 
 <!-- example reflection-delegates -->
 ```csharp
@@ -7206,9 +7276,9 @@ app/
 
 ## 29. Effects
 
-An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities. It also records every call into plain PHP, whose effect an `extern` declaration states, and every `emit`, which raises an event and has the effect `Events` (section 15).
+An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities. It also records every call into plain PHP, whose effects its `extern` line states, and every `emit`, which raises an event and has the effect `Events` (section 15).
 
-**Any PHP# code may call plain PHP,** such as a library's classes, facades and models. Most libraries are plain PHP, so this is how PHP# code uses them. PHP's own built-in functions are the exception: the standard library replaces them (section 8).
+**Any PHP# code may call plain PHP that an `extern` line declares,** such as a library's classes, facades and models. Most libraries are plain PHP, so this is how PHP# code uses them. PHP's own built-in functions are the exception: the standard library replaces them (section 8).
 
 <!-- example plain-php-calls -->
 ```csharp
@@ -7220,7 +7290,7 @@ public class OrderReport
 }
 ```
 
-**The effect of plain PHP is declared once, with `extern`.** A `.sharp` declaration file names a plain PHP class, one of its methods or a function, and the effect after `uses`. A declaration holds no code.
+**The effects of plain PHP are declared once, with `extern`.** A `.sharp` declaration file names a plain PHP class, one of its methods or a function, and its effects after `uses`. A declaration holds no code.
 
 <!-- example extern-declaration -->
 ```csharp
@@ -7234,7 +7304,7 @@ extern StripeClient uses Http;
 
 - **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
 - **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern Foundation.now uses Clock;` for a function a library declares outside any namespace, after `import Illuminate.Foundation;` and the `extern namespace` line that gives its folder that namespace (section 23). `extern namespace WordPress for WP_Post;` declares no effect: it gives a library's folder of root names the namespace its functions are declared through, as `extern WordPress.get_post uses Database;` (section 23).
-- **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
+- **Every `extern` line ends in `uses`,** which states its effects on purpose. `uses none` declares the class, method or function pure, as in `extern BigDecimal uses none;`, a list names its effects, and `uses any` declares that it may have any effect, as `extern Container.make uses any;` does: code that reaches it is never pure, never takes part in a law (section 28), and fits no `uses`. A line without `uses` is a compile error, "State its effects: `uses none`, `uses <effects>`, or `uses any`.", so a line written only for its signature never claims its target pure. `uses none` and `uses any` stand alone, so `uses any, Http` is a compile error. An `extern namespace` line states no effects (section 23).
 - **An `extern` of a method or a function may state its signature,** as `extern string Routing.route(RouteName name) uses Http;` does, and its `uses` follows the signature (section 23). A function value its `callable` parameter takes (section 7) adds its own effects to the call, as any function plain PHP is given does.
 
 <!-- example extern-functions -->
@@ -7259,12 +7329,12 @@ extern now uses Clock;               // compile error: no function now exists
 ```
 
 - **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
-- **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
+- **Every plain PHP class, interface, trait and function PHP# code reaches has an `extern` line.** A call, a `new`, a static call or a property read of plain PHP that no line declares is a compile error that names the line to write: "`Mailchimp` has no `extern` line.", with `extern Mailchimp uses any;` as the line. PHP's built-ins the standard library declares are declared already.
+- **One line for a class covers its members, and a method's own line overrides its class's line.** After `extern CarbonImmutable uses none;` and `extern CarbonImmutable.now uses Clock;`, `CarbonImmutable.now()` has the effect `Clock` and `date.addDays(1)` is pure.
+- **A call has the effects of the line of the class, trait or interface that declares the method it calls,** and nothing passes from the class a call goes through or from the call that returned the object. A facade's docblock `@method` declares the method on the facade, so `DB.table(…)` takes `DB`'s line. `new` takes the line of the class it creates, as `new ValueError("empty")` takes `ValueError`'s, or of the nearest plain PHP class a PHP# class extends, and a read of a property takes the line of the class that declares it. `StripeClient.charges().create(…)` has the effects of `StripeClient`'s line for `charges()`, and of the line of the class `charges()` returns for `create(…)`, which a project declares on its own, so `Order.all().sum("total")` has only `Database` from `all()` after `extern Collection uses none;`.
 - **A plain PHP trait's member is one body, so its `extern` line covers every class that takes the member from the trait.** After `extern Dispatchable.dispatch uses Database;`, `ReceiveEvent.dispatch(…)` has the effect `Database` where `ReceiveEvent` lists `Dispatchable` in its header. A class that writes `dispatch` itself runs its own body, which the line does not cover.
-- **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect.
-- **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
 - **Reflection has the effects of the code it runs** (section 25). `Property.get` and `Property.set` run an accessor no `uses` can name, so each may have every effect. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` and `Method.createInvoker` are pure, and a call of the value each gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`.
-- **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
+- **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way. `mago convert` writes `extern X uses any;` there for each plain PHP class a converted file reaches that has no line, so the converted file compiles, and the project narrows each `uses any` to the effects it knows.
 - **An `extern` line takes any attribute, which the class, method or function it declares carries as its own,** as every declaration takes one (section 1). The checker reads it as the declaration's, so a `[DynamicallyAccessed]` written on a class's line marks a library's attribute class whose source carries no mark (section 5). At run time PHP#'s `typeof(X).attributes<T>()` and `Method.attributes<T>()`, and plain PHP's `ReflectionClass`, `ReflectionMethod` and `ReflectionFunction` `getAttributes()`, give the declaration's own attributes and then the line's, though no code loads the file that holds the line. A method takes them on the line of the class that declares it, so an attributed line of a method the class only inherits is a compile error that names that class. An `extern namespace` line (section 23) declares nothing, so an attribute on it is a compile error. `import` and `extern` stay separate lines.
 
 <!-- example extern-attributes -->
@@ -7275,10 +7345,10 @@ namespace App.Stubs;
 import Symfony.Component.EventDispatcher.Attribute.AsEventListener;
 
 [DynamicallyAccessed]
-extern AsEventListener;          // compiles: AsEventListener carries [DynamicallyAccessed], so a method marked
-                                 // [AsEventListener] is never too wide
+extern AsEventListener uses none;   // compiles: AsEventListener carries [DynamicallyAccessed], so a method marked
+                                    // [AsEventListener] is never too wide
 ```
-- **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package declares the effect of each built-in function the standard library calls, so `Files` has the effect `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
+- **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package declares the effect of each built-in function the standard library calls, so `Files` has the effect `Files`. Each built-in exception class is declared `uses none`, so pure code may `throw new ValueError("empty")`.
 
 **The standard library's twelve effect classes replace PHP's built-ins for their effects.** Each lives in the namespace of its domain (section 23), and a `uses` names it by its class name with no import. A name in `uses` resolves as any class name does, so a class the file imports or declares under the name, or one in the file's own namespace, wins over the effect, as `App.Math` wins over `Math`, and a file that imports a facade named `Http` imports the effect under another name, `import Sharp.Net.Http as HttpEffect;`:
 
@@ -7587,9 +7657,44 @@ public class Stamp
 - **A class's effects** are the `foreign` classes it holds, directly or through its fields, or that its methods take, the effects of the plain PHP its methods call, and the events its methods emit. A method that calls a `foreign` object it takes has that effect, as when it calls one it holds, and a caller that uses one a method returns has the effect at that call. The checker works them out from field, constructor and parameter types and from method bodies. Nothing is written down.
 - **A `foreign` object** is created in a module binding (section 32), as often as its binding's lifetime decides, and passed on through constructors, method parameters and return values. Creating one anywhere else in PHP# code, or storing one in a static, is a compile error. Plain PHP creates one as it creates any object.
 
-**Pure code** reaches no `foreign` object, emits no event, and calls no plain PHP unless an `extern` declares it pure. Pure limits only what code reaches outside the program, so a pure method may change its own object and its arguments. `readonly` after the parameters is what promises a method changes nothing, as in `T peek() readonly;`, and it holds every implementation to that (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code that changes nothing it was given, so a law that reaches a change is a compile error naming the method, and a law cannot see inside `foreign` classes or plain PHP.
+**Pure code** reaches no `foreign` object, emits no event, and calls no plain PHP but what an `extern` line declares `uses none`. Pure limits only what code reaches outside the program, so a pure method may change its own object and its arguments. `readonly` after the parameters is what promises a method changes nothing, as in `T peek() readonly;`, and it holds every implementation to that (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code that changes nothing it was given, so a law that reaches a change is a compile error naming the method, and a law cannot see inside `foreign` classes or plain PHP.
 
-**A struct and an enum are pure** (sections 10 and 20). Each method, `get` body and operator of one, a data case's included, has no effects, as a value is the same wherever code reads it. A struct method that calls a `foreign` parameter or a plain PHP method an `extern` gives an effect, and an enum method that emits, is a compile error that names the member and the effect: "`Money.inEuros` has the effect `Http`, and a struct has no effects." The work goes in a class that takes the value. Creating and throwing an exception is no effect, and a plain PHP call that no `extern` declares has no effect a `uses` names, so a struct may validate its fields with `filter_var` and throw a `ValueError`.
+**A struct and an enum are pure** (sections 10 and 20). Each method, `get` body and operator of one, a data case's included, has no effects, as a value is the same wherever code reads it. A struct or an enum calls only plain PHP its `extern` line declares `uses none`. A struct method that calls a `foreign` parameter, or a plain PHP method whose line names an effect or says `uses any`, and an enum method that emits, is a compile error that names the member and the effect: "`Money.inEuros` has the effect `Http`, and a struct has no effects.", or "`Money.check` may have any effect, and a struct has no effects.". The work goes in a class that takes the value. Creating and throwing an exception is no effect, so a struct may validate its fields with a plain PHP validator declared `uses none`, and throw a `ValueError`:
+
+<!-- example struct-plain-php -->
+```php
+namespace Vendor\Rules;
+
+final class Validator
+{
+    public static function check(string $value): bool { return $value !== ''; }
+}
+```
+
+<!-- example struct-plain-php -->
+```csharp
+// app/Stubs/Rules.sharp
+namespace App.Stubs;
+
+import Vendor.Rules.Validator;
+
+extern Validator.check uses none;
+```
+
+<!-- example struct-plain-php -->
+```csharp
+// app/Sku.sharp
+namespace App;
+
+import Vendor.Rules.Validator;
+
+public struct Sku
+{
+    public string code { get; init; }
+
+    public bool isValid() => Validator.check(this.code);   // compiles: Validator.check is declared uses none
+}
+```
 
 **Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types, except the function type of a method's parameter, which takes on what each call passes (below). A declaration that overrides another is held to it: a sub-interface may narrow its parent's `uses`, and a `uses` that widens it is a compile error at the declaration. Every implementation is held to what the declaration allows, and so is each default of its parameters, which a call of the declaration that leaves the argument out runs:
 
@@ -7615,7 +7720,7 @@ Map<string, Function<Charge(Cart) uses Http, Mail>> handlers = [:];         // c
 Function<int(Function<int(int) uses Http>)> apply = (step) => 0;            // compiles
 ```
 
-An implementation that calls plain PHP fits the declaration only through an `extern`:
+An implementation that calls plain PHP fits the declaration only through an `extern` line that names effects the declaration allows:
 
 <!-- example extern-implementations -->
 ```csharp
@@ -7656,8 +7761,8 @@ public class MailchimpSync : AudienceSync
 ```
 
 ```text
-MailchimpSync.sync calls Mailchimp, which has no extern declaration, so `uses Http` cannot accept it.
-Declare its effect in a .sharp file, such as `extern Mailchimp uses Http;`.
+`Mailchimp` has no `extern` line.
+Declare it in a .sharp file, such as `extern Mailchimp uses any;`, and name its effects in place of `any` when you know them.
 ```
 
 **`uses Events` lets an implementation emit:**
@@ -7759,7 +7864,7 @@ pricing.setRate((cents) => this.rates.convert(cents));            // compile err
 
 The standard library's collection methods (section 12) take on the effects of their functions this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
-**Plain PHP can run any function it is given,** as Laravel's `Collection.map(f)` and `Foundation.app().call(f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => this.clock.now()` to a plain PHP method has the effect `Clock`.
+**Plain PHP can run any function it is given,** as Laravel's `Collection.map(f)` and `Foundation.app().call(f)` do. So a call or a `new` of plain PHP has the effects its `extern` line lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => this.clock.now()` to a plain PHP method has the effect `Clock`, and `orders.map(o => this.db.save(o))` has the effect `Database` after `extern Collection uses none;`, so it fits `uses Database` and no `uses none`.
 
 **Code with a body writes no `uses`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function it is given, and its body and declaration show all four. The checker works out each method's effects, and its errors name them, as in "`Gauge.level` calls `Clock.now`, which has the effect `Clock`". A `uses` that names a function parameter, with or without a body, is a parse error that says to delete it.
 
@@ -7858,7 +7963,7 @@ public enum PaymentError : Error
 }
 ```
 
-**Inside `.sharp` files, a bare `Error` means this interface by default,** and an import or a class of the file's own namespace named `Error` shadows it, as it shadows every default name (section 23). PHP's global engine class `Error` is never named in PHP# code, so an import of it is a compile error.
+**Inside `.sharp` files, a bare `Error` means this interface by default,** and an import or a class of the file's own namespace named `Error` shadows it, as it shadows every default name (section 23). PHP's global engine class `Error` is never named in PHP# code, so an import of it is a compile error. The standard library alone imports it, to state its members' effects on an `extern` line (section 29).
 - **Bugs are caught as `Throwable`,** so `catch (Error failure)` is a compile error that names `Throwable`. Engine subclasses such as `TypeError` keep their names.
 
 ## 32. Modules

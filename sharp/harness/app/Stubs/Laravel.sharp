@@ -1,5 +1,27 @@
 namespace App.Stubs;
 
+import Illuminate.Database.Eloquent.Factories.HasFactory;
+import Illuminate.Database.Eloquent.Model;
+import Illuminate.Database.Query.Builder;
+import Illuminate.Foundation.Application;
+import Illuminate.Http.Request;
 import Illuminate.Queue.Events.JobFailed;
+import Illuminate.Support.Facades.DB;
+import Illuminate.Support.Facades.File;
+import Illuminate.Support.Facades.Http as HttpFacade;
+import Illuminate.Support.Facades.Log;
+import Illuminate.Support.Facades.Redis;
+import Illuminate.Support.Str as SupportStr;
 
-extern event JobFailed;
+extern event JobFailed uses none;
+extern Application uses any;
+extern Builder uses any;
+extern DB uses any;
+extern File uses any;
+extern HasFactory uses any;
+extern HttpFacade uses any;
+extern Log uses any;
+extern Model uses any;
+extern Redis uses any;
+extern Request uses any;
+extern SupportStr uses any;

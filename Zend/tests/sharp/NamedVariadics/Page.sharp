@@ -5,6 +5,8 @@ import Lib.Generic;
 import Lib.Markup;
 import Lib.Sized;
 
+extern Lib.markup_attributes uses any;
+
 // A named argument that matches no other parameter of plain PHP fills its `...` parameter under its name, spec
 // section 16: a static method's, a method's, a constructor's, a function's and an attribute's.
 [Generic(Item: typeof(Page))]

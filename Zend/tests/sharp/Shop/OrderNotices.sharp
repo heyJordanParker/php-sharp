@@ -1,7 +1,7 @@
 namespace Shop;
 
 import Symfony.Contracts.EventDispatcher.Event;
-extern event Event;
+extern event Event uses none;
 
 public class OrderNotices
 {

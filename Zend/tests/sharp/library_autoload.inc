@@ -121,7 +121,7 @@ namespace {
     // An extern declaration file, which declares no type, named like the class its line declares. The class map reads
     // it, and mago compiles only src and library.
     @mkdir("$package/stubs/App", 0777, true);
-    file_put_contents("$package/stubs/App/Failed.sharp", "namespace App;\n\nimport Lib.Failed;\n\nextern event Failed;\n");
+    file_put_contents("$package/stubs/App/Failed.sharp", "namespace App;\n\nimport Lib.Failed;\n\nextern event Failed uses none;\n");
     file_put_contents("$package/mago.toml", "[source]\npaths = [\"src\", \"library\"]\nextensions = [\"sharp\"]\n");
     $uncompiled = ($argv[5] ?? null) === 'uncompiled';
     if ($uncompiled) {

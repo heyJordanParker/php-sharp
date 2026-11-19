@@ -4,6 +4,8 @@ import Lib;
 import Lib.Callbacks;
 import Lib.Words;
 
+extern Lib.magnitude uses any;
+
 public class FunctionValues
 {
     private static Function<int(int)> round = (int n) => n - 1;
