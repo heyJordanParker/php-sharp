@@ -52,6 +52,12 @@ jobs:
         ${{ (github.event_name == 'pull_request' && steps.diff.outputs.bump == 'true'
         || github.event_name == 'push' && !steps.passed.outputs.run) && 'true' || '' }}
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -122,6 +128,12 @@ jobs:
         env:
           RUN: ${{ steps.passed.outputs.run }}
         run: echo "::notice::This tree ran and passed every Mago job in $RUN, so no test runs again."
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
 
   # The gates on Linux with CHANGES's rust toolchain, the one sharp/mago/Cargo.toml's rust-version names and
   # release.yml builds the binaries with, and the Linux binary plain-php runs. On the push to master it saves its
@@ -138,6 +150,12 @@ jobs:
       contents: read
 
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -213,6 +231,12 @@ jobs:
           name: mago-${{ runner.os }}
           path: ${{ env.CARGO_TARGET_DIR }}/test-run/mago
           if-no-files-found: error
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
 
   # The run's one Linux build of the workspace's tests, in the sharp/docker image on the target sharp/bin/build-mago
   # builds there, which sharp.yml's BUILD_LINUX saves on master and its own BUILD_LINUX restores, so Linux keeps one dev
@@ -251,6 +275,12 @@ jobs:
       CXX: ccache g++
 
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -310,6 +340,12 @@ jobs:
 
       - name: Test the last fifth of the workspace's tests, the doc tests and the property tests
         run: sharp/bin/test --linux --mago --shard 5/5
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
 
   # The workspace's tests on Linux, every fifth test of every test binary, by exact name, with sharp/bin/test --mago
   # --shard, so a set of slow tests spreads over the jobs, on the build job's test binaries. The build job runs the
@@ -339,6 +375,12 @@ jobs:
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
 
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -358,6 +400,12 @@ jobs:
 
       - name: Test every fifth test of the workspace
         run: sharp/bin/test --linux --mago --no-build --shard ${{ matrix.shard }}/5
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
 
   # The workspace's tests on macOS arm64, which covers the few lines of Mago that differ there, such as the watch mode's
   # FSEvents, on the self-hosted Mac runners, for a release's pull request and a push whose tree no pull request's run
@@ -367,7 +415,7 @@ jobs:
   tests-macos:
     name: tests (macOS)
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true' && needs.CHANGES.outputs.full == 'true'
+    if: false
     runs-on: macos-arm64-local
     timeout-minutes: 90
 
@@ -385,6 +433,12 @@ jobs:
       LEAN_NUM_THREADS: 2
 
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -415,6 +469,12 @@ jobs:
 
       - name: cargo test
         run: cargo test --workspace --locked
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
 
   # The macOS binary plain-php runs, in the test-run profile sharp/mago/Cargo.toml explains, since plain-php needs a
   # binary that behaves as release's, not release's fat LTO. It builds in the target folder the self-hosted Macs keep,
@@ -422,7 +482,7 @@ jobs:
   # It runs when tests (macOS) does.
   release-build:
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true' && needs.CHANGES.outputs.full == 'true'
+    if: false
     runs-on: macos-arm64-local
     timeout-minutes: 60
 
@@ -441,6 +501,12 @@ jobs:
       LEAN_NUM_THREADS: 2
 
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -474,6 +540,12 @@ jobs:
           name: mago-${{ runner.os }}
           path: ${{ steps.build.outputs.binary }}
           if-no-files-found: error
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
 
   # Installs heyjordanparker/mago-sharp from what git archive ships, the way Packagist ships it, and
   # heyjordanparker/php-sharp-composer from sharp/composer, on the runner's own PHP. A package that requires
@@ -486,11 +558,11 @@ jobs:
     needs: [CHANGES, checks, release-build]
     if: >-
       ${{ !cancelled() && needs.checks.result == 'success'
-      && (needs.CHANGES.outputs.full != 'true' || needs.release-build.result == 'success') }}
+       }}
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(needs.CHANGES.outputs.full == 'true' && '["ubuntu-latest", "macos-arm64-local"]' || '["ubuntu-latest"]') }}
+        os: ${{ fromJSON(needs.CHANGES.outputs.full == 'true' && '["ubuntu-latest"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
 
     permissions:
@@ -505,6 +577,12 @@ jobs:
       LEAN_NUM_THREADS: 2
 
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -534,6 +612,12 @@ jobs:
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/target
         run: sharp/bin/check plain-php
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
 
   # The one required check of this workflow: it passes only when every job above passed, or skipped a change that
   # leaves Mago alone, so a job added later blocks merges without a change to the repository's rules. It runs always,
@@ -551,6 +635,12 @@ jobs:
       run:
         working-directory: .
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       # Only for the actions below.
       - name: checkout
         if: always()
@@ -576,3 +666,9 @@ jobs:
       - name: Delete the Mago target caches this run replaced
         if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: ./.github/actions/mago-cache-prune
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"

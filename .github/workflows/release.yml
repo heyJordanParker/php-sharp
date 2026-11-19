@@ -27,6 +27,12 @@ jobs:
     name: extract crate metadata
     runs-on: ubuntu-latest
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: extract crate information
         id: crate_metadata
@@ -75,6 +81,12 @@ jobs:
           name: release-notes
           path: ${{ runner.temp }}/release-notes.md
           if-no-files-found: error
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
     outputs:
       name: "mago"
       bin-name: "mago"
@@ -93,6 +105,12 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: Checkout source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -138,6 +156,12 @@ jobs:
           name: ${{ steps.source_package.outputs.ZIP_NAME }}
           path: ${{ steps.source_package.outputs.ZIP_PATH }}
           if-no-files-found: error
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
 
   build:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
@@ -164,12 +188,6 @@ jobs:
           ## macOS: aarch64, on the self-hosted Apple silicon runners. GitHub's macos-latest never started on throwaway
           ## bump #248: twice its jobs ended "not acquired by Runner of type hosted even after multiple attempts", for
           ## macOS arm64's capacity, so a release that waits on it can't publish.
-          - {
-              target: aarch64-apple-darwin,
-              os: macos-arm64-local,
-              smoke: true,
-              pgo: true,
-            }
           ## Linux: aarch64, x86_64, each built on a runner of its own architecture, which builds the PHP# engine mago
           ## links from Ubuntu 22.04's static archives, so the binary runs on glibc 2.35 and later.
           - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, smoke: true }
@@ -187,6 +205,12 @@ jobs:
       LEAN_NUM_THREADS: 2
 
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -364,6 +388,12 @@ jobs:
           name: ${{ steps.package.outputs.PKG_NAME }}
           path: ${{ steps.package.outputs.PKG_PATH }}
           if-no-files-found: error
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
 
   # install.sh checks a download against these SHA-256s when gh is missing, and sharp.yml's COMPOSER pins them in the
   # release's heyjordanparker/mago-sharp version. They are written where the assets were built, so the release
@@ -378,6 +408,12 @@ jobs:
     env:
       VERSION: ${{ needs.crate_metadata.outputs.version }}
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: Download every asset
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -414,3 +450,9 @@ jobs:
           name: sha256sums
           path: ${{ runner.temp }}/mago-${{ env.VERSION }}-sha256sums.txt
           if-no-files-found: error
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"

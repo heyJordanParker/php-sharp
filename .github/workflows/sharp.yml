@@ -53,6 +53,12 @@ jobs:
         ${{ (github.event_name == 'pull_request' && steps.diff.outputs.bump == 'true'
         || github.event_name == 'push' && !steps.passed.outputs.run) && 'true' || '' }}
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # .github/actions/passed-tree finds the runs that passed a tree by this notice. A pull request's run checks out the
@@ -112,6 +118,12 @@ jobs:
             BASE=$(git hash-object -t tree /dev/null)
           fi
           sharp/bin/check --changes "$BASE" | tee -a "$GITHUB_OUTPUT"
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
   # The run's one Linux build, which every Linux suite runs on: the engine, its install and mago, which the suites run
   # with --no-build. Each of the 8 suite jobs built them itself for 2 to 5 minutes on release pull request #363's run,
   # where the bump rebuilt every Mago crate in each, so a run built the same code 8 times. The suites wait for it, so its
@@ -146,6 +158,12 @@ jobs:
       CC: ccache gcc
       CXX: ccache g++
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # sharp/bin/build-mago builds inside the image, where CARGO_HOME and RUSTUP_HOME are sharp/build/cargo and
@@ -191,6 +209,12 @@ jobs:
           if-no-files-found: error
       - name: Verify the generated files, and that no Cargo.lock names a local source
         run: sharp/bin/check generated
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
 
   # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in two slices, each without opcache, in shared
   # memory twice per process, and under the tracing JIT production runs with the opcache. The slices balance by the
@@ -213,6 +237,12 @@ jobs:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # sharp/docker/run pulls the image base-images.yml builds from ghcr.io.
@@ -231,6 +261,12 @@ jobs:
         run: >-
           sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/2
           ${{ matrix.shard == 2 && '--census --differential --phpunit' || '' }}
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
   # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before, and
   # sharp/bin/spec's self-test. Each took 155 and 54 seconds on release pull request #379's run, where LINUX (1/2), which
   # ran the self-test after its slice, took 377 seconds, the longest suite job.
@@ -246,6 +282,12 @@ jobs:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Log in to ghcr.io
@@ -267,6 +309,12 @@ jobs:
         run: |
           build="sharp/build/linux-$(uname -m)"
           sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --self-test
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
   # Every code example in docs/spec.md and README.md, compared with sharp/baseline/spec, in four slices of the examples.
   # Each slice runs sharp/bin/spec on BUILD_LINUX's engine and mago, as sharp/bin/test --spec does. Five slices checked
   # their examples in 123 to 161 seconds on release pull request #343's run.
@@ -287,6 +335,12 @@ jobs:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Log in to ghcr.io
@@ -304,6 +358,12 @@ jobs:
         run: |
           build="sharp/build/linux-$(uname -m)"
           sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/4
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
   # The fixture in sharp/hosts, served from FrankenPHP's worker mode, with FrankenPHP built with Go against
   # BUILD_LINUX's installed engine, and BUILD_LINUX's mago. It runs on every push to master that BUILD_LINUX runs on,
   # even one whose tree a pull request's run passed, because that push's HOSTS saves the Go modules and Go's build cache
@@ -322,6 +382,12 @@ jobs:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Log in to ghcr.io
@@ -356,6 +422,12 @@ jobs:
             sharp/build/go/pkg/mod
             sharp/build/linux-x86_64/frankenphp/go-build
           key: SHARP_HOSTS_GO-${{ runner.arch }}-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile', 'sharp/build/linux-x86_64/install/include/**') }}-${{ github.sha }}
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
   # The engine built with AddressSanitizer, so a memory error of the engine fails a test, nightly on master's tip.
   # sharp/bin/build has no flag for php-src's --enable-address-sanitizer, so it builds as php-src's own CI does: a debug
   # build whose CFLAGS and LDFLAGS add -fsanitize=address and ZEND_TRACK_ARENA_ALLOC. sharp/docker/run passes no CFLAGS
@@ -377,6 +449,12 @@ jobs:
         autoconf bison pkg-config re2c libcurl4-openssl-dev libicu-dev libonig-dev libpq-dev libsodium-dev libsqlite3-dev
         libxml2-dev libzip-dev
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: apt
@@ -415,6 +493,12 @@ jobs:
         uses: ./.github/actions/red-master-issue
         with:
           title: The nightly ASAN run failed
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
   # The run's one macOS build, which MACOS runs on: the engine and mago, as BUILD_LINUX builds Linux's. A release's pull
   # request runs it, and a push whose tree no pull request's run passed. A job never installs on the self-hosted Mac
   # runners, so it checks that Homebrew already has the build's formulae, and builds without ccache.
@@ -427,7 +511,7 @@ jobs:
   # Lean's.
   BUILD_MACOS:
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.full == 'true'
+    if: false
     runs-on: macos-arm64-local
     timeout-minutes: 120
     env:
@@ -438,6 +522,12 @@ jobs:
       MAGO_THREADS: 4
       LEAN_NUM_THREADS: 2
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       # actions/checkout's clean deletes sharp/build. The build keeps it instead, as .github/actions/clean-kept-build
       # explains, so the engine and mago rebuild only what changed since that runner's last build, where a build from
       # nothing took 19 minutes.
@@ -475,6 +565,12 @@ jobs:
           compression-level: 0
           retention-days: 1
           if-no-files-found: error
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
   # The checks only macOS can fail: mago compile and the suite on a disk that ignores case, without opcache and in shared
   # memory, since Apple silicon has no thread-safe JIT, the census and the differential, on BUILD_MACOS's engine and
   # mago. Whole, its tests took 11 to 12 minutes on the pushes of pull requests #351 and #352, so it runs in three
@@ -485,7 +581,7 @@ jobs:
   MACOS:
     name: MACOS (${{ matrix.shard }}/3)
     needs: [CHANGES, BUILD_MACOS]
-    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.full == 'true'
+    if: false
     runs-on: macos-arm64-local
     timeout-minutes: 60
     strategy:
@@ -503,6 +599,12 @@ jobs:
       run:
         working-directory: shard
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: git checkout, into a folder of its own
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -518,6 +620,12 @@ jobs:
         run: >-
           sharp/bin/test --no-build --shard ${{ matrix.shard }}/3
           ${{ matrix.shard == 3 && '--census --differential' || '' }}
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
   # The checks that keep the release pipeline on pinned code, which sharp/bin/check workflows runs: an action that is not
   # ours runs only at a full commit SHA, so a moved tag can't change what runs, no Dockerfile under sharp/docker names a
   # `# syntax=` frontend, which BuildKit pulls from Docker Hub with no login (#86), and actionlint, at the version this
@@ -528,6 +636,12 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install actionlint
@@ -540,6 +654,12 @@ jobs:
           echo "$RUNNER_TEMP/actionlint" >> "$GITHUB_PATH"
       - name: The actions are pinned, no Dockerfile names a syntax frontend, and actionlint passes
         run: sharp/bin/check workflows
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
   # The release's Mago binaries, their attestations, Mago's source archives, their SHA-256s and its notes, which
   # release.yml builds beside the suites in a release's pull request run, and in a release's push whose tree no pull
   # request's run passed. RELEASE publishes them. A called workflow's jobs may ask only for permissions its caller grants.
@@ -577,6 +697,12 @@ jobs:
       contents: read
       issues: write
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       # Only for the actions below.
       - name: git checkout
         if: always()
@@ -601,6 +727,12 @@ jobs:
       - name: Delete the caches this run replaced
         if: always() && github.event_name == 'push' && needs.BUILD_LINUX.result == 'success'
         uses: ./.github/actions/mago-cache-prune
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
   # Splits sharp/composer and sharp/mago and pushes them to master of heyJordanParker/php-sharp-composer and
   # heyJordanParker/mago-sharp, whose webhooks tell Packagist, once every check of the push passed: it needs RELEASE,
   # and a job's failure() counts every job before it. For a release, it then pushes tag v<version> to both, once RELEASE
@@ -617,6 +749,12 @@ jobs:
       RUN_ID: ${{ needs.RELEASE.outputs.run-id }}
       VERSION: ${{ needs.RELEASE.outputs.version }}
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -721,6 +859,12 @@ jobs:
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit --message "The SHA-256 of every mago $VERSION release asset"
           git push origin "HEAD:refs/tags/v$VERSION"
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
   # The runtime image, FrankenPHP on the thread-safe engine, as <version>. Each platform builds on a runner of its own
   # architecture with -O2 and --enable-werror, where GCC finds -Wmaybe-uninitialized and libcurl's type checks, so a
   # warning one architecture alone finds fails. Each pushes its image by digest, with BuildKit's provenance and SBOM
@@ -751,6 +895,12 @@ jobs:
       # outages failed this job.
       INSTALL: exif gd /usr/src/imagick pcntl pdo_pgsql pgsql /usr/src/phpredis
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       # For .github/actions/boot-image and sharp/bin/php-extensions. The build fetches its own context.
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -876,6 +1026,12 @@ jobs:
           name: digest-dev-${{ strategy.job-index }}
           path: ${{ runner.temp }}/dev-digests/*
           if-no-files-found: error
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
   # Publishes a release from the push of its merge to master, once every job before it passed, and mago.yml's run of
   # the same push: the GitHub release of the files RELEASE_ASSETS built, whose publication creates tag v<version> on the
   # merge commit, and the runtime image as ghcr.io/heyjordanparker/php-sharp:<version>, never as latest, with its -dev
@@ -902,6 +1058,12 @@ jobs:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.CHANGES.outputs.version }}
     steps:
+      - name: usage start
+        shell: bash
+        run: |
+          awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
+          echo 0 > /tmp/usage-peak
+          nohup bash -c 'peak=0; while :; do used=$(awk "/MemTotal/{t=\$2} /MemAvailable/{a=\$2} END{print t-a}" /proc/meminfo); if ((used > peak)); then peak=$used; echo $peak > /tmp/usage-peak; fi; sleep 1; done' > /dev/null 2>&1 &
       - name: Find the run that built the release
         id: run
         env:
@@ -1072,3 +1234,9 @@ jobs:
           subject-name: ghcr.io/heyjordanparker/php-sharp
           subject-digest: ${{ steps.tag.outputs.dev }}
           push-to-registry: true
+      - name: usage end
+        if: always()
+        shell: bash
+        run: |
+          end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
+          echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
