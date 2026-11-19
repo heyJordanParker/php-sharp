@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.36] - 2026-11-19
+
 ### Added
 
 - `ghcr.io/heyjordanparker/php-sharp:<version>-dev`, the runtime image with the law checker's Lean installed in Mago's cache folder, `/var/cache/mago`, which every user reads and writes. A compile with laws in a container built from it downloads nothing: in a 6-CPU arm64 container, the first compile of a project with 9 laws took 6.6 to 7.7 seconds there, run as root or with `--user`, and 17.9 to 19.1 seconds in `<version>`, where `mago` downloads the Lean first. `ghcr.io/heyjordanparker/php-sharp:<version>` stays the runtime image, at its size, for production.
@@ -1385,7 +1387,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.35...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.36...HEAD
+[0.6.36]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.35...v0.6.36
 [0.6.35]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.34...v0.6.35
 [0.6.34]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.33...v0.6.34
 [0.6.33]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.32...v0.6.33
