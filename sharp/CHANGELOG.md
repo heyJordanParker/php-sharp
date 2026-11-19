@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A law reaches the standard library from its PHP# source, as it reaches the project's code, spec section 28. 0.6.36 refused every standard library class but a fixed list of members, so a law over one state of a sealed family was refused when another state held an `Instant`, as "Law postponeHoldsTheError reaches the standard library class Instant in Done.", though the law never reads that state. `Instant` now translates from its declaration, and a law that orders two `Instant`s with `<` proves through `Instant`'s own `operator <=>`, as `<`, `<=`, `>`, `>=` and `<=>` on two values of any class that declares `<=>` do. A standard library member that calls plain PHP is refused where the law reaches it, with the reason project code gets, as "Law parses reaches the plain PHP function `global.preg_match` in Instant.tryParse.". `Math.max`, `Math.min` and a List's `count()`, `map` and `filter` keep the checker's own model.
+
 ## [0.6.36] - 2026-11-19
 
 ### Added
