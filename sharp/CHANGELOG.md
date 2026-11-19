@@ -16,6 +16,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - `mago analyze` reports every refusal of a law that `mago compile` reports before the proof, spec section 28: a construct the law reaches that a law cannot reason about, as a type test of an interface that is not sealed or a standard library class, a declaration it reaches in a file with errors, and a law that calls itself in a cycle. 0.6.35 reported them only at the compile, so a watch showed a file clean while `mago compile` refused it with "Law shapeIsShape reaches a type test of the interface Figure in Shape.isShape. A law tells apart only the implementers of a sealed interface. Declare `Figure` sealed.". `mago analyze` and its watch now report it, in each round, and never start the law checker, so a law's proof is still checked only at the compile.
+- An `Any` joined with an `Any` is an `Any`, spec section 12, where one of them is an element read that may be past the end of its `List`. 0.6.35 joined such a pair as `Any?`, so `List<Any> write = written < request.byteLength() ? [this.streams[0]] : [];`, with `streams` a `List<Any>`, was refused as "Invalid assignment to `write`: it is declared as `List<Any>`.", though 0.6.34 compiled it, and so was `Any picked = flag ? this.streams[0] : held;`. Both now compile. An `Any` joined with an `Any?` is still an `Any?`.
 
 ## [0.6.35] - 2026-11-19
 
