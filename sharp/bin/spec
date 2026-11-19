@@ -801,7 +801,11 @@ function harness_files(string $root): array
     return $files;
 }
 
-/** Writes a project folder: the harness without the files whose names $files declare, the standard library, and $files. */
+/**
+ * Writes a project folder: the harness without the files whose names $files declare, the standard library, and $files.
+ * Its composer.json says it is a library, so section 5's strict rules, which an application's code meets, leave an
+ * example whose classes nothing else uses alone.
+ */
 function write_project(string $root, string $folder, array $harness, array $files): void
 {
     $declared = array_merge([], ...array_column($files, 'names'));
@@ -816,7 +820,7 @@ function write_project(string $root, string $folder, array $harness, array $file
         put("$folder/" . PACKAGE_FOLDER . '/library/' . substr($file->getPathname(), strlen("$root/" . PACKAGE . '/library/')), file_get_contents($file->getPathname()));
     }
     put("$folder/mago.toml", "[source]\npaths = [\".\"]\nextensions = [\"sharp\", \"php\"]\n");
-    put("$folder/composer.json", "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n");
+    put("$folder/composer.json", "{\"type\": \"library\", \"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n");
     foreach ($files as $file) {
         put("$folder/$file[path]", $file['contents']);
     }
