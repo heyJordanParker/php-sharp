@@ -130,7 +130,9 @@ jobs:
     needs: CHANGES
     if: needs.CHANGES.outputs.mago == 'true' && !(needs.CHANGES.outputs.passed && needs.CHANGES.outputs.bump == 'true')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # A build of the engine takes up to 20 more minutes, which the engine's cache spares a run whose engine
+    # inputs an earlier run built.
+    timeout-minutes: 50
 
     permissions:
       contents: read
@@ -174,6 +176,26 @@ jobs:
         with:
           tool: typos
 
+      # The PHP# engine mago links, from the cache a run saved for the same inputs, or else built by
+      # sharp/bin/build-mago --engine from the static archives of these packages, which it links into libphp.a.
+      - name: Restore the engine mago links
+        id: mago-engine
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/linux-*-engine/install
+          key: MAGO_ENGINE-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('configure.ac', 'build/**', 'main/**', 'Zend/**', 'TSRM/**', 'sapi/**', 'ext/**', 'scripts/**', '!**/tests/**', 'sharp/bin/build-mago', 'sharp/docker/runtime/configure-options') }}
+      - name: Build the engine mago links
+        if: steps.mago-engine.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends autoconf bison cmake pkg-config re2c libedit-dev libicu-dev liblzma-dev libsodium-dev libsqlite3-dev libssl-dev libxml2-dev zlib1g-dev
+          sharp/bin/build-mago --engine
+      - name: Save the engine mago links
+        if: steps.mago-engine.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/linux-*-engine/install
+          key: ${{ steps.mago-engine.outputs.cache-primary-key }}
+
       # sharp/bin/check mago-checks runs them, as it does on a machine: typos, the PHP SDK's tests, cargo check of
       # the workspace and of the PHP# bridge alone, the fuzz crate's Cargo.lock, no file watcher in the bridge, the PHP
       # SDK's generated NodeKind, rustfmt and clippy, then the test-run mago, which analyzes the standard library and
@@ -207,7 +229,9 @@ jobs:
     needs: CHANGES
     if: needs.CHANGES.outputs.mago == 'true' && !needs.CHANGES.outputs.passed
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # A build of the engine takes up to 20 more minutes, which the engine's cache spares a run whose engine
+    # inputs an earlier run built.
+    timeout-minutes: 50
 
     permissions:
       contents: read
@@ -243,8 +267,26 @@ jobs:
             sharp/build/cargo
             sharp/build/rustup
 
+      # The PHP# engine mago links, from the cache a run saved for the same inputs, or else built in the image by
+      # sharp/bin/build-mago --engine. A build that links mago then takes it through MAGO_ENGINE, as it is.
+      - name: Restore the engine mago links
+        id: mago-engine
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/linux-x86_64-engine/install
+          key: MAGO_ENGINE-debian-${{ runner.arch }}-${{ hashFiles('configure.ac', 'build/**', 'main/**', 'Zend/**', 'TSRM/**', 'sapi/**', 'ext/**', 'scripts/**', '!**/tests/**', 'sharp/bin/build-mago', 'sharp/docker/runtime/configure-options', 'sharp/docker/Dockerfile') }}
+      - name: Build the engine mago links
+        if: steps.mago-engine.outputs.cache-hit != 'true'
+        run: sharp/docker/run sharp/bin/build-mago --engine
+      - name: Save the engine mago links
+        if: steps.mago-engine.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/linux-x86_64-engine/install
+          key: ${{ steps.mago-engine.outputs.cache-primary-key }}
+
       - name: Build mago and its test binaries
-        run: sharp/docker/run sharp/bin/build-mago --quiet
+        run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/build-mago --quiet
 
       # The test binaries build.json names, mago, which the tests run, and build.json. An artifact keeps no file's mode,
       # so the files travel in a tar, compressed here, since Actions would compress them on one thread.
@@ -363,6 +405,11 @@ jobs:
       - name: Install elan and Lean
         uses: ./.github/actions/setup-lean
 
+      # The PHP# engine mago links, which sharp/bin/build-mago --engine builds in the sharp/build folder the runner
+      # keeps, so it builds only what changed since the runner's last build.
+      - name: Build the engine mago links
+        run: sharp/bin/build-mago --engine
+
       - name: cargo test
         run: cargo test --workspace --locked
 
@@ -404,6 +451,11 @@ jobs:
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: ${{ needs.CHANGES.outputs.rust }}
+
+      # The PHP# engine mago links, which sharp/bin/build-mago --engine builds in the sharp/build folder the runner
+      # keeps, so it builds only what changed since the runner's last build.
+      - name: Build the engine mago links
+        run: sharp/bin/build-mago --engine
 
       - name: Build mago in the test-run profile
         id: build

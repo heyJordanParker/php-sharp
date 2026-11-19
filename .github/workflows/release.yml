@@ -170,20 +170,16 @@ jobs:
               smoke: true,
               pgo: true,
             }
-          ## Linux: aarch64, x86_64
-          - { target: aarch64-unknown-linux-gnu, os: ubuntu-latest, smoke: false }
-          - {
-              target: x86_64-unknown-linux-gnu,
-              os: ubuntu-latest,
-              smoke: true,
-            }
+          ## Linux: aarch64, x86_64, each built on a runner of its own architecture, which builds the PHP# engine mago
+          ## links from Ubuntu 22.04's static archives, so the binary runs on glibc 2.35 and later.
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, smoke: true }
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, smoke: true }
 
     # The self-hosted Macs cap each job's parallelism, as sharp.yml's MACOS explains. The build goes to sharp/mago/target,
     # which clean-kept-build removes, so each release builds from nothing, and never into the folder sharp/.cargo's
     # config names for the Mac's dev builds.
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/sharp/mago/target
-      BUILD_CMD: cargo
       CARGO_BUILD_JOBS: 4
       RUST_TEST_THREADS: 4
       RAYON_NUM_THREADS: 4
@@ -206,15 +202,10 @@ jobs:
         shell: bash
         run: echo "VERSION=${{ needs.crate_metadata.outputs.version }}" >> "$GITHUB_OUTPUT"
 
-      - name: Install Prerequisites
+      - name: Install what the PHP# engine builds with
         if: contains(matrix.job.os, 'ubuntu')
         shell: bash
-        run: |
-          sudo apt-get -y update
-          sudo apt-get remove -y libssl-dev
-          case ${{ matrix.job.target }} in
-            aarch64-unknown-linux-gnu) sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-          esac
+        run: sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends autoconf bison cmake pkg-config re2c libedit-dev libicu-dev liblzma-dev libsodium-dev libsqlite3-dev libssl-dev libxml2-dev zlib1g-dev
 
       - name: install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
@@ -230,33 +221,6 @@ jobs:
           rustup component add llvm-tools-preview
           if ! command -v cargo-pgo &>/dev/null; then
             cargo install cargo-pgo
-          fi
-
-      - name: install cross
-        if: startsWith(matrix.job.os, 'ubuntu') && !matrix.job.pgo
-        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
-        with:
-          tool: cross
-
-      - name: overwrite build command env variable (for cross)
-        if: startsWith(matrix.job.os, 'ubuntu') && !matrix.job.pgo
-        shell: bash
-        run: echo "BUILD_CMD=cross" >> "$GITHUB_ENV"
-
-      - name: Configure cross-rs container image for glibc 2.17
-        if: contains(matrix.job.target, 'linux-gnu') && !matrix.job.pgo
-        shell: bash
-        run: |
-          IMAGE=""
-          case ${{ matrix.job.target }} in
-            x86_64-unknown-linux-gnu) IMAGE="quay.io/pypa/manylinux2014_x86_64" ;;
-            aarch64-unknown-linux-gnu) IMAGE="quay.io/pypa/manylinux2014_aarch64" ;;
-          esac
-          if [[ -n "$IMAGE" ]]; then
-            echo "Using custom image for glibc 2.17: $IMAGE"
-            echo "CROSS_IMAGE=$IMAGE" >> "$GITHUB_ENV"
-          else
-            echo "::warning:: No manylinux2014 image found for target ${{ matrix.job.target }}. Build will use default cross image, which may have a newer glibc."
           fi
 
       - name: show version information (Rust, cargo, GCC)
@@ -287,6 +251,12 @@ jobs:
           composer update --ignore-platform-reqs
           cd ..
 
+      # The PHP# engine mago links, which sharp/bin/build-mago --engine builds for the runner's own platform, each
+      # release from nothing but on the self-hosted Macs, which keep sharp/build.
+      - name: Build the engine mago links
+        shell: bash
+        run: sharp/bin/build-mago --engine
+
       - name: build
         shell: bash
         run: |
@@ -295,7 +265,7 @@ jobs:
             cargo pgo run -- -- --workspace corpus/ analyze --reporting-format count || true
             cargo pgo optimize build -- --target=${{ matrix.job.target }}
           else
-            $BUILD_CMD build --locked --release --target=${{ matrix.job.target }}
+            cargo build --locked --release --target=${{ matrix.job.target }}
           fi
 
       - name: set binary name

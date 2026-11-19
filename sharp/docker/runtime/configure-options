@@ -10,8 +10,6 @@ if [ $# -ne 0 ]; then
 	echo "usage: sharp/docker/runtime/configure-options" >&2
 	exit 2
 fi
-# An assignment of its own, so a failure stops the script.
-multiarch="$(dpkg-architecture --query DEB_BUILD_MULTIARCH)"
 
 # make sure invalid --configure-flags are fatal errors instead of just warnings
 echo --enable-option-checking=fatal
@@ -55,7 +53,13 @@ echo --enable-phpdbg-readline
 # in PHP 7.4+, the pecl/pear installers are officially deprecated (requiring an explicit "--with-pear")
 echo --with-pear
 
-echo --with-libdir="lib/$multiarch"
+# Debian's library folder for the build's architecture. sharp/bin/build-mago builds mago's engine with these options on
+# macOS too, where configure finds each library itself.
+if command -v dpkg-architecture > /dev/null; then
+	# An assignment of its own, so a failure stops the script.
+	multiarch="$(dpkg-architecture --query DEB_BUILD_MULTIARCH)"
+	echo --with-libdir="lib/$multiarch"
+fi
 
 # https://github.com/docker-library/php/pull/939#issuecomment-730501748
 echo --enable-embed
