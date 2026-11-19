@@ -11,10 +11,26 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
 target="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago"
 
+# $target/build.json holds cargo's messages about the build, one JSON object per line, among them every test binary it
+# made and the folder each build script wrote, while the diagnostics print as cargo prints them. sharp/bin/test runs the
+# test binaries it names, as does a CI job that runs them on another job's build with sharp/bin/test --no-build. A
+# failed build leaves no build.json, so no run takes a build that failed for one that passed.
+messages="$target/build.json"
+rm -f "$messages"
+mkdir -p "$target"
+PATH="$(dirname "$cargo"):$PATH" "$cargo" test --workspace --locked --no-run \
+  --manifest-path "$root/sharp/mago/Cargo.toml" \
+  --target-dir "$target" --jobs "$("$root/sharp/bin/jobs")" --message-format=json-render-diagnostics "$@" \
+  > "$messages.part"
+mv "$messages.part" "$messages"
+
 # Cargo never deletes a copy of a crate it no longer uses. Each distinct `cargo test -p` or `cargo clippy -p` list
 # compiles its own copy of the shared crates, and so does each version bump or Cargo.lock change. A fresh build holds
 # 5.9 GiB, 7 lists took one slot from 5.85 to 7.37 GiB, and live slots reached 16 GiB. So in a builder's slot, a
-# profile folder above 10 GiB goes, and mago builds it from nothing.
+# profile folder above 10 GiB keeps only the crates this build used. Cargo names each file and folder of a crate's
+# compile, and of a build script's run, with that unit's metadata hash, and build.json names the files of every unit
+# the build used, built or fresh. So an entry of deps, build, examples or .fingerprint whose hash build.json doesn't
+# name goes. The prune runs once the build has passed, so a failed build, even on a bad argument, leaves every file.
 # In CI the folder is a cache that CI keeps itself. clean-kept-build bounds it on the self-hosted Macs. On GitHub-hosted
 # runners mago-cache restores it with a manifest, $target/sources, which a delete would lose, so a later restore would
 # rebuild every crate. sharp/docker/run doesn't pass GITHUB_ACTIONS into the container, so a hosted Linux job shows by that manifest.
@@ -23,7 +39,7 @@ target="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/m
 # skips the folder while it can't take that flock without waiting, or while a process runs from the build. Each
 # sharp/docker/run is its own container with its own processes, so a prune there can't see a test binary another
 # container runs from the same folder: run one sharp/docker/run at a time per slot.
-if [[ -z ${GITHUB_ACTIONS:-} && ! -e $target/sources && -d $target ]]; then
+if [[ -z ${GITHUB_ACTIONS:-} && ! -e $target/sources ]]; then
   # Runs the rest of the line while it holds the flock on the lock file, or exits 75 at once when another process
   # holds it: util-linux's flock on Linux, and BSD's lockf on macOS, which has no flock command.
   holding() {
@@ -36,6 +52,7 @@ if [[ -z ${GITHUB_ACTIONS:-} && ! -e $target/sources && -d $target ]]; then
     fi
   }
 
+  tab=$'\t'
   shopt -s nullglob
   # Each profile folder: debug, and one a tool builds below the folder, as cargo-llvm-cov's llvm-cov-target/debug.
   for lock in "$target"/*/.cargo-lock "$target"/*/*/.cargo-lock; do
@@ -61,8 +78,38 @@ if [[ -z ${GITHUB_ACTIONS:-} && ! -e $target/sources && -d $target ]]; then
       ps -o pid=,command= -p "$running" >&2
       continue
     fi
+    used=$({ grep -oE '/(deps|build|examples)/[^/"]+-[0-9a-f]{16}' "$messages" || true; } \
+      | sed -E 's/.*-([0-9a-f]{16})$/\1/')
+    # Cargo copies a bin up out of deps, and an example out of its hashed name in examples, and names only the copy. So
+    # each one's unit is the hashed file its copy matches byte for byte.
+    while IFS= read -r copy; do
+      if [[ $copy != "$profile"/* || $copy =~ -[0-9a-f]{16}$ ]]; then
+        continue
+      fi
+      folder=$(dirname "$copy")
+      if [[ $folder == "$profile" ]]; then
+        folder="$profile/deps"
+      fi
+      for file in "$folder/$(basename "$copy")"-*; do
+        if [[ $file =~ -([0-9a-f]{16})$ ]] && cmp -s "$file" "$copy"; then
+          used+=$'\n'"${BASH_REMATCH[1]}"
+        fi
+      done
+    done < <(sed -nE 's/.*"executable":"([^"]+)".*/\1/p' "$messages")
+    used=$(LC_ALL=C sort -u <<< "$used" | sed '/^$/d')
+    if [[ -z $used ]]; then
+      echo "$held $messages names no crate's hash, so no prune can tell the crates this build used." >&2
+      exit 1
+    fi
+    stale=$(printf '%s\n' "$profile"/{deps,build,examples,.fingerprint}/* \
+      | sed -nE "s|^(.*-([0-9a-f]{16})([.][^/]*)?)\$|\\2$tab\\1|p" | LC_ALL=C sort -t "$tab" -k 1,1 \
+      | LC_ALL=C join -t "$tab" -v 1 - <(printf '%s\n' "$used") | cut -f 2-)
+    if [[ -z $stale ]]; then
+      echo "$held each crate in it is one this build used, so the folder stays." >&2
+      continue
+    fi
     status=0
-    holding "$lock" rm -rf "$profile" || status=$?
+    printf '%s\n' "$stale" | tr '\n' '\0' | holding "$lock" xargs -0 rm -rf -- || status=$?
     if (( status == 75 )); then
       echo "$held a cargo holds $lock, so it is building there, and the folder stays." >&2
       continue
@@ -70,20 +117,8 @@ if [[ -z ${GITHUB_ACTIONS:-} && ! -e $target/sources && -d $target ]]; then
     if (( status != 0 )); then
       exit "$status"
     fi
-    echo "$profile held $((size / 1024)) MiB, above the 10 GiB bound, so mago builds it from nothing." >&2
+    echo "$profile held $((size / 1024)) MiB, above the 10 GiB bound, so the $(grep -c '' <<< "$stale") entries of" \
+      "crates this build didn't use went, and it holds $(($(du -sk "$profile" | cut -f1) / 1024)) MiB." >&2
   done
   shopt -u nullglob
 fi
-
-# $target/build.json holds cargo's messages about the build, one JSON object per line, among them every test binary it
-# made and the folder each build script wrote, while the diagnostics print as cargo prints them. sharp/bin/test runs the
-# test binaries it names, as does a CI job that runs them on another job's build with sharp/bin/test --no-build. A
-# failed build leaves no build.json, so no run takes a build that failed for one that passed.
-messages="$target/build.json"
-rm -f "$messages"
-mkdir -p "$target"
-PATH="$(dirname "$cargo"):$PATH" "$cargo" test --workspace --locked --no-run \
-  --manifest-path "$root/sharp/mago/Cargo.toml" \
-  --target-dir "$target" --jobs "$("$root/sharp/bin/jobs")" --message-format=json-render-diagnostics "$@" \
-  > "$messages.part"
-mv "$messages.part" "$messages"
