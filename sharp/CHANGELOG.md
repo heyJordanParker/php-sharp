@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.38] - 2026-11-19
+
 ### Added
 
 - An `extern` line's parameter takes the type `callable`, spec sections 7 and 23, so `extern bool WordPress.add_action(string hookName, callable callback, int priority = 10, int acceptedArgs = 1);` states a plain PHP hook's callback, and `WordPress.add_action("save_post", this.saved, 10, 3)` passes any function value, a method value, a lambda or a `Function<…>` value, which plain PHP receives as the closure it is. 0.6.37 refused `callable` as "Unexpected `callable`". Anywhere else, a local, a property, a return type, a PHP# parameter or a type argument, `callable` is refused as "`callable` is only the type of an extern line's parameter.", and a string passed for a function value, as `WordPress.add_action("init", "my_function")`, is refused as "Argument #2 of function `WordPress.add_action` is a string, and a string is never a function value.", for a `Function<…>` parameter too, where 0.6.37 reported "Possible argument type mismatch".
@@ -1419,7 +1421,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.37...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.38...HEAD
+[0.6.38]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.37...v0.6.38
 [0.6.37]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.36...v0.6.37
 [0.6.36]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.35...v0.6.36
 [0.6.35]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.34...v0.6.35
