@@ -364,3 +364,42 @@ RUN setcap cap_net_bind_service=+ep /usr/local/bin/frankenphp && \
 	frankenphp version && \
 	frankenphp build-info && \
 	php --ri sharp
+
+# The Lean the law checker runs, unpacked where mago reads it: `lean/<archive>/` in Mago's cache folder. The archive is
+# the release of the Lean version sharp/mago/crates/sharp-lean/lean/lean-toolchain pins, with the SHA-256
+# sharp/mago/crates/sharp-lean/src/library.rs pins for the platform, so a new Lean version fails here until both pin it.
+# Every user reads and writes the folder, so a container run with --user finds the Lean and builds the library beside it.
+FROM ${BASE_IMAGE} AS lean
+
+ARG TARGETARCH
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update && \
+	apt-get -y --no-install-recommends install ca-certificates curl zstd && \
+	apt-get dist-clean
+
+COPY sharp/mago/crates/sharp-lean/lean/lean-toolchain /tmp/lean-toolchain
+RUN set -eux; \
+	version=$(sed 's/.*:v//' /tmp/lean-toolchain); \
+	case "$TARGETARCH" in \
+		amd64) archive="lean-$version-linux"; sha256=47bf4bbd78f70c2e9670598ab7124d92b6efb7330ff33e5fbb4030f6fd72e4e4 ;; \
+		arm64) archive="lean-$version-linux_aarch64"; sha256=fdb974c2cdb4627e090d5d4007b913e09d13c4868720fb5594e22808b3de9e37 ;; \
+		*) echo "Lean ships no Linux archive for $TARGETARCH." >&2; exit 1 ;; \
+	esac; \
+	curl -fsSL --retry 3 -o /tmp/lean.tar.zst "https://github.com/leanprover/lean4/releases/download/v$version/$archive.tar.zst"; \
+	echo "$sha256  /tmp/lean.tar.zst" | sha256sum -c; \
+	mkdir -p /cache/mago/lean; \
+	tar --zstd --no-same-owner -xf /tmp/lean.tar.zst -C /cache/mago/lean; \
+	"/cache/mago/lean/$archive/bin/lake" --version; \
+	chmod -R a+rwX /cache/mago
+
+# ghcr.io/heyjordanparker/php-sharp:<version>-dev: the runtime image with the law checker's Lean installed, so a compile
+# with laws in it downloads nothing. Mago's cache folder is /var/cache/mago for every user.
+FROM runner AS dev
+
+ENV XDG_CACHE_HOME=/var/cache
+# The folder's contents, so the copy keeps the mode of mago/ too.
+COPY --link --from=lean /cache/ /var/cache/
+
+# The runtime image stays the stage a build without --target makes.
+FROM runner

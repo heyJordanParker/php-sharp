@@ -4,8 +4,13 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Added
+
+- `ghcr.io/heyjordanparker/php-sharp:<version>-dev`, the runtime image with the law checker's Lean installed in Mago's cache folder, `/var/cache/mago`, which every user reads and writes. A compile with laws in a container built from it downloads nothing: in a 6-CPU arm64 container, the first compile of a project with 9 laws took 6.6 to 7.7 seconds there, run as root or with `--user`, and 17.9 to 19.1 seconds in `<version>`, where `mago` downloads the Lean first. `ghcr.io/heyjordanparker/php-sharp:<version>` stays the runtime image, at its size, for production.
+
 ### Changed
 
+- `mago compile` installs the law checker's Lean itself, from Lean's release archive, which it unpacks while it downloads, on threads of their own, into `lean/` in Mago's cache folder. It installs nothing else: 0.6.35 installed elan, which downloaded the whole archive and then unpacked it on one core. The archive's SHA-256 is pinned for each platform, and the Lean moves into place only once the download matches it. In a 6-CPU arm64 container with an empty cache, the first compile of a project with 9 laws took 28.2 to 29.2 seconds on 0.6.35 and takes 17.9 to 19.1. A `lake` on the `PATH` is still used first. The `elan/` folder and `elan.lock` an earlier `mago` left in Mago's cache folder are no longer read: delete them to free about 3 GB.
 - Spec section 5's strict rules run on every package whose `composer.json` does not say `"type": "library"`: a public type or member too wide, a public member whose types hold `Any`, and, from section 24, a string fixed at compile time that selects. 0.6.35 ran them only where `composer.json` said `"type": "project"`, so an application that left the type out, or had no `composer.json`, compiled a public member nothing outside its class used. A package with no type, one with no `composer.json` above it and one whose `composer.json` does not parse are now projects, so no line left out turns a rule off. A library adds `"type": "library"` to its `composer.json`. The standard library and every package installed in `vendor/` stay exempt whatever their type.
 
 ### Fixed

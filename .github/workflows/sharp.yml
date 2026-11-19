@@ -746,6 +746,20 @@ jobs:
           provenance: mode=max
           sbom: generator=ghcr.io/heyjordanparker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
           outputs: type=image,name=ghcr.io/heyjordanparker/php-sharp,push-by-digest=true,name-canonical=true,push=true
+      # The -dev image, the runtime image with the law checker's Lean in Mago's cache folder, which RELEASE tags
+      # <version>-dev. The build reuses the runtime image's stages from the build before it.
+      - name: Build and push the -dev image by digest
+        id: dev
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ github.server_url }}/${{ github.repository }}.git#${{ github.sha }}
+          file: sharp/docker/runtime/frankenphp.Dockerfile
+          target: dev
+          platforms: ${{ matrix.platform }}
+          build-args: REGISTRY=ghcr.io/heyjordanparker
+          provenance: mode=max
+          sbom: generator=ghcr.io/heyjordanparker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
+          outputs: type=image,name=ghcr.io/heyjordanparker/php-sharp,push-by-digest=true,name-canonical=true,push=true
       # A critical or high CVE that a fixed package resolves fails the job, so the digest is never uploaded and
       # RELEASE tags none. aquasecurity/trivy-action's v0.35.0 and later are immutable releases, made after its tags
       # were rewritten to malware on 2026-03-19, and Trivy's v0.71.1 and later fix GHSA-mcj4-mphf-j9ff.
@@ -774,6 +788,19 @@ jobs:
             echo "::error::php -m in the $PLATFORM image lists no sharp extension."
             exit 1
           fi
+      # mago reads the Lean of its compile from lean/lean-<version>-<platform>/ in Mago's cache folder, which XDG_CACHE_HOME
+      # puts in /var/cache/mago, so a compile in the -dev image downloads nothing, run by any user.
+      - name: A user other than root runs the -dev image's Lean and writes in Mago's cache folder
+        env:
+          IMAGE: ghcr.io/heyjordanparker/php-sharp@${{ steps.dev.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          archive="lean-$(sed 's/.*:v//' sharp/mago/crates/sharp-lean/lean/lean-toolchain)-linux"
+          if [[ $PLATFORM == linux/arm64 ]]; then
+            archive+=_aarch64
+          fi
+          docker run --rm --user 1000:1000 --env ARCHIVE="$archive" "$IMAGE" \
+            sh -c '"$XDG_CACHE_HOME/mago/lean/$ARCHIVE/bin/lake" --version && touch "$XDG_CACHE_HOME/mago/install.lock"'
       # rustup comes after the extensions, so they build as in the app's image. The builder is Docker's own, which reads
       # the pulled image, where Buildx's would not.
       - name: Install the extensions
@@ -795,13 +822,15 @@ jobs:
         run: |
           # shellcheck disable=SC2086 # EXTENSIONS is a list of extensions.
           docker run --rm --volume "$PWD:/src" --workdir /src php-sharp-extensions frankenphp php-cli sharp/bin/php-extensions $EXTENSIONS
-      # The file is named by the digest and holds the commit the image was built from.
-      - name: Keep the digest for RELEASE
+      # Each file is named by its image's digest and holds the commit the image was built from.
+      - name: Keep the digests for RELEASE
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
+          DEV: ${{ steps.dev.outputs.digest }}
         run: |
-          mkdir "$RUNNER_TEMP/digests"
+          mkdir "$RUNNER_TEMP/digests" "$RUNNER_TEMP/dev-digests"
           echo "$GITHUB_SHA" > "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+          echo "$GITHUB_SHA" > "$RUNNER_TEMP/dev-digests/${DEV#sha256:}"
       # Kept as long as release.yml's assets, as the repository's artifact retention sets. The name keeps the frankenphp
       # of the runs that also built php-fpm's image, so a tag of their commits tags FrankenPHP's alone.
       - name: Upload the digest for RELEASE
@@ -810,9 +839,16 @@ jobs:
           name: digest-frankenphp-${{ strategy.job-index }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
+      - name: Upload the -dev digest for RELEASE
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-dev-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/dev-digests/*
+          if-no-files-found: error
   # Publishes a release from the push of its merge to master, once every job before it passed, and mago.yml's run of
   # the same push: the GitHub release of the files RELEASE_ASSETS built, whose publication creates tag v<version> on the
-  # merge commit, and the runtime image as ghcr.io/heyjordanparker/php-sharp:<version>, never as latest. The files and
+  # merge commit, and the runtime image as ghcr.io/heyjordanparker/php-sharp:<version>, never as latest, with its -dev
+  # image as <version>-dev. The files and
   # images are the ones the pull request's run built on this commit's tree, or the ones this run built when no pull
   # request's run passed that tree, so a release builds them once and the merge builds nothing. A tag GITHUB_TOKEN makes
   # starts no workflow, so this run publishes, and COMPOSER then publishes the Composer packages. A rerun of a failed
@@ -940,7 +976,15 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-frankenphp-*
-          path: ${{ runner.temp }}/digests
+          path: ${{ runner.temp }}/digests/runtime
+          merge-multiple: true
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+      - name: Download the platforms' -dev digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-dev-*
+          path: ${{ runner.temp }}/digests/dev
           merge-multiple: true
           run-id: ${{ steps.run.outputs.id }}
           github-token: ${{ github.token }}
@@ -950,36 +994,50 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Each digest's file holds the commit IMAGE built it from.
-      - name: Tag the platforms' images as one image
+      # Each digest's file holds the commit IMAGE built it from: the runtime image's in runtime/, tagged <version>, and the
+      # -dev image's in dev/, tagged <version>-dev.
+      - name: Tag the platforms' images as one image each
         id: tag
         working-directory: ${{ runner.temp }}/digests
         env:
           TREE: ${{ steps.run.outputs.tree }}
         run: |
           image=ghcr.io/heyjordanparker/php-sharp
-          tag="$image:$VERSION"
-          sources=()
-          for digest in *; do
-            commit=$(< "$digest")
-            built=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)
-            if [[ $built != "$TREE" ]]; then
-              echo "::error::IMAGE built $image@sha256:$digest from commit $commit, whose tree $built isn't commit $GITHUB_SHA's tree $TREE."
+          for kind in runtime dev; do
+            tag="$image:$VERSION"
+            if [[ $kind == dev ]]; then
+              tag+=-dev
+            fi
+            sources=()
+            for file in "$kind"/*; do
+              digest=${file#"$kind"/}
+              commit=$(< "$file")
+              built=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)
+              if [[ $built != "$TREE" ]]; then
+                echo "::error::IMAGE built $image@sha256:$digest from commit $commit, whose tree $built isn't commit $GITHUB_SHA's tree $TREE."
+                exit 1
+              fi
+              sources+=("$image@sha256:$digest")
+            done
+            if [[ ${#sources[@]} != 2 ]]; then
+              echo "::error::IMAGE pushed ${#sources[@]} platform images for $tag, not linux/amd64's and linux/arm64's."
               exit 1
             fi
-            sources+=("$image@sha256:$digest")
+            docker buildx imagetools create --tag "$tag" "${sources[@]}"
+            docker buildx imagetools inspect "$tag"
+            echo "$kind=$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_OUTPUT"
           done
-          if [[ ${#sources[@]} != 2 ]]; then
-            echo "::error::IMAGE pushed ${#sources[@]} platform images for $tag, not linux/amd64's and linux/arm64's."
-            exit 1
-          fi
-          docker buildx imagetools create --tag "$tag" "${sources[@]}"
-          docker buildx imagetools inspect "$tag"
-          echo "digest=$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_OUTPUT"
-      # `gh attestation verify oci://ghcr.io/heyjordanparker/php-sharp:<version> --repo heyJordanParker/php-sharp` checks it.
+      # `gh attestation verify oci://ghcr.io/heyjordanparker/php-sharp:<version> --repo heyJordanParker/php-sharp` checks it,
+      # and the same command with <version>-dev the -dev image's.
       - name: Attest the image's provenance
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-name: ghcr.io/heyjordanparker/php-sharp
-          subject-digest: ${{ steps.tag.outputs.digest }}
+          subject-digest: ${{ steps.tag.outputs.runtime }}
+          push-to-registry: true
+      - name: Attest the -dev image's provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-name: ghcr.io/heyjordanparker/php-sharp
+          subject-digest: ${{ steps.tag.outputs.dev }}
           push-to-registry: true
