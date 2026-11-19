@@ -7117,6 +7117,7 @@ A law the checker cannot prove is a compile error that names it (section 27).
 - **A law reaches the standard library from its PHP# source, as it reaches the project's code,** so a type such as `Instant` translates from its declaration and each member a law calls, and a member that calls plain PHP is refused where the law reaches it, as the project's would be. `Math.max` and `Math.min` on ints, and a List's `count()`, `map` and `filter`, keep the checker's own model of what they give.
 - **`<`, `<=`, `>`, `>=` and `<=>` on two values of one class run the class's own `operator <=>`,** so a law that orders two `Instant`s proves through `Instant`'s.
 - **`==` and `!=` on two values of a struct that declares no `operator ==` compare each field with that field's own `==`, and on two values of a class that declares `operator ==` run it,** so a law that compares two `Instant`s proves. A struct with a field whose `==` a law can't read, as an `Instant?`, is refused.
+- **A value of a class holds the fields of every PHP# class above it,** so a law reads a field, calls a method and runs `new` through `: super(…)` with what a PHP# parent declares, at any depth. The first plain PHP class above it, and each class above that, is plain PHP: a law carries the value and takes it as a parameter, and a read of a member such a class declares, or a `new` that runs its constructor, is refused where the law reaches it.
 - **Each refusal names what to write instead,** as these do:
 
 ```text
@@ -7126,6 +7127,7 @@ Law cappedHolds reaches a loop that reads a local it adds to in Shape.capped. Wr
 Law reachesZero reaches a recursion that does not get smaller in Shape.up. Write the method as recursion that calls itself on a smaller value: a list's rest from a list pattern, or an int one step towards a bound a condition tested.
 Law nullIsSmall reaches a pattern that names a value outside the condition of an if or a ?: in Shape.big. Write the test as the condition of an if or a ?:, and read the value it names in the branch it decides.
 Law shapeIsShape reaches a type test of the interface Figure in Shape.isShape. A law tells apart only the implementers of a sealed interface. Declare `Figure` sealed.
+Law readsBase reaches the plain PHP property Base.x in Shape.readsBase. Write the code the law reaches in PHP#, or pass the value plain PHP computes to the law as a parameter.
 ```
 
 <!-- example law-reach -->

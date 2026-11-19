@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A law reaches a class that extends other classes, spec section 28. Its value holds the fields of every PHP# class above it, so a law reads a field, calls a method and runs `new` through `: super(…)` with what a PHP# parent declares, at any depth, and `super.m(…)` in a method a law reaches runs the parent's `m`. 0.6.38 refused every law that reached such a class, as "Law carries reaches the class Entry, which extends Stamped in Entry. Declare the members the law reaches in the class itself, in place of inheriting them.", even one that only took the value as a parameter. The first plain PHP class above it, as an ORM's base model, is plain PHP: a law carries the value, and a read of a member that class declares is refused at the read, as "Law readsBase reaches the plain PHP property Base.x in Shape.readsBase. Write the code the law reaches in PHP#, or pass the value plain PHP computes to the law as a parameter.", and so is a `new` that runs its constructor.
+
 ## [0.6.38] - 2026-11-19
 
 ### Added
