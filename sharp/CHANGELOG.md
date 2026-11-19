@@ -7,6 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Added
 
 - `ghcr.io/heyjordanparker/php-sharp:<version>-dev`, the runtime image with the law checker's Lean installed in Mago's cache folder, `/var/cache/mago`, which every user reads and writes. A compile with laws in a container built from it downloads nothing: in a 6-CPU arm64 container, the first compile of a project with 9 laws took 6.6 to 7.7 seconds there, run as root or with `--user`, and 17.9 to 19.1 seconds in `<version>`, where `mago` downloads the Lean first. `ghcr.io/heyjordanparker/php-sharp:<version>` stays the runtime image, at its size, for production.
+- `heyjordanparker/php-sharp-composer` ships the spec its release follows, at `vendor/heyjordanparker/php-sharp-composer/spec.md`, so a project can read each section a refusal or the standard library cites, as `Sharp/Method.sharp` cites section 29. The release copies the release tag's `docs/spec.md` into the package's tag, so the two never differ.
 
 ### Changed
 

@@ -613,15 +613,27 @@ jobs:
           ssh-key: ${{ secrets.PHP_SHARP_COMPOSER_DEPLOY_KEY }}
           path: sharp/build/php-sharp-composer
           fetch-depth: 0
-      # A release's tag here becomes the plugin release of the same version. The split is the same commit on a rerun.
-      - name: Push the split, and a release's tag
+      # A release's tag here becomes the plugin release of the same version: the split plus a commit that adds this
+      # commit's docs/spec.md as spec.md, so a project reads the spec its version follows at
+      # vendor/heyjordanparker/php-sharp-composer/spec.md. A rerun finds the tag an earlier attempt pushed, and leaves it.
+      - name: Push the split, and a release's tag with its spec
         working-directory: sharp/build/php-sharp-composer
         run: |
           git fetch "$GITHUB_WORKSPACE" refs/heads/composer
           git push origin "FETCH_HEAD:$GITHUB_REF"
-          if [[ -n $VERSION ]]; then
-            git push origin "FETCH_HEAD:refs/tags/v$VERSION"
+          if [[ -z $VERSION ]]; then
+            exit 0
           fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null; then
+            echo "heyJordanParker/php-sharp-composer already has tag v$VERSION."
+            exit 0
+          fi
+          git switch --detach FETCH_HEAD
+          cp "$GITHUB_WORKSPACE/docs/spec.md" spec.md
+          git add spec.md
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit --message "The spec PHP# $VERSION follows"
+          git push origin "HEAD:refs/tags/v$VERSION"
       - name: Split sharp/mago
         run: splitsh-lite --prefix=sharp/mago --target=refs/heads/mago
       - name: git checkout heyJordanParker/mago-sharp
