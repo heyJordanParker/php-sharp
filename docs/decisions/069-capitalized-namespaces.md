@@ -1,5 +1,7 @@
 # 69. Capitalized namespaces
 
+Superseded: [section 23, Namespaces and imports](../spec.md#23-namespaces-and-imports) holds the current rule. Every part of a `namespace` line is in Pascal case, as a type is, and a part that is not, as `namespace App.store;`, is a naming warning, not a compile error.
+
 ## Decision
 
 Every part of a `namespace` line starts with a capital letter, A to Z. `namespace App.store;` is a compile error on `store`, and `namespace App.Store;` compiles. The error reads as the one for a lowercase type, because one rule covers both: "`store` must start with a capital letter: PHP# capitalizes every namespace and every type except the built-in ones." An `import` line keeps the letters it names, because it names a namespace another file declares, and plain PHP vendor namespaces are often lowercase. Decision 59 names namespaces PascalCase. This decision makes the first letter of each part a compile error, as section 24 does for types.

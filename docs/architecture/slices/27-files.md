@@ -1,5 +1,7 @@
 # Slice 27: PHP# files
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 27. This note is the design only. team-lead approves it before anyone builds.
 
 ## The answer first
@@ -24,7 +26,7 @@ The rule also reaches tests: 49 of the 143 `.sharp` fixtures under `Zend/tests/s
    - 49 engine fixtures: 43 declare several types, 6 declare one named unlike the file (`trace grep` over `Zend/tests/sharp/*.sharp`).
    - Up to 178 mago test functions whose sources declare several PHP# types, of 641 that declare any (an upper bound: some already put each type in its own file). How many name a type unlike the file is measured once the rule runs.
    - `sharp/harness/`, `sharp/composer/library/` and `sharp/phpunit/` already hold: their only multi-declaration file is `Laravel.sharp`, which declares no type.
-   - The alternative, the PSR-4 gate the folder rule uses, costs no test, but leaves a file outside any PSR-4 folder free to hold several types, which line 3508 forbids. It needs a spec change, so it is Jordan's call, and this note does not propose it.
+   - The alternative, the PSR-4 gate the folder rule uses, costs no test, but leaves a file outside any PSR-4 folder free to hold several types, which line 3508 forbids. It needs a spec change, so it is the language owner's call, and this note does not propose it.
 2. **`check_declarations` enforces the rule,** beside the folder-namespace rule it already runs in `crates/semantics/src/internal/checker/sharp.rs`. It already collects the file's declarations with `declarations(program)`. A type is a class, interface, enum, struct or event at file level. `extern` lines and `module` blocks are not types, so an `extern` file, a `Module.sharp`, a `Module.<Environment>.sharp` and a test file's `module : …` block need no exemption. The errors land on the type's name:
    - a second type: "A `.sharp` file declares one type: move `StoreHelper` to `StoreHelper.sharp`."
    - a type named unlike the file, case included, because Linux's PSR-4 lookup is: "`Misnamed.sharp` declares `Elsewhere`: rename the file `Elsewhere.sharp`, or the type `Misnamed`."
@@ -50,7 +52,7 @@ The rule also reaches tests: 49 of the 143 `.sharp` fixtures under `Zend/tests/s
 
     Runner-up: `CALL_SITE_DEFAULT`, if a second call-site default ever joins `Position`.
 
-## Questions for Jordan
+## Questions for the language owner
 
 Each one decides what users write. The note recommends and decides none.
 
@@ -76,7 +78,7 @@ FAIL §27 position (docs/spec.md:3524)
   docs/spec.md:3538 expects no error, and the checker reports: A `Position.current()` default is not supported yet in PHP#.
 ```
 
-- **Probes:** `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-files/ws/` is a Composer project: `App\` maps to `app/`, and `heyjordanparker/php-sharp-composer` installs from `sharp/composer/` as a copy, through Composer 2's path repository. `compile.sh ws` runs `mago compile` with `MAGO_REPORTING_FORMAT=emacs`. `probes/runtime.php` runs the engine probes through the project's real `vendor/autoload.php`, `probes/state.php <class>` loads one class, and `probes/preload*.php` are the preload scripts. Every message and value below is their output.
+- **Probes:** `~/.claude/jobs/6affb5f6/tmp/slice-files/ws/` is a Composer project: `App\` maps to `app/`, and `heyjordanparker/php-sharp-composer` installs from `sharp/composer/` as a copy, through Composer 2's path repository. `compile.sh ws` runs `mago compile` with `MAGO_REPORTING_FORMAT=emacs`. `probes/runtime.php` runs the engine probes through the project's real `vendor/autoload.php`, `probes/state.php <class>` loads one class, and `probes/preload*.php` are the preload scripts. Every message and value below is their output.
 
 # Every rule of section 27, its state and its mechanism
 
@@ -108,7 +110,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 | 3521 | It has `file`, `directory`, `line`, `column` and `function` | Works: `ext/sharp/sharp.stub.php`'s `Sharp\Position`; the constructor derives `directory` | None new | |
 | 3521 | `function` is the fully qualified dotted name | Works: `App.Pos.Here.fromStatic` | None new | `Lowering::enter` |
 | 3553 | `Position.current()` in a body gives the position where it is written | Works: a static method (`Here.sharp:5:44 App.Pos.Here.fromStatic`), a method, an accessor (`App.Pos.Here.property`), a constructor (`App.Pos.Here.Here`) and a lambda (the member that holds it, `App.Pos.Here.fromLambda`). Columns count bytes from 1 | None new | `Lowering::current_position` |
-| 3554 | As a parameter's default, `Position.current()` gives the caller's position | **Refused:** "A `Position.current()` default is not supported yet in PHP#." `position` line 3538 | Semantics, codex, bridge (decision 5), Jordan questions 1 and 2 | `sharp_arguments`, `current_position` |
+| 3554 | As a parameter's default, `Position.current()` gives the caller's position | **Refused:** "A `Position.current()` default is not supported yet in PHP#." `position` line 3538 | Semantics, codex, bridge (decision 5), the language owner's questions 1 and 2 | `sharp_arguments`, `current_position` |
 
 ## Compiling and running
 
@@ -121,7 +123,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 | 3559, 3562 | An uncompiled file is refused, naming the fix | Works, word for word: "app/Shop/Fresh.sharp isn't compiled. Run vendor/bin/mago compile." | None new | `sharp_refuse`, `refusal_not_compiled.phpt` |
 | 3563 | An out-of-date file is refused, naming the file that changed | Works, word for word: "app/Shop/Order.sharp is out of date (app/Shop/Money.sharp changed). Run vendor/bin/mago compile." | None new | `refusal_out_of_date_input.phpt` |
 | 3564 | A file compiled for another engine is refused | Works, word for word, after one ABI byte of `Fresh.sharpc` changed: "app/Shop/Fresh.sharp was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine." | None new | `refusal_different_engine.phpt` |
-| 3567 | A deploy runs `vendor/bin/mago compile` before the code runs | Holds through the refusals above: a deploy that skips it stops at its first PHP# file | None new; Jordan question 3 | |
+| 3567 | A deploy runs `vendor/bin/mago compile` before the code runs | Holds through the refusals above: a deploy that skips it stops at its first PHP# file | None new; the language owner's question 3 | |
 | 3568 | A type error stops the file, and so does a law without a proof, a gap, or a proof of a deleted law | Works: section 28's examples pass; `laws.phpt` | None new (section 28, #113) | |
 | 3569 | A whole-project rule can lag in development, and is exact at deploy | Works by design: `sharp.compile_command` compiles on demand from a stale file, and `mago compile` checks every rule | None new | |
 

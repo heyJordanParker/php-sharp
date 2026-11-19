@@ -12,7 +12,11 @@
 public abstract class DatabaseEntity
 {
     public required DatabaseEntity(Row row) { … }
-    public static Self fromSchema(Any value, VerifiedUser caller) { … return new Self(row); }   // compiles: the constructor is required
+    public static Self fromSchema(Map<string, Any?> value, VerifiedUser caller)
+    {
+        Row row = Row.parse(value);
+        return new Self(row);   // compiles: the constructor is required
+    }
 }
 
 public class Order : DatabaseEntity

@@ -1,5 +1,7 @@
 # Slice 12: Collections
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 12 (collections) and section 17's collection rules, with the section 5 rule one section 12 example needs and the section 30 rules the entries of a `Map` need. team-lead approved this design with the answers each question records.
 
 **Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.

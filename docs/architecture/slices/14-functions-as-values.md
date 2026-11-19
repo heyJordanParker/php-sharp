@@ -1,5 +1,7 @@
 # Slice 14: Functions as values
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 14: function types, lambdas, methods as values and the null operators. This note holds every rule line of the section, its state on master `c4adf74516`, its mechanism and the code it reuses. Hosts (#136) and effect classes (#151) land in their own pull requests, and this Slice builds on them without building them again: a method takes on the effects of each function it is given, a function parameter whose type states no effects never escapes, and an effect object is an ordinary type.
 
 **Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
@@ -15,7 +17,7 @@ All eight examples of section 14 pass on master, and most rule lines hold, engin
 3. **A field named like an inherited method compiles, and the call runs the method.** `ChildWithField` declares a field `discount` below its parent's method `discount`, and `this.discount(5)` runs the parent's method. Line 1577 promises that `this.discount(…)` always has one meaning (Q4).
 4. **A lambda parameter nothing types is silently `Any?`.** `const identity = x => x;` and `Any f = x => x;` compile. Line 1523 makes a parameter's type optional only when the checker can infer it.
 5. **A method of a collection, of a built-in type or of an extension is no function value.** `numbers.map(allowed.contains)` is "Attempting to access a property on a non-object type (`List<int>`).", and `names.map(name.trim)` is "`trim` is a method of `string`, not a computed property: call it as `trim(…)`." Line 1565 says a method named without parentheses is a function value (Q5).
-6. **A lambda can't capture a loop variable that changes.** It is "This capture of a loop variable that changes is not supported yet in PHP#.", and the help tells the user to copy it into a `const` because "the engine cannot give a lambda" one. That is code written around PHP's closures, which Jordan's rule forbids.
+6. **A lambda can't capture a loop variable that changes.** It is "This capture of a loop variable that changes is not supported yet in PHP#.", and the help tells the user to copy it into a `const` because "the engine cannot give a lambda" one. That is code written around PHP's closures, which the language owner's rule forbids.
 7. **Two PHP forms get "not supported yet" instead of section 14's words.** PHP's first-class callable `Item.doubled(...)` is "This expression is not supported yet in PHP#.", and `Function<int(void)>` is "This type is not supported yet in PHP#."
 
 Everything else holds: function types with their effects, every lambda form, capture of the variable itself, changes through a captured collection, method values of PHP# and plain PHP classes found when the code runs, a plain PHP property winning over its method, a field or property called like a method and read before its arguments, all five null operators with their short-circuits, the four leave forms and their `return` rules, and every needless null check and needless `?` the spec lists.
@@ -97,7 +99,7 @@ Spec line 1565 names methods only. `names.map(global.strtoupper)` is "`global.st
 
 No spec line. `(&value) => value` is "A by-reference parameter is not supported yet in PHP#." A method's `int &value` is a parse error.
 
-- **Answered (Jordan, 10-18):** `&` is no PHP# syntax, so a by-reference parameter fails as a typo does.
+- **Answered (the language owner, 10-18):** `&` is no PHP# syntax, so a by-reference parameter fails as a typo does.
 
 ### Q10. A method value of a method that changes the collection
 
@@ -119,11 +121,11 @@ Found while building Q5. Q5's copy means `numbers.forEach(seen.add)` would add t
 
 ## How the states were observed
 
-Master is `c4adf74516`, in `/Users/jordan/Developer/sharp-worktrees/6/php-sharp`. The engine was built with `sharp/bin/build`, and a release `mago` with `CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_LTO=off rustup run 1.97.0 cargo build --release --locked -j 2 --bin mago` into `sharp/build/darwin-arm64/mago/`.
+Master is `c4adf74516`, in `~/Developer/sharp-worktrees/6/php-sharp`. The engine was built with `sharp/bin/build`, and a release `mago` with `CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_LTO=off rustup run 1.97.0 cargo build --release --locked -j 2 --bin mago` into `sharp/build/darwin-arm64/mago/`.
 
 `sharp/bin/spec` with that `mago` and engine: "Checked 202 examples, ignored 1, and 11 fail", none of them in section 14, each on `sharp/baseline/spec`.
 
-Every rule was probed in one scratch project, `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-functions/ws`, whose `composer.json` maps `Demo\` to `app/`, and whose `vendor/heyjordanparker/php-sharp-composer/` holds master's `sharp/composer/`:
+Every rule was probed in one scratch project, `~/.claude/jobs/6affb5f6/tmp/slice-functions/ws`, whose `composer.json` maps `Demo\` to `app/`, and whose `vendor/heyjordanparker/php-sharp-composer/` holds master's `sharp/composer/`:
 
 ```sh
 MAGO_REPORTING_FORMAT=emacs mago --no-version-check --colors never --threads 2 --workspace $P/ws compile
@@ -209,7 +211,7 @@ PHP's first-class callable binds an object's method only. A collection runs as a
 Spec section 3 gives each loop pass a fresh binding, and line 1538 has the lambda capture the variable itself. PHP reuses one variable across passes.
 
 - **Semantics:** `check_lambda_captures` and `is_loop_variable` are deleted.
-- **Bridge:** a `for … of` variable that a lambda captures by reference is read into a hidden variable, then unset and assigned at the top of each pass, as a captured `let` in a loop body already is. A `for (let i = …; …; i++)` counter that a lambda captures by reference is moved into a fresh PHP variable at the end of each pass, before the increments run, so each pass's lambda keeps that pass's counter. PHP's increments take expressions only, and `unset` is a statement, so the body lowers inside `do { … } while (false)` with the move after it: a `continue` in the body ends the `do` and reaches the move, and a `break` that leaves the `for` becomes `break 2`. A step that rebinds by reference, `$step#1 = $step, $step = &$step#1`, fails from the second pass on, because `$step#1` is then the slot the second lambda holds. Both shapes ran as plain PHP on master's engine (`/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-functions/loop_move.php`): the planned one gives `0,12` for a loop whose pass 1 continues and whose pass 2 adds 10 after its lambda is made, and the rebinding step gives `0,3,3` where each pass should keep `0,1,2`.
+- **Bridge:** a `for … of` variable that a lambda captures by reference is read into a hidden variable, then unset and assigned at the top of each pass, as a captured `let` in a loop body already is. A `for (let i = …; …; i++)` counter that a lambda captures by reference is moved into a fresh PHP variable at the end of each pass, before the increments run, so each pass's lambda keeps that pass's counter. PHP's increments take expressions only, and `unset` is a statement, so the body lowers inside `do { … } while (false)` with the move after it: a `continue` in the body ends the `do` and reaches the move, and a `break` that leaves the `for` becomes `break 2`. A step that rebinds by reference, `$step#1 = $step, $step = &$step#1`, fails from the second pass on, because `$step#1` is then the slot the second lambda holds. Both shapes ran as plain PHP on master's engine (`~/.claude/jobs/6affb5f6/tmp/slice-functions/loop_move.php`): the planned one gives `0,12` for a loop whose pass 1 continues and whose pass 2 adds 10 after its lambda is made, and the rebinding step gives `0,3,3` where each pass should keep `0,1,2`.
 - What a user sees, by spec section 3: `for (let step = 0; step < 3; step++) { reads.add(() => step); }` gives `0`, `1` and `2`, and a lambda made in a pass sees a change the same pass makes after it.
 
 ## Gap 7: PHP forms named in section 14's words
@@ -370,7 +372,7 @@ Nothing. Every "not supported yet" that section 14's rules reach, a call of an e
 
 # Found, not fixed
 
-Each was probed on master's `mago` in `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-functions/ws`. None blocks a rule of section 14.
+Each was probed on master's `mago` in `~/.claude/jobs/6affb5f6/tmp/slice-functions/ws`. None blocks a rule of section 14.
 
 - **Messages print a method's name in lowercase.** "Declared return type `int?` for `saferead` has unused branches: `null`." (`NeedlessNullChecks.sharp:16`), and "Parameter `value` is nullable, but `leavethrow` rejects null on every path." from an earlier probe of `NullOperators.sharp`. The methods are `safeRead` and `leaveThrow`.
 - **Null check messages keep PHP's words.** "Redundant null coalesce: left-hand side can never be `null` or undefined." and "Redundant nullsafe operator (`?.`) used on an expression that is never `null`." (`NeedlessNullChecks.sharp:14`, `16`). PHP# has no undefined value, and the spec calls `?.` a null check.

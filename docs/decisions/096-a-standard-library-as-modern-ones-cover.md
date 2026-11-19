@@ -1,6 +1,6 @@
 # 96. A standard library as modern ones cover
 
-Jordan's ruling of 11-13. The standard library's coverage map followed PHP's built-ins, as one codebase called them, and listed a reason to leave each one out. It now follows what modern standard libraries cover.
+The language owner's ruling of 11-13. The standard library's coverage map followed PHP's built-ins, as one codebase called them, and listed a reason to leave each one out. It now follows what modern standard libraries cover.
 
 ## Decision
 

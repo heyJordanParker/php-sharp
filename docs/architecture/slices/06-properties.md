@@ -1,5 +1,7 @@
 # Slice 6: Fields and properties
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 6 and 6.1 to 6.5, with the parts of sections 5, 9, 12, 16, 22, 29 and 32 that section 6 reaches. This note is the design only. team-lead approves it before anyone builds.
 
 ## The answer first
@@ -17,9 +19,9 @@ The Slice builds all of it in one php-sharp PR, `feat/properties`, across `sharp
 - **#123 (structs)** builds `required`, object initializers, and the "set on every path through the main constructor" check for a non-nullable get-only property (its ruling 14, `MethodMetadata::assigned_properties`).
 - **#102 (generics)** builds `new C<T>(…)`, which `via` needs if a behavior is generic (question 10).
 
-13 questions about what users write go to Jordan. Each names its spec line. The parts they decide are designed below to the recommended answer and are built last.
+13 questions about what users write go to the language owner. Each names its spec line. The parts they decide are designed below to the recommended answer and are built last.
 
-## Questions for Jordan
+## Questions for the language owner
 
 Each question is about syntax or meaning. The recommendation is mine, and the build waits for the answer.
 
@@ -41,7 +43,7 @@ Each question is about syntax or meaning. The recommendation is mine, and the bu
 8. **Line 293, what an observer sees and when it runs.** Recommended:
    - Both observers see `value`, the written value, and `field`, the storage, as accessor bodies do (line 256). In `didSet`, `field` is the new value. In `willSet` it is the value the write replaces (Queue 17): an observer runs only once the object is built, when every member with storage holds a value.
    - `willSet` cannot change or stop the write.
-   - Jordan accepted, replacing his first answer (Queue 17): they run only once the object is built, never on an initial value, a write while a constructor, a named constructor or an object initializer runs (Queue 19), or a `with` copy's values.
+   - The language owner accepted, replacing the first answer (Queue 17): they run only once the object is built, never on an initial value, a write while a constructor, a named constructor or an object initializer runs (Queue 19), or a `with` copy's values.
    - They run when the value is unchanged.
    - Beside a `set` body, the order is `willSet`, the `set` body, `didSet`.
    - They need `set`. On `init`, a get-only or a computed property, they are an error.
@@ -54,7 +56,7 @@ Each question is about syntax or meaning. The recommendation is mine, and the bu
     - `via` goes on an auto-property with `get` and `set` and no bodies. It is an error with observers, `lazy`, `static` or in an interface.
     - A behavior's `get` is a getter, so it never writes `this` (section 6.1).
 11. **Lines 332 to 342, `lazy`.**
-    - Jordan's ruling: a `lazy` body may have any effect, and a read carries it. "Getters must be pure." is gone from section 29: a `get` body may have any effect but never writes `this` (`getters_never_write_this`, `getter-writes-this`), and unlike a method marked `readonly` it may call plain PHP and unmarked PHP# methods. The kept value is the language's write.
+    - The language owner's ruling: a `lazy` body may have any effect, and a read carries it. "Getters must be pure." is gone from section 29: a `get` body may have any effect but never writes `this` (`getters_never_write_this`, `getter-writes-this`), and unlike a method marked `readonly` it may call plain PHP and unmarked PHP# methods. The kept value is the language's write.
     - Recommended form: only `lazy T name => expr;`. `lazy` with accessors or an initial value is an error.
     - If the body throws, nothing is kept and the next read runs it again.
     - `static lazy` lives "the lifetime of a `singleton` (section 32)". #121 makes a singleton live for the request. Recommended: a `static lazy` value is kept where #121 keeps singletons, so the two lifetimes are equal by construction. This needs #121. The other option is a PHP static, equal under PHP-FPM and different in a worker that serves many requests.
@@ -76,11 +78,11 @@ Each question is about syntax or meaning. The recommendation is mine, and the bu
 
 ## How the states were observed
 
-Every state below comes from the `mago` built from `feat/properties` at `e19d4c27c8` into `sharp/build/darwin-arm64/mago/release/mago`, with `CARGO_PROFILE_RELEASE_LTO=off`, run on one scratch project, `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-properties/ws`. It is a copy of the project `sharp/bin/spec` writes for an example: the harness, the standard library and `composer.json` mapping `App\` to `app/`. Each probe is one class in `app/Probe/`, named in the tables.
+Every state below comes from the `mago` built from `feat/properties` at `e19d4c27c8` into `sharp/build/darwin-arm64/mago/release/mago`, with `CARGO_PROFILE_RELEASE_LTO=off`, run on one scratch project, `~/.claude/jobs/6affb5f6/tmp/slice-properties/ws`. It is a copy of the project `sharp/bin/spec` writes for an example: the harness, the standard library and `composer.json` mapping `App\` to `app/`. Each probe is one class in `app/Probe/`, named in the tables.
 
 ```sh
 MAGO=sharp/build/darwin-arm64/mago/release/mago
-P=/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-properties
+P=~/.claude/jobs/6affb5f6/tmp/slice-properties
 env -u FORCE_COLOR XDG_CACHE_HOME=$P/cache MAGO_REPORTING_FORMAT=emacs MAGO_LOG=error \
   $MAGO --no-version-check --colors never --threads 2 --workspace $P/ws compile
 ```
@@ -106,10 +108,10 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 
 | Line | Rule | Today | Mechanism | Reuses |
 |---|---|---|---|---|
-| 191 | A property has `get` and `set`, each with its own level | Works for `private set` and `protected set`. Refused on `get`: `GetAccess`, "This accessor is not supported yet" | Jordan's ruling on question 7: only `set` and `init` take a level, and one on `get` is the error "Only `set` and `init` take an access level", whose help says to read the property through a method inside the class. Lines 191, 252 and 483 say so, with the `access-on-get` example | `check_accessors` |
+| 191 | A property has `get` and `set`, each with its own level | Works for `private set` and `protected set`. Refused on `get`: `GetAccess`, "This accessor is not supported yet" | The language owner's ruling on question 7: only `set` and `init` take a level, and one on `get` is the error "Only `set` and `init` take an access level", whose help says to read the property through a method inside the class. Lines 191, 252 and 483 say so, with the `access-on-get` example | `check_accessors` |
 | 196 | `public int views { get; private set; }` | Works (`Views`). Reading before a write throws at runtime (question 13) | None new | |
 | 197 | `{ get; internal set => field = value.trim(); }` | Refused: `InternalSet`, "This accessor is not supported yet" at `internal` | Question 1: built with section 5's `internal`, so the `field-and-property` example passes | |
-| 198 | `public string slug => Str.slug(this.name);` | Refused: `PureGetter`, "Getter `slug` calls `Str.slug`, which has no `extern` declaration. Getters must be pure." | Harness `app/Stubs/Str.sharp` (decision 2). Since Jordan's ruling on question 11 a getter may call it without one | Section 29's `extern` |
+| 198 | `public string slug => Str.slug(this.name);` | Refused: `PureGetter`, "Getter `slug` calls `Str.slug`, which has no `extern` declaration. Getters must be pure." | Harness `app/Stubs/Str.sharp` (decision 2). Since the language owner's ruling on question 11 a getter may call it without one | Section 29's `extern` |
 
 ## Section 6: initial values
 
@@ -119,10 +121,10 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 | 207 | `= new List<Tag>();` | Refused: `NewList`, 4 generic parse errors at `<` | Question 2 | |
 | 210 | Initial values run before the parent's constructor, in declaration order | Works. A constant is PHP's default. Any other runs at the start of the constructor, before `parent::__construct` (`Lowering::class`). Engine: `initial_values.phpt` (order), `constructors.phpt` (before `: super`) | None new | |
 | 210 | An initial value can't read `this` | Works: `InitialThis`, "An initial value cannot use `this`" | None new | |
-| 212 | No code that can read the object runs before it is built: an initial value fills the storage without a `set` body, constant or not, and only a behavior's `set` processes it (Jordan accepted, Queue 18) | Was: a constant one was PHP's default, which skips `set`, and any other ran `set` at the start of the constructor, or was refused as "not supported yet" beside a `set` body | Built: a constant one stays PHP's default, a static's other one is a storage write in `#statics`, and an instance one's other one runs at the start of the constructor as PHP's `ReflectionProperty::setRawValue`, which runs no hook, when the property has a `set` hook (`Lowering::initial_value`). A property with behaviors keeps `$this->name = value`, which runs their `set`. The semantics refusal goes. Rows: `observers.phpt` (a constant and a computed one skip `set`, a constructor write runs it), `behaviors.phpt` (`Trimmed` trims one) | PHP's `setRawValue` |
-| 212 | A member has no implicit starting value: a `T?` one writes `= null` (Jordan's ruling, Queue 16, "we want consistency") | Was: a `T?` field or settable auto-property started as null (`is_null_by_default`, `sharp_null_default`) | Built: the codex gives a `T?` member no default, the bridge no `null` default, and `check_storage_initialization` holds every field and property with storage, `T?` included, to an initial value or every path through the constructor. PHP's own `check_property_initialization`, which offers a nullable type, runs on PHP only. Rows: the analyzer's `a_nullable_member_has_no_implicit_starting_value`, the semantics static row | |
+| 212 | No code that can read the object runs before it is built: an initial value fills the storage without a `set` body, constant or not, and only a behavior's `set` processes it (the language owner accepted, Queue 18) | Was: a constant one was PHP's default, which skips `set`, and any other ran `set` at the start of the constructor, or was refused as "not supported yet" beside a `set` body | Built: a constant one stays PHP's default, a static's other one is a storage write in `#statics`, and an instance one's other one runs at the start of the constructor as PHP's `ReflectionProperty::setRawValue`, which runs no hook, when the property has a `set` hook (`Lowering::initial_value`). A property with behaviors keeps `$this->name = value`, which runs their `set`. The semantics refusal goes. Rows: `observers.phpt` (a constant and a computed one skip `set`, a constructor write runs it), `behaviors.phpt` (`Trimmed` trims one) | PHP's `setRawValue` |
+| 212 | A member has no implicit starting value: a `T?` one writes `= null` (the language owner's ruling, Queue 16, "we want consistency") | Was: a `T?` field or settable auto-property started as null (`is_null_by_default`, `sharp_null_default`) | Built: the codex gives a `T?` member no default, the bridge no `null` default, and `check_storage_initialization` holds every field and property with storage, `T?` included, to an initial value or every path through the constructor. PHP's own `check_property_initialization`, which offers a nullable type, runs on PHP only. Rows: the analyzer's `a_nullable_member_has_no_implicit_starting_value`, the semantics static row | |
 | 212 | A get-only `T?` is set once, by its initial value or the constructor | `= null` works (`Profile`'s `memo`). Constructor-set refused: `Profile`, "A get-only nullable property without an initial value is not supported yet in PHP#." | Built: semantics no longer refuses it, and `check_storage_initialization` holds it to every path. The bridge lowers it to `readonly` with no default, so the constructor's write is PHP's one `readonly` write. Engine: `overrides.phpt` (`Member`'s `note`) | `Lowering::property`, `accessor_flags` |
-| 214 | A property with storage and no initial value, get-only or a settable one that isn't `T?`, is set on every path through the main constructor, or it is an error naming both fixes (Jordan's ruling on question 13) | Silently accepted, wrong: `Coupon` (`string code`, set on one path) and `NoConstructor` compile, and the first read of an unset one throws. `Claim` (`string?`) is refused as not supported | Built: `check_storage_initialization` takes the class's members and adds each settable property that isn't `T?`, `init` or `required`, with the note "A property that isn't `T?` holds a value from the start". The spec's settable examples gain initial values. Engine: `overrides.phpt` (`Member`'s `level`) | #123's `MethodMetadata::assigned_properties` (decision 1) |
+| 214 | A property with storage and no initial value, get-only or a settable one that isn't `T?`, is set on every path through the main constructor, or it is an error naming both fixes (the language owner's ruling on question 13) | Silently accepted, wrong: `Coupon` (`string code`, set on one path) and `NoConstructor` compile, and the first read of an unset one throws. `Claim` (`string?`) is refused as not supported | Built: `check_storage_initialization` takes the class's members and adds each settable property that isn't `T?`, `init` or `required`, with the note "A property that isn't `T?` holds a value from the start". The spec's settable examples gain initial values. Engine: `overrides.phpt` (`Member`'s `level`) | #123's `MethodMetadata::assigned_properties` (decision 1) |
 | 237 | A static with storage needs an initial value whatever its type (Queue 16) | Was: only one that isn't `T?`, with "or make it `int?`" | Built: `report_static_without_initial_value`: "Give `misses` an initial value: no constructor sets a static." | |
 | 201, 237 | A static's initial value that is not constant | Refused: `StaticObject`, "A static member's initial value that is not constant is not supported yet" | Built: it runs once per app, when the app first builds the class's statics, in the class's hidden private static method `#statics` (`Lowering::static_initial_values`, `Property::initial_value_runs_after_class`), which `zend_class_init_sharp_statics` calls from `zend_class_init_statics` or, once the constant defaults are evaluated, from `zend_update_class_constants`. A generic class runs it once for each type argument, on that type argument's first use, in its hidden `#init` (`11-generics-rest.md`, "Generic statics"). A get-only static is `private(set)`, and the analyzer refuses every write of it, its own class's included. Engine: `overrides.phpt` (`Registry`), `preloaded.phpt` (opcache preloading) | |
 
@@ -169,7 +171,7 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 
 | Line | Rule | Today | Mechanism | Reuses |
 |---|---|---|---|---|
-| 293 | `willSet` runs before a write, `didSet` after it, only once the object is built (Queue 17) | Refused: `Observed`, `WillSet`, "This accessor is not supported yet" | Built, as below. Jordan accepted, replacing his answer to question 8: observers run only once the object is built, so never on an initial value, a write while a constructor, a named constructor or an object initializer runs (Queue 19), or a `with` copy's values, and a static's initial value runs none. `field` in `willSet` reads the value the write replaces | `check_accessors`, `Lowering::hooks` |
+| 293 | `willSet` runs before a write, `didSet` after it, only once the object is built (Queue 17) | Refused: `Observed`, `WillSet`, "This accessor is not supported yet" | Built, as below. The language owner accepted, replacing the earlier answer to question 8: observers run only once the object is built, so never on an initial value, a write while a constructor, a named constructor or an object initializer runs (Queue 19), or a `with` copy's values, and a static's initial value runs none. `field` in `willSet` reads the value the write replaces | `check_accessors`, `Lowering::hooks` |
 | 299 | `public string name { get; set; didSet => this.touch(); }` | Passes: `change-observers` is out of the baseline | As above | |
 
 - **Syntax:** none new. The parser already reads `willSet` and `didSet` as `PropertyHook`s by name. `PropertyHook::is_observer` names them, beside `is_setter`.
@@ -229,7 +231,7 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 
 # Queue 1: team-lead's answers, and what they needed checked
 
-team-lead accepted this note and answered questions 1 to 6, 9, 10, the parts of 11 that are not purity, and 12. Questions 7, 8, 11's purity and 13 went to Jordan, and their parts wait. Decisions 1 to 6 are approved, line 447 included. Found item 1 is fixed in this PR.
+team-lead accepted this note and answered questions 1 to 6, 9, 10, the parts of 11 that are not purity, and 12. Questions 7, 8, 11's purity and 13 went to the language owner, and their parts wait. Decisions 1 to 6 are approved, line 447 included. Found item 1 is fixed in this PR.
 
 ## Question 2: `new List<Tag>()`
 
@@ -237,7 +239,7 @@ Section 12 makes a collection with a literal, under "**Literals:**" on line 816,
 
 ## Question 4: what PHP runs on a redeclared plain PHP property
 
-Stock PHP 8.5.1 ran each form a PHP# override can lower to, over a parent with a constructor that reads the property and a method that writes it. The scripts are `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-properties/php-hooks/forms.php` and `set-levels.php`.
+Stock PHP 8.5.1 ran each form a PHP# override can lower to, over a parent with a constructor that reads the property and a method that writes it. The scripts are `~/.claude/jobs/6affb5f6/tmp/slice-properties/php-hooks/forms.php` and `set-levels.php`.
 
 | Form | Lowers from | Typed parent | Untyped parent |
 |---|---|---|---|

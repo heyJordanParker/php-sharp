@@ -1,5 +1,7 @@
 # Slice 13: `readonly`
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 13, `readonly`: a value only read, and a method that only reads `this`. This note is the design only. team-lead approves it before anyone builds.
 
 ## The answer first
@@ -19,7 +21,7 @@ Seven questions below were rules users write that section 13 did not state. Each
 
 ## Rulings
 
-team-lead ruled questions 1, 3, 4, 6 and 7 as proposed. Jordan ruled questions 2 and 5:
+team-lead ruled questions 1, 3, 4, 6 and 7 as proposed. The language owner ruled questions 2 and 5:
 
 - **Question 2:** operators, `hash()` and `toString()` are readonly by definition. They run on readonly values with no marker, and a body that changes an operand or `this` is a compile error. Section 13 states the rule with an example.
 - **Question 5:** the method's `readonly` is always its last clause, after `uses` and after `on`, as in `Money quote(Cart cart) uses Http readonly;` and `public void refresh() on OrderPaid readonly { … }`. Any other position is a compile error that says to write `readonly` last. Section 13 states the order with an example.
@@ -41,14 +43,14 @@ The questions as asked follow, each with its spec line, the proposal and the oth
    - A type pattern or a cast, `x is readonly Order`, `x as readonly Order`: a compile error, "`is` keeps `readonly`: write `is Order`". A pattern on a readonly value already narrows to a readonly type.
 5. **Where the marker goes among the clauses after the parameters.** Line 1176: "After a method's parameters, it makes `this` readonly inside that method." A method can also have `uses` (section 29) and `on` (section 15). Proposal: `readonly` comes first, right after `)`, as in `public Money quote(Cart cart) readonly uses Http;`. The other choice: any order.
 6. **The message when the marker cannot be the fix.** Lines 1225 to 1230 show the message for `totalIn`, which does not change `Order`. `markPaid` does. Proposal, for a method that changes `this`: "render cannot call order.markPaid: order is readonly. markPaid changes Order: it writes `this.paid`." For a plain PHP method a PHP# class inherits: "render cannot call order.save: order is readonly. save is a plain PHP method of Model, which PHP# does not check." The message names a fix only when there is one. The mechanism is under "Messages".
-7. **Decision 051 contradicts line 1193.** `docs/decisions/051-readonly.md` says "Any plain PHP method can be called through a readonly value" and shows `order.save(); // compiles`. Commit `cc3258a319` ("the plain PHP boundary under readonly", Jordan-approved on 2026-10-13) changed the spec to "`readonly` holds only types PHP# checks, so a plain PHP class under `readonly` is a compile error". Proposal: this PR rewrites decision 051 to the spec's rule, with the option that leaves plain PHP methods callable moved to its rejected options. A plain PHP method that a PHP# class inherits is then unmarked, and calling it through a readonly value is a compile error.
+7. **Decision 051 contradicts line 1193.** `docs/decisions/051-readonly.md` says "Any plain PHP method can be called through a readonly value" and shows `order.save(); // compiles`. Commit `cc3258a319` ("the plain PHP boundary under readonly", approved by the language owner on 2026-10-13) changed the spec to "`readonly` holds only types PHP# checks, so a plain PHP class under `readonly` is a compile error". Proposal: this PR rewrites decision 051 to the spec's rule, with the option that leaves plain PHP methods callable moved to its rejected options. A plain PHP method that a PHP# class inherits is then unmarked, and calling it through a readonly value is a compile error.
 
 ## How the states were observed
 
-Every state below comes from a release `mago` built from master `c6a673cdde` in slot 3, `/Users/jordan/Developer/sharp-worktrees/3/php-sharp`, with `git status` clean:
+Every state below comes from a release `mago` built from master `c6a673cdde` in slot 3, `~/Developer/sharp-worktrees/3/php-sharp`, with `git status` clean:
 
 ```sh
-CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_LTO=off CARGO_TARGET_DIR=/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-readonly/target \
+CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_LTO=off CARGO_TARGET_DIR=~/.claude/jobs/6affb5f6/tmp/slice-readonly/target \
   rustup run 1.97.0 cargo build --release -j 2 --bin mago --manifest-path sharp/mago/Cargo.toml
 ```
 
@@ -74,7 +76,7 @@ FAIL §13 readonly-fields (docs/spec.md:1235)
   docs/spec.md:1272 expects a compile error, and the checker reports: This modifier is not supported yet in PHP#.
 ```
 
-A file with a parse error skips the PHP# checks, so lines 1182, 1183, 1210, 1211 and 1214 show nothing in that run. The `RushOrder` error is the parser's recovery from line 1202: the example's `Order` replaces the harness's, and `RushOrder` extends it. Each form was then compiled alone, one file each, in the scratch project `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-readonly/ws`, a copy of the generated `readonly-fields` project without its four example files:
+A file with a parse error skips the PHP# checks, so lines 1182, 1183, 1210, 1211 and 1214 show nothing in that run. The `RushOrder` error is the parser's recovery from line 1202: the example's `Order` replaces the harness's, and `RushOrder` extends it. Each form was then compiled alone, one file each, in the scratch project `~/.claude/jobs/6affb5f6/tmp/slice-readonly/ws`, a copy of the generated `readonly-fields` project without its four example files:
 
 ```text
 Parameter.sharp:7:24   public void render(readonly Order order)        Promoted properties are not allowed outside of constructors.

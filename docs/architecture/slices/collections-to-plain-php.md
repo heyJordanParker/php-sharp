@@ -1,6 +1,8 @@
 # Slice: collections to plain PHP
 
-A fix found by moving part of a real Laravel app to PHP#. Plain PHP code and the framework read the moved classes, and a PHP# `Map` or `Set` reaches each reader as a `Sharp\Map` or `Sharp\Set` object. team-lead's rule, which Jordan can correct: a PHP# collection reaches plain PHP as a PHP array at every crossing, the mirror of the approved rule that an int-keyed plain PHP array arrives in PHP# as a `List`. A second crossing breaks too: a PHP# interface method that returns `Any?` lowers to `: mixed`, which no untyped plain PHP method fits.
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
+A fix found by moving part of a real Laravel app to PHP#. Plain PHP code and the framework read the moved classes, and a PHP# `Map` or `Set` reaches each reader as a `Sharp\Map` or `Sharp\Set` object. team-lead's rule, which the language owner can correct: a PHP# collection reaches plain PHP as a PHP array at every crossing, the mirror of the approved rule that an int-keyed plain PHP array arrives in PHP# as a `List`. A second crossing breaks too: a PHP# interface method that returns `Any?` lowers to `: mixed`, which no untyped plain PHP method fits.
 
 **Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
 

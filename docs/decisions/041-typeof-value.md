@@ -24,7 +24,7 @@ Class<Order> type = typeof(order);              // would compile: order is a loc
 typeof(Order);                                  // the class Order, unless a local named Order is in scope
 ```
 
-A bare name inside `typeof` would be a local's value when a local with that name is in scope, and a type otherwise. Jordan ruled that a pattern takes types and constants only, and `typeof` follows the same rule.
+A bare name inside `typeof` would be a local's value when a local with that name is in scope, and a type otherwise. The language owner ruled that a pattern takes types and constants only, and `typeof` follows the same rule.
 
 ### Rejected: `getType()` on every object
 

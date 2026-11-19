@@ -1,5 +1,7 @@
 # 40. The standard library's shape
 
+Superseded: [section 23, Namespaces and imports](../spec.md#23-namespaces-and-imports) holds the current list of standard library namespaces, such as `Json` in `Sharp.Encoding` and `Math` in `Sharp` itself, which needs no import, and [section 8, Functions](../spec.md#8-functions) holds the rule that `.sharp` code outside the standard library calls no PHP function, wrapped or not.
+
 Superseded in part by [decision 76](076-plain-php-functions.md): every bare call of a PHP function is a compile error, and the standard library calls PHP through `global.` like any project.
 
 ## Decision

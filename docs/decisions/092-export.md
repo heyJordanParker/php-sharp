@@ -1,6 +1,6 @@
 # 92. `[Export]`
 
-Jordan's ruling of 11-11.
+The language owner's ruling of 11-11.
 
 ## Decision
 
@@ -13,13 +13,13 @@ Jordan's ruling of 11-11.
 ```csharp
 import Sharp.Interop.Export;
 
-public static class Auth
+public class Auth
 {
     [Export("auth_redirect")]
     public static void redirect() { … }               // compiles: PHP's auth_redirect() calls it
 
-    [Export("auth_check")]
-    public bool check() => true;                      // compile error: only a static method is exported
+    [Export("auth_check")]                            // compile error: only a static method is exported
+    public bool check() => true;
 }
 ```
 

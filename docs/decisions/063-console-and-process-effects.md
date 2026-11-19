@@ -1,5 +1,7 @@
 # 63. The effects of printing and `exit`
 
+Superseded: [section 29, Effects](../spec.md#29-effects) holds the current rule. `Console` and `Process` are effect classes a constructor takes, so a class prints with `console.write(…)` and exits with `process.exit(…)`, and no PHP function is called from `.sharp` code ([section 8, Functions](../spec.md#8-functions)).
+
 Superseded in part by [decision 83](083-php-through-the-standard-library.md): `global.` does not exist in PHP# code, and a bare `printf(…)`, `fwrite(…)` or `exit(1)` names no function, as a misspelled name does, with no message that names a member to write. Inside the standard library, `global.fwrite` keeps both `Console` and `Files`.
 
 Superseded in part by [decision 76](076-plain-php-functions.md): a bare call such as `printf(…)`, `fwrite(…)` or `exit(1)` below is a compile error. A bare `STDERR` or `PHP_EOL` is a compile error too, and the constant is written `global.STDERR`.

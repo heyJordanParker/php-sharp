@@ -1,5 +1,7 @@
 # Slice 29: Effects
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 29, lines 3688 to 3997 of `docs/spec.md` on master `849232f4e1`, with the parts of sections 6.1, 8, 13, 15, 23, 28 and 32 that section 29 reaches. This note is the design only. team-lead approves it before anyone builds.
 
 **Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
@@ -15,10 +17,10 @@ The effect checker works on master. `crates/analyzer/src/effects/` records each 
 - **Three rules are silently accepted:**
   - creating a `foreign` object outside a module binding (line 3871): `new Store()` and `new Environment()` compile in a method
   - importing a PHP built-in class the standard library replaces (line 3759): `import DateTime;` with `new DateTime().format("Y")`, and `import PDO;` with a `PDO?` result, compile
-  - storing a `uses f` parameter, on `feat/hosts` (waiting for Jordan)
+  - storing a `uses f` parameter, on `feat/hosts` (waiting for the language owner)
 - **Two messages say the wrong thing:**
   - a bare call of a replaced function names `global.time(…)`, not the effect class member (line 3759)
-  - `_ENV` gets the message of the other superglobals, which fail as a typo does since Jordan's ruling of 10-18 (line 3819)
+  - `_ENV` gets the message of the other superglobals, which fail as a typo does since the language owner's ruling of 10-18 (line 3819)
 - **`uses f` is refused on master and works on `feat/hosts`** (#136), which also removes `§29/function-effects`. This Slice builds on it and adds nothing to it.
 - **"The editor displays them" (line 3997) has no editor.** `mago --help` lists no language server, and section 28's lens (line 3686) is unbuilt for the same reason.
 - **A law cannot reason about list code (line 3993).** The list code stays pure, but `law doubledKeepsCount(List<int> xs) => ListLaws.doubled(xs).count() == xs.count();` gets "Mago does not translate collections to Lean."
@@ -27,12 +29,12 @@ The Slice builds all of section 29 in one php-sharp PR, after #136 merges and af
 
 ## Decisions team-lead approves
 
-1. **The nine effect classes ship in this PR,** as `docs/architecture/slices/29-effect-classes.md` on master already designs them, member by member, with `Duration`, `HttpMethod`, `HttpRequest`, `HttpResponse`, `ProcessResult`, `MailAddress` and `MailMessage`. That note says they "ship in their own PR". No branch or PR holds them (`git log --all -S "class Duration" -- sharp/composer` finds nothing), and Jordan's definition of done puts lines 3746 to 3757 and 3815 in this PR. Two follow-ups:
+1. **The nine effect classes ship in this PR,** as `docs/architecture/slices/29-effect-classes.md` on master already designs them, member by member, with `Duration`, `HttpMethod`, `HttpRequest`, `HttpResponse`, `ProcessResult`, `MailAddress` and `MailMessage`. That note says they "ship in their own PR". No branch or PR holds them (`git log --all -S "class Duration" -- sharp/composer` finds nothing), and the language owner's definition of done puts lines 3746 to 3757 and 3815 in this PR. Two follow-ups:
    - `NAMED_EFFECTS` in `effects/mod.rs` is deleted, because each name becomes a `foreign` class and `is_effect` already accepts every `foreign` class.
    - The standard library's `Module.sharp` binds the seven classes whose constructors take nothing (`Clock`, `Random`, `Console`, `Process`, `Files`, `Http`, `Mail`) beside `Environment`. `Database` and `Cache` take a connection string and a path, so the app's module binds them, as `29-effect-classes.md` says ("A module sets it").
 2. **`Http` keeps the curl backend `29-effect-classes.md` names,** so `sharp/bin/build` gains `--with-curl`, and `sharp/docker/Dockerfile` and `sharp/docker/runtime/Dockerfile` carry `libcurl4-openssl-dev`. The built engine has no curl today (`php -n -m` lists none). Approved: real PHP apps and their HTTP clients depend on curl.
 3. **Line 3741 is a type-level carry, decided in `Effects::solve`.** A plain PHP class with no `extern` of its own takes the effects of every declared call that returns it, as the spec's "inherited effect" says. `solve` builds one map per run, from each `extern`'d class's and method's return types, closed over chains such as `Builder.where(): static`. It then reads an `Effect::Unknown` whose class is in the map as those effects. No codex field and no incremental input are added, because `solve` already runs over every summary on each compile. The cost is that a class two libraries return gets both effects. The spec's own way out holds for that case: an `extern` on the returned class wins. Approved, with a row where one plain PHP class is returned by two declared calls with different effects and takes both.
-4. **Line 3759's built-in classes may be imported and named, and only creating one is refused** (Jordan's answer, Option A), with the code `wrapped-class`, as `wrapped-function` refuses a function. `new` of one, and a static factory, a static method whose return type is the class, as `DateTimeImmutable.createFromFormat(…)` and `PDO.connect(…)`, are refused at the call. The error names the standard library members to write instead through `member_form`, as in "write `Date.parse(…)` or `clock.now()` on the `Clock` your constructor takes". `WRAPPED_CLASSES` sits beside `REPLACEMENTS` in `expression/call/function_call.rs`, and the test that holds every `REPLACEMENTS` member to the library holds its members too. The standard library is exempt, because `Database` must use `PDO`. The rows follow line 3759's own rule, "a standard library type that replaces it":
+4. **Line 3759's built-in classes may be imported and named, and only creating one is refused** (the language owner's answer, Option A), with the code `wrapped-class`, as `wrapped-function` refuses a function. `new` of one, and a static factory, a static method whose return type is the class, as `DateTimeImmutable.createFromFormat(…)` and `PDO.connect(…)`, are refused at the call. The error names the standard library members to write instead through `member_form`, as in "write `Date.parse(…)` or `clock.now()` on the `Clock` your constructor takes". `WRAPPED_CLASSES` sits beside `REPLACEMENTS` in `expression/call/function_call.rs`, and the test that holds every `REPLACEMENTS` member to the library holds its members too. The standard library is exempt, because `Database` must use `PDO`. The rows follow line 3759's own rule, "a standard library type that replaces it":
    - `PDO`, `PDOStatement`, `mysqli`, `SQLite3` to `Database`
    - `DateTime`, `DateTimeImmutable` to `Date`
    - `DateTimeZone` to `TimeZone`
@@ -49,18 +51,18 @@ The Slice builds all of section 29 in one php-sharp PR, after #136 merges and af
    - Line 3759: a bare call of a function an effect class replaces names the member on the object a constructor takes, as `29-effect-classes.md` writes it: "write `clock.now()` on the `Clock` your constructor takes". `REPLACEMENTS` in `expression/call/function_call.rs` gains one row per mapped function, and `member_form` writes an instance member that way.
    - Lines 3939 to 3942: an undeclared call names the class and offers the declaration's own effects, as the spec's message does: "Declare its effect in a .sharp file, such as `extern Mailchimp uses Http;`". Today the help offers `extern Mailchimp.addListMember;`.
    - `new ValueError("empty")` names `ValueError`, the class `new` names. Today it names `Error`, the class that declares the constructor, and offers `extern Error;`.
-   - Line 3819: every superglobal, `_ENV` and `_SERVER`'s `"argv"` and `"argc"` included, fails as a typo does (Jordan, 10-18).
+   - Line 3819: every superglobal, `_ENV` and `_SERVER`'s `"argv"` and `"argc"` included, fails as a typo does (the language owner, 10-18).
 9. **A law reasons about list code (line 3993).** `crates/sharp-lean` refuses every collection with `unmodeled-construct`, and every lambda too: `issues.rs` holds "Mago does not translate collections to Lean." and "Mago does not translate lambdas to Lean." The options:
    - **A.** This PR translates a `List` to Lean's `List`, a lambda to a Lean `fun`, and the collection methods whose Lean function means the same, such as `map`, `filter` and `count` to `List.map`, `List.filter` and `List.length`. Every other construct stays refused by name.
    - **B.** Section 28's translator owns it, and line 3993's law clause stays refused by name until then.
 
    Approved: A, so a law over list code proves. Built: a `List` is Lean's `List`, a list literal a Lean list, `count()` is `List.length`, and `map` and `filter` of a lambda whose body cannot throw are `List.map` and `List.filter`. Any other `List` method is refused by name, as are a `Map`, a `Set` and any other lambda.
 
-Decisions 4, 5, 6 and 8 are approved as written, with the codes `wrapped-class` and `foreign-outside-module`. Decision 6 builds on #136's mechanism. If Jordan's open answer drops the `uses f` syntax for an inferred one, the declarations change and the mechanism stays.
+Decisions 4, 5, 6 and 8 are approved as written, with the codes `wrapped-class` and `foreign-outside-module`. Decision 6 builds on #136's mechanism. If the language owner's open answer drops the `uses f` syntax for an inferred one, the declarations change and the mechanism stays.
 
 10. **Every built-in exception class comes declared pure** (team-lead's answer to question 4). `Builtins.sharp` declares each class by name, as it declares each function, and a row has pure code throw `new ValueError("empty")`.
 
-## Questions for Jordan
+## Questions for the language owner
 
 Each one decides what users write. The note recommends, and decides none.
 
@@ -80,7 +82,7 @@ Each one decides what users write. The note recommends, and decides none.
 3. **Line 3860: may a method take or return a `foreign` object?** "A `foreign` object reaches other code only through constructors." On master, `public Store make()`, `public Environment environment()` and `public string home(Environment environment)` all compile. Recommended: refuse a `foreign` type as a method's parameter or result, outside constructors and module bindings, so a class's effects stay visible from its constructor. The alternative keeps line 3860 as advice.
 4. **Line 3744: do PHP's built-in exception classes come declared?** Pure code that throws one is refused: `public int parse(string text) => text == "" ? throw new ValueError("empty") : 1;` gets "calls `Error`, which has no `extern` declaration". Line 3744 promises built-in functions only. Recommended: the Composer package also ships `extern Exception;` and `extern Error;`, which cover every built-in exception through `extern_of`'s walk up the parents, and line 3744 says so.
 
-**Waiting for Jordan, from #136:** whether a `uses f` parameter can be stored. On `feat/hosts`, `public void keep(Function<int()> body) uses body { this.kept = body; }` compiles, so the function's effects leave through the field. This Slice keeps #136's behaviour.
+**Waiting for the language owner, from #136:** whether a `uses f` parameter can be stored. On `feat/hosts`, `public void keep(Function<int()> body) uses body { this.kept = body; }` compiles, so the function's effects leave through the field. This Slice keeps #136's behaviour.
 
 ## How the states were observed
 
@@ -98,7 +100,7 @@ FAIL §29 function-effects (docs/spec.md:3982)
   docs/spec.md:3986 expects no error, and the checker reports: Property `Cart.total` does not exist.
 ```
 
-- **Probes:** seven copies of `sharp/bin/spec`'s harness project, each compiled with `mago --workspace <probe> compile`. Every message quoted in this note is that output. The sources are in `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-effects/probes/`:
+- **Probes:** seven copies of `sharp/bin/spec`'s harness project, each compiled with `mago --workspace <probe> compile`. Every message quoted in this note is that output. The sources are in `~/.claude/jobs/6affb5f6/tmp/slice-effects/probes/`:
   - `a/`: crossings (plain PHP with and without `extern`, a getter, a lambda and a method value passed to plain PHP, overrides, `foreign` classes, laws, superglobals, replaced functions and classes)
   - `b/`: `extern` rules, an `extern` on a returned class, `uses` on a body, `emit`
   - `c/`: Laravel facades and models with `extern`, a function value passed to plain PHP, a built-in exception, `uses f` and collection methods
@@ -182,7 +184,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 | Line | Rule | State on master | Mechanism | Reuses |
 |---|---|---|---|---|
 | 3976 | `uses f`: each call has the effects of the function passed as `f`, with or without a body | Refused on master: `Carries.carried(() => this.environment.require("HOME"))` gets "a `Function<string()>` cannot hold it". Works on `feat/hosts`: the call compiles, and a pure method that makes it is refused naming `Environment` | #136 | |
-| 3976 | A stored `uses f` parameter | Silently accepted on `feat/hosts` | Waiting for Jordan | |
+| 3976 | A stored `uses f` parameter | Silently accepted on `feat/hosts` | Waiting for the language owner | |
 | 3978 to 3991 | `function-effects` | Fails on master on the harness (`Cart.total`). #136 adds `Cart.total` and removes the entry | #136 | |
 | 3993 | The collection methods are declared with `uses f`, so pure list code stays pure | Works in behaviour: `this.carts.map(c => this.gateway.charge(c))` gets "calls `PaymentGateway.charge`, which has the effect `Http`", and `this.carts.map(c => c.orders.count())` fits. Declared through prelude stubs and `prelude_stub_call`, not `uses f` | Decision 6 | #136's `uses_arguments` |
 | 3993 | Laws can reason about that list code | Refused by name: `doubledKeepsCount` over `xs.map(x => x * 2)` is pure, and gets `unmodeled-construct`, "Mago does not translate collections to Lean." | Decision 9 | `crates/sharp-lean/src/translate/body.rs`, `issues.rs` |

@@ -1,5 +1,7 @@
 # Slice 22: Inheritance
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 22, with the parts of sections 6.1, 11, 15, 20 and 26 that section 22 reaches. This note is the design only. team-lead approves it before anyone builds.
 
 ## The answer first
@@ -35,7 +37,7 @@ The Slice builds all of section 22 in one PR. Zend/ does not change:
    - two header traits, or two `Defaults` traits, that give the same method, which PHP refuses when it links the class. Question 2 decides the wording.
 8. **A default body in a generic interface reads the type arguments each class gives the interface.** The codex gives the trait the interface's type parameters, as `@template` on a trait does, and each class the type arguments it gives the interface, as `@use` does. The bridge gives the trait the header `App.Keyed<$0>`, and the engine maps a trait's code, and a method a class took from a trait, to the interface the header names, so `is`, `new` and the checks of a call from plain PHP read the class's type arguments.
 
-## Questions for Jordan
+## Questions for the language owner
 
 Each one decides what users write. The note recommends, and decides none.
 
@@ -50,7 +52,7 @@ Each one decides what users write. The note recommends, and decides none.
 4. **Line 2397: can an enum's header name a plain PHP trait?** "It works everywhere an interface does", an enum header takes interfaces, and PHP enums can `use` traits that have no properties. Recommended: yes, with PHP's rule that the trait has no properties as the error.
 5. **Line 2431: which traits does Reflection list?** Lowered to `use`, `ReflectionClass::getTraitNames()` and `class_uses()` list a class's own header traits and its `Defaults` traits, and a subclass lists neither, as PHP lists traits. `getInterfaceNames()` does list inherited interfaces. Recommended: keep PHP's lists as they are, `Defaults` traits included, because Laravel's `class_uses_recursive` already covers the inherited case.
 6. **Line 2253: is a closed PHP# method closed to a plain PHP subclass at runtime?** `mago analyze` reports "Cannot override final method `App\DatabaseEntity::hash()`" for the plain PHP subclass, and the engine runs its replacement, which returned `99`. Recommended: keep it open at runtime, as master does, so PHPUnit and Mockery can still mock a PHP# class.
-   Decided by Jordan: closed to every class the checker sees, and open at runtime. `mago compile` and `mago analyze` refuse every replacement written in the project, in PHP# or in a plain PHP class. The bridge lowers it as an ordinary method, so a subclass a library generates while the app runs, as a test double or a lazy-loading proxy, may replace the method. The test doubles are PHPUnit's, Mockery's and Laravel's `mock()`, and the lazy-loading proxies are Doctrine's entity proxies. #181 lowered it `final`, and a Laravel app's `createMock(...)->method('gateway')` then failed with "MethodCannotBeConfiguredException ... is final".
+   Decided by the language owner: closed to every class the checker sees, and open at runtime. `mago compile` and `mago analyze` refuse every replacement written in the project, in PHP# or in a plain PHP class. The bridge lowers it as an ordinary method, so a subclass a library generates while the app runs, as a test double or a lazy-loading proxy, may replace the method. The test doubles are PHPUnit's, Mockery's and Laravel's `mock()`, and the lazy-loading proxies are Doctrine's entity proxies. #181 lowered it `final`, and a Laravel app's `createMock(...)->method('gateway')` then failed with "MethodCannotBeConfiguredException ... is final".
 7. **Not in the spec: method modifier pairs that contradict each other.** Master compiles each of these with no error: `private virtual`, `virtual override`, `abstract virtual`, `static virtual` and `static override`, and a `virtual` method in a `final` class. Recommended: refuse each one. `virtual` on an interface method is a generic parse error today, and becomes "An interface method takes no modifier".
 
 ## How the states were observed
@@ -69,7 +71,7 @@ FAIL §22 plain-php-traits (docs/spec.md:2400)
   docs/spec.md:2407 expects no error, and the checker reports: Class `App.Order` cannot implement non-interface type `HasFactory`
 ```
 
-- **Probes:** the checker probes are in `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-inheritance/ws/app/Probe/`, a copy of `sharp/bin/spec`'s harness project. `compile.sh ws` runs `mago --workspace ws compile` with `MAGO_REPORTING_FORMAT=emacs`, and every message below is its output. The engine probes are in `run/app/Probe/`, compiled the same way and run by `run.php` on the engine. Their output:
+- **Probes:** the checker probes are in `~/.claude/jobs/6affb5f6/tmp/slice-inheritance/ws/app/Probe/`, a copy of `sharp/bin/spec`'s harness project. `compile.sh ws` runs `mago --workspace ws compile` with `MAGO_REPORTING_FORMAT=emacs`, and every message below is its output. The engine probes are in `run/app/Probe/`, compiled the same way and run by `run.php` on the engine. Their output:
 
 ```text
 superCall: 'entity (page)'
@@ -238,7 +240,7 @@ Zend/tests/sharp/                     <- added: Inheritance.sharp and its .inc t
                                          a row in opcodes.phpt
 ```
 
-`docs/spec.md` changes only where Jordan's answers change a line.
+`docs/spec.md` changes only where the language owner's answers change a line.
 
 # The tests
 

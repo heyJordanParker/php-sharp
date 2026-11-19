@@ -1,5 +1,7 @@
 # The standard library: what a modern standard library does, in PHP#
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 The standard library covers what modern standard libraries cover (decision 96). Each domain below groups its operations and gives the PHP# member or language form that does each one, or **missing**. PHP's built-ins appear only in the last column, as the code a PHP# member runs, and an empty cell there is the engine's own code or PHP#'s. PHP# code reaches PHP only through the standard library (decision 83), and `[Import]` declares a built-in that no member covers (decision 93). The [gap list](#gaps) at the end collects every missing operation.
 
 ## Text

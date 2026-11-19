@@ -27,8 +27,8 @@ const first = lines[0];                       // compiles; runs: throws OutOfRan
 lines[0] = line;                              // compiles; runs: replaces the element; throws OutOfRangeException when lines is empty
 Line? maybe = lines.getOrNull(5);             // compiles; runs: null when index 5 is missing
 lines[5] ?? line;                             // compile error: a List read throws when the index is missing; write lines.getOrNull(5) ?? line
-int price = prices[plan];                     // compile error: handle a missing plan with ??, or read it with get
-int? maybe = prices.get(plan);                // compiles; runs: null when plan is missing
+int price = prices[planName];                 // compile error: handle a missing planName with ??, or read it with get
+int? maybe = prices.get(planName);            // compiles; runs: null when planName is missing
 plans["pro"] = pro;                           // compiles; runs: inserts or replaces
 for (const [name, plan] of plans) { … }       // compiles; runs: each entry as a [key, value] tuple
 for (const plan of plans.values()) { … }      // compiles; runs: a Map's values

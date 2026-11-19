@@ -11,10 +11,10 @@
 ```csharp
 public void renewAll(List<int> customerIds, string plan)
 {
-    int price = prices[plan] ?? return;                     // no such plan: nothing to renew
+    int price = this.prices[plan] ?? return;                // no such plan: nothing to renew
     for (const id of customerIds) {
-        Customer customer = customers[id] ?? continue;      // skip ids with no customer
-        charge(customer, price);
+        Customer customer = this.customers[id] ?? continue; // skip ids with no customer
+        this.charge(customer, price);
     }
 }
 ```
@@ -26,10 +26,10 @@ Every early exit has the same form as `?? throw`, on the line that reads the val
 ```csharp
 public void renewAll(List<int> customerIds, string plan)
 {
-    if (prices[plan] is not int price) { return; }
+    if (this.prices[plan] is not int price) { return; }
     for (const id of customerIds) {
-        if (customers[id] is not Customer customer) { continue; }
-        charge(customer, price);
+        if (this.customers[id] is not Customer customer) { continue; }
+        this.charge(customer, price);
     }
 }
 ```
@@ -39,7 +39,7 @@ public void renewAll(List<int> customerIds, string plan)
 ### Rejected: a block that runs only when the value is not null
 
 ```csharp
-customers[id]?.let(customer => charge(customer, price));   // not PHP#: a let block after ?.
+this.customers[id]?.let(customer => this.charge(customer, price));   // not PHP#: a let block after ?.
 ```
 
 This is a second way to do what `is Type name` already does.

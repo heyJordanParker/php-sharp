@@ -1,5 +1,7 @@
 # Slice 6: Structs
 
+Dated design record of this slice. `docs/spec.md` holds the current rules.
+
 Spec section 10, with the parts of the sections it leans on: section 16 (object initializers and `with`), section 6.1 (`init` and `required`), section 9 and 9.1 (main and named constructors), section 12 (`Map` keys), section 19 (`==`, `===` and `Set`), section 21 (a struct in a `match`), section 23 (the standard `Key` attribute) and section 24 (`Int.parse`, `Any` and `Object`). v1 plan Slice 6, "Structs, `with`, `init`, `required`, object initializers". team-lead approved it at `fdda638880` with the rulings below.
 
 **Superseded in part by the standard library's collection members:** the engine has no `Sharp\Collection` and no PHP# method-call opcode. Every `List`, `Map`, `Set` and `Iterable` method is a member of the `ListMembers`, `MapMembers`, `SetMembers` or `IterableMembers` extension block in `sharp/composer/library/Sharp`, which calls a `Sharp\Internal` engine function or the engine's `Sharp\Internal\Sequence`, and a member that changes the collection takes it by `ref`. `map[key] = value` runs the `Map`'s `set`, as `list[i] = v` runs the `List`'s. A `Map`'s `filter` runs as `Sharp\Internal\filterEntries`, and `filterValues` and `delete` exist nowhere. Every `Sharp\Collection` method, `IterableMethods` class, `Sharp\Sequence` name, `sharp_collection_*` function, `ZEND_METHOD_CALL_SHARP` mark and `zend_compile_sharp_receiver` arm below describes the engine before that change.
@@ -8,7 +10,7 @@ Spec section 10, with the parts of the sections it leans on: section 16 (object 
 
 **No part of section 10 exists, and none of it compiles silently.** On mago-sharp `master` at `c3a2b5af8`, `struct`, `readonly struct`, an object initializer and `with` are parse errors, `required` on a property is "not supported yet", `[Key(…)]` is an unknown attribute, and `Note.parse(…)` on a class is "Method `Note.parse` does not exist." Section 10's 4 entries in `sharp/baseline/spec` fail on those parse errors.
 
-**The Slice builds it in one mago-sharp PR and one php-sharp PR.** The mago-sharp PR opens once #166 merges, for a struct key in `has`, `keys()` and `remove`. The php-sharp PR follows the collection Slice's engine PR and pins past generics R3c's php-sharp merge, since `parse` checks types through R3c's engine walk. Generic structs are refused whole until generics R3c (Jordan's answer to question 4). The rest of section 11 lifts that refusal: `11-generics-rest.md`, "A generic struct, from section 10".
+**The Slice builds it in one mago-sharp PR and one php-sharp PR.** The mago-sharp PR opens once #166 merges, for a struct key in `has`, `keys()` and `remove`. The php-sharp PR follows the collection Slice's engine PR and pins past generics R3c's php-sharp merge, since `parse` checks types through R3c's engine walk. Generic structs are refused whole until generics R3c (the language owner's answer to question 4). The rest of section 11 lifts that refusal: `11-generics-rest.md`, "A generic struct, from section 10".
 
 **Each construct lowers to PHP the engine already runs, plus one engine change:**
 
@@ -32,11 +34,11 @@ team-lead's Queue 2, on the note at `fdda638880`:
 3. **Language rules 1 to 11 are approved. Rule 12 is reversed: a struct states laws as a class does.** Section 28 gives laws to a class (`Money`) and an enum (`Status`), and a struct is where value laws such as `addKeepsCurrency` belong. `sharp-lean` reads a struct through the codex as the `final` class it lowers to.
 4. **Collection `==` joins the mago-sharp PR,** through `\array_all` with each element's `==`, a `Map` compared without regard to order ("Found outside the Slice", item 1). Task #463 closes through the required-property check, for classes too.
 5. **Cross-slice order: `parse` lands first,** and generics R3c reuses its per-type generator.
-6. **Question 6 is team-lead's, approved.** The harness gains `app/Username.sharp` and `app/OrderRow.sharp` in the spec PR team-lead opens with Jordan's answers, not in this Slice's php-sharp PR.
-7. **Questions 1 to 5 are with Jordan.** The parts his answers decide are built last, to this note's proposals: the backed shape (question 1), the struct required rule (question 2), `parse` without a main constructor (question 3) and the generic struct refusal (question 4). A different answer replaces that part before the PR opens.
+6. **Question 6 is team-lead's, approved.** The harness gains `app/Username.sharp` and `app/OrderRow.sharp` in the spec PR team-lead opens with the language owner's answers, not in this Slice's php-sharp PR.
+7. **Questions 1 to 5 are with the language owner.** The parts the answers decide are built last, to this note's proposals: the backed shape (question 1), the struct required rule (question 2), `parse` without a main constructor (question 3) and the generic struct refusal (question 4). A different answer replaces that part before the PR opens.
 8. **One mago-sharp PR and one php-sharp PR** ("The PRs, in order").
 
-Jordan's answers, through team-lead's Queue 3 and Queue 4:
+The language owner's answers, through team-lead's Queue 3 and Queue 4:
 
 9. **Question 1, "this one": any struct is a `Map` key by its whole value, with no declaration.** The `: string` header is gone, and a struct header lists interfaces only. Two keys are one key when the struct's `==` says they are equal. `keys()`, the loop and `has` give back the struct itself, never its text. Decision 6 is replaced.
 10. **Question 2, "this":** in a struct, every property without an initial value must be set at creation, written `required` or not, nullable too. `= null` makes it optional. The message names every missing property: "`new Point` must set `y` and `label`."
@@ -55,9 +57,9 @@ team-lead's Queue 5 to Queue 11:
 20. **R3c's walk signature is fixed, and `parse` lowers to it:** generated PHP calls `\Sharp\Internal\accepts(string $type, mixed &$value, string $path, array &$problems): bool` once per parameter, with the type text for the calling frame and the input key as the path. The walk writes the problem text, so `InvalidFields.expected` has no caller and is deleted. The walk takes only a struct object where a struct is expected, so `parse` reads each nested struct through its own `parse` with the extended path first, then checks the result through the walk.
 21. **Queue 10 is accepted, with three rulings.** A problem names a class by its full dotted name, as `expected App.S.Address`, as every PHP# engine message does. A union of structs is tried in the order the source writes it. The bridge keeps one writer of decision 72's type text: when #152 merges, its `type_text` replaces this Slice's in the same commit.
 
-team-lead's Queue 17 to Queue 22, with Jordan's rulings:
+team-lead's Queue 17 to Queue 22, with the language owner's rulings:
 
-22. **A `Map` and a `Set` are engine objects, and a `List` stays a PHP array** (Jordan: what plain PHP receives is not part of PHP#, "just make sure OUR type safety & functionality doesn't suffer"). Lookup is `hash()`, then `==` within the bucket, for every key kind. A `Map` keeps the key objects it stores, and `keys()`, the loop and `has` give back the stored key itself. The key text goes: `sharp_struct_key`, `Sharp\Map::key`, `Sharp\Map::readKey` and the bridge's key lowering for them. The table starts from php-ds v1.8.0 (MIT, its notice kept). Section 10 and the key path ship as one php-sharp PR, once mago-sharp moves into php-sharp under `sharp/mago`.
+22. **A `Map` and a `Set` are engine objects, and a `List` stays a PHP array** (the language owner: what plain PHP receives is not part of PHP#, "just make sure OUR type safety & functionality doesn't suffer"). Lookup is `hash()`, then `==` within the bucket, for every key kind. A `Map` keeps the key objects it stores, and `keys()`, the loop and `has` give back the stored key itself. The key text goes: `sharp_struct_key`, `Sharp\Map::key`, `Sharp\Map::readKey` and the bridge's key lowering for them. The table starts from php-ds v1.8.0 (MIT, its notice kept). Section 10 and the key path ship as one php-sharp PR, once mago-sharp moves into php-sharp under `sharp/mago`.
 23. **Copy at the write when the object is shared** (option B), as PHP's `SEPARATE_ARRAY` does. Section 12's value rule and section 13's local copy stay as written. The separation lives in the opcodes, so plain PHP's `$map[$k] = $v` separates too.
 24. **Queue 17: any type declares `operator ==` with `hash()`, structs included.** The declared pair replaces a struct's automatic `==`, and a `Set` and a `Map` key use it. **Queue 18: a PHP# class gets `parse` and `tryParse` as a struct does.** Both landed in mago-sharp `39192aa56`, with five decisions team-lead approved as made: an inherited declared `parse` wins, a static class gets no `parse`, a promoted property is read once through its parameter, an `Object` or `Iterable` field is refused at the call, and a struct that declares its own `parse` gets no generated one.
 
@@ -115,7 +117,7 @@ team-lead's Queue 17 to Queue 22, with Jordan's rulings:
 
 ## Language rules the spec leaves open
 
-The checker enforces each one with the message shown. team-lead rules, and brings any it rejects to Jordan.
+The checker enforces each one with the message shown. team-lead rules, and brings any it rejects to the language owner.
 
 1. **A struct property has `get`, or `get` and `init`. A `set` accessor is refused:** "A struct never changes, so `x` takes `init`, not `set`." A struct field is set only by its initial value and the main constructor, and lowers to `readonly`. A collection property can't change through `add` on `this`, because that writes the property back (decision 14).
 2. **A write to a struct's property after it is created names a method that returns a changed copy,** as the spec's example shows: "A struct never changes; return a changed copy from a method, such as `moved`." The method named is the struct's first method that returns the struct. With none, the help shows `with`: "return a changed copy built with `with`." Both helps get a row that compiles the fix.
@@ -130,9 +132,9 @@ The checker enforces each one with the message shown. team-lead rules, and bring
 11. **`X.parse` is refused when a parameter's type can't be read from a value:** a not-backed enum or a function type, also nested. "`Order.parse` can't read `state`: `CheckoutState` has no backing value." The struct itself compiles, so a struct used only inside the program may hold such a type. The error is at the call, where a `parse` that cannot work would be used.
 12. **A struct states laws as a class does** (ruling 3, which reversed this note's first proposal). A struct's law and its proof follow section 28 unchanged, and `sharp-lean` reads the struct through the codex as the `final` class it is, as it reads any class.
 
-## Spec questions for Jordan
+## Spec questions for the language owner
 
-Jordan answered all six (rulings 9 to 13, and ruling 6 for question 6). The questions stay as he read them.
+The language owner answered all six (rulings 9 to 13, and ruling 6 for question 6). The questions stay as they were asked.
 
 1. **What is a struct's backing value?** Section 10 line 483: "**A struct can declare a backing value** with the header an enum uses (section 20). `public struct Username : string` has a `string` backing value, so it can be a `Map` key (section 12)." Line 489: `public Username(public string value { get; }) { }`. Section 12 line 947: `Map<Username, Order> byUser = [:];   // keyed by username.value`. Nothing says which member is the backing value, or how a key becomes a `Username` again.
    - Proposal: a backed struct's main constructor takes exactly one parameter, a get-only property named `value` of the backing type, and any other shape is a compile error: "A struct backed by `string` holds its backing value in `public Username(public string value { get; })`." Then `->value` stores the key and `new Username(key)` reads it back, as an enum's `->value` and `from` do.
@@ -143,19 +145,19 @@ Jordan answered all six (rulings 9 to 13, and ruling 6 for question 6). The ques
 4. **May a struct take type parameters?** Section 10 shows none, and section 11 shows classes.
    - Proposal: yes, with section 11's rules. `Box<int>.parse(…)` reads `T` while the code runs, so generic structs follow generics R3c, and until then `struct Box<T>` is refused whole: "A generic struct is not supported yet in PHP#." That refuses one whole rule, not part of one.
 5. **Errata for `initializer-shorthand` (section 16, lines 1509 to 1515).** It writes `new Money { amount: 500, currency }`. The harness `Money` declares `public Money(public int amount { get; }, public string currency { get; })`, so the example both omits two constructor arguments and sets two get-only properties. Proposal: the example's setup declares the struct it creates, `public struct Amount { public int value { get; init; } public string currency { get; init; } }`, and the line reads `new Amount { value: 500, currency }`. `naming-values` (lines 1499 to 1505) is ignored and needs no change.
-6. **Errata for two examples that name a struct no file declares.** Section 12 line 947 names `Username` (task #498), and section 24 line 2471 names `OrderRow`. Proposal: the harness gains `app/Username.sharp` with line 487's struct and `app/OrderRow.sharp` with line 525's, each in its own file (Jordan's ruling 3).
+6. **Errata for two examples that name a struct no file declares.** Section 12 line 947 names `Username` (task #498), and section 24 line 2471 names `OrderRow`. Proposal: the harness gains `app/Username.sharp` with line 487's struct and `app/OrderRow.sharp` with line 525's, each in its own file (the language owner's ruling 3).
 
 ## How the states were observed
 
-Every state below comes from the `mago` built from mago-sharp `master` at `c3a2b5af8` (#169 merged) in slot 9, `/Users/jordan/Developer/sharp-worktrees/9/mago-sharp/target/debug/mago`, built at 17:33 local time on 2026-10-12 with `git status --short` empty.
+Every state below comes from the `mago` built from mago-sharp `master` at `c3a2b5af8` (#169 merged) in slot 9, `~/Developer/sharp-worktrees/9/mago-sharp/target/debug/mago`, built at 17:33 local time on 2026-10-12 with `git status --short` empty.
 
-**The spec's examples ran through Guard 1's own checker.** `git archive` exported `README.md`, `docs/spec.md`, `sharp/bin/spec`, `sharp/baseline/spec`, `sharp/harness/` and `sharp/composer/` from php-sharp `master` at `7fdcaf1685` into `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-structs/spec-tree`, and `sharp/bin/spec` ran there on the slot 7 engine with `TEST_MAGO_EXECUTABLE` set to the `mago` above. It ended "Checked 167 examples, ignored 2, and 91 fail."
+**The spec's examples ran through Guard 1's own checker.** `git archive` exported `README.md`, `docs/spec.md`, `sharp/bin/spec`, `sharp/baseline/spec`, `sharp/harness/` and `sharp/composer/` from php-sharp `master` at `7fdcaf1685` into `~/.claude/jobs/6affb5f6/tmp/slice-structs/spec-tree`, and `sharp/bin/spec` ran there on the slot 7 engine with `TEST_MAGO_EXECUTABLE` set to the `mago` above. It ended "Checked 167 examples, ignored 2, and 91 fail."
 
-**Single rules ran on one probe project,** `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-structs/ws`, a copy of one example's generated project with the example removed: the harness, the standard library under `vendor/heyjordanparker/php-sharp-composer/`, and the probe files under `app/Probe/`.
+**Single rules ran on one probe project,** `~/.claude/jobs/6affb5f6/tmp/slice-structs/ws`, a copy of one example's generated project with the example removed: the harness, the standard library under `vendor/heyjordanparker/php-sharp-composer/`, and the probe files under `app/Probe/`.
 
 ```sh
-MAGO=/Users/jordan/Developer/sharp-worktrees/9/mago-sharp/target/debug/mago
-P=/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-structs
+MAGO=~/Developer/sharp-worktrees/9/mago-sharp/target/debug/mago
+P=~/.claude/jobs/6affb5f6/tmp/slice-structs
 env -u FORCE_COLOR XDG_CACHE_HOME=$P/cache MAGO_REPORTING_FORMAT=json MAGO_LOG=error MAGO_THREADS=1 \
   $MAGO --no-version-check --colors never --workspace $P/ws compile > $P/probe.json
 php $P/issues.php $P/probe.json
@@ -163,7 +165,7 @@ php $P/issues.php $P/probe.json
 
 `issues.php` prints each issue with the message of its first span. Each probe below is quoted with what it printed. A parse error prints one line per token the parser skipped, and each section quotes the first.
 
-**The lowering ran on the slot 7 engine,** `/Users/jordan/Developer/sharp-worktrees/7/php-sharp/sharp/build/darwin-arm64/sapi/cli/php` (PHP 8.5.11, at `efaccd222e`), through `$P/lowered.php`: the PHP this note says each form lowers to, written by hand, with `declare(strict_types=1)`. PHP's own behavior ran through `$P/php-precedent.php` on the same engine, and the cost through `$P/initializer-cost.php` on Homebrew PHP 8.5.1.
+**The lowering ran on the slot 7 engine,** `~/Developer/sharp-worktrees/7/php-sharp/sharp/build/darwin-arm64/sapi/cli/php` (PHP 8.5.11, at `efaccd222e`), through `$P/lowered.php`: the PHP this note says each form lowers to, written by hand, with `declare(strict_types=1)`. PHP's own behavior ran through `$P/php-precedent.php` on the same engine, and the cost through `$P/initializer-cost.php` on Homebrew PHP 8.5.1.
 
 # Every rule of section 10, its state and its mechanism
 
@@ -312,7 +314,7 @@ app/Probe/Copies.sharp:5 parse: Parse error encountered during parsing [Expected
 
 ## Any struct is a `Map` key by its whole value
 
-The spec's line, "**A struct can declare a backing value** … so it can be a `Map` key (section 12)", becomes Jordan's answer to question 1 (ruling 9) in team-lead's spec PR: any struct keys a `Map` by its whole value.
+The spec's line, "**A struct can declare a backing value** … so it can be a `Map` key (section 12)", becomes the language owner's answer to question 1 (ruling 9) in team-lead's spec PR: any struct keys a `Map` by its whole value.
 
 Parse error before this Slice. `app/Probe/Username.sharp`, line 487's `Username`, printed
 
@@ -638,7 +640,7 @@ The names, each with the slate it was picked from:
 
 # The PRs, in order
 
-**One mago-sharp PR and one php-sharp PR build all of section 10** (Jordan's direction, team-lead's Queue 2: every PR is another full round of suites, review and merge). The harness's `Username` and `OrderRow` go in the php-sharp PR (ruling 19).
+**One mago-sharp PR and one php-sharp PR build all of section 10** (the language owner's direction, team-lead's Queue 2: every PR is another full round of suites, review and merge). The harness's `Username` and `OrderRow` go in the php-sharp PR (ruling 19).
 
 1. **mago-sharp: structs**, on `feat/slice-structs` in slot 9. Every rule of section 10, with section 16's object initializer, section 6.1's `required` and section 19's collection `==`:
    - `Struct`, `readonly struct`, a struct never changes (language rules 1 and 2), the header with interfaces and no inheritance (rule 3), and laws on a struct (rule 12).
@@ -719,7 +721,7 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 
 # What the Slice refuses as "not supported yet", and why
 
-- **A generic struct, whole,** until generics R3c, if Jordan allows generic structs (question 4).
+- **A generic struct, whole,** until generics R3c, if the language owner allows generic structs (question 4).
 - **A `Set` of class instances,** with today's refusal, until section 19's `Set` of objects lands. A `Set` of structs works.
 - **A struct key in `groupBy` and `associateBy`,** refused by their template bound as an enum key is, until the collection Slice widens it.
 

@@ -27,6 +27,7 @@ import App.Pricing.PriceRule;
 import App.Pricing.TaxRule;
 import App.Pricing.DiscountRule;
 import App.Cache.RedisStore;
+import Sharp.System.Environment;
 
 module
 {

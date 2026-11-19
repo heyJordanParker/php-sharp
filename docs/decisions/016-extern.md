@@ -19,6 +19,9 @@ extern StripeClient;             // compile error: StripeClient already has an e
 ```
 
 ```csharp
+import Stripe.StripeClient;
+import Mailchimp.Mailchimp;
+
 public class StripeGateway : PaymentGateway
 {
     public Charge charge(Cart cart) => StripeClient.charges().create(…);   // compiles: StripeClient is declared Http

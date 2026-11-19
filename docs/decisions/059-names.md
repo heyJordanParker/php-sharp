@@ -15,12 +15,13 @@ import Illuminate.Database.Eloquent.Model;
 
 public enum Status : string { case Paid = "paid"; }
 
+public event InvoicePaid(int orderId, Money amount);
+
 public class Invoice<TLine : Line> : Model
 {
     const MAX_LINES = 100;
     List<TLine> pendingLines = [];
-    public string dueDate { get; set; }
-    public event Paid(int orderId, Money amount);
+    public string dueDate { get; set; } = "";
 
     public Money totalIn(string currency)
     {

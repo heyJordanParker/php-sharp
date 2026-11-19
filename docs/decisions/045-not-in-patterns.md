@@ -1,8 +1,8 @@
 # 45. `not` beside `or`
 
-## Decision
+Superseded: [section 21, Pattern matching](../spec.md#21-pattern-matching) holds the current rule, from the spec refusal audit's ruling of 11-14: `not` binds tighter than `or` and `and`, so `result is not Paid or Refunded` compiles and means `(not Paid) or Refunded`, and `not (Paid or Refunded)` puts `not` over the whole `or`. The rest of this record is the decision as it stood before.
 
-Superseded by the spec refusal audit's ruling of 11-14 (L3887): `not` binds tighter than `or` and `and`, so `result is not Paid or Refunded` compiles and means `(not Paid) or Refunded`, and `not (Paid or Refunded)` puts `not` over the whole `or`. The rest of this record is the decision as it stood before.
+## Decision
 
 In a pattern, `not` beside `or` needs parentheses, in `is` and in `match` arms alike. `result is not Paid or Refunded` is a compile error that reads "write `not (Paid or Refunded)`, or `(not Paid) or Refunded`". `result is not (Paid or Refunded)` compiles. `not` beside `and` needs no parentheses, because it reads the way it binds: `code is not null and not ""` means `(not null) and (not "")`.
 

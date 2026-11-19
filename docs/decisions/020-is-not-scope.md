@@ -12,8 +12,8 @@ A variable created by `is not` stays in scope after an `if` whose block always e
 public Receipt checkout(Map<string, Any?> payload, string plan)
 {
     if (payload["orderId"] is not int orderId) { throw new BadPayload("orderId"); }
-    if (prices[plan] is not int price) { return Receipt.unknownPlan(plan); }
-    return charge(orderId, price);                          // orderId and price are both known here
+    if (this.prices[plan] is not int price) { return Receipt.unknownPlan(plan); }
+    return this.charge(orderId, price);                     // orderId and price are both known here
 }
 ```
 
@@ -25,8 +25,8 @@ Each check leaves early, and the code after it reads the variable at the top lev
 public Receipt checkout(Map<string, Any?> payload, string plan)
 {
     if (payload["orderId"] is int orderId) {
-        if (prices[plan] is int price) {
-            return charge(orderId, price);
+        if (this.prices[plan] is int price) {
+            return this.charge(orderId, price);
         }
         return Receipt.unknownPlan(plan);
     }

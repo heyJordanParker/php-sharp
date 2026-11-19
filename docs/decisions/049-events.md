@@ -1,5 +1,7 @@
 # 49. Events
 
+Superseded: [section 15, Events](../spec.md#15-events) holds the current rule for where an event is declared. No type nests, so an event and an interface that events share each sit at file level in a file of their own, as `OrderPaid` and `OrderEvent` do, and `new Order.Paid(…)` calls `Order`'s named constructor `Paid`. `emit`, the trailing `on` clause, `Events.on<T>` and `uses Events` hold as decided here.
+
 ## Decision
 
 An event is a type. `public event Paid(int orderId, Money amount);` inside `Order` declares `Order.Paid`, and `emit new Paid(this.id, this.total);` raises it. Any code may raise any event type. A method listens with a trailing `on` clause that lists its events, and `vendor/bin/mago compile` finds every one at build time. `Events.on<T>` listens until the handle it returns goes out of scope. `emit` has the effect `Events`, which code without a body allows with `uses Events`. The app's dispatcher decides when listeners run.

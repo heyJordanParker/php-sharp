@@ -1,5 +1,7 @@
 # 43. The effects of PHP's built-in functions
 
+Superseded: [section 29, Effects](../spec.md#29-effects) holds the current rule. PHP's built-in functions come declared, and the standard library's twelve effect classes replace them for their effects, so `.sharp` code writes `files.write(…)` on the `Files` its constructor takes ([section 8, Functions](../spec.md#8-functions)).
+
 Superseded in part by [decision 83](083-php-through-the-standard-library.md): `global.` does not exist in PHP# code, and a bare `file_put_contents(…)` names no function, as a misspelled name does. Only the standard library calls PHP's built-ins, so their declared effects reach PHP# code through the standard library's members.
 
 Superseded in part by [decision 76](076-plain-php-functions.md): a bare call such as `file_put_contents("seen.txt", token)` below is a compile error.
