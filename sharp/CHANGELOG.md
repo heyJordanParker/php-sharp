@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Changed
+
+- An extension host's provider answers each call in less time. After each answer the SDK checked which classes the call declared by listing every declared class, interface and trait. It now skips that when the interpreter declared none and asked its autoloaders for none, which mago's engine tells it through `\Mago\Engine\classCount()`.
+
 ### Fixed
 
 - A law compares a nullable value of a class with `==` or `!=` as the code compares it, spec section 28: null equals only null, and two values run the class's `==`. `new Stamp(at).at == at` on an `Instant?` and an `Instant` proves, and so does `==` on two structs with an `Instant?` field. 0.6.38 and 0.6.39 refused both, as "Law keepsTheInstant reaches the class operator `==` in Stamp.keepsTheInstant. Compare the values the objects hold, such as their properties."
