@@ -4,14 +4,10 @@ version = "0.0.0"
 edition = "2024"
 publish = false
 
+# PHP's build links the staticlib. mago links the rlib, so its binary holds one Rust standard library, its own, where
+# the staticlib would bring a second.
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 deunicode = "=1.6.2"
-
-[profile.dev]
-panic = "unwind"
-
-[profile.release]
-panic = "unwind"

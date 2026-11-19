@@ -29,6 +29,7 @@ jobs:
     steps:
       - name: usage start
         shell: bash
+        working-directory: /tmp
         run: |
           awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
           echo 0 > /tmp/usage-peak
@@ -84,6 +85,7 @@ jobs:
       - name: usage end
         if: always()
         shell: bash
+        working-directory: /tmp
         run: |
           end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
           echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
@@ -107,6 +109,7 @@ jobs:
     steps:
       - name: usage start
         shell: bash
+        working-directory: /tmp
         run: |
           awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
           echo 0 > /tmp/usage-peak
@@ -159,6 +162,7 @@ jobs:
       - name: usage end
         if: always()
         shell: bash
+        working-directory: /tmp
         run: |
           end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
           echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
@@ -207,6 +211,7 @@ jobs:
     steps:
       - name: usage start
         shell: bash
+        working-directory: /tmp
         run: |
           awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
           echo 0 > /tmp/usage-peak
@@ -391,6 +396,7 @@ jobs:
       - name: usage end
         if: always()
         shell: bash
+        working-directory: /tmp
         run: |
           end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
           echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
@@ -410,6 +416,7 @@ jobs:
     steps:
       - name: usage start
         shell: bash
+        working-directory: /tmp
         run: |
           awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat > /tmp/usage-cpu-start
           echo 0 > /tmp/usage-peak
@@ -453,6 +460,7 @@ jobs:
       - name: usage end
         if: always()
         shell: bash
+        working-directory: /tmp
         run: |
           end=$(awk '/^cpu /{print $2+$3+$4+$7+$8}' /proc/stat)
           echo "::notice title=usage::cpu_seconds=$(( (end - $(cat /tmp/usage-cpu-start)) / 100 )) peak_mib=$(( $(cat /tmp/usage-peak) / 1024 )) cores=$(nproc)"
