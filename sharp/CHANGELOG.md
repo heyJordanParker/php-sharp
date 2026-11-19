@@ -7,6 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - A law compares a nullable value of a class with `==` or `!=` as the code compares it, spec section 28: null equals only null, and two values run the class's `==`. `new Stamp(at).at == at` on an `Instant?` and an `Instant` proves, and so does `==` on two structs with an `Instant?` field. 0.6.38 and 0.6.39 refused both, as "Law keepsTheInstant reaches the class operator `==` in Stamp.keepsTheInstant. Compare the values the objects hold, such as their properties."
+- `mago analyze` refuses a law that reaches a package's PHP# file with errors where `mago compile` refuses it, spec section 28, as "Law addKeeps is not proven: it reaches Money.add, whose file has errors. Fix them, then run vendor/bin/mago compile again.", and still reports none of the package's own issues. 0.6.39's `mago analyze` reported no issue for such a law. A law that calls a law no translation states, in a file with no errors, is refused as the checker's bug, as one that reaches any other declaration is, where 0.6.39 always said its file had errors.
 
 ## [0.6.39] - 2026-11-19
 
