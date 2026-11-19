@@ -4,6 +4,20 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.35] - 2026-11-19
+
+### Added
+
+- A law tells apart the states of a sealed interface and reads the data each state holds, spec section 28. A sealed interface's implementers are every value it has, so `is` and `match` over its value test which implementer it is, and the branch reads that implementer's get-only properties. With `public sealed interface OrderStatus { }`, its implementers `Pending` and `Paid`, and `public OrderStatus settle(int at) => new Paid(at);`, the laws `p.settle(at) is Paid paid ? paid.paidAt == at : false` and `Pending.start() is Pending` prove, and `Pending.start() is Paid` is refused as not proven. 0.6.34 refused each such test as "It reads types while the code runs.". A data case's fields read in a law too: through its pattern, as `PaymentResult.Paid(int paid) => paid > 0`, which 0.6.34 refused as reading types, and as a property of a value a pattern names, as `paid.amount`, which 0.6.34 refused as "A law tells the cases of an enum apart, and reads none of the data a case carries.". A type test of an interface that is not sealed is now refused as "A law tells apart only the implementers of a sealed interface. Declare `Figure` sealed."
+
+### Fixed
+
+- A list literal on a side of `??`, in a branch of `? :` or in a `match` arm takes the declared type of the place the value goes into, spec section 12, as a literal written there alone does. 0.6.34 stopped at the operator, so `Set<string> tags = maybe ?? ["a"];` was refused as "Invalid assignment to `tags`: it is declared as `Set<string>`.", though `const tags = maybe ?? ["a"];` and `Set<string> tags = ["a"];` compiled. It now compiles, and the literal runs as a `Set`, as do `flag ? ["b"] : tags` and a `match` arm `true => ["c"]` where a `Set` is declared.
+- A `??` or a `match` whose value goes into a declared `Set` or `Map` runs with no run-time array test when none of its sides can be a PHP array, spec section 12, as a `? :` already did. 0.6.34 tested every such value, so `Set<string> owning = maybe ?? fallback;` ran `\is_array($crossing = $maybe ?? $fallback) ? new \Sharp\Set(…) : $crossing` on each evaluation, though both sides are `Set`s. It now runs `$owning = $maybe ?? $fallback;`. A side that plain PHP gives still crosses into the object, as in `Map<int, string> named = given ?? Calc.names();`.
+- `mago convert` finds the `extern` line of a call of a plain PHP trait's member as the checker does, spec section 29: the trait's line covers every class that takes the member from the trait. 0.6.34 looked from the call's class only, so with `extern Dispatchable.dispatch uses Http;`, an enum's `ReceiveEvent::dispatch($this->value)` converted, though the checker gives that call the effect `Http`, which an enum never has. It is now refused as "`ReceiveEvent::dispatch` has the effect `Sharp\Net\Http`, and a PHP# enum has no effects (spec section 29)".
+- A plain PHP call on a side of `??`, in a branch of `? :` or in a `match` arm keeps the keys plain PHP gave it where the value goes into a declared `Map`, spec section 12, as the call written there alone does. 0.6.34 read the call as a `List` and renumbered it, so with `Calc.names()` returning `[5 => 'a', 9 => 'b']`, `Map<int, string> named = given ?? Calc.names();` held `{0: "a", 1: "b"}` when `given` was null, with no error. It now holds `{5: "a", 9: "b"}`, as `Map<int, string> named = Calc.names();` does.
+- `mago compile` works out once which files each file's bodies reach, and the inputs that reach them, where 0.6.34 walked each file's chain of body reads again from scratch and then took the inputs of every file on it, on one thread. On a generated project of 2,000 classes that each read the one before through a call, in a 6-CPU container, the step took 1.64 to 1.74 seconds of a 2.6 to 2.9-second compile and now takes 0.17 to 0.23 seconds. Each compiled file lists the same inputs as before.
+
 ## [0.6.34] - 2026-11-19
 
 ### Changed
@@ -1354,7 +1368,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.34...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.35...HEAD
+[0.6.35]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.34...v0.6.35
 [0.6.34]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.33...v0.6.34
 [0.6.33]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.32...v0.6.33
 [0.6.32]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.31...v0.6.32

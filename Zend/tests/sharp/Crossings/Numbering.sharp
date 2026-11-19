@@ -1,0 +1,35 @@
+namespace Demo;
+
+import Lib.Numbered;
+
+// A plain PHP call on a side of `??`, in a branch of `? :` or in a `match` arm, bound for a `Map`, keeps the keys plain
+// PHP gave it, as the call bound there alone does.
+public static class Numbering
+{
+    public static Map<int, string> coalesced(Map<int, string>? given)
+    {
+        Map<int, string> named = given ?? Numbered.names();
+        return named;
+    }
+
+    public static Map<int, string> branched(bool empty)
+    {
+        Map<int, string> named = empty ? [:] : Numbered.names();
+        return named;
+    }
+
+    public static Map<int, string> matched(int extra)
+    {
+        Map<int, string> named = match (extra) {
+            0 => [:],
+            default => Numbered.names(),
+        };
+        return named;
+    }
+
+    public static Map<int, string> direct()
+    {
+        Map<int, string> named = Numbered.names();
+        return named;
+    }
+}
