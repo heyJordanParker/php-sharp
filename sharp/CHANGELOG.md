@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A list literal on a side of `??`, in a branch of `? :` or in a `match` arm takes the declared type of the place the value goes into, spec section 12, as a literal written there alone does. 0.6.34 stopped at the operator, so `Set<string> tags = maybe ?? ["a"];` was refused as "Invalid assignment to `tags`: it is declared as `Set<string>`.", though `const tags = maybe ?? ["a"];` and `Set<string> tags = ["a"];` compiled. It now compiles, and the literal runs as a `Set`, as do `flag ? ["b"] : tags` and a `match` arm `true => ["c"]` where a `Set` is declared.
+
 ## [0.6.34] - 2026-11-19
 
 ### Changed

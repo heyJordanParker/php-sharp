@@ -2104,7 +2104,7 @@ for (const [status, group] of orders.groupBy(o => o.status)) { … }   // compil
 Map<Username, Order> byUser = [:];                               // compiles: a struct whose every field has == keys a Map by its whole value
 ```
 
-**Only a literal takes its collection type from where it lands.** A list literal passed where a `Set` or a tuple is expected becomes one. A `List` variable passed there is a compile error, and where a `Set` is expected the error names `toSet()`:
+**Only a literal takes its collection type from where it lands.** A list literal passed where a `Set` or a tuple is expected becomes one. A literal that `??`, `? :` or a `match` arm gives lands where their value lands, so `Set<string> tags = given ?? ["vip"];` makes it a `Set`, as `Set<string> tags = ["vip"];` does. A `List` variable passed there is a compile error, and where a `Set` is expected the error names `toSet()`:
 
 <!-- example set-arguments: statements in Tags -->
 ```csharp
