@@ -255,6 +255,7 @@ jobs:
       # release from nothing but on the self-hosted Macs, which keep sharp/build.
       - name: Build the engine mago links
         shell: bash
+        working-directory: ${{ github.workspace }}
         run: sharp/bin/build-mago --engine
 
       - name: build

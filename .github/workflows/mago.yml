@@ -186,6 +186,7 @@ jobs:
           key: MAGO_ENGINE-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('configure.ac', 'build/**', 'main/**', 'Zend/**', 'TSRM/**', 'sapi/**', 'ext/**', 'scripts/**', '!**/tests/**', 'sharp/bin/build-mago', 'sharp/docker/runtime/configure-options') }}
       - name: Build the engine mago links
         if: steps.mago-engine.outputs.cache-hit != 'true'
+        working-directory: ${{ github.workspace }}
         run: |
           sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends autoconf bison cmake pkg-config re2c libedit-dev libicu-dev liblzma-dev libsodium-dev libsqlite3-dev libssl-dev libxml2-dev zlib1g-dev
           sharp/bin/build-mago --engine
@@ -277,6 +278,7 @@ jobs:
           key: MAGO_ENGINE-debian-${{ runner.arch }}-${{ hashFiles('configure.ac', 'build/**', 'main/**', 'Zend/**', 'TSRM/**', 'sapi/**', 'ext/**', 'scripts/**', '!**/tests/**', 'sharp/bin/build-mago', 'sharp/docker/runtime/configure-options', 'sharp/docker/Dockerfile') }}
       - name: Build the engine mago links
         if: steps.mago-engine.outputs.cache-hit != 'true'
+        working-directory: ${{ github.workspace }}
         run: sharp/docker/run sharp/bin/build-mago --engine
       - name: Save the engine mago links
         if: steps.mago-engine.outputs.cache-hit != 'true'
@@ -408,6 +410,7 @@ jobs:
       # The PHP# engine mago links, which sharp/bin/build-mago --engine builds in the sharp/build folder the runner
       # keeps, so it builds only what changed since the runner's last build.
       - name: Build the engine mago links
+        working-directory: ${{ github.workspace }}
         run: sharp/bin/build-mago --engine
 
       - name: cargo test
@@ -455,6 +458,7 @@ jobs:
       # The PHP# engine mago links, which sharp/bin/build-mago --engine builds in the sharp/build folder the runner
       # keeps, so it builds only what changed since the runner's last build.
       - name: Build the engine mago links
+        working-directory: ${{ github.workspace }}
         run: sharp/bin/build-mago --engine
 
       - name: Build mago in the test-run profile
