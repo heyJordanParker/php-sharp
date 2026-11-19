@@ -7073,6 +7073,7 @@ A law the checker cannot prove is a compile error that names it (section 27).
 - **A list pattern takes one rest, anywhere in it,** and each element names a value or only a type. `[...a, x, ...b]` appends the lists.
 - **A law reaches the standard library from its PHP# source, as it reaches the project's code,** so a type such as `Instant` translates from its declaration and each member a law calls, and a member that calls plain PHP is refused where the law reaches it, as the project's would be. `Math.max` and `Math.min` on ints, and a List's `count()`, `map` and `filter`, keep the checker's own model of what they give.
 - **`<`, `<=`, `>`, `>=` and `<=>` on two values of one class run the class's own `operator <=>`,** so a law that orders two `Instant`s proves through `Instant`'s.
+- **`==` and `!=` on two values of a struct that declares no `operator ==` compare each field with that field's own `==`, and on two values of a class that declares `operator ==` run it,** so a law that compares two `Instant`s proves. A struct with a field whose `==` a law can't read, as an `Instant?`, is refused.
 - **Each refusal names what to write instead,** as these do:
 
 ```text

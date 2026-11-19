@@ -4,6 +4,11 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A call in a law that leaves out an argument passes its parameter's default, as the call does at run time, spec section 28, for a constructor, a static method and a method alike. 0.6.37 refused it as "Law enqueuedHoldsNoError reaches a default argument in Pending.enqueued. Pass every argument, the ones with a default value included.", so with `Pending(string? error = null)`, a factory `Pending.enqueued() => new Pending()` could not appear in a law, and each law restated each default by hand. `Pending.enqueued().error == null` now proves. A default a law can't read is refused, naming its parameter, only where a call leaves its argument out, as "Law cappedAtMax reaches the operator `**` here in the default of `limit` in Shape.capped.".
+- A law compares two values of a struct that declares no `operator ==` field by field, each with that field's own `==`, and two values of a class that declares `operator ==` with it, spec section 19. 0.6.37 refused both as "Law deliveredAt reaches the class operator `==` in Pending.deliveredAt. Compare the values the objects hold, such as their properties.", so a law could not say that `new Pending().deliver(at).doneAt == at` over two `Instant`s. It now proves, and a claim the fields break is not proven. A struct with a field whose `==` a law can't read, as an `Instant?`, keeps that refusal.
+
 ## [0.6.37] - 2026-11-19
 
 ### Upgrading from 0.6.36
