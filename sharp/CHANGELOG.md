@@ -8,6 +8,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 - Spec section 5's strict rules run on every package whose `composer.json` does not say `"type": "library"`: a public type or member too wide, a public member whose types hold `Any`, and, from section 24, a string fixed at compile time that selects. 0.6.35 ran them only where `composer.json` said `"type": "project"`, so an application that left the type out, or had no `composer.json`, compiled a public member nothing outside its class used. A package with no type, one with no `composer.json` above it and one whose `composer.json` does not parse are now projects, so no line left out turns a rule off. A library adds `"type": "library"` to its `composer.json`. The standard library and every package installed in `vendor/` stay exempt whatever their type.
 
+### Fixed
+
+- `mago analyze` reports every refusal of a law that `mago compile` reports before the proof, spec section 28: a construct the law reaches that a law cannot reason about, as a type test of an interface that is not sealed or a standard library class, a declaration it reaches in a file with errors, and a law that calls itself in a cycle. 0.6.35 reported them only at the compile, so a watch showed a file clean while `mago compile` refused it with "Law shapeIsShape reaches a type test of the interface Figure in Shape.isShape. A law tells apart only the implementers of a sealed interface. Declare `Figure` sealed.". `mago analyze` and its watch now report it, in each round, and never start the law checker, so a law's proof is still checked only at the compile.
+
 ## [0.6.35] - 2026-11-19
 
 ### Added
