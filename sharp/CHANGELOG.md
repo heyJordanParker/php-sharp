@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Changed
+
+- A `public` type that nothing outside its namespace uses is too wide, spec section 5, as a member is: a class, an interface, a struct, an enum and an event alike, so `public event Quiet(int id);`, which only `App.Shop` creates, is refused as "`Quiet` is public, and nothing outside `App.Shop` uses it." 0.6.33 checked only members, so a public type that only its namespace used compiled. Declare such a type `internal`. A use of the type or of a member of it counts, an `extends` or an `implements` included, and so do plain PHP calling one of its `[Export]` methods and a framework reading a marked attribute. A class whose only reach is a listener, a method written with `on`, is refused too, since PHP# creates it whatever its access.
+
 ### Fixed
 
 - A `new` of a plain PHP class whose `extern` line states its constructor's signature takes the line's parameters, each function type with the effects its `uses` lists, as a call of a method or a function already did, spec sections 23 and 29. 0.6.33 checked the constructor's arguments against the library's own docblock, so with `extern void Registry.__construct(Map<string, Function<Any?(Any?) uses Database>> functions);` over a docblock `array<non-empty-string, callable>`, `new Registry(handlers)` was refused as "expected `Map<string, Function<Any?(Any?)>>`, but possibly received …", and a closure with an effect the line leaves out passed. A closure with `Mail` is now refused as "This lambda calls `Mailer.send`, which has the effect `Mail`, so a `Function<Any?(Any?) uses Database>` cannot hold it.". A write that fits a `Map` or `List` declared with a type keeps that type, so after `handlers[name] = (Any? ...arguments) => …` the local is still `Map<string, Function<Any?(Any?) uses Database>>`, not a union with the closure's own `Function<scalar?(Any?)>`. A loop that fills such a `Map` with closures and passes it to `new Registry(handlers)` now compiles.
