@@ -7068,6 +7068,7 @@ Law joinedText reaches a loop that does more than count or sum in Shape.joined. 
 Law cappedHolds reaches a loop that reads a local it adds to in Shape.capped. Write the method as recursion that calls itself on a smaller value.
 Law reachesZero reaches a recursion that does not get smaller in Shape.up. Write the method as recursion that calls itself on a smaller value: a list's rest from a list pattern, or an int one step towards a bound a condition tested.
 Law nullIsSmall reaches a pattern that names a value outside the condition of an if or a ?: in Shape.big. Write the test as the condition of an if or a ?:, and read the value it names in the branch it decides.
+Law shapeIsShape reaches a type test of the interface Figure in Shape.isShape. A law tells apart only the implementers of a sealed interface. Declare `Figure` sealed.
 ```
 
 <!-- example law-reach -->
@@ -7120,6 +7121,8 @@ public enum Status : string
     law refundedIsFinal(Payment e) => Status.Refunded.after(e) == Status.Refunded;
 }
 ```
+
+**A state that holds data is a sealed interface's implementer, or an enum's data case,** and a law tells the states apart. A sealed interface's implementers (section 20.1) are every value it has, so `is` and `match` on its value test which implementer it is, and the branch reads that implementer's get-only properties. A data case's pattern reads its fields, and so does a property read of a value the pattern names. An interface that is not sealed has implementers a law cannot list, so a law that reaches a type test of its value is refused.
 
 ### 28.1 Lean files
 
