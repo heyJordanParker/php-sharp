@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.37] - 2026-11-19
+
 ### Upgrading from 0.6.36
 
 - `Method.invoke` is gone, spec section 25. Write `method.invoke(receiver, arguments)` as `method.createInvoker<Function<Any?(Object, List<Any?>) uses …>>()(receiver, arguments)`, with the effects the method has, and a static method's `method.invoke(null, arguments)` as `method.createInvoker<Function<Any?(List<Any?>) uses …>>()(arguments)`. A call of `invoke` is refused as "Method `Method.invoke` does not exist.". A plain PHP method with no `extern` may have every effect, so no invoker holds it, as no delegate does.
@@ -1405,7 +1407,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.36...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.37...HEAD
+[0.6.37]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.36...v0.6.37
 [0.6.36]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.35...v0.6.36
 [0.6.35]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.34...v0.6.35
 [0.6.34]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.33...v0.6.34
