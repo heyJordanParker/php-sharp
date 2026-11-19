@@ -163,10 +163,12 @@ build_engine() {
       flag=${libs[index]}
       case "$flag" in
         -framework) echo "framework=${libs[++index]}" >> "$library/system-libs.part"; continue ;;
-        -l*) name=${flag#-l} ;;
+        # -l:<file> names the archive's own file, as OpenSSL 3.5's libcrypto names jitterentropy's.
+        -l:*) name= file=${flag#-l:} ;;
+        -l*) name=${flag#-l} file=lib${flag#-l}.a ;;
         *) continue ;;
       esac
-      if [[ " ${system[*]} " == *" $name "* ]]; then
+      if [[ -n $name && " ${system[*]} " == *" $name "* ]]; then
         # macOS ships libc++ alone. Its clang links it for -lstdc++, which intl's link names, but rustc links with
         # -nodefaultlibs, which keeps clang from doing so.
         [[ "$(uname -s)" == Darwin && $name == stdc++ ]] && name=c++
@@ -175,13 +177,13 @@ build_engine() {
       fi
       archive=
       for folder in "${folders[@]}"; do
-        if [[ -f "$folder/lib$name.a" ]]; then
-          archive="$folder/lib$name.a"
+        if [[ -f "$folder/$file" ]]; then
+          archive="$folder/$file"
           break
         fi
       done
       if [[ -z $archive ]]; then
-        echo "the engine links -l$name, and no folder holds lib$name.a: ${folders[*]}" >&2
+        echo "the engine links $flag, and no folder holds $file: ${folders[*]}" >&2
         exit 1
       fi
       [[ " ${archives[*]} " == *" $archive "* ]] || archives+=("$archive")
