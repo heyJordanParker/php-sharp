@@ -191,19 +191,13 @@ jobs:
           - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, smoke: true }
           - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, smoke: true }
 
-    # The self-hosted Macs cap each job's parallelism, as sharp.yml's MACOS explains. The build goes to sharp/mago/target,
-    # which clean-kept-build removes, so each release builds from nothing, and never into the folder sharp/.cargo's
-    # config names for the Mac's dev builds.
+    # The build goes to sharp/mago/target, which clean-kept-build removes, so each release builds from nothing, and
+    # never into the folder sharp/.cargo's config names for the Mac's dev builds.
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/sharp/mago/target
-      CARGO_BUILD_JOBS: 4
-      RUST_TEST_THREADS: 4
-      RAYON_NUM_THREADS: 4
-      MAGO_THREADS: 4
-      LEAN_NUM_THREADS: 2
 
     steps:
-      # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
+      # The self-hosted Mac runner keeps sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -271,7 +265,7 @@ jobs:
           cd ..
 
       # The PHP# engine mago links, which sharp/bin/build-mago --engine builds for the runner's own platform, each
-      # release from nothing but on the self-hosted Macs, which keep sharp/build.
+      # release from nothing but on the self-hosted Mac runner, which keeps sharp/build.
       - name: Build the engine mago links
         shell: bash
         working-directory: ${{ github.workspace }}

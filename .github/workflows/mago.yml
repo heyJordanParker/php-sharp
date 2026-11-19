@@ -396,7 +396,7 @@ jobs:
           end: true
 
   # The workspace's tests on macOS arm64, which covers the few lines of Mago that differ there, such as the watch mode's
-  # FSEvents, on the self-hosted Mac runners, for a release's pull request and a push whose tree no pull request's run
+  # FSEvents, on the self-hosted Mac runner, for a release's pull request and a push whose tree no pull request's run
   # passed. cargo builds in the folder sharp/.cargo's config names, which the runner keeps and sharp.yml's MACOS builds
   # mago in, so it rebuilds only what changed: in sharp/mago/target, which clean-kept-build removes, it built every
   # crate and took 23 minutes on the pushes of pull requests #351 and #352.
@@ -410,18 +410,8 @@ jobs:
     permissions:
       contents: read
 
-    # The self-hosted Macs cap each job's parallelism, as sharp.yml's MACOS explains. Lean reads an empty
-    # LEAN_NUM_THREADS as 0 threads and panics on its first promise, and mago refuses to start on an empty MAGO_THREADS,
-    # so both name a number.
-    env:
-      CARGO_BUILD_JOBS: 4
-      RUST_TEST_THREADS: 4
-      RAYON_NUM_THREADS: 4
-      MAGO_THREADS: 4
-      LEAN_NUM_THREADS: 2
-
     steps:
-      # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
+      # The self-hosted Mac runner keeps sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -462,8 +452,8 @@ jobs:
           end: true
 
   # The macOS binary plain-php runs, in the test-run profile sharp/mago/Cargo.toml explains, since plain-php needs a
-  # binary that behaves as release's, not release's fat LTO. It builds in the target folder the self-hosted Macs keep,
-  # beside the dev build sharp/bin/test makes there, so it rebuilds only what changed since that runner's last build.
+  # binary that behaves as release's, not release's fat LTO. It builds in the target folder the Mac's runner keeps,
+  # beside the dev build sharp/bin/test makes there, so it rebuilds only what changed since the runner's last build.
   # It runs when tests (macOS) does.
   release-build:
     needs: CHANGES
@@ -475,18 +465,12 @@ jobs:
       contents: read
 
     # With incremental state, which the test-run profile builds with in the folder the runner keeps.
-    # dtolnay/rust-toolchain turns it off only when CARGO_INCREMENTAL is unset. The self-hosted Macs cap each job's
-    # parallelism, as sharp.yml's MACOS explains.
+    # dtolnay/rust-toolchain turns it off only when CARGO_INCREMENTAL is unset.
     env:
       CARGO_INCREMENTAL: 1
-      CARGO_BUILD_JOBS: 4
-      RUST_TEST_THREADS: 4
-      RAYON_NUM_THREADS: 4
-      MAGO_THREADS: 4
-      LEAN_NUM_THREADS: 2
 
     steps:
-      # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
+      # The self-hosted Mac runner keeps sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -534,7 +518,7 @@ jobs:
   # upstream's carthage-software/mago at the release this checker left from, as an extension host does,
   # installs no second checker, and one that requires a later release installs nothing. Then runs mago on
   # a one-class .sharp project with the binary the job before built, and sharp/phpunit's tests, which stop.
-  # Its macOS leg runs on the self-hosted Mac runners, where release-build runs, and only when release-build does, so
+  # Its macOS leg runs on the self-hosted Mac runner, where release-build runs, and only when release-build does, so
   # another run needs only checks' binary.
   plain-php:
     needs: [CHANGES, checks, release-build]
@@ -550,16 +534,8 @@ jobs:
     permissions:
       contents: read
 
-    # The self-hosted Macs cap each job's parallelism, as sharp.yml's MACOS explains.
-    env:
-      CARGO_BUILD_JOBS: 4
-      RUST_TEST_THREADS: 4
-      RAYON_NUM_THREADS: 4
-      MAGO_THREADS: 4
-      LEAN_NUM_THREADS: 2
-
     steps:
-      # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
+      # The self-hosted Mac runner keeps sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
