@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.39] - 2026-11-19
+
 ### Upgrading from 0.6.38
 
 - Every `extern` line ends in `uses`, spec section 29: `uses none` declares the plain PHP pure, a list names its effects, and `uses any` says it may have any effect. A line without it, as `extern Formatter.format;`, is refused as "State its effects: `uses none`, `uses <effects>`, or `uses any`.", where 0.6.38 read it as pure. Add `uses none` to each such line, after a stated signature too, as `extern string Routing.route(RouteName name) uses none;`.
@@ -1451,7 +1453,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.38...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.39...HEAD
+[0.6.39]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.38...v0.6.39
 [0.6.38]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.37...v0.6.38
 [0.6.37]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.36...v0.6.37
 [0.6.36]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.35...v0.6.36
