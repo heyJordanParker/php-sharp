@@ -1,7 +1,9 @@
 use super::sharp_native_str;
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sharp_native_Text_StringMembers_slugOf(title: sharp_native_str) -> sharp_native_str {
+pub unsafe extern "C" fn sharp_native_Text_StringMembers_slugOf(
+    title: sharp_native_str,
+) -> sharp_native_str {
     slug(unsafe { title.bytes() }).into()
 }
 
