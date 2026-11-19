@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A law compares a nullable value of a class with `==` or `!=` as the code compares it, spec section 28: null equals only null, and two values run the class's `==`. `new Stamp(at).at == at` on an `Instant?` and an `Instant` proves, and so does `==` on two structs with an `Instant?` field. 0.6.38 and 0.6.39 refused both, as "Law keepsTheInstant reaches the class operator `==` in Stamp.keepsTheInstant. Compare the values the objects hold, such as their properties."
+
 ## [0.6.39] - 2026-11-19
 
 ### Upgrading from 0.6.38
