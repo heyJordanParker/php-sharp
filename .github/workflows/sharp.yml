@@ -18,15 +18,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  # CI_PASSED is this workflow's one required check, so the workflow always runs, and every suite skips a change to
-  # documentation alone. docs/spec.md, README.md and sharp/spec-self-test.md count as code, because SPEC compiles and
-  # runs their examples. sharp/bin/check --changes holds these rules, so sharp/bin/check on a machine chooses its gates
-  # as this job does.
-  #
-  # A pull request runs the Linux suites, each job on 4 cores. A release's pull request, whose sharp/mago/Cargo.toml
-  # version has no tag yet, also runs what needs the Mac, the runtime image and the release assets, so every check that
-  # guards a release runs before the merge, on the tree that merges. GitHub runs 20 of the account's hosted jobs at once,
-  # across all its repositories, and a job past them waits: a pull request's runs hold 14 at most, and a release's 18.
+  # CI_PASSED is this workflow's one required check. Every push runs every check, whatever it changed: the Linux suites,
+  # each job on 4 cores, the Mac's, the runtime image and the release's build, so every check that guards a release runs
+  # before the merge, on the tree that merges. GitHub runs 20 of the account's hosted jobs at once, across all its
+  # repositories, and a job past them waits.
   #
   # A tree runs the checks once, as bors's "not rocket science" rule tests the exact tree that lands once. A push to
   # master runs none of them when a pull request's run passed CI_PASSED on its tree, as .github/actions/passed-tree
@@ -44,14 +39,9 @@ jobs:
       pull-requests: read
     outputs:
       base: ${{ steps.base.outputs.sha }}
-      bump: ${{ steps.diff.outputs.bump }}
-      code: ${{ steps.diff.outputs.code }}
+      bump: ${{ steps.version.outputs.bump }}
       passed: ${{ steps.passed.outputs.run }}
-      version: ${{ steps.diff.outputs.version }}
-      # A release's pull request, or a push whose tree no pull request's run passed, runs every check.
-      full: >-
-        ${{ (github.event_name == 'pull_request' && steps.diff.outputs.bump == 'true'
-        || github.event_name == 'push' && !steps.passed.outputs.run) && 'true' || '' }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -101,19 +91,11 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "This push's changes start at ${sha:-no commit, so every job runs}."
       # A change is a release's bump while origin has no tag for sharp/mago/Cargo.toml's version, as sharp/bin/check
-      # --changes prints it. So a release whose push failed is still a bump in the next pull request, and its merge
-      # publishes it, with no second bump. With no base, the change starts at the empty tree, so every job runs.
-      - name: Find changes outside documentation, and a release's bump
-        id: diff
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || steps.base.outputs.sha }}
-        run: |
-          if [[ -n $BASE ]]; then
-            git fetch --depth=1 origin "$BASE"
-          else
-            BASE=$(git hash-object -t tree /dev/null)
-          fi
-          sharp/bin/check --changes "$BASE" | tee -a "$GITHUB_OUTPUT"
+      # --release prints it. So a release whose push failed is still a bump in the next pull request, and its merge
+      # publishes it, with no second bump.
+      - name: Find the version, and whether it is a release's bump
+        id: version
+        run: sharp/bin/check --release | tee -a "$GITHUB_OUTPUT"
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -137,9 +119,7 @@ jobs:
   # CI_PASSED, which runs after it, deletes the caches it replaced.
   BUILD_LINUX:
     needs: CHANGES
-    if: >-
-      needs.CHANGES.outputs.code == 'true'
-      && !(needs.CHANGES.outputs.passed && needs.CHANGES.outputs.bump == 'true')
+    if: ${{ !(needs.CHANGES.outputs.passed && needs.CHANGES.outputs.bump == 'true') }}
     runs-on: ubuntu-24.04
     # A build of the engine takes up to 20 more minutes, which the engine's cache spares a run whose engine
     # inputs an earlier run built.
@@ -213,7 +193,7 @@ jobs:
   LINUX:
     name: LINUX (${{ matrix.shard }}/2)
     needs: [CHANGES, BUILD_LINUX]
-    if: needs.CHANGES.outputs.code == 'true' && !needs.CHANGES.outputs.passed
+    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -257,7 +237,7 @@ jobs:
   # ran the self-test after its slice, took 377 seconds, the longest suite job.
   UPSTREAM:
     needs: [CHANGES, BUILD_LINUX]
-    if: needs.CHANGES.outputs.code == 'true' && !needs.CHANGES.outputs.passed
+    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -301,7 +281,7 @@ jobs:
   SPEC:
     name: SPEC (${{ matrix.shard }}/4)
     needs: [CHANGES, BUILD_LINUX]
-    if: needs.CHANGES.outputs.code == 'true' && !needs.CHANGES.outputs.passed
+    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -345,9 +325,7 @@ jobs:
   # of FrankenPHP's packages, which every pull request's run restores, as BUILD_LINUX saves its caches.
   HOSTS:
     needs: [CHANGES, BUILD_LINUX]
-    if: >-
-      needs.CHANGES.outputs.code == 'true'
-      && !(needs.CHANGES.outputs.passed && needs.CHANGES.outputs.bump == 'true')
+    if: ${{ !(needs.CHANGES.outputs.passed && needs.CHANGES.outputs.bump == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -466,11 +444,11 @@ jobs:
           end: true
   # The checks only macOS can fail, on the run's one macOS build of the engine and mago: mago compile and the suite on a
   # disk that ignores case, without opcache and in shared memory, since Apple silicon has no thread-safe JIT, the census
-  # and the differential. A release's pull request runs it, and a push whose tree no pull request's run passed. A job
-  # never installs on the self-hosted Mac runner, so it checks that Homebrew already has the build's formulae, ccache
-  # among them. The engine builds through ccache, as BUILD_LINUX's does, so a file that changes back, as a run of another
-  # branch makes it, compiles from the cache, and sharp/bin/build configures again only when what configure reads
-  # changed.
+  # and the differential. Every pull request's push runs it, and a push to master whose tree no pull request's run
+  # passed. A job never installs on the self-hosted Mac runner, so it checks that Homebrew already has the build's
+  # formulae, ccache among them. The engine builds through ccache, as BUILD_LINUX's does, so a file that changes back,
+  # as a run of another branch makes it, compiles from the cache, and sharp/bin/build configures again only when what
+  # configure reads changed.
   #
   # The Mac has one runner, so its jobs run one at a time, each on every core, and a job builds where the job before it
   # built: sharp/bin/build and sharp/bin/build-mago rebuild only what changed since. Three runners each kept a build of
@@ -478,7 +456,7 @@ jobs:
   # at p50 and 48.1 at p95 over the last 150 runs, while three jobs at once held the Mac.
   MACOS:
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.full == 'true'
+    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: macos-arm64-local
     timeout-minutes: 120
     env:
@@ -552,11 +530,11 @@ jobs:
         with:
           end: true
   # The release's Mago binaries, their attestations, Mago's source archives, their SHA-256s and its notes, which
-  # release.yml builds beside the suites in a release's pull request run, and in a release's push whose tree no pull
-  # request's run passed. RELEASE publishes them. A called workflow's jobs may ask only for permissions its caller grants.
+  # release.yml builds beside the suites in every pull request's run, and in a push to master whose tree no pull
+  # request's run passed, so a build that fails fails before the merge. RELEASE publishes a release's. A called workflow's jobs may ask only for permissions its caller grants.
   RELEASE_ASSETS:
     needs: CHANGES
-    if: needs.CHANGES.outputs.bump == 'true' && needs.CHANGES.outputs.full == 'true'
+    if: ${{ !needs.CHANGES.outputs.passed }}
     uses: ./.github/workflows/release.yml
     permissions:
       attestations: write
@@ -595,7 +573,7 @@ jobs:
           sparse-checkout: .github/actions
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-      - name: Every job passed, or skipped a change that doesn't need it
+      - name: Every job passed, or skipped a tree that a pull request's run passed
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
           allowed-skips: >-
@@ -752,12 +730,12 @@ jobs:
   # BuildKit, its SBOM scanner and the bases are base-images.yml's copies in ghcr.io at pinned digests, pulled after the
   # login, so no pull is an anonymous Docker Hub pull (#86). The engine changes PHP's internal structures, so an
   # extension can stop building or loading: each pushed image then installs the extensions a typical Laravel app
-  # installs on top, the way such an app's Dockerfile does. A release's pull request runs it, and a push whose tree no
-  # pull request's run passed. The two platforms build at once, since a release's run ends with its slowest job: each
-  # took 12 to 13 minutes on the pushes of pull requests #351 and #352.
+  # installs on top, the way such an app's Dockerfile does. Every pull request's push runs it, and a push to master
+  # whose tree no pull request's run passed. The two platforms build at once, since a run ends with its slowest job:
+  # each took 12 to 13 minutes on the pushes of pull requests #351 and #352.
   IMAGE:
     name: IMAGE (${{ matrix.platform }})
-    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.full == 'true'
+    if: ${{ !needs.CHANGES.outputs.passed }}
     needs: CHANGES
     runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 45
