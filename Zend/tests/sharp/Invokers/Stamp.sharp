@@ -1,0 +1,6 @@
+namespace App.Invokers;
+
+public class Stamp
+{
+    public string at => "now";
+}

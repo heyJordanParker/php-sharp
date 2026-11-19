@@ -4,6 +4,18 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.36
+
+- `Method.invoke` is gone, spec section 25. Write `method.invoke(receiver, arguments)` as `method.createInvoker<Function<Any?(Object, List<Any?>) uses …>>()(receiver, arguments)`, with the effects the method has, and a static method's `method.invoke(null, arguments)` as `method.createInvoker<Function<Any?(List<Any?>) uses …>>()(arguments)`. A call of `invoke` is refused as "Method `Method.invoke` does not exist.". A plain PHP method with no `extern` may have every effect, so no invoker holds it, as no delegate does.
+
+### Added
+
+- `Method.createInvoker<TFunction>()` gives a value of the function type `TFunction` that calls the method with its arguments as one `List<Any?>`, after the receiver of an instance method, spec sections 25 and 29. So a dispatcher held to `uses Database` calls `pause(Subscription s, VerifiedUser u)` and `create(string name, Plan plan = Plan.Normal)` by name, each through one invoker, where `invoke` may have every effect and no `uses` accepted it. The method fits `TFunction` as it fits `createDelegate`'s, so a method with `Mail` throws "`App.Billing.notify` has the effect `App.Mailer`, and `Function<Any?(Object, List<Any?>) uses Sharp.Data.Database>` allows only `Sharp.Data.Database`." at `createInvoker`, which is pure. A call checks each value against the parameter at its place and throws `TypeError` naming it, and a parameter the list leaves out takes its default when that runs no code, as `Parameter.defaultValue()` reads it.
+
+### Changed
+
+- `mago convert` writes a static call through a class held at run time, `$kind::label(7)`, and its method value, `$kind::find(...)`, through the method's invoker, spec section 25: `kind.methods().first(method => method.name == nameof(Order.label)).createInvoker<Function<string(List<Any?>) uses Database>>()([7])`. The invoker lists the effects the analysis solves for a PHP# method, or those a plain PHP method's `extern` line declares, and gives the result the method declares where PHP checks it. Where only PHPDoc gives the result, it gives `Any?`, which `as` checks, as 0.6.36 did. A plain PHP method no `extern` declares may have every effect, which no `uses` lists, so the file stays plain PHP, and the refusal names the line to add, as `extern App.Order.label;`.
+
 ### Fixed
 
 - A law reaches the standard library from its PHP# source, as it reaches the project's code, spec section 28. 0.6.36 refused every standard library class but a fixed list of members, so a law over one state of a sealed family was refused when another state held an `Instant`, as "Law postponeHoldsTheError reaches the standard library class Instant in Done.", though the law never reads that state. `Instant` now translates from its declaration, and a law that orders two `Instant`s with `<` proves through `Instant`'s own `operator <=>`, as `<`, `<=`, `>`, `>=` and `<=>` on two values of any class that declares `<=>` do. A standard library member that calls plain PHP is refused where the law reaches it, with the reason project code gets, as "Law parses reaches the plain PHP function `global.preg_match` in Instant.tryParse.". `Math.max`, `Math.min` and a List's `count()`, `map` and `filter` keep the checker's own model.

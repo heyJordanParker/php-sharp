@@ -8,7 +8,7 @@ public static class Report
 
     private static Field field(Class<Object> type, string name) => type.fields().first(field => field.name == name);
 
-    // A static read and written through its Property, and a static method invoked with no receiver.
+    // A static read and written through its Property, and a static method invoked with no receiver, through an invoker.
     public static List<Any?> statics()
     {
         const opened = Report.property(typeof(Account), "opened");
@@ -17,7 +17,9 @@ public static class Report
             opened.isStatic,
             opened.get(null),
             Account.opened,
-            typeof(Account).methods().first(method => method.name == "kind").invoke(null, []),
+            typeof(Account).methods()
+                .first(method => method.name == "kind")
+                .createInvoker<Function<string(List<Any?>)>>()([]),
         ];
     }
 
@@ -62,11 +64,11 @@ public static class Report
         const balance = Report.property(typeof(Account), "balance");
         const getter = doubled.getter() ?? throw new ValueError("none");
         const setter = note.setter() ?? throw new ValueError("none");
-        setter.invoke(account, ["seen"]);
+        setter.createInvoker<Function<void(Account, List<Any?>)>>()(account, ["seen"]);
         return [
             getter.name,
             getter.type == typeof(int),
-            getter.invoke(account, []),
+            getter.createInvoker<Function<int(Account, List<Any?>)>>()(account, []),
             doubled.setter(),
             setter.name,
             setter.type == typeof(void),
@@ -120,7 +122,7 @@ public static class Report
             limit.get(null),
             Counter.count,
             getter.name,
-            getter.invoke(null, []),
+            getter.createInvoker<Function<int(List<Any?>)>>()([]),
             Report.property(typeof(Counter), "hidden").visibility == Visibility.Private,
             Report.property(typeof(Shelf<string>), "made").get(null),
         ];

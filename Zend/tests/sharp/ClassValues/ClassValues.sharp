@@ -15,7 +15,7 @@ public class ClassValues
     // Only the run-time class is known, so its static runs through reflection, as a class value calls no static, spec
     // section 25.
     private static string tag(Class<Badge> type)
-        => type.methods().first(method => method.name == "tag").invoke(null, []) as string ?? "";
+        => type.methods().first(method => method.name == "tag").createInvoker<Function<string(List<Any?>)>>()([]);
 
     public static List<Any> types() => [typeof(int), typeof(List<Badge>), typeof(Map<string, int>), typeof(Set<int>)];
 

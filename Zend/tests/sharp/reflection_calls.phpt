@@ -1,5 +1,5 @@
 --TEST--
-Method.invoke, Property.get, Property.set and Field.get reach a member as a direct use from the calling code would, check each argument and value against its PHP# type in strict mode, run an override and a computed property's get, and refuse a receiver of another class
+Method.createInvoker, Property.get, Property.set and Field.get reach a member as a direct use from the calling code would, check each argument and value against its PHP# type in strict mode, run an override and a computed property's get, and refuse a receiver of another class
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -23,19 +23,18 @@ function attempt(string $label, Closure $body): void
 $till = new Till();
 $register = new Register();
 
-attempt('add', fn () => Calls::method('add')->invoke($till, [2, [3, 4]]));
-attempt('add "2"', fn () => Calls::method('add')->invoke($till, ['2', [3]]));
-attempt('add ["a"]', fn () => Calls::method('add')->invoke($till, [2, ['a']]));
-attempt('add three', fn () => Calls::method('add')->invoke($till, [2, [3], 9]));
-attempt('add one', fn () => Calls::method('add')->invoke($till, [2]));
-attempt('add on another class', fn () => Calls::method('add')->invoke(new stdClass(), [2, [3]]));
-attempt('name on the subclass', fn () => Calls::method('name')->invoke($register, []));
-attempt('kind', fn () => Calls::method('kind')->invoke($register, []));
-attempt('secret from plain PHP', fn () => Calls::method('secret')->invoke($till, []));
-attempt('guarded from plain PHP', fn () => Calls::method('guarded')->invoke($till, []));
+attempt('add', fn () => Calls::invoker('add')($till, [2, [3, 4]]));
+attempt('add "2"', fn () => Calls::invoker('add')($till, ['2', [3]]));
+attempt('add ["a"]', fn () => Calls::invoker('add')($till, [2, ['a']]));
+attempt('add three', fn () => Calls::invoker('add')($till, [2, [3], 9]));
+attempt('add one', fn () => Calls::invoker('add')($till, [2]));
+attempt('add on another class', fn () => Calls::invoker('add')(new stdClass(), [2, [3]]));
+attempt('name on the subclass', fn () => Calls::invoker('name')($register, []));
+attempt('kind', fn () => Calls::staticInvoker('kind')([]));
+attempt('secret from App.Calls', fn () => Calls::invoker('secret'));
+attempt('guarded from App.Calls', fn () => Calls::invoker('guarded'));
 attempt('guarded from the subclass', fn () => Register::guardedFrom($till));
-attempt('near from plain PHP', fn () => Calls::method('near')->invoke($till, []));
-attempt('near from App.Calls', fn () => Calls::nearFromInside($till));
+attempt('near from App.Calls', fn () => Calls::invoker('near')($till, []));
 attempt('near from App.Elsewhere', fn () => Outside::near($till));
 
 attempt('get total', fn () => Calls::property('total')->get($till));
@@ -58,15 +57,14 @@ attempt('restock from App.Elsewhere', fn () => Outside::restock($till));
 add: 10
 add "2": TypeError: App\Calls\Till::add(): Argument #1 ($amount) must be of type int, string given
 add ["a"]: TypeError: App\Calls\Till::add(): Argument #2 ($more) must be of type List<int>, array given: [0] expected int, got string 'a'
-add three: ArgumentCountError: `invoke` passes App\Calls\Till::add() at most 2 arguments, and was given 3.
-add one: ArgumentCountError: Too few arguments to function App\Calls\Till::add(), 1 passed and exactly 2 expected
-add on another class: TypeError: `invoke` takes a receiver of `App\Calls\Till`, and was given `stdClass`.
+add three: ArgumentCountError: `App.Calls.Till.add` takes at most 2 arguments, and was given 3.
+add one: ArgumentCountError: `App.Calls.Till.add` takes `more`, and was given no value for it.
+add on another class: TypeError: `App.Calls.Till.add` takes a receiver of `App\Calls\Till`, and was given stdClass.
 name on the subclass: 'register'
 kind: 'till'
-secret from plain PHP: Error: Call to private method App\Calls\Till::secret() from global scope
-guarded from plain PHP: Error: Call to protected method App\Calls\Till::guarded() from global scope
+secret from App.Calls: Error: Call to private method App\Calls\Till::secret() from scope App\Calls\Calls
+guarded from App.Calls: Error: Call to protected method App\Calls\Till::guarded() from scope App\Calls\Calls
 guarded from the subclass: 8
-near from plain PHP: 9
 near from App.Calls: 9
 near from App.Elsewhere: Error: Call to internal method App\Calls\Till::near() from App\Elsewhere\Outside, outside namespace App\Calls
 get total: 0

@@ -1,6 +1,6 @@
 namespace App.Calls;
 
-// `Till`'s members by name, and calls of them from `Till`'s own namespace, which reaches its `internal` members.
+// `Till`'s members by name, and their invokers, made from `Till`'s own namespace, which reaches its `internal` members.
 public static class Calls
 {
     public static Method method(string name) => typeof(Till).methods().first(method => method.name == name);
@@ -9,7 +9,11 @@ public static class Calls
 
     public static Field field(string name) => typeof(Till).fields().first(stored => stored.name == name);
 
-    public static Any? nearFromInside(Till till) => Calls.method("near").invoke(till, []);
+    public static Function<Any?(Object, List<Any?>)> invoker(string name)
+        => Calls.method(name).createInvoker<Function<Any?(Object, List<Any?>)>>();
+
+    public static Function<Any?(List<Any?>)> staticInvoker(string name)
+        => Calls.method(name).createInvoker<Function<Any?(List<Any?>)>>();
 
     public static Any? stockFromInside(Till till) => Calls.property("stock").get(till);
 }

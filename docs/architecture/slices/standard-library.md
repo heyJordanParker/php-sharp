@@ -181,7 +181,7 @@ The standard library covers what modern standard libraries cover (decision 96). 
 | A type's value, a value's type, its name | `typeof(T)`, `Class.of(value)`, `type.name()` (section 25) | |
 | Test a type | `value is T`, `value as T` (section 21) | |
 | Members, their attributes, type arguments | `methods()`, `properties()`, `attributes<T>()`, `typeArguments()` | `ReflectionClass` |
-| Call, read and write a member by its reflection | `method.invoke(receiver, arguments)`, `property.get(receiver)`, `property.set(receiver, value)` | |
+| Call, read and write a member by its reflection | `method.createInvoker<TFunction>()(receiver, arguments)`, `method.createDelegate<TFunction>()`, `property.get(receiver)`, `property.set(receiver, value)` | |
 | Create an instance from a type | `new (type)(arguments)` (section 25) | |
 | A result or an error | `Result<T, E>` with `Ok` and `Err`, and exceptions | |
 | Events | `emit` (section 15), `Events.on<TEvent>(listener)`, a `Dispatcher` | |
