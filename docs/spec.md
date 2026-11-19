@@ -1899,9 +1899,17 @@ class Shelf
 }
 ```
 
-<!-- example plain-list-arrival: statements
+<!-- example plain-list-arrival -->
+```csharp
+// app/Stubs/Shelf.sharp
+namespace App.Stubs;
+
+import App.Shelf;
+
 extern Shelf uses none;
--->
+```
+
+<!-- example plain-list-arrival: statements -->
 ```csharp
 for (const line of Shelf.kept()) { … }       // compiles: plain PHP's array<int, Line> is a List<Line>
 List<Line> kept = Shelf.kept();             // compiles: kept[0] is the first kept line, whatever its key was
@@ -2815,8 +2823,17 @@ class Subscription
 }
 ```
 
-<!-- example magic-properties: statements
+<!-- example magic-properties -->
+```csharp
+// app/Stubs/Subscription.sharp
+namespace App.Stubs;
+
+import App.Subscription;
+
 extern Subscription uses none;
+```
+
+<!-- example magic-properties: statements
 Subscription subscription = new Subscription();
 -->
 ```csharp
@@ -3606,9 +3623,19 @@ final class Email
 final class Row {}
 ```
 
-<!-- example plain-to-string: statements
+<!-- example plain-to-string -->
+```csharp
+// app/Stubs/Email.sharp
+namespace App.Stubs;
+
+import App.Email;
+import App.Row;
+
 extern Email uses none;
 extern Row uses none;
+```
+
+<!-- example plain-to-string: statements
 Email email = new Email("ada@example.com");
 Row row = new Row();
 -->
@@ -4416,9 +4443,17 @@ class Legacy
 }
 ```
 
-<!-- example type-tests: statements
+<!-- example type-tests -->
+```csharp
+// app/Stubs/Legacy.sharp
+namespace App.Stubs;
+
+import App.Legacy;
+
 extern Legacy uses none;
--->
+```
+
+<!-- example type-tests: statements -->
 ```csharp
 Any? doubled = (int x) => x * 2;
 doubled is Function<int(int)>;               // true
@@ -4443,6 +4478,8 @@ class Legacy
 ```csharp
 // app/Stubs/Legacy.sharp
 namespace App.Stubs;
+
+import App.Legacy;
 
 extern Legacy uses none;
 extern Function<int(int) uses none> Legacy.doubler() uses none;
@@ -4471,9 +4508,17 @@ class Orders
 }
 ```
 
-<!-- example plain-closure-type-tests: statements
+<!-- example plain-closure-type-tests -->
+```csharp
+// app/Stubs/Orders.sharp
+namespace App.Stubs;
+
+import App.Orders;
+
 extern Orders uses none;
--->
+```
+
+<!-- example plain-closure-type-tests: statements -->
 ```csharp
 import Sharp.Data.Database;
 
@@ -4977,10 +5022,19 @@ abstract class Record
 class Photo extends Record implements Taggable {}      // compiles: each call of morphClass() checks its result
 ```
 
-<!-- example interface-member-untyped-implementer: statements
+<!-- example interface-member-untyped-implementer -->
+```csharp
+// app/Stubs/Record.sharp
+namespace App.Stubs;
+
+import App.Photo;
+import App.Record;
+
 extern Photo uses none;
 extern Record uses none;
--->
+```
+
+<!-- example interface-member-untyped-implementer: statements -->
 ```csharp
 Taggable photo = new Photo("photo");
 photo.morphClass();                     // "photo"

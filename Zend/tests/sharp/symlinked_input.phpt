@@ -33,6 +33,8 @@ namespace Demo;
 
 import Lib.Helper;
 
+extern Helper uses none;
+
 public class Shop
 {
     public static int run() => Helper.one();

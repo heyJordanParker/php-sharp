@@ -1,14 +1,15 @@
 <?php
 
-// The standard library's module, each class it binds, and the classes and types their members take, return and call,
-// by their paths under the library's Sharp folder. A project that holds the library's module holds these.
+// The standard library's module, each class it binds, the classes and types their members take, return and call, the
+// `extern` lines of the PHP built-ins they call, and the effect classes those lines name, by their paths under the
+// library's Sharp folder. A project that holds the library's module holds these.
 const LIBRARY_MODULE = [
     'Module', 'Dispatcher', 'ImmediateDispatcher', 'System/Environment', 'Time/Clock', 'Random', 'IO/Console',
     'System/Process', 'System/ProcessResult', 'System/ChildProcess', 'IO/Files', 'Net/Http', 'Net/Mail', 'Net/Dns', 'Net/IpAddress',
     'Net/IpFamily', 'Interop/PhpGlobals', 'Interop/Superglobal', 'Time/Duration', 'Time/Instant',
     'Time/DateTime', 'Time/Date', 'Time/TimeOfDay', 'Time/TimeZone', 'Time/DateTimeInterfaceMembers', 'Time/Weekday', 'Time/Month', 'Int', 'ByteOrder', 'Math', 'Net/HttpMethod', 'Net/HttpRequest',
     'Net/HttpResponse', 'Net/MailAddress', 'Net/MailMessage', 'Net/Url', 'Text/StringMembers', 'Text/NormalizationForm', 'ListMembers',
-    'MapMembers', 'SetMembers', 'IterableMembers',
+    'MapMembers', 'SetMembers', 'IterableMembers', 'Internal/Builtins', 'Data/Database', 'Data/Cache',
 ];
 
 // A library unless $files holds a composer.json of its own, so spec section 5's strict rules, which an application's
