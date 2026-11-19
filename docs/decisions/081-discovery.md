@@ -1,70 +1,42 @@
-# 81. PHP code that lists or reads `*.php` files finds PHP# classes
+# 81. PHP# classes load by name, and no folder scan finds them
 
 ## Decision
 
-`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type, as `StoreService.php` beside `StoreService.sharp`. The file loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error, so no source reaches the output. Its last statement states the type's declaration and never runs, so PHP code that reads `*.php` source finds the type in it with no change of its own, as Composer's class map generator and Symfony's attribute routing do. The engine declares the type once, from the `.sharp` file, and mago reads the `.sharp` file and never the `.php` file:
+`mago compile` writes nothing beside a `.sharp` file, so a PHP# project's tree holds only what its authors wrote. Its compiled output lives in `.sharp/` (decision 29).
+
+A PHP# class loads by its name. The standard library's autoloader finds `<Class>.sharp` by Composer's PSR-4 prefixes, and the Composer plugin lists every PHP# class in `vendor/composer/autoload_sharp.php` on an optimized dump.
+
+PHP code that lists a folder's `*.php` files and names each class by its path finds no PHP# class. Laravel's console kernel, Laravel's event discovery and Spatie's route attributes find classes this way. An app names each PHP# class through the framework's own explicit API instead:
 
 ```php
-if (is_file(sprintf('%s/StoreService.sharp', __DIR__))) {
-    function_exists('Sharp\Internal\requireNative')
-        || throw new Error(
-            'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
-        );
-
-    require_once sprintf('%s/StoreService.sharp', __DIR__);
-}
-
-if (false) {
-    class StoreService
-    {
-        // The engine declares StoreService from StoreService.sharp, and this declaration never runs.
-    }
-}
+->withCommands([SendReport::class])                   // a console command, in bootstrap/app.php
+Event::listen(Login::class, RecordLogin::class);      // a listener
 ```
 
-The declaration names the type and the kind PHP's reflection gives it: `interface`, `enum` for an enum that runs as a PHP enum, and `class` for a class, a struct, an event and an enum whose cases carry data.
+A controller is named in a route file, or with `RouteRegistrar::registerClass`.
 
-A type named after a word PHP reserves, compared ignoring case, as `Case`, `Match`, `Print`, `Function`, `Echo`, `Include` or `Global`, gets the file without the declaration. Spec section 1 makes a capitalized keyword an ordinary PHP# name, but PHP refuses a reserved word as a type's name even in a declaration that never runs, so the file would not parse. No PHP source can declare such a type, so no source scanner finds it: Symfony's attribute routing reads the word after `class` as the keyword's token, not as a name, and Composer's class map lists only what PHP source declares. The file still parses and loads the type, through Composer's PSR-4 rule and through PHP code that names a class by its path. A project whose class map is authoritative, built with `--classmap-authoritative`, never reaches PSR-4, so it loads such a type only once it is named otherwise.
-
-`mago compile` writes the installed standard library's native fingerprint into each compiled file, and the engine refuses a compiled file whose fingerprint is not its own, whatever loads it: the `.php` file, a `require`, the plugin's loader, opcache or preloading. Composer's own process runs on any engine, so `composer install` runs there and prints the refusal as an error line. PHP code that lists a folder's `*.php` files and names each class by its path, as Spatie's route attributes, Laravel's console kernel and Laravel's event discovery do, finds and loads the PHP# class with no change of its own.
-
-Nobody edits the file. A `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, because PHP names a class whatever its case. The next compile rewrites a changed file and deletes the file of a removed source, which until then declares nothing. `mago compile` lists the files in a `.gitignore` of its own in each folder that holds one, which lists itself too, so each checkout of a repository ignores its own files alone. Editors hide them: VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, PhpStorm through file nesting.
-
-A `.sharp` file in an `autoload-dev` folder gets no file, so a test class keeps one file: PHPUnit loads a test class only from the file it lists, and a project lists its PHP# tests with `suffix="Test.sharp"`. A package in `vendor/` gets none, because nothing is written into `vendor/` (decision 29).
-
-Decision 29's compiled output still lives in one folder, `.sharp/`. A deploy's `mago compile` writes the `.php` files beside the sources too.
+A `.php` file and a `.sharp` file that declare one class are two declarations of it, which `mago analyze` refuses with `duplicate-definition`.
 
 ## Options
 
-### Chosen: a `.php` file beside each `.sharp` file
+### Chosen: the app names each PHP# class
+
+```text
+app/Http/Controllers/
+└── OrderController.sharp      <- the only file; a route file names OrderController
+```
+
+A framework's explicit registration names the class, and the autoloader loads it by that name. The source tree holds one language, and `mago compile` carries no code for files of another.
+
+### Rejected: a `.php` file beside each `.sharp` file
 
 ```text
 app/Http/Controllers/
 ├── OrderController.sharp
-└── OrderController.php        <- written by mago compile: loads OrderController.sharp
+└── OrderController.php        <- not PHP#: a PHP file mago compile wrote, which loads OrderController.sharp
 ```
 
-Every listing sees a real file: Symfony's Finder, `glob()`, `scandir()` and `find`. The class name a scanner builds from the path is right, and Composer's PSR-4 rule loads the `.php` file first. Compiled output stays in `.sharp/`.
-
-### Chosen: the file states the type's name and kind in a declaration that never runs
-
-Composer's class map generator matches `class Order` in the code that `php_strip_whitespace` leaves, and Symfony's attribute routing reads the name after the `class` token. Both find the type and load it through Composer, and the engine declares it from the `.sharp` file.
-
-### Rejected: the declaration in a comment
-
-`php_strip_whitespace` and every tokenizer drop comments, so no scanner would see it.
-
-### Rejected: a reserved name's declaration after `__halt_compiler();`
-
-PHP never reads past `__halt_compiler();`, so `class Case {}` there parses, and Composer's class map, which strips strings and comments but not what follows the halt, would list it. Symfony's tokens read it as inline text, so attribute routing still finds nothing, and the class map would depend on Composer's cleaner not knowing a part of PHP's grammar.
-
-### Rejected: a declaration that runs
-
-PHP binds a top-level class when it compiles the file, before any statement runs, so the file would declare a second `StoreService` beside the one the engine declares from the `.sharp` file.
-
-### Rejected: the declaration with its members
-
-A scanner reads the type's name and kind from source, and reads the rest through reflection, which gets the engine's class. Members would only repeat the `.sharp` file.
+Every listing saw a real file, so a folder scan found the class. The source tree filled with files in another language that nobody wrote, and each needed more: a `.gitignore` in each folder to hide them, a compile error for a `.php` file someone wrote under the same name, editor and formatter settings to hide or skip them, and code that deleted the files an earlier compile wrote. `mago compile` wrote these files from 0.4.0 until this decision.
 
 ### Rejected: the engine shows PHP a `.php` file that is not on disk
 
@@ -78,17 +50,9 @@ Every scanner resolves the link with `getRealPath()` and names the class `OrderC
 
 The engine, Composer, editors and the checker choose the grammar from the extension (spec section 27).
 
-### Rejected: the compiled file itself as `OrderController.php`
-
-The engine would have to recognize a compiled `.php` file and check it against its `.sharp` source, and a package's compiled files would stay in `.sharp/` or move into `vendor/`.
-
-### Rejected: teaching each library about `.sharp`
-
-Every library would need its own change, and a user would choose libraries by whether they know PHP#.
-
 ## Precedent
 
-- **Chosen, hiding the files:** VS Code's `files.exclude` sibling condition and JetBrains' file nesting.
+- **Earlier decisions:** this reverses this decision's earlier choice of a `.php` file beside each `.sharp` file, and keeps decision 29's single `.sharp/` output folder.
 
 ## Spec
 

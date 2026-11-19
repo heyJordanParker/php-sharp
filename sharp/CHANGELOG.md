@@ -4,6 +4,15 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.39
+
+- `mago compile` writes no `.php` file and no `.gitignore` beside a `.sharp` file, decision 81, where 0.6.39 wrote a `.php` file that loaded each `.sharp` file that declares a type. A framework that lists a folder's `*.php` files no longer finds PHP# classes there, as Laravel's console kernel, Laravel's event discovery and Spatie's route attributes list them. Name each PHP# class through the framework's explicit registration instead: a console command with `->withCommands([SendReport::class])`, a controller in a route file or with `RouteRegistrar::registerClass`, and a listener with `Event::listen(Login::class, RecordLogin::class)`. Then delete the files earlier compiles wrote, once, from the project root. Each is matched by the line `mago compile` wrote at its top:
+
+  ```sh
+  grep -rl --null --include='*.php' --exclude-dir=vendor '^// mago compile writes this file from ' . | xargs -0 rm --
+  grep -rl --null --include=.gitignore --exclude-dir=vendor '^# mago compile writes this file and the files it lists\.' . | xargs -0 rm --
+  ```
+
 ### Changed
 
 - An extension host's provider answers each call in less time. After each answer the SDK checked which classes the call declared by listing every declared class, interface and trait. It now skips that when the interpreter declared none and asked its autoloaders for none, which mago's engine tells it through `\Mago\Engine\classCount()`.

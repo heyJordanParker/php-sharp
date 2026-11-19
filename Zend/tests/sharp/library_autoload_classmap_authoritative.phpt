@@ -1,5 +1,5 @@
 --TEST--
-A deploy runs an authoritative class-map dump before mago compile, so no PHP file sits beside a .sharp file and Composer's class map holds no PHP# class: the plugin's optimized dump maps each PHP# class to its .sharp file, and autoload.php loads a class, an interface's Defaults trait and the case class of an enum whose cases carry data by name through that map, while a class missing from it stays not found
+mago compile writes no PHP file beside a .sharp file, so an authoritative class map holds no PHP# class: the plugin's optimized dump maps each PHP# class to its .sharp file, and autoload.php loads a class, an interface's Defaults trait and the case class of an enum whose cases carry data by name through that map, while a class missing from it stays not found
 --FILE--
 <?php
 require __DIR__ . '/project.inc';
@@ -22,8 +22,8 @@ $root = compile_project('library-autoload-classmap-authoritative', $files + [
     'app/Priced.sharp' => "namespace App;\n\npublic interface Priced\n{\n    int price() => 5;\n}\n",
     'app/Payment.sharp' => "namespace App;\n\npublic enum Payment\n{\n    case Pending;\n    case Paid(int amount);\n}\n",
     'vendor/composer/autoload_psr4.php' => "<?php\n\nreturn ['App\\\\' => [dirname(__DIR__, 2) . '/app']];\n",
-    // Composer's loader after `--classmap-authoritative`: it answers only from its class map, which a dump made before
-    // mago compile fills with no PHP# class, and autoload.php reads no PSR-4 folder of it.
+    // Composer's loader after `--classmap-authoritative`: it answers only from its class map, which holds no PHP#
+    // class, and autoload.php reads no PSR-4 folder of it.
     'vendor/composer/autoload_real.php' => <<<'PHP'
 <?php
 
@@ -149,10 +149,7 @@ echo $argv[1], ': ', match ($argv[1]) {
 PHP,
 ]);
 
-// The deploy's dump ran before mago compile, so no PHP file sits beside a .sharp file.
-foreach (glob("$root/app/*.php") as $companion) {
-    unlink($companion);
-}
+// mago compile wrote no PHP file beside a .sharp file.
 var_dump(glob("$root/app/*.php"));
 
 $php = escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n ';
