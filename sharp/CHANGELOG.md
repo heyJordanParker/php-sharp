@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Changed
+
+- Spec section 5's strict rules run on every package whose `composer.json` does not say `"type": "library"`: a public type or member too wide, a public member whose types hold `Any`, and, from section 24, a string fixed at compile time that selects. 0.6.35 ran them only where `composer.json` said `"type": "project"`, so an application that left the type out, or had no `composer.json`, compiled a public member nothing outside its class used. A package with no type, one with no `composer.json` above it and one whose `composer.json` does not parse are now projects, so no line left out turns a rule off. A library adds `"type": "library"` to its `composer.json`. The standard library and every package installed in `vendor/` stay exempt whatever their type.
+
 ## [0.6.35] - 2026-11-19
 
 ### Added

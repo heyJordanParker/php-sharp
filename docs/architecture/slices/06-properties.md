@@ -272,7 +272,7 @@ Question 1's answer: section 5's `internal` is built whole in this PR, once team
 | 161 | A test folder may declare the namespace it tests, which gives it `internal` access | Not checked: `Tests/Tenant/HiddenTest.sharp` declares `App.Tenant.Store` and compiles, because nothing is checked | Line 160's check accepts a file in a test folder declaring any namespace. Proposed: a test folder is one Composer's `autoload-dev` maps, which is how a Composer project marks its tests. The spec does not define it, and #121 defines only a test file (one holding a test module). This is for team-lead to approve |
 | 162 | A member is never more visible than its class | Not checked, because no class is narrower than `public` today | The analyzer's reach of a member is the narrower of its own and its class's |
 | 164 | Too narrow is a compile error at the caller | Works for `private` and `protected`. None for `internal` | Line 157's check, with the caller's namespace in the message: "`Hidden` is internal to `App.Tenant.Store`, and `App.Tenant.Other` is outside it." |
-| 165 | Too wide is a warning, for example a `public` member nothing outside its namespace uses | None: `Wide.unusedOutside` is `public` and used only in its class, and `mago analyze` reports nothing | `too_wide_members` in `statement/class_like/unused_members.rs` warns on a `public` member that nothing outside its namespace and the ones below it uses, its own class's uses and a member nothing uses included. It reads every file's uses, so it runs once after `Effects::solve`, in `IncrementalAnalysisService::run_analyzer_selective` and `AnalysisService::oneshot`. It runs in a project only, a package whose `composer.json` says `"type": "project"` (Jordan's ruling): the loader sets `File::is_project`, and the codex marks the file's PHP# class-likes `MetadataFlags::PROJECT` |
+| 165 | Too wide is a warning, for example a `public` member nothing outside its namespace uses | None: `Wide.unusedOutside` is `public` and used only in its class, and `mago analyze` reports nothing | `too_wide_members` in `statement/class_like/unused_members.rs` warns on a `public` member that nothing outside its namespace and the ones below it uses, its own class's uses and a member nothing uses included. It reads every file's uses, so it runs once after `Effects::solve`, in `IncrementalAnalysisService::run_analyzer_selective` and `AnalysisService::oneshot`. It runs in a project only, a package whose `composer.json` does not say `"type": "library"`, a folder with no `composer.json` above it included, and never the standard library or a package installed in `vendor/`: the loader sets `File::is_project`, and the codex marks the file's PHP# class-likes `MetadataFlags::PROJECT` |
 | 166 | There is no named reach, such as `internal(App\Tenant)` | Refused with 8 generic "Parse error encountered during parsing" (`NamedReach`) | One parse error at the `(`, the error a typo gets, and the declaration parses on as `internal` |
 | 183 | An interface member is as visible as its interface | Not checked (`InternalInterface` with no modifier is unreachable by no rule) | Line 162's effective reach, for interface members too |
 | 184 | Interface members are exempt from the too-wide warning | Holds trivially today | Line 165's warning skips interface members |
@@ -311,7 +311,7 @@ sharp/mago/crates/
 ├── database/src/file.rs                     <- added: enum FolderNamespace { Namespace(Box<str>), Test }; File gains
 │                                               `folder_namespace: Option<FolderNamespace>`, which the loader sets
 │                                               from the nearest composer.json's PSR-4 folders, and `is_project:
-│                                               bool`, from its `"type": "project"`
+│                                               bool`, true unless it says `"type": "library"`
 ├── codex/src/
 │   ├── metadata/flags.rs                    <- MetadataFlags::LAZY: the bridge lowers a read of a static one;
 │   │                                           MetadataFlags::INTERNAL_SET for `internal set` and `internal init`.
@@ -397,7 +397,8 @@ The names, each with the slate it was picked from:
 - `NamedReachInSharp`: the spec's "named reach", beside `UntypedPropertyInSharp`. Also considered: `InternalWithNamespace`.
 - `internal-access`: the modifier and the act, as `private` access is reported. Also considered: `internal-reach`.
 - `too-wide-member` and `too_wide_members`: the spec's "too wide". Also considered: `overly-public-member`.
-- `File::is_project` and `MetadataFlags::PROJECT`: Composer's own word, `"type": "project"`. Also considered:
+- `File::is_project` and `MetadataFlags::PROJECT`: Composer's own word for an application, `"type": "project"`, which
+  every package is that does not say `"type": "library"`. Also considered:
   `is_application`, `IN_PROJECT`.
 
 # The PR
