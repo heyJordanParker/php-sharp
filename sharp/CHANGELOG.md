@@ -13,6 +13,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ## [0.6.34] - 2026-11-19
 
 ### Changed
+- A plain PHP call on a side of `??`, in a branch of `? :` or in a `match` arm keeps the keys plain PHP gave it where the value goes into a declared `Map`, spec section 12, as the call written there alone does. 0.6.34 read the call as a `List` and renumbered it, so with `Calc.names()` returning `[5 => 'a', 9 => 'b']`, `Map<int, string> named = given ?? Calc.names();` held `{0: "a", 1: "b"}` when `given` was null, with no error. It now holds `{5: "a", 9: "b"}`, as `Map<int, string> named = Calc.names();` does.
 
 - A `public` type that nothing outside its namespace uses is too wide, spec section 5, as a member is: a class, an interface, a struct, an enum and an event alike, so `public event Quiet(int id);`, which only `App.Shop` creates, is refused as "`Quiet` is public, and nothing outside `App.Shop` uses it." 0.6.33 checked only members, so a public type that only its namespace used compiled. Declare such a type `internal`. A use of the type or of a member of it counts, an `extends` or an `implements` included, and so do plain PHP calling one of its `[Export]` methods and a framework reading a marked attribute. A class whose only reach is a listener, a method written with `on`, is refused too, since PHP# creates it whatever its access.
 
