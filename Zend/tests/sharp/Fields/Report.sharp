@@ -72,7 +72,8 @@ public static class Report
         return refusals;
     }
 
-    // A lazy object that has not loaded refuses a Field's read and write, and stays unloaded.
+    // A lazy object that has not loaded refuses a Field's read and takes its write without loading, and the storage
+    // keeps the value once a read of another property loads it.
     public static List<Any?> lazy()
     {
         Row.loads = 0;
@@ -84,15 +85,12 @@ public static class Report
         } catch (Throwable failure) {
             facts.add(Class.of(failure).name() + ": " + failure.getMessage());
         }
-        try {
-            name.set(row, "ada");
-        } catch (Throwable failure) {
-            facts.add(Class.of(failure).name() + ": " + failure.getMessage());
-        }
+        name.set(row, "ada");
         facts.add(Row.loads);
         facts.add(name.isInitialized(row));
-        facts.add(Row.loads);
         facts.add(row.name);
+        facts.add(Row.loads);
+        facts.add(row.code);
         facts.add(Row.loads);
         facts.add(name.get(row));
         return facts;

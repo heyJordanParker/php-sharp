@@ -25,6 +25,20 @@ class PlainLedger
     }
 }
 
+final class HookedLedger extends PlainLedger
+{
+    public string $code = 'hooked' {
+        get {
+            echo "get hook ran\n";
+            return $this->code;
+        }
+        set {
+            echo "set hook ran\n";
+            $this->code = $value;
+        }
+    }
+}
+
 final class PlainJournal extends PlainLedger
 {
     public function title(): string
