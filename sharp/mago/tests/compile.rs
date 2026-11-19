@@ -3841,6 +3841,113 @@ fn compile_lists_the_effects_each_extern_line_declares_for_a_class_and_a_method(
     );
 }
 
+/// Spec section 29: a parameter an `extern` line states keeps the effects its function type lists, so a `Map` a loop
+/// fills with closures that have those effects passes to the plain PHP constructor, and the `Map` local keeps the value
+/// type it is declared with. A closure with an effect the type leaves out is refused at the call, naming the effect.
+#[test]
+fn an_extern_parameter_takes_the_functions_whose_effects_its_function_type_lists() {
+    let extension = "<?php\n\nnamespace Cel;\n\nfinal readonly class CallableExtension\n{\n    /** @param array<non-empty-string, callable> $functions */\n    public function __construct(\n        private array $functions,\n        private bool $idempotent = false,\n    ) {}\n}\n";
+    let stubs = "namespace App.Stubs;\n\nimport Cel.CallableExtension;\n\nextern void CallableExtension.__construct(Map<string, Function<Any?(Any?) uses Database, Files, Clock>> functions);\n";
+    let value = "namespace App.Schema;\n\npublic class CelValue\n{\n    public CelValue(public Any? value { get; }) { }\n\n    public static CelValue of(Any? value) => new CelValue(value);\n}\n";
+    let function = "namespace App.Schema;\n\npublic abstract class ExpressionFunction\n{\n    public abstract (string|int|float|bool)? invoke(CelValue ...arguments) uses Database, Files, Clock;\n}\n";
+    let runtime = "namespace App.Schema;\n\nimport Cel.CallableExtension;\n\npublic class Runtime\n{\n    public Runtime(private Map<string, ExpressionFunction> functions) { }\n\n    public CallableExtension extension()\n    {\n        Map<string, Function<Any?(Any?) uses Database, Files, Clock>> callables = [:];\n        for (const [name, function] of this.functions) {\n            callables[name] = (Any? ...arguments) => function.invoke(...arguments.map((Any? argument) => CelValue.of(argument)));\n        }\n        return new CallableExtension(callables);\n    }\n}\n";
+    let directory = library_project(&[
+        ("vendor/acme/cel/CallableExtension.php", extension),
+        ("app/Stubs/Cel.sharp", stubs),
+        ("app/Schema/CelValue.sharp", value),
+        ("app/Schema/ExpressionFunction.sharp", function),
+        ("app/Schema/Runtime.sharp", runtime),
+    ]);
+    let root = directory.path();
+
+    compile_succeeds(root);
+
+    let mailing =
+        "namespace App.Schema;\n\npublic abstract class Mailing\n{\n    public abstract string? send() uses Mail;\n}\n";
+    let outbox = "namespace App.Schema;\n\nimport Cel.CallableExtension;\n\npublic class Outbox\n{\n    public CallableExtension extension(Mailing mailing) => new CallableExtension([\"send\": (Any? ...arguments) => mailing.send()]);\n}\n";
+    write(root, "app/Schema/Mailing.sharp", mailing);
+    write(root, "app/Schema/Outbox.sharp", outbox);
+
+    let output = compile_lines(root);
+
+    assert_eq!(
+        issue_lines(&output),
+        [
+            "app/Schema/Outbox.sharp:7:82:error - invalid-argument: This lambda calls `Mailing.send`, which has the effect `Mail`, so a `Function<Any?(Any?) uses Database, Files, Clock>` cannot hold it."
+        ],
+        "{}",
+        printed(&output)
+    );
+}
+
+/// Spec section 7: a call of a method declared `(string|int|float|bool)?` has that type, which PHP# writes, so the call
+/// compiles and an error names its type as written, never as a `scalar` PHP# has no name for.
+#[test]
+fn a_call_of_a_method_that_gives_string_int_float_or_bool_keeps_the_four_types() {
+    let function = "namespace App.Schema;\n\npublic abstract class ExpressionFunction\n{\n    public abstract (string|int|float|bool)? invoke();\n}\n";
+    let runner = "namespace App.Schema;\n\npublic class Runner\n{\n    public (string|int|float|bool)? run(ExpressionFunction function) => function.invoke();\n}\n";
+    let directory =
+        library_project(&[("app/Schema/ExpressionFunction.sharp", function), ("app/Schema/Runner.sharp", runner)]);
+    let root = directory.path();
+
+    compile_succeeds(root);
+
+    let counter = "namespace App.Schema;\n\npublic class Counter\n{\n    public int count(ExpressionFunction function) => Counter.twice(function.invoke());\n\n    public static int twice(int value) => value * 2;\n}\n";
+    write(root, "app/Schema/Counter.sharp", counter);
+
+    let output = compile_lines(root);
+
+    assert_eq!(
+        issue_lines(&output),
+        [
+            "app/Schema/Counter.sharp:5:68:error - possibly-null-argument: Argument #1 of method `Counter.twice` is possibly `null`, but parameter type `int` does not accept it.",
+            "app/Schema/Counter.sharp:5:68:error - possibly-invalid-argument: Possible argument type mismatch for argument #1 of `Counter.twice`: expected `int`, but possibly received `(bool|int|float|string)?`.",
+        ],
+        "{}",
+        printed(&output)
+    );
+}
+
+/// Spec section 29: an `extern` line of a plain PHP trait's member declares the effects of that one body, so a call of
+/// it through a PHP# class that takes it from the trait has them. A class that writes the member itself runs its own
+/// body, which the line does not cover.
+#[test]
+fn an_extern_line_of_a_trait_member_covers_each_class_that_takes_the_member_from_the_trait() {
+    let dispatchable = "<?php\n\nnamespace Bus;\n\ntrait Dispatchable\n{\n    public static function dispatch(...$arguments): void\n    {\n    }\n}\n";
+    let stubs = "namespace App.Stubs;\n\nimport Bus.Dispatchable;\n\nextern Dispatchable.dispatch uses Database;\n";
+    let receive =
+        "namespace App.Events;\n\nimport Bus.Dispatchable;\n\npublic class ReceiveEvent : Dispatchable\n{\n}\n";
+    let send = "namespace App.Events;\n\nimport Bus.Dispatchable;\n\npublic class SendEvent : Dispatchable\n{\n    public static override void dispatch(Any? ...arguments)\n    {\n    }\n}\n";
+    let mail =
+        "namespace App.Events;\n\npublic interface Mail\n{\n    void receive() uses Database;\n\n    void send();\n}\n";
+    let inbox = "namespace App.Events;\n\npublic class Inbox : Mail\n{\n    public void receive()\n    {\n        ReceiveEvent.dispatch(\"payload\");\n    }\n\n    public void send()\n    {\n        SendEvent.dispatch(\"payload\");\n    }\n}\n";
+    let directory = library_project(&[
+        ("vendor/acme/bus/Dispatchable.php", dispatchable),
+        ("app/Stubs/Bus.sharp", stubs),
+        ("app/Events/ReceiveEvent.sharp", receive),
+        ("app/Events/SendEvent.sharp", send),
+        ("app/Events/Mail.sharp", mail),
+        ("app/Events/Inbox.sharp", inbox),
+    ]);
+    let root = directory.path();
+
+    compile_succeeds(root);
+
+    let outbox = "namespace App.Events;\n\npublic class Outbox : Mail\n{\n    public void receive()\n    {\n    }\n\n    public void send()\n    {\n        ReceiveEvent.dispatch(\"payload\");\n    }\n}\n";
+    write(root, "app/Events/Outbox.sharp", outbox);
+
+    let output = compile_lines(root);
+
+    assert_eq!(
+        issue_lines(&output),
+        [
+            "app/Events/Outbox.sharp:11:9:error - incompatible-effects: `Outbox.send` calls `ReceiveEvent.dispatch`, which has the effect `Database`, so the pure `App.Events.Mail.send` cannot accept it."
+        ],
+        "{}",
+        printed(&output)
+    );
+}
+
 /// A path the listener table quotes keeps a `'` and a `\` in its name. The PSR-4 folder that maps `App` carries both,
 /// since a folder below it names a namespace, which can take neither.
 #[test]

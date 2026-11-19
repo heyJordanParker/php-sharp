@@ -47,9 +47,7 @@ use crate::context::Context;
 use crate::context::block::BlockContext;
 use crate::error::AnalysisError;
 use crate::expression::ancestor_type_arguments;
-use crate::expression::array::check_sharp_literal_kind;
-use crate::expression::array::get_empty_literal_type;
-use crate::expression::array::get_set_literal_type;
+use crate::expression::array::type_collection_literal;
 use crate::expression::binary::utils::DeclaredOperator;
 use crate::expression::binary::utils::analyze_operator_call;
 use crate::expression::binary::utils::are_definitely_loosely_equal;
@@ -105,9 +103,9 @@ where
     binary.lhs.analyze(context, block_context, artifacts)?;
     binary.rhs.analyze(context, block_context, artifacts)?;
     block_context.flags.set_inside_general_use(was_inside_general_use);
-    if context.dialect.is_sharp() && matches!(binary.operator, BinaryOperator::Equal(_) | BinaryOperator::NotEqual(_)) {
-        type_collection_literal(context, block_context, artifacts, binary.lhs, binary.rhs);
-        type_collection_literal(context, block_context, artifacts, binary.rhs, binary.lhs);
+    if matches!(binary.operator, BinaryOperator::Equal(_) | BinaryOperator::NotEqual(_)) {
+        type_collection_literal(context, block_context, artifacts, binary.lhs, &[binary.rhs]);
+        type_collection_literal(context, block_context, artifacts, binary.rhs, &[binary.lhs]);
     }
 
     let fallback_type = Rc::new(get_mixed());
@@ -125,7 +123,7 @@ where
     }
     let refused = refusal.is_some();
     if !refused {
-        report_compile_time_selection(context, binary, lhs_type, rhs_type);
+        report_compile_time_selection(context, artifacts, binary, lhs_type, rhs_type);
     }
 
     // A PHP# comparison of instances runs the operator their class declares, which returns the `bool` it decides.
@@ -500,45 +498,6 @@ where
     artifacts.expression_types.insert(get_expression_range(binary), Rc::new(result_type));
 
     Ok(())
-}
-
-/// Gives `literal`, a side of a PHP# `==` or `!=` written as a collection literal, the collection type of `other`, the
-/// other side, as a place gives its literal one, spec section 12: a list literal compared with a `Set` is a `Set`, at
-/// any depth, `[]` is the other side's `List` or `Set`, and `[:]` its `Map`. A literal of a kind the other side is not,
-/// as `[]` compared with a `Map`, is refused as [`check_sharp_literal_kind`] refuses it at a place, and takes the other
-/// side's type, so the comparison adds no second issue. A literal compared with a literal or with no collection keeps
-/// its own type.
-fn type_collection_literal<'arena, A>(
-    context: &mut Context<'_, 'arena, A>,
-    block_context: &BlockContext<'_>,
-    artifacts: &mut AnalysisArtifacts,
-    literal: &Expression<'arena>,
-    other: &Expression<'_>,
-) where
-    A: Arena,
-{
-    let Expression::Array(array) = literal.unparenthesized() else {
-        return;
-    };
-    let Some(other_type) = artifacts
-        .get_expression_type(other)
-        .filter(|other_type| other_type.has_array() && !matches!(other.unparenthesized(), Expression::Array(_)))
-        .cloned()
-    else {
-        return;
-    };
-
-    let literal_type = if check_sharp_literal_kind(context, Some(block_context), artifacts, literal, &other_type) {
-        Some(other_type)
-    } else if array.elements.is_empty() {
-        get_empty_literal_type(Some(literal), &other_type)
-    } else {
-        get_set_literal_type(context, artifacts, literal, &other_type, block_context.scope.get_function_like())
-    };
-    if let Some(literal_type) = literal_type {
-        artifacts.set_expression_type(array, literal_type.clone());
-        artifacts.set_expression_type(literal, literal_type);
-    }
 }
 
 /// Whether `==` never holds for a value of `lhs_type` and one of `rhs_type`. PHP# `==` is `===` on every pair but an
@@ -1341,11 +1300,11 @@ where
     Some(analyze_operator_call(context, artifacts, method, &operands, binary.span()))
 }
 
-/// Spec section 24: `==`, `!=` or a value pattern that compares a string with a string fixed at compile time, a
-/// literal, a constant, a backed case's `.value` or a join of them, selects one of a closed set of values, as
-/// [`report_selection`] reports it.
+/// Spec section 24: `==`, `!=` or a value pattern that compares a string with a string fixed at compile time, as
+/// [`is_compile_time_string`] reads it, selects one of a closed set of values, as [`report_selection`] reports it.
 fn report_compile_time_selection<A>(
     context: &mut Context<'_, '_, A>,
+    artifacts: &AnalysisArtifacts,
     binary: &Binary<'_>,
     lhs_type: &TUnion,
     rhs_type: &TUnion,
@@ -1357,7 +1316,10 @@ fn report_compile_time_selection<A>(
     {
         return;
     }
-    let (compared, fixed, fixed_type) = match (is_compile_time_string(lhs_type), is_compile_time_string(rhs_type)) {
+    let (compared, fixed, fixed_type) = match (
+        is_compile_time_string(context, artifacts, binary.lhs),
+        is_compile_time_string(context, artifacts, binary.rhs),
+    ) {
         (_, true) if lhs_type.has_string() => (binary.lhs, binary.rhs, rhs_type),
         (true, false) if rhs_type.has_string() => (binary.rhs, binary.lhs, lhs_type),
         _ => return,

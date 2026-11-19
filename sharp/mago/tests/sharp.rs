@@ -225,7 +225,7 @@ fn analyze_refuses_a_public_member_nothing_outside_its_namespace_uses() {
     write(
         directory.path(),
         "src/App/Shop/Priced.sharp",
-        "namespace App.Shop;\n\npublic interface Priced\n{\n    int price();\n}\n",
+        "namespace App.Shop;\n\ninternal interface Priced\n{\n    int price();\n}\n",
     );
     write(
         directory.path(),
@@ -270,7 +270,7 @@ fn analyze_refuses_a_public_member_nothing_outside_its_namespace_uses() {
         "{stdout}"
     );
     assert!(
-        stdout.contains("src/App/Shop/Cart.sharp:13:16:error - too-wide-member: `Cart.count` is public, and nothing outside `App.Shop` uses it."),
+        stdout.contains("src/App/Shop/Cart.sharp:13:16:error - too-wide-member: `Cart.count` is public, and nothing outside `Cart` uses it."),
         "{stdout}"
     );
     for file in [
@@ -719,6 +719,131 @@ fn analyze_types_the_parse_calls_of_the_standard_library_from_the_vendored_packa
             "src/App/Page.sharp:7:30:error - invalid-return-statement: Invalid return type for method `Page.price`: expected `string`, but found `float?`.",
             "src/App/Page.sharp:9:29:error - nullable-return-statement: Method `Page.flag` is declared to return `string` but possibly returns a nullable value (inferred as `bool?`).",
             "src/App/Page.sharp:9:29:error - invalid-return-statement: Invalid return type for method `Page.flag`: expected `string`, but found `bool?`.",
+        ]
+    );
+}
+
+/// Spec section 30: a local without a written type takes its value's general type, and a tuple a `Map` or a `List`
+/// holds stays that tuple there, so `get` and `getOrNull` on the local give the tuple, and it unpacks into locals of
+/// its element types.
+#[test]
+fn a_tuple_a_collection_local_holds_unpacks_into_its_element_types() {
+    assert_eq!(
+        page_errors(
+            "namespace App;\n\npublic class Page\n{\n    public string label(string key)\n    {\n        const held = Page.held();\n        const [tag, attribute] = held.get(key) ?? throw new LogicException(\"none\");\n        [string tag, string? attribute] one = held.get(key) ?? throw new LogicException(\"none\");\n        const rows = Page.rows();\n        const [name, count] = rows.getOrNull(0) ?? throw new LogicException(\"none\");\n        int wrongTag = tag;\n        int wrongAttribute = attribute;\n        string wrongCount = count;\n        return `${tag}${attribute ?? \"\"}${one.tag}${name}${count}`;\n    }\n\n    private static Map<string, [string tag, string? attribute]> held() => [\"k\": [\"x\", null]];\n\n    private static List<[string, int]> rows() => [[\"a\", 1]];\n}\n"
+        ),
+        [
+            "src/App/Page.sharp:12:24:error - invalid-local-assignment-value: Invalid assignment to `wrongTag`: it is declared as `int`.",
+            "src/App/Page.sharp:13:30:error - invalid-local-assignment-value: Invalid assignment to `wrongAttribute`: it is declared as `int`.",
+            "src/App/Page.sharp:14:29:error - invalid-local-assignment-value: Invalid assignment to `wrongCount`: it is declared as `string`.",
+        ]
+    );
+}
+
+/// A test that returns a count compared with `0` narrows the value it counts, as the standard library's `isEmpty()` and
+/// `isNotEmpty()` and a plain PHP `return count($items) > 0;` do: where it holds, or past an early return where it
+/// fails, a `List` passes where a plain PHP parameter requires a `non-empty-list`. Without a test it is still refused.
+#[test]
+fn a_tested_list_passes_where_a_non_empty_list_is_required() {
+    let directory = library_workspace(
+        "namespace App;\n\nimport Lib.CheckedType;\nimport Lib.Lists;\n\npublic class Page\n{\n    public string tested(List<string> members)\n    {\n        if (members.isNotEmpty()) {\n            return CheckedType.union(members);\n        }\n        return \"\";\n    }\n\n    public string returned(List<string> members)\n    {\n        if (members.isEmpty()) {\n            return \"\";\n        }\n        return CheckedType.union(members);\n    }\n\n    public string counted(List<string> members)\n    {\n        if (Lists.filled(members)) {\n            return CheckedType.union(members);\n        }\n        return \"\";\n    }\n\n    public string untested(List<string> members) => CheckedType.union(members);\n}\n",
+    );
+    write(
+        directory.path(),
+        "src/Lib/CheckedType.php",
+        "<?php\n\nnamespace Lib;\n\nfinal class CheckedType\n{\n    /**\n     * @param non-empty-list<string> $members\n     */\n    public static function union(array $members): string\n    {\n        return implode('|', $members);\n    }\n}\n",
+    );
+    write(
+        directory.path(),
+        "src/Lib/Lists.php",
+        "<?php\n\nnamespace Lib;\n\nfinal class Lists\n{\n    public static function filled(array $items): bool\n    {\n        return count($items) > 0;\n    }\n}\n",
+    );
+
+    let output = run(directory.path(), "analyze", &["--reporting-format", "emacs"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert_eq!(
+        stdout.lines().filter(|line| line.starts_with("src/")).collect::<Vec<_>>(),
+        [
+            "src/App/Page.sharp:32:71:error - possibly-invalid-argument: Argument #1 of method `CheckedType.union` takes a non-empty `List<string>`, and `members` may be empty."
+        ]
+    );
+}
+
+/// Spec section 25: a plain PHP method a class reaches through a `@mixin` that returns `$this` gives a PHP# call the
+/// receiver's type, type arguments included, as a method the class declares with `$this` does, after a `where` and
+/// through a chain of two such calls. Returned where another type argument is declared, it is still refused.
+#[test]
+fn a_mixin_method_that_returns_this_gives_the_receivers_type() {
+    let directory = library_workspace(
+        "namespace App;\n\npublic class Page\n{\n    public RowQuery<Page> ordered() => RowQuery.of(typeof(Page)).where(\"status\").orderBy(\"id\");\n\n    public RowQuery<Page> twice() => RowQuery.of(typeof(Page)).orderBy(\"id\").orderBy(\"name\");\n\n    public int shown() => RowQuery.of(typeof(Page)).orderBy(\"id\");\n\n    public RowQuery<Item> other() => RowQuery.of(typeof(Page)).where(\"status\").orderBy(\"id\");\n}\n",
+    );
+    write(directory.path(), "src/App/Item.sharp", "namespace App;\n\npublic class Item\n{\n}\n");
+    write(
+        directory.path(),
+        "src/App/RowQuery.sharp",
+        "namespace App;\n\nimport Acme.Query.Builder;\n\npublic class RowQuery<TRow> : Builder<TRow>\n{\n    public static RowQuery<TRow> of(Class<TRow> rows) => new RowQuery<TRow>();\n}\n",
+    );
+    write(
+        directory.path(),
+        "vendor/acme/query/src/Builder.php",
+        "<?php\n\nnamespace Acme\\Query;\n\n/**\n * @template TModel\n * @mixin QueryBuilder\n */\nclass Builder\n{\n    /**\n     * @return $this\n     */\n    public function where(string $column)\n    {\n        return $this;\n    }\n\n    public function __call(string $method, array $parameters): mixed\n    {\n        return $this;\n    }\n}\n",
+    );
+    write(
+        directory.path(),
+        "vendor/acme/query/src/QueryBuilder.php",
+        "<?php\n\nnamespace Acme\\Query;\n\nclass QueryBuilder\n{\n    /**\n     * @return $this\n     */\n    public function orderBy(string $column)\n    {\n        return $this;\n    }\n}\n",
+    );
+
+    let output = run(directory.path(), "analyze", &["--reporting-format", "emacs"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert_eq!(
+        stdout.lines().filter(|line| line.starts_with("src/")).collect::<Vec<_>>(),
+        [
+            "src/App/Page.sharp:9:27:error - invalid-return-statement: Invalid return type for method `Page.shown`: expected `int`, but found `RowQuery<Page>`.",
+            "src/App/Page.sharp:11:38:error - invalid-return-statement: RowQuery<Page> cannot be used as RowQuery<Item>.",
+        ]
+    );
+}
+
+/// Spec section 24: the check of a string fixed at compile time reads declared types, so a member read through a value
+/// from data, as an enum's `limit.value`, is a `string`, and `==`, `equals`, `contains` and a `Map` key compare it as
+/// data. A literal, a constant and a member of a case named in the code, as `Feature.Reports.value`, are still fixed.
+#[test]
+fn a_member_read_through_data_is_no_string_fixed_at_compile_time() {
+    let directory = library_workspace(
+        "namespace App;\n\npublic class Page\n{\n    public bool shared(Limit limit, Feature feature) => limit.value == feature.value;\n\n    public bool equal(Limit limit, Feature feature) => limit.value.equals(feature.value);\n\n    public bool listed(List<string> names, Feature feature) => names.contains(feature.value);\n\n    public int keyed(Map<string, int> counts, Feature feature) => counts[feature.value] ?? 0;\n\n    public bool status(Order order) => order.status == \"paid\";\n\n    public bool written(Feature feature) => feature.value == \"reports\";\n\n    public bool cased(string status) => status == Feature.Reports.value;\n}\n",
+    );
+    write(
+        directory.path(),
+        "src/App/Feature.sharp",
+        "namespace App;\n\npublic enum Feature : string\n{\n    case Reports = \"reports\";\n    case Exports = \"exports\";\n}\n",
+    );
+    write(
+        directory.path(),
+        "src/App/Limit.sharp",
+        "namespace App;\n\npublic enum Limit : string\n{\n    case Seats = \"seats\";\n}\n",
+    );
+    write(directory.path(), "composer.json", "{\n    \"name\": \"acme/app\",\n    \"type\": \"project\"\n}\n");
+    write(
+        directory.path(),
+        "src/App/Order.sharp",
+        "namespace App;\n\npublic class Order\n{\n    public Order(public string status { get; }) { }\n}\n",
+    );
+
+    let output = run(directory.path(), "analyze", &["--reporting-format", "emacs"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert_eq!(
+        stdout
+            .lines()
+            .filter(|line| line.contains(" - invalid-operand: ") || line.contains(" - invalid-array-index: "))
+            .collect::<Vec<_>>(),
+        [
+            "src/App/Page.sharp:13:40:error - invalid-operand: `==` compares `order.status` with `\"paid\"`, a string fixed at compile time, so it selects one of a closed set of values.",
+            "src/App/Page.sharp:15:45:error - invalid-operand: `==` compares `feature.value` with `\"reports\"`, a string fixed at compile time, so it selects one of a closed set of values.",
+            "src/App/Page.sharp:17:41:error - invalid-operand: `==` compares `status` with `Feature.Reports.value`, a string fixed at compile time, so it selects one of a closed set of values.",
         ]
     );
 }

@@ -1,0 +1,30 @@
+namespace SetValues;
+
+// A list literal beside a Set in `??`, `? :` or a `match` is that Set, so adding an element twice keeps it once.
+public static class Owners
+{
+    public static List<int> grouped(List<string> keys)
+    {
+        Map<string, Set<string>> owners = [:];
+        for (const key of keys) {
+            const owning = owners.get(key) ?? [];
+            owning.add(key);
+            owners[key] = owning;
+        }
+        return [owners.count(), owners.get("a")?.count() ?? 0];
+    }
+
+    public static List<int> branches(Set<string> tags, bool flag, int extra)
+    {
+        const chosen = flag ? tags : [];
+        chosen.add("a");
+        chosen.add("a");
+        const matched = match (extra) {
+            0 => [],
+            default => tags,
+        };
+        matched.add("b");
+        matched.add("b");
+        return [chosen.count(), matched.count()];
+    }
+}
