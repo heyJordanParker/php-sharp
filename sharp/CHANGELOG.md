@@ -4,6 +4,16 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.33] - 2026-11-19
+
+### Changed
+
+- `Parameter.defaultValue()` is pure under every `uses`, and throws `ValueError` for a default that runs code, a `new`, a call or a lambda, without running it, spec sections 25 and 29. 0.6.32 gave it the effects of every parameter default the analysis loaded, so with only constant ones a method held to `uses none` read any parameter's default, a plain PHP vendor class's `__construct(Transport $t = new SmtpTransport())` included, and ran `SmtpTransport`'s constructor inside pure code. `Parameter.hasConstantDefault` now tells a default that runs no code apart, so a reader that fills a call's missing arguments reads those and leaves out the others, and the call then runs those defaults under its own effects. A read of such a default now throws "`defaultValue` reads a default that runs no code, and `tag` of `total` has one that runs code, which `defaultValue` never runs". `Property.defaultValue()` and `Field.defaultValue()` keep the effects of the initial values they can run.
+
+### Fixed
+
+- `mago compile` works out once which source files each declaration's signature edit reaches, and builds each compiled file's list of inputs from that. 0.6.32 walked the dependencies again from scratch for each file, and for each file whose bodies it reads, on one thread and on every compile, warm or cold, so the step grew with the files times their reach and a one-line body edit took as long as a compile from nothing. On a generated project of 2,000 classes that each take the one before as a parameter, the step took 374 seconds of a 378-second compile and now takes 1.6 seconds, and the compile takes 6 seconds and 3.3 seconds of processor time instead of 378 and 372. Each compiled file lists the same inputs as before.
+
 ## [0.6.32] - 2026-11-19
 
 ### Changed
@@ -1325,7 +1335,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.32...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.33...HEAD
+[0.6.33]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.32...v0.6.33
 [0.6.32]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.31...v0.6.32
 [0.6.31]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.30...v0.6.31
 [0.6.30]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.29...v0.6.30
