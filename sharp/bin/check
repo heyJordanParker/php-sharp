@@ -246,10 +246,12 @@ sharp_kinds() {
     | diff -u sharp/mago/crates/sharp-bridge/src/kind.rs -
 }
 # cargo builds nothing for the mago sharp/bin/test built, and its build.json names the out_dir of the bridge it links.
-# `-p mago-sharp-bridge` resolves other features, so it built a second bridge and its dependencies beside it.
+# `-p mago-sharp-bridge` resolves other features, so it built a second bridge and its dependencies beside it. A
+# MAGO_ENGINE in the environment names the engine that build linked, as BUILD_LINUX's restores it from its cache, so
+# build-mago links that one, where it would build the engine from nothing in a job that holds only its install.
 sharp_unit_header() {
   local line
-  sharp/docker/run sharp/bin/build-mago --quiet
+  sharp/docker/run env ${MAGO_ENGINE:+"MAGO_ENGINE=$MAGO_ENGINE"} sharp/bin/build-mago --quiet
   while read -r line; do
     if [[ $line == *'"reason":"build-script-executed"'* && $line == *mago-sharp-bridge* && $line =~ \"out_dir\":\"/src/([^\"]+)\" ]]; then
       diff -u ext/sharp/sharp_unit.h "${BASH_REMATCH[1]}/sharp_unit.h"
