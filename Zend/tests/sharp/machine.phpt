@@ -1,5 +1,5 @@
 --TEST--
-A machine's case holds its moves, a case with no fields is one object, a move called on a case it doesn't move from throws a StateError, Json.encode and Json.decode write and read a case as a [Tag] family's variant, and Json.decode evaluates each invariant of the case it reads
+A machine's case holds its moves, a case with no fields is one object, a move called on a case it doesn't move from throws a StateError, Json.encode and Json.decode write and read a case as a [Tag] family's variant named by its value, and Json.decode evaluates each invariant of the case it reads
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';

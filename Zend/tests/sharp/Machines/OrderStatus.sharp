@@ -1,12 +1,11 @@
 namespace Machines;
 
-import Sharp.Key;
 import Sharp.Tag;
 
 [Tag("status")]
-public machine OrderStatus
+public machine OrderStatus : string
 {
-    [Key("draft")] case Draft
+    case Draft = "draft"
     {
         public OrderStatus.Paid pay(int cents)
         {
@@ -19,13 +18,13 @@ public machine OrderStatus
         public OrderStatus.Cancelled cancel() => OrderStatus.Cancelled;
     }
 
-    [Key("paid")] case Paid(int cents)
+    case Paid(int cents) = "paid"
     {
         public OrderStatus.Shipped ship() => OrderStatus.Shipped;
     }
 
-    [Key("shipped")] final case Shipped;
-    [Key("cancelled")] final case Cancelled;
+    final case Shipped = "shipped";
+    final case Cancelled = "cancelled";
 
     public static OrderStatus.Draft open() => OrderStatus.Draft;
 
