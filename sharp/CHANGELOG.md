@@ -4,6 +4,14 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.40
+
+- The arm64 Linux `mago` a release publishes needs glibc 2.39 or later, as Ubuntu 24.04 and Debian 13 have, where 0.6.40's needed glibc 2.35. It links the PHP# engine, which now builds on Ubuntu 24.04 for arm64. The x86_64 Linux `mago` still needs glibc 2.35.
+
+### Changed
+
+- A release `mago` holds the law checker built for its platform, and unpacks it into its cache folder on the first compile that proves a law, so no machine builds the checker with `lake`, and a `mago` runs only the checker built with it. 0.6.40 built the checker with `lake build` on each machine's first compile that proved a law. A `mago` built without the checker, as `cargo build` builds it, still builds it with `lake`. On a cold compile of a 187-file project with an empty cache folder, on an M-series Mac, the first compile takes 4.3 s and 14.7 CPU-seconds, where it took 10.5 s and 23.3 CPU-seconds.
+
 ### Fixed
 
 - `redundant-type-comparison` reports an `==` or `!=` of a class value and a `typeof` only when the class value is that one class, spec section 25, since two class values are equal when they name the same class and a `Class<T>` also holds each class that extends `T`. 0.6.37 to 0.6.40 reported each later comparison of `type == typeof(Order) || type == typeof(Invoice) || type == typeof(Refund)` on a `Class<Any>` as "Redundant condition: variable `type` (type `Class<Any>`) is already known to be `Class<Invoice>`.", and `early || type == typeof(Order)` on a `Class<Order>` too. Both report nothing now, and after `const type = typeof(Order);` the same `type == typeof(Order)` is still reported.

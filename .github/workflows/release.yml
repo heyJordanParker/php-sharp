@@ -187,8 +187,9 @@ jobs:
               pgo: true,
             }
           ## Linux: aarch64, x86_64, each built on a runner of its own architecture, which builds the PHP# engine mago
-          ## links from Ubuntu 22.04's static archives, so the binary runs on glibc 2.35 and later.
-          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, smoke: true }
+          ## links from its Ubuntu's static archives: 24.04's on arm64, so that binary runs on glibc 2.39 and later, and
+          ## 22.04's on x86_64, so that one runs on glibc 2.35 and later.
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm, smoke: true }
           - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, smoke: true }
 
     steps:
@@ -287,6 +288,14 @@ jobs:
         shell: bash
         working-directory: ${{ github.workspace }}
         run: sharp/bin/build-mago --engine
+
+      # The law checker's build for the job's platform, which mago embeds and unpacks on the first compile that
+      # proves a law, so no machine builds the checker with lake and a binary runs only its own checker.
+      - name: Build the law checker mago embeds
+        shell: bash
+        run: |
+          cargo run --locked --release --target=${{ matrix.job.target }} -p mago-sharp-lean --example checker -- "$RUNNER_TEMP/checker.tar.zst"
+          echo "MAGO_CHECKER_ARCHIVE=$RUNNER_TEMP/checker.tar.zst" >> "$GITHUB_ENV"
 
       - name: build
         shell: bash
