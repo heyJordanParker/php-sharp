@@ -31,21 +31,27 @@ jobs:
           fi
           git show "$BASE:sharp/bin/spec" > "$RUNNER_TEMP/spec"
           php "$RUNNER_TEMP/spec" --base "$BASE"
-  # A pull request body line such as `Completes: §6.1, §9` claims those sections are done. sharp/bin/spec --completes
-  # fails on a malformed claim, on a section with no checked example and on a section sharp/baseline/spec still lists.
-  # It runs on `edited`, which the main workflow never does.
+  # A commit message line such as `Completes: §6.1, §9` claims those sections are done, so the pull request that lands
+  # the commit checks the claim, whichever commits it lands with: a pull request from a branch of next has a body of its
+  # own. sharp/bin/spec --completes, which reads the claims from BODY, fails on a malformed claim, on a section with no
+  # checked example and on a section sharp/baseline/spec still lists. The messages come from the API, as data.
   COMPLETES:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: git checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: refs/pull/${{ github.event.pull_request.number }}/merge
           persist-credentials: false
-      - name: Every section the body completes has its examples passing
+      - name: Every section a commit message completes has its examples passing
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-          BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          COMMITS: ${{ github.event.pull_request.commits }}
         run: |
           git fetch --depth=1 origin "$BASE"
           if ! git cat-file -e "$BASE:sharp/bin/spec"; then
@@ -53,4 +59,10 @@ jobs:
             exit 0
           fi
           git show "$BASE:sharp/bin/spec" > "$RUNNER_TEMP/spec"
+          if ((COMMITS > 250)); then
+            echo "::error::This pull request has $COMMITS commits, and GitHub lists only 250 of them, so their Completes: lines can't all be read."
+            exit 1
+          fi
+          BODY=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/commits?per_page=100" --jq '.[].commit.message')
+          export BODY
           php "$RUNNER_TEMP/spec" --completes

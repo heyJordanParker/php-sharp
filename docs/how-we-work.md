@@ -19,7 +19,7 @@ No agent reviews code. The review happens before the code exists, and the check 
 3. When every condition is met, the maintainer posts an approval on the PR.
 4. The maintainer merges with `gh pr merge --merge --match-head-commit <full head SHA>`.
 
-A PR that finishes spec sections says so in its body, on its own line, exactly as `Completes: §6.1, §9`. The `COMPLETES` check fails while `sharp/baseline/spec` still lists an example of a named section.
+A commit that finishes spec sections says so in its message, on its own line, exactly as `Completes: §6.1, §9`, so the PR that lands it checks the claim. The `COMPLETES` check fails while `sharp/baseline/spec` still lists an example of a named section.
 
 A feature PR changes the spec, its examples, `sharp/baseline/spec` and the code together. It leaves `sharp/bin/spec`, which measures the examples, as master has it: that changes only in a PR of its own, beside Markdown. A feature PR may add or change harness classes in `sharp/harness/`. Its body lists each harness file, and its Verification proves that no stub makes an example pass falsely. When the builder's work makes listed examples pass, the failing run prints the `git rm` of each fixed example's file in `sharp/baseline/spec/`, and the entries leave through it. A listed example that fails with other errors than before stays on the list unchanged, because the list records which examples fail, not how. An example master already checked never joins the list unchanged.
 
