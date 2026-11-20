@@ -107,10 +107,11 @@ jobs:
   # minutes are on every suite's path, and it keeps them few: .github/actions/linux-build builds the engine through
   # ccache in the sharp/docker image, which sharp/docker/run passes CC and CXX into, with its folder at
   # sharp/build/cache/ccache under the XDG_CACHE_HOME sharp/docker/run sets, while master's Mago target restores, and
-  # sharp/bin/build-mago then builds only what changed since master's build, with every test binary, as mago.yml's build
-  # job builds them on the same target. It also runs the checks of generated files, which took 18 seconds on release
-  # pull request #379's run, since one of them reads the header the build generates: a job starts once every job it
-  # needs has ended, so the suites wait for them too.
+  # sharp/bin/build-mago then builds only what changed since master's build, with every test binary, which MAGO's slices
+  # run, so Linux builds Mago's dev target once per run, where mago.yml's build job built it a second time for 122
+  # seconds on dfa6e7e2941's run. It also runs the checks of generated files, since one of them reads the header the
+  # build generates, and the last fifth of Mago's tests with the doc tests and the property tests, which cargo builds,
+  # so they need this target: a job starts once every job it needs has ended, so the suites wait for them too.
   #
   # On each push to master it saves the ccache, the Rust toolchain and crates, and the target, which every pull
   # request's run restores, as .github/actions/mago-cache explains. A cache only its own ref's runs would restore is no
@@ -178,12 +179,35 @@ jobs:
           compression-level: 0
           retention-days: 1
           if-no-files-found: error
+      # What MAGO's slices run: the test binaries build.json names, mago, which the tests run, and build.json.
+      - name: Pack Mago's test binaries
+        if: ${{ !needs.CHANGES.outputs.passed }}
+        run: |
+          build="sharp/build/linux-$(uname -m)/mago"
+          jq -r 'select(.reason == "compiler-artifact" and .profile.test and .executable) | .executable | ltrimstr("/src/")' \
+            "$build/build.json" | sort -u > "$RUNNER_TEMP/test-binaries"
+          tar --zstd -cf "$RUNNER_TEMP/tests.tar.zst" "$build/build.json" "$build/debug/mago" --files-from "$RUNNER_TEMP/test-binaries"
+      - name: Upload Mago's test binaries
+        if: ${{ !needs.CHANGES.outputs.passed }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tests-linux
+          path: ${{ runner.temp }}/tests.tar.zst
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
       # With the engine the build of mago linked, so the check's build of mago builds nothing: without it, the check
       # built the engine from nothing, which held the suites for 280 of this job's 624 seconds on dfa6e7e2941's run.
       - name: Verify the generated files, and that no Cargo.lock names a local source
         env:
           MAGO_ENGINE: /src/sharp/build/linux-x86_64-engine/install
         run: sharp/bin/check generated
+      # With the engine the build of mago linked, as the check of the generated files takes it, so sharp/bin/test's
+      # build builds nothing: mago.yml's build job ran this slice with no MAGO_ENGINE, and built the engine from nothing
+      # first, for 4.5 of its 8.7 minutes on dfa6e7e2941's run.
+      - name: Test the last fifth of Mago's workspace tests, the doc tests and the property tests
+        if: ${{ !needs.CHANGES.outputs.passed }}
+        run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/test --mago --shard 5/5
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -231,6 +255,48 @@ jobs:
         run: >-
           sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/2
           ${{ matrix.shard == 2 && '--census --differential --phpunit' || '' }}
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+  # sharp/mago's workspace tests on Linux, every fifth test of every test binary, by exact name, with sharp/bin/test
+  # --mago --shard, so a set of slow tests spreads over the jobs, on BUILD_LINUX's test binaries. BUILD_LINUX runs the
+  # fifth slice, with the doc tests and the property tests, which need its target.
+  MAGO:
+    name: MAGO (${{ matrix.shard }}/5)
+    needs: [CHANGES, BUILD_LINUX]
+    if: ${{ !needs.CHANGES.outputs.passed }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ github.token }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Download BUILD_LINUX's test binaries
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tests-linux
+          path: ${{ runner.temp }}
+      - name: Unpack BUILD_LINUX's test binaries
+        run: tar --zstd -xf "$RUNNER_TEMP/tests.tar.zst"
+      - name: Test every fifth test of the workspace
+        run: sharp/bin/test --linux --mago --no-build --shard ${{ matrix.shard }}/5
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -554,6 +620,7 @@ jobs:
       - CHANGES
       - BUILD_LINUX
       - LINUX
+      - MAGO
       - UPSTREAM
       - SPEC
       - HOSTS
@@ -581,7 +648,7 @@ jobs:
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
           allowed-skips: >-
-            BUILD_LINUX, LINUX, UPSTREAM, SPEC, HOSTS, MACOS, RELEASE_ASSETS, IMAGE, RELEASE, COMPOSER
+            BUILD_LINUX, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, MACOS, RELEASE_ASSETS, IMAGE, RELEASE, COMPOSER
           jobs: ${{ toJSON(needs) }}
       # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed run on master
@@ -898,7 +965,7 @@ jobs:
   # starts no workflow, so this run publishes, and COMPOSER then publishes the Composer packages. A rerun of a failed
   # RELEASE finds what an earlier attempt published, and leaves it.
   RELEASE:
-    needs: [CHANGES, BUILD_LINUX, LINUX, UPSTREAM, SPEC, HOSTS, MACOS, WORKFLOWS, RELEASE_ASSETS, IMAGE]
+    needs: [CHANGES, BUILD_LINUX, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, MACOS, WORKFLOWS, RELEASE_ASSETS, IMAGE]
     if: ${{ !failure() && !cancelled() && github.event_name == 'push' && needs.CHANGES.outputs.bump == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
