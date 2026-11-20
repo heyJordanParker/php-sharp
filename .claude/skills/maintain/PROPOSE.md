@@ -29,7 +29,7 @@ A spec line is the language owner's ruling only when the rulings record, `~/.cla
 
 ## 4. Propose a syntax change in this shape
 
-Two or three sentences, then one program with every line commented `today → proposed`. The program is the spec examples the change will land, so every rule, case, name and error it adds is one of its lines. Every option shows the same program, the first annotated and the rest as a `diff` against it. Precedent is one real line each from Rust, C# and TypeScript. Offer only options you would ship, and label options only when there are two or more.
+Two or three sentences, then one program with every line commented `today → proposed`. The program is the spec examples the change will land, so every rule, case, name and error it adds is one of its lines. Compile it with the released `mago` before sending it: each line marked as working today does, and each line the change needs is marked `today → proposed`, a law the checker can't prove yet included. Every option shows the same program, the first annotated and the rest as a `diff` against it. Precedent is one real line each from Rust, C# and TypeScript. Offer only options you would ship, and label options only when there are two or more.
 
 The reply is the proposal alone. The research, the options dropped and the reasoning come before it and stay out of it.
 
