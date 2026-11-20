@@ -1385,7 +1385,7 @@ import Sharp.Encoding.Json;
 Json.encode(new Payment("https://shop.test/done", Decimal.parse("1.50"), null, new Card("4242")));   // "{\"return_url\":\"https://shop.test/done\",\"amount\":\"1.50\",\"method\":{\"type\":\"card\",\"last4\":\"4242\"}}"
 -->
 
-- A variant without `[Key]` is a compile error: "`Cash` is a variant of `PaymentMethod` and gives no name for it."
+- A variant without `[Key]` is a compile error: "`Cash` is a variant of `PaymentMethod` and gives no name for it." A backed machine's case is named by its value instead (section 20.2).
 - Two variants of one family with one name are a compile error: "`Debit` and `Card` are both named `card` in `PaymentMethod`."
 - A field of a variant read by the tag's key is a compile error: "`type` is read twice: by the tag of `PaymentMethod` and the main constructor parameter `type`."
 - A name the family has no variant of is the problem of the tag's key: "type: expected bank or card, got string 'cash'". The names are listed in their order.
