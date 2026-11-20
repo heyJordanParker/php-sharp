@@ -2,7 +2,7 @@
 
 `docs/how-we-work.md`'s "A release's path" says what CI does with a release. These are the maintainer's steps.
 
-Every lane commits and pushes to one branch, `next`, for good. Each tick runs `sharp/bin/land`, which opens a pull request from `land/<sha>` with auto-merge for the newest commit of `next` whose `PHP#` and `Mago` runs passed, and `master`'s ruleset admits nothing that hasn't passed. A change to `sharp/bin/spec` reaches `master` in a pull request of its own first, and `next` takes it from `master`.
+Every lane commits and pushes to one branch, `next`, for good. `next`'s own pull request into `master` stays open, because its runs are the runs that test `next`. Each tick runs `sharp/bin/land`, which opens a pull request from `land/<sha>` with auto-merge for the newest commit of `next` whose `PHP#` and `Mago` runs passed, and `master`'s ruleset admits nothing that hasn't passed. A change to `sharp/bin/spec` reaches `master` in a pull request of its own first, and `next` takes it from `master`.
 
 A release is cut the moment `next` holds a green fix that is `blocking`, a speed gain, or a change consumers must rewrite code for, and it takes everything committed by then. Work found later goes in the next release, and no builder ever stops: a release is one commit on `next`, the version bump, and it publishes when that commit lands on `master`. When `master`'s own CI is red, its fix lands before anything else.
 

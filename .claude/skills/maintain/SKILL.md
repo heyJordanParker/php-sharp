@@ -20,9 +20,8 @@ Each step is its own command:
 4. `sysctl -n vm.loadavg`.
 5. `sharp/bin/land`, which lands the newest commit of `next` whose runs passed, and `gh issue list --search "label:blocking,needs-triage,ready-for-agent,ready-for-human"`.
 6. `git worktree list`, the branches, local and on GitHub, and the scratchpad's folders. Only `master`, `next`, `speed`, `ci`, and their worktrees under `worktrees/` exist. Any other copy of the repository is deleted the same tick.
-7. The inbox, if one is installed: withdraw every PHP# item that is resolved or stale.
-8. Work the issues from the right: verify what builders returned, ship what is green, give ready issues to free lanes, then triage every `needs-triage` issue to its outcome. Retest any stop that holds every lane.
-9. Append a line to `~/.claude/orchestrate/php-sharp/log.md` for each issue whose state changed this tick, and update `state.md` with what is in flight.
+7. Work the issues from the right: verify what builders returned, ship what is green, give ready issues to free lanes, then triage every `needs-triage` issue to its outcome. Retest any stop that holds every lane.
+8. Append a line to `~/.claude/orchestrate/php-sharp/log.md` for each issue whose state changed this tick, and update `state.md` with what is in flight.
 
 Then reply with the status report.
 
@@ -107,7 +106,7 @@ NOW     <what runs now>
 NEXT    <what runs next>
 ```
 
-Never: the box without its block, or a stale count. Hours count from 01:17 on 2026-11-06. `ALL` is issues closed since then over those plus every open one. Then a few plain sentences say what PHP# can do now, what is broken, and its fix, naming things by what they do, never by issue or PR number. An open decision is its whole proposal, never a recap list.
+Never: the box without its block, or a stale count. Hours count from 01:17 on 2026-11-06. `ALL` is issues closed since then over those plus every open one. Then a few plain sentences say what PHP# can do now, what is broken, and its fix, naming things by what they do, never by issue or PR number. Every decision he owes is shown whole in every reply until he rules, never as a link or a recap: he never reads the inbox.
 
 When the language owner asks a question, answer it and change nothing. His direction is triaged like any idea. Each correction from him changes, the same turn, the SOP file that let the mistake happen.
 
