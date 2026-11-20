@@ -71,4 +71,8 @@ class Library
     public static List<int> restored(string text) => Bytes.parse(text).toList();
 
     public static string encoded(Bytes data) => Json.encode(["data": data]);
+
+    public static string made(Function<string()> make) => make();
+
+    public static Function<string() uses none> kept(Function<string() uses none> make) => make;
 }

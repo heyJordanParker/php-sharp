@@ -2137,6 +2137,7 @@ static bool sharp_sequence_iterator_read(sharp_sequence_iterator *iterator, bool
 
 static ZEND_COLD void sharp_sequence_refuse(const sharp_sequence *sequence, const zval *element, zend_long index);
 static void sharp_type_renumber(const sharp_type *type, zval *value);
+static void sharp_closure_check(const sharp_type *type, zval *value);
 
 /* Reads the stage's next value into value, which stays undefined at the end. take stops before it reads its source
  * again. A check stage converts each int its type takes as a float, as every crossing does. */
@@ -8306,10 +8307,12 @@ static bool sharp_type_renumbers(const sharp_type *type, const zval *value)
  * value, a `List`'s element and a tuple's element. The three crossings take it so: an argument from plain PHP, the
  * result of a plain PHP call PHP# checks, and a property plain PHP writes. A list is taken as it is, and an array with
  * a string key is no list. An array is separated only when it changes. Each crossing makes its strings text first, as
- * sharp_type_take_strings does. */
+ * sharp_type_take_strings does, and wraps a plain PHP closure that crosses into a function type, as sharp_closure_check
+ * does. */
 static void sharp_type_renumber(const sharp_type *type, zval *value)
 {
 	sharp_type_take_strings(type, value);
+	sharp_closure_check(type, value);
 	if (UNEXPECTED(EG(exception)) || !sharp_type_renumbers(type, value)) {
 		return;
 	}
@@ -9718,6 +9721,8 @@ typedef struct {
 	/* ZEND_PROPERTY_HOOK_GET or ZEND_PROPERTY_HOOK_SET for an accessor, -1 for a method. */
 	int accessor;
 	bool spreads;
+	/* The plain PHP closure a delegate made at a crossing calls, see sharp_closure_check, and UNDEF for a method's. */
+	zval closure;
 	zend_object std;
 } sharp_delegate;
 
@@ -9750,7 +9755,18 @@ static void sharp_delegate_free(zend_object *object)
 	if (delegate->file) {
 		zend_string_release(delegate->file);
 	}
+	zval_ptr_dtor(&delegate->closure);
 	zend_object_std_dtor(object);
+}
+
+/* The plain PHP closure a delegate holds, which the cycle collector walks into. */
+static HashTable *sharp_delegate_gc(zend_object *object, zval **table, int *count)
+{
+	sharp_delegate *delegate = sharp_delegate_from(object);
+	*table = Z_ISUNDEF(delegate->closure) ? NULL : &delegate->closure;
+	*count = Z_ISUNDEF(delegate->closure) ? 0 : 1;
+
+	return NULL;
 }
 
 /* Appends the name a message gives the method `func`, its class's dotted name and its own, `App.Order.customer`, or
@@ -10206,8 +10222,25 @@ static void sharp_delegate_run(const sharp_delegate *delegate, zval *arguments, 
 	}
 }
 
-/* Runs the delegate on the `count` arguments its closure was called with, see sharp_delegate_run. An invoker takes its
- * method's arguments as the one list after its receiver, which it spreads: each value of the list is an argument. */
+/* Calls the plain PHP closure `delegate` holds with the `count` `arguments` PHP# passes, which PHP checks against the
+ * closure's declared parameters, and checks its result as any crossing's, spec section 14: a result of another type than
+ * the delegate's function type returns throws the TypeError of a function's return value naming that type. */
+static void sharp_closure_checked_call(const sharp_delegate *delegate, zval *arguments, uint32_t count, zval *return_value)
+{
+	if (call_user_function(NULL, NULL, (zval *) &delegate->closure, return_value, count, arguments) == FAILURE
+		|| EG(exception)) {
+		return;
+	}
+	const sharp_type *result = delegate->type->members[0];
+	if (!sharp_type_verified(result, result, return_value, ZSTR_VAL(delegate->type->text))) {
+		zval_ptr_dtor(return_value);
+		ZVAL_NULL(return_value);
+	}
+}
+
+/* Runs the delegate on the `count` arguments its closure was called with, see sharp_delegate_run, or the plain PHP
+ * closure it holds, see sharp_closure_checked_call. An invoker takes its method's arguments as the one list after its
+ * receiver, which it spreads: each value of the list is an argument. */
 ZEND_METHOD(Sharp_Internal_Delegate, call)
 {
 	zval *arguments = NULL;
@@ -10218,6 +10251,10 @@ ZEND_METHOD(Sharp_Internal_Delegate, call)
 	ZEND_PARSE_PARAMETERS_END();
 
 	sharp_delegate *delegate = sharp_delegate_from(Z_OBJ_P(ZEND_THIS));
+	if (!Z_ISUNDEF(delegate->closure)) {
+		sharp_closure_checked_call(delegate, arguments, count, return_value);
+		return;
+	}
 	if (!delegate->spreads) {
 		sharp_delegate_run(delegate, arguments, count, return_value);
 		return;
@@ -10254,6 +10291,55 @@ ZEND_METHOD(Sharp_Internal_Delegate, call)
 ZEND_METHOD(Sharp_Internal_Delegate, __construct)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
+}
+
+/* The function type `type` is, or holds as `T?`, whose result a crossing checks: NULL for any other type, and for a
+ * function type returning `void` or `Any?`, which every result fits. */
+static const sharp_type *sharp_type_checked_function(const sharp_type *type)
+{
+	if (type->kind == SHARP_TYPE_NULLABLE) {
+		type = type->members[0];
+	}
+	if (type->kind != SHARP_TYPE_FUNCTION) {
+		return NULL;
+	}
+	const sharp_type *result = type->members[0];
+	const sharp_type *named = result->kind == SHARP_TYPE_NULLABLE ? result->members[0] : result;
+	bool open = named->kind == SHARP_TYPE_NAMED
+		&& (named->built_in == SHARP_BUILT_IN_VOID || (named->built_in == SHARP_BUILT_IN_ANY && named != result));
+
+	return open ? NULL : type;
+}
+
+/* Spec section 14: puts in `value`, a plain PHP closure that crosses into the function type `type`, the delegate that
+ * calls it and checks each result, see sharp_closure_checked_call, as a gradual type system wraps a function from
+ * untyped code. One that crosses in again keeps its delegate for the same type, and has its plain PHP closure wrapped
+ * for another. A PHP# closure and a method's delegate carry their own type, which the crossing's check compares. */
+static void sharp_closure_check(const sharp_type *type, zval *value)
+{
+	const sharp_type *function = sharp_type_checked_function(type);
+	if (!function || Z_TYPE_P(value) != IS_OBJECT || Z_OBJCE_P(value) != zend_ce_closure) {
+		return;
+	}
+	const zend_function *func = zend_get_closure_method_def(Z_OBJ_P(value));
+	zval *closure = value;
+	if (func->common.scope == sharp_ce_delegate) {
+		sharp_delegate *held = sharp_delegate_from(Z_OBJ_P(zend_get_closure_this_ptr(value)));
+		if (Z_ISUNDEF(held->closure) || sharp_type_equals(held->type, function)) {
+			return;
+		}
+		closure = &held->closure;
+	} else if (sharp_function_is_sharp(func)) {
+		return;
+	}
+	zval object;
+	object_init_ex(&object, sharp_ce_delegate);
+	sharp_delegate *delegate = sharp_delegate_from(Z_OBJ(object));
+	delegate->type = function;
+	ZVAL_COPY(&delegate->closure, closure);
+	zval_ptr_dtor(value);
+	zend_create_fake_closure(value, sharp_delegate_call, sharp_ce_delegate, sharp_ce_delegate, &object);
+	zval_ptr_dtor(&object);
 }
 
 /* The type the closure `value` carries: a PHP# closure's as sharp_function_carried spells it for the object the closure
@@ -15367,6 +15453,7 @@ static PHP_MINIT_FUNCTION(sharp)
 	memcpy(&sharp_delegate_handlers, &std_object_handlers, sizeof(zend_object_handlers));
 	sharp_delegate_handlers.offset = XtOffsetOf(sharp_delegate, std);
 	sharp_delegate_handlers.free_obj = sharp_delegate_free;
+	sharp_delegate_handlers.get_gc = sharp_delegate_gc;
 	sharp_delegate_handlers.clone_obj = NULL;
 	sharp_ce_delegate->default_object_handlers = &sharp_delegate_handlers;
 	sharp_delegate_call = zend_hash_str_find_ptr(&sharp_ce_delegate->function_table, "call", sizeof("call") - 1);
