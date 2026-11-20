@@ -7,6 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Changed
 
 - The law checker proves that a recursion stepping an `int` one down or one up towards a bound ends with the step's own lemma and `omega`, and tries `grind` only when that fails, and it elaborates each generated module with Lean's linters off, since no answer reads their warnings. A cold compile of a 2,128-file project with 1,330 laws has its law checker retire 1,029 G instructions where it retired 1,183 G. Every law proves or fails as before.
+- A compile proves its laws in one law checker process. A law with fixed steps that leave it unproven goes on to Lean's search in the same process, where 0.6.40 started a second process that imported all of Lean again. A compile whose every law has fixed steps still imports only the runtime library, and sends the laws its steps leave unproven to a second process after the first. On an Apple M2 Max at a load average of 100 to 150, medians of 3 rounds measured with `/usr/bin/time -l`: a compile of the laws fixture with laws with and without bodies takes 5.39 s of CPU where it took 5.97 s, and a cold compile of a 2,128-file project with 1,330 laws takes 336.7 s where it took 341.4 s. That compile's wall time is 176.8 s where it was 146.9 s, since one process now proves what two proved at once.
 
 ### Fixed
 
