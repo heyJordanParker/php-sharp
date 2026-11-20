@@ -12243,6 +12243,11 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 			}
 			zend_update_property_ex(ce, Z_OBJ_P(built), property, property_value);
 		} ZEND_HASH_FOREACH_END();
+		/* Spec section 20.2: a machine's case holds each invariant of the machine, which its `#invariants` evaluates. */
+		zend_function *invariants = zend_hash_str_find_ptr(&ce->function_table, "#invariants", sizeof("#invariants") - 1);
+		if (!EG(exception) && invariants) {
+			zend_call_known_function(invariants, Z_OBJ_P(built), ce, NULL, 0, NULL, NULL);
+		}
 		if (EG(exception)) {
 			zval_ptr_dtor(built);
 			ZVAL_UNDEF(built);
@@ -15009,6 +15014,8 @@ static PHP_MINIT_FUNCTION(sharp)
 
 	register_class_Sharp_Container();
 	sharp_ce_container_error = register_class_Sharp_ContainerError(zend_ce_error);
+	/* Spec section 20.2: a move called on a machine's case it doesn't move from throws it. */
+	register_class_Sharp_StateError(zend_ce_error);
 	sharp_fiber_slot = zend_get_resource_handle("sharp");
 	if (sharp_fiber_slot < 0) {
 		return FAILURE;

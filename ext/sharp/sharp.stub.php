@@ -35,6 +35,10 @@ final class ContainerError extends \Error
 {
 }
 
+final class StateError extends \Error
+{
+}
+
 /**
  * @strict-properties
  * @not-serializable

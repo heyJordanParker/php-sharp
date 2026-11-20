@@ -772,6 +772,16 @@ static zend_class_entry *register_class_Sharp_ContainerError(zend_class_entry *c
 	return class_entry;
 }
 
+static zend_class_entry *register_class_Sharp_StateError(zend_class_entry *class_entry_Error)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "StateError", NULL);
+	class_entry = zend_register_internal_class_with_flags(&ce, class_entry_Error, ZEND_ACC_FINAL);
+
+	return class_entry;
+}
+
 static zend_class_entry *register_class_Sharp_Listening(void)
 {
 	zend_class_entry ce, *class_entry;
