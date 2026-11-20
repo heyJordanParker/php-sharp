@@ -1,0 +1,33 @@
+namespace Machines;
+
+import Sharp.Key;
+import Sharp.Tag;
+
+[Tag("status")]
+public machine OrderStatus
+{
+    [Key("draft")] case Draft
+    {
+        public OrderStatus.Paid pay(int cents)
+        {
+            if (cents <= 0) {
+                throw new ValueError("A payment is positive.");
+            }
+            return OrderStatus.Paid(cents);
+        }
+
+        public OrderStatus.Cancelled cancel() => OrderStatus.Cancelled;
+    }
+
+    [Key("paid")] case Paid(int cents)
+    {
+        public OrderStatus.Shipped ship() => OrderStatus.Shipped;
+    }
+
+    [Key("shipped")] final case Shipped;
+    [Key("cancelled")] final case Cancelled;
+
+    public static OrderStatus.Draft open() => OrderStatus.Draft;
+
+    law paidIsPositive(OrderStatus.Paid paid) => paid.cents > 0;
+}

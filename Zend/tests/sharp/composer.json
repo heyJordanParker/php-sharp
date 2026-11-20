@@ -136,6 +136,7 @@
             "ListChanges\\": "ListChanges/",
             "ListMembers\\": "ListMembers/",
             "LoopNames\\": "LoopNames/",
+            "Machines\\": "Machines/",
             "MagicProperties\\": "MagicProperties/",
             "Mailing\\": "Mailing/",
             "MapReads\\": "MapReads/",

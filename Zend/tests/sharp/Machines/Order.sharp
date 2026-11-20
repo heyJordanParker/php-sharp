@@ -1,0 +1,18 @@
+namespace Machines;
+
+import Sharp.Encoding.Json;
+
+public class Order
+{
+    public Order(public int id { get; }) { }
+
+    public OrderStatus status { get; private set; } = OrderStatus.open();
+
+    public void pay(int cents) { this.status = this.status.pay(cents); }
+
+    public void ship() { this.status = this.status.ship(); }
+
+    public static string encode(OrderStatus status) => Json.encode(status);
+
+    public static OrderStatus decode(string json) => Json.decode<OrderStatus>(json);
+}
