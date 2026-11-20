@@ -178,7 +178,11 @@ jobs:
           compression-level: 0
           retention-days: 1
           if-no-files-found: error
+      # With the engine the build of mago linked, so the check's build of mago builds nothing: without it, the check
+      # built the engine from nothing, which held the suites for 280 of this job's 624 seconds on dfa6e7e2941's run.
       - name: Verify the generated files, and that no Cargo.lock names a local source
+        env:
+          MAGO_ENGINE: /src/sharp/build/linux-x86_64-engine/install
         run: sharp/bin/check generated
       - name: Write the job's CPU-seconds and peak memory
         if: always()
