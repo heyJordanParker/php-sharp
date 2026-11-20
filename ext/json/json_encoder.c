@@ -687,6 +687,8 @@ again:
 		case IS_DOUBLE:
 			if (php_json_is_valid_double(Z_DVAL_P(val))) {
 				php_json_encode_double(buf, Z_DVAL_P(val), options);
+			} else if (encoder->nonfinite_as_null) {
+				smart_str_appendl(buf, "null", 4);
 			} else {
 				encoder->error_code = PHP_JSON_ERROR_INF_OR_NAN;
 				smart_str_appendc(buf, '0');

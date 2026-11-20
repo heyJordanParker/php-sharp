@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls Sharp.Encoding.Json: parse gives objects as maps and throws JsonException on invalid JSON, decode<T> reads a struct and a nested struct through T's parse and throws its InvalidFields for a bad field and for JSON that holds no object, and encode writes a Map as an object and a List as an array, a struct key through its toString(), floats with their fraction, and slashes and Unicode as they are, and the checker's mark on encode's parameter never reaches the code that runs
+A PHP# class calls Sharp.Encoding.Json: parse gives objects as maps and throws JsonException on invalid JSON, decode<T> reads a struct and a nested struct through T's parse and throws its InvalidFields for a bad field and for JSON that holds no object, and encode writes a Map as an object and a List as an array, a struct key through its toString(), floats with their fraction and NaN and infinity as null, and slashes and Unicode as they are, and the checker's mark on encode's parameter never reaches the code that runs
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -37,10 +37,9 @@ try {
     echo get_class($error), ': ', $error->getMessage(), "\n";
 }
 
-try {
-    JsonCalls::encode(NAN);
-} catch (JsonException $error) {
-    echo get_class($error), ': ', $error->getMessage(), "\n";
+// JSON has no number for NaN or infinity, so encode writes null, alone and inside a List and a Map.
+foreach ([NAN, INF, -INF, [1.5, NAN, INF, -INF], ['nan' => NAN, 'up' => INF, 'down' => -INF]] as $value) {
+    echo JsonCalls::encode($value), "\n";
 }
 
 // The checker's mark on encode's parameter stays out of the code that runs, where no class declares it.
@@ -81,6 +80,10 @@ JsonException: Syntax error
 "a/é"
 {"plain":[1,2]}
 JsonException: A JSON object key is text, and Demo\JsonPoint is not
-JsonException: Inf and NaN cannot be JSON encoded
+null
+null
+null
+[1.5,null,null,null]
+{"nan":null,"up":null,"down":null}
 array(0) {
 }

@@ -3709,7 +3709,7 @@ import Sharp.Text.NormalizationForm;
 0xD800.toCharacter();                             // throws ValueError
 ```
 
-**Text and bytes:** a `string` is text and always valid UTF-8. Binary data, as `Ip.toBinary` gives, and the bytes another system counts or signs are `Bytes`, a separate type. A plain PHP value that becomes a `string` has each byte sequence that is not UTF-8 replaced by U+FFFD, and one that becomes `Bytes` keeps every byte. `text.toBytes()` gives a string's UTF-8 bytes, and `bytes.toText()` reads bytes as UTF-8, replacing each sequence that is not UTF-8 by U+FFFD. `Bytes` has `length()`, `slice(start, end)`, which throws `OutOfRangeException` for a range outside the bytes, and `toList()`, which gives each byte as an `int` from 0 to 255:
+**Text and bytes:** a `string` is text and always valid UTF-8. Binary data, as `Ip.toBinary` gives, and the bytes another system counts or signs are `Bytes`, a separate type. A plain PHP value that becomes a `string` has each byte sequence that is not UTF-8 replaced by U+FFFD, and one that becomes `Bytes` keeps every byte. `text.toBytes()` gives a string's UTF-8 bytes, and `bytes.toText()` reads bytes as UTF-8, replacing each sequence that is not UTF-8 by U+FFFD. `Bytes` has `length()`, `slice(start, end)`, which throws `OutOfRangeException` for a range outside the bytes, and `toList()`, which gives each byte as an `int` from 0 to 255. A string literal is text too: one whose escapes write bytes that are no UTF-8 is a compile error that writes those bytes as `Bytes`, and `\u{E9}` writes a character's UTF-8 bytes:
 
 <!-- example text-bytes: statements
 import Sharp.Net.Ip;
@@ -3722,6 +3722,8 @@ import Sharp.Net.Ip;
 "école".toBytes().slice(0, 9);             // throws: "`slice` takes a range inside the bytes, and the range is outside it."
 Ip.toBinary("192.168.0.1").toList();       // [192, 168, 0, 1]
 Ip.toBinary("::1").length();               // 16
+"\xB1\x31";                                // compile error: this literal's escapes are no UTF-8 text; bytes are [0xB1, 0x31].toBytes()
+"caf\u{E9}".length();                      // 4
 "--sku--".trim("-");                       // "sku"
 "/path/".trimEnd("/");                     // "/path"
 "xyx-a-xyx".trim("xy");                    // "-a-": each character of "xy", not the text "xy"
@@ -6030,7 +6032,7 @@ Json.parse("{\"a\":[1,2]}") != Json.parse("{\"a\":[2,1]}");       // true
 Json.parse("{\"a\":1,\"b\":2}") == Json.parse("{\"b\":2,\"a\":1}"); // true: an object's keys in any order
 ```
 
-**`Json.encode` takes `escapeSlashes`, `escapeUnicode`, `keepZeroFraction`, `indent` and `escapeHtml`,** which default to `false`, `false`, `true`, `0` and `true`, its output without them. `escapeSlashes` writes `/` as `\/`, `escapeUnicode` writes each character outside ASCII as `\u` and its code, and `keepZeroFraction: false` writes `1.0` as `1`, so a payload can match the bytes another system signs. `escapeHtml` writes `<`, `>`, `&`, `'` and `"` inside a string as `\u003C`, `\u003E`, `\u0026`, `\u0027` and `\u0022`, so JSON put inside a `<script>` can't close it, and `escapeHtml: false` writes them as themselves, `"` as `\"`. `indent` writes each nested value on its own line, `indent` spaces deeper than its parent, with `": "` after a key and `[]` and `{}` for an empty value, so `indent: 4` writes the bytes of PHP's `JSON_PRETTY_PRINT`. A negative `indent` throws a `ValueError`:
+**`Json.encode` takes `escapeSlashes`, `escapeUnicode`, `keepZeroFraction`, `indent` and `escapeHtml`,** which default to `false`, `false`, `true`, `0` and `true`, its output without them. `escapeSlashes` writes `/` as `\/`, `escapeUnicode` writes each character outside ASCII as `\u` and its code, and `keepZeroFraction: false` writes `1.0` as `1`, so a payload can match the bytes another system signs. `escapeHtml` writes `<`, `>`, `&`, `'` and `"` inside a string as `\u003C`, `\u003E`, `\u0026`, `\u0027` and `\u0022`, so JSON put inside a `<script>` can't close it, and `escapeHtml: false` writes them as themselves, `"` as `\"`. `indent` writes each nested value on its own line, `indent` spaces deeper than its parent, with `": "` after a key and `[]` and `{}` for an empty value, so `indent: 4` writes the bytes of PHP's `JSON_PRETTY_PRINT`. A NaN or infinite `float` is written as `null`, since JSON has no number for it. A negative `indent` throws a `ValueError`:
 
 <!-- example json-switches: statements
 import Sharp.Encoding.Json;
@@ -6044,6 +6046,8 @@ Json.encode(["tags": ["a"], "none": [:]], indent: 2);                           
 Json.encode(payload, indent: -1);                                                  // throws: "Json.encode: indent is -1, and it must be 0 or more"
 Json.encode(["tag": "<b>"]);                                                       // "{\"tag\":\"\\u003Cb\\u003E\"}"
 Json.encode(["tag": "<b>"], escapeHtml: false);                                    // "{\"tag\":\"<b>\"}"
+Json.encode(Math.asin(2.0));                                                       // "null": NaN
+Json.encode([1.5, Math.log(0.0)]);                                                 // "[1.5,null]": negative infinity
 ```
 
 **A string-backed enum case's `value` is a `literal-string`,** wherever the case comes from, a parameter, a variable or a collection's element included, since every case's backing value is a literal. So the columns or tables a query may name are an enum, and the one chosen while the code runs reaches a plain PHP `literal-string` parameter, as Laravel's `orderByRaw` declares one, as one of the application's own names. Values still go through a query's bindings:

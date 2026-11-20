@@ -29,6 +29,9 @@ struct _php_json_encoder {
 	/* PHP#: the spaces PHP_JSON_PRETTY_PRINT writes for each level, as Sharp.Encoding.Json.encode's indent, or 0 for
 	 * PHP's 4. */
 	int indent;
+	/* PHP#: a NaN or infinite float is written as null, as Sharp.Encoding.Json.encode writes it, where PHP's json_encode
+	 * fails. */
+	bool nonfinite_as_null;
 };
 
 static inline void php_json_encode_init(php_json_encoder *encoder)

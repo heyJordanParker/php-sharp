@@ -8604,8 +8604,8 @@ ZEND_FUNCTION(Sharp_Internal_equals)
 }
 
 /* Spec section 24: the JSON text Sharp.Encoding.Json.encode writes, json_encode's with `$flags`, or with
- * JSON_PRETTY_PRINT's layout at `$indent` spaces a level when `$indent` is above 0. It throws JsonException as
- * json_encode does with JSON_THROW_ON_ERROR. */
+ * JSON_PRETTY_PRINT's layout at `$indent` spaces a level when `$indent` is above 0. A NaN or infinite float is null,
+ * which JSON has no number for. It throws JsonException as json_encode does with JSON_THROW_ON_ERROR. */
 ZEND_FUNCTION(Sharp_Internal_jsonEncode)
 {
 	zval *value;
@@ -8625,6 +8625,7 @@ ZEND_FUNCTION(Sharp_Internal_jsonEncode)
 	php_json_encode_init(&encoder);
 	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
 	encoder.indent = (int) indent;
+	encoder.nonfinite_as_null = true;
 	smart_str text = {0};
 	php_json_encode_zval(&text, value, (int) (indent ? flags | PHP_JSON_PRETTY_PRINT : flags & ~PHP_JSON_PRETTY_PRINT),
 		&encoder);
