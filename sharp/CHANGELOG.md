@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Changed
+
+- The law checker proves that a recursion stepping an `int` one down or one up towards a bound ends with the step's own lemma and `omega`, and tries `grind` only when that fails, and it elaborates each generated module with Lean's linters off, since no answer reads their warnings. A cold compile of a 2,128-file project with 1,330 laws has its law checker retire 1,029 G instructions where it retired 1,183 G. Every law proves or fails as before.
+
 ### Fixed
 
 - A program Mago just wrote starts on Linux, as the Lean the first compile with a law unpacks into Mago's cache folder. 0.6.40 failed that compile with "Text file busy" when a process another thread started still held the descriptor Mago wrote the program through. Mago now starts a busy program again after a pause that doubles from 1 ms, for 10 tries, and an error after the last one names them.
