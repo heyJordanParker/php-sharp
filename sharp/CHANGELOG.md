@@ -15,6 +15,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Changed
 
+- `mago analyze` of the whole project compiles it before it analyzes with the extension hosts, spec section 27: it writes the `.sharp` folder as `mago --no-extensions compile` writes it, laws proven, and the hosts' folder, from one analysis without the hosts and one lowering, then reports each issue of the analysis and of the compile once. A save runs `mago analyze` alone. 0.6.39's `mago analyze` compiled only the hosts' folder, from an analysis of its own, so a save that also ran `mago compile` analyzed the project three times and lowered it twice. On a project of 496 PHP# files with one host, a one-file edit's save costs 4.1 CPU-seconds, where the two commands cost 6.1, with the same `.sharp` folder and issues.
 - An extension host's provider answers each call in less time. After each answer the SDK checked which classes the call declared by listing every declared class, interface and trait. It now skips that when the interpreter declared none and asked its autoloaders for none, which mago's engine tells it through `\Mago\Engine\classCount()`.
 
 ### Fixed
