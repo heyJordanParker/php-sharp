@@ -18,7 +18,7 @@ The standard library covers what modern standard libraries cover (decision 96). 
 | Pad | `padStart(length, padding)`, `padEnd(length, padding)` | `mb_str_pad` |
 | Repeat | `repeat(times)` | `str_repeat` |
 | Replace all, replace the first n | `replace(old, new)`, `replace(old, new, limit)` | `str_replace`, `explode` |
-| Split, split into lines, split on whitespace | `split(delimiter, limit)`, `lines()`; on whitespace: `Regex.split` | `explode` |
+| Split, split into lines, split on whitespace | `split(delimiter, limit)`, `lines()`; on whitespace: `Regex.parse("/\s+/").split(text)` | `explode` |
 | Join | `parts.join(separator)` | `implode` |
 | Characters, code points, code point to text | `characters()`, `codePoints()`, `n.toCharacter()` | `mb_str_split`, `mb_ord`, `mb_chr` |
 | Bytes, bytes to text | `bytes()`, `n.toByteString()` for one byte, `bytes.toByteString()` for a `List<int>` | `ord`, `chr` |
@@ -27,7 +27,7 @@ The standard library covers what modern standard libraries cover (decision 96). 
 | Parse numbers and booleans | `Int.parse`, `Int.tryParse`, `Float.parse`, `Float.tryParse`, `Bool.tryParse` | `filter_var`, `floatval` |
 | Character classes | `isLetter()`, `isDigit()`, `isLetterOrDigit()`, `isWhitespace()`, `isUppercase()`, `isLowercase()` | `preg_match` |
 | Unicode normalization | `normalized(form)`, with `NormalizationForm` | `normalizer_normalize`, of the `intl` extension every engine builds |
-| Regular expressions | `Regex.matches`, `match`, `matchAll`, `replace`, `split`, `filter`, `escape` | `preg_match`, `preg_match_all`, `preg_replace`, `preg_split`, `preg_grep`, `preg_quote` |
+| Regular expressions | `Regex.parse(pattern)`, `Regex.tryParse(pattern)`; on a `Regex`: `matches(text)`, `match(text)`, `matchAll(text)`, `replace(replacement, text)`, `split(text)`, `filter(texts)`; `Regex.escape(text)` | `preg_match`, `preg_match_all`, `preg_replace`, `preg_split`, `preg_grep`, `preg_quote` |
 | HTML escaping | `Html.escape`, `Html.unescape`, `Html.decodeEntities`, `Html.stripTags` | `htmlspecialchars`, `htmlspecialchars_decode`, `html_entity_decode`, `strip_tags` |
 
 ## Collections

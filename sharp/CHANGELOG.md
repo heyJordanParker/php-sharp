@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.40
+
+- `Sharp.Text.Regex` is a value that holds a pattern that compiles, spec section 31, so a pattern that comes from data, as one a user types into a form field, is read with `Regex.tryParse(pattern)`, which gives null when the pattern doesn't compile, and a pattern the code writes is read with `Regex.parse(pattern)`, which throws `ValueError` as `Regex.parse: "/[/" does not compile`. `matches`, `match`, `matchAll`, `replace`, `split` and `filter` are its methods and take only the text, and `escape` stays static. 0.6.40's static methods took the pattern on every call and threw `ValueError` for one that didn't compile, so a bad pattern from data could be handled only by catching a bug. Change `Regex.matches("/^[a-z]+$/", text)` to `Regex.parse("/^[a-z]+$/").matches(text)`, and `Regex.replace(pattern, replacement, text)` to `Regex.parse(pattern).replace(replacement, text)`. A failure while matching, as PCRE's backtrack limit, still throws `ValueError`.
+
 ## [0.6.40] - 2026-11-20
 
 ### Upgrading from 0.6.39
