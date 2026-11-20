@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A program Mago just wrote starts on Linux, as the Lean the first compile with a law unpacks into Mago's cache folder. 0.6.40 failed that compile with "Text file busy" when a process another thread started still held the descriptor Mago wrote the program through. Mago now starts a busy program again after a pause that doubles from 1 ms, for 10 tries, and an error after the last one names them.
+
 ## [0.6.40] - 2026-11-20
 
 ### Upgrading from 0.6.39
