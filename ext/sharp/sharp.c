@@ -12172,6 +12172,16 @@ static void sharp_read_whole(const sharp_type *type, zval *value, sharp_read *re
 	ZVAL_COPY_VALUE(&read->texts, &outer_texts);
 }
 
+/* The class whose terms the type text of the field `name` of the struct or class `ce`'s `#fields` is written in: the
+ * class that declares its property, as `PaginatedList<TItem>` declares `items` for `OrderPage : PaginatedList<Order>`,
+ * or `ce` for a main constructor parameter that holds no property. */
+static const zend_class_entry *sharp_field_scope(const zend_class_entry *ce, zend_string *name)
+{
+	const zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, name);
+
+	return info ? info->ce : ce;
+}
+
 /* Spec section 10: builds in `built` the struct or class `ce`, of the type arguments `arguments` or none, from `value`,
  * a Map, a PHP array or an object, as its `parse` reads it: each field a row of its `#fields` gives, read under its key
  * as a value of its type, then its main constructor called with its parameters by name, so a missing one takes its
@@ -12198,7 +12208,8 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 		zval *into = Z_TYPE_P(zend_hash_index_find(parts, 3)) == IS_TRUE ? &parameters : &properties;
 		bool optional = Z_TYPE_P(zend_hash_index_find(parts, 4)) == IS_TRUE;
 		zval *written_order = zend_hash_index_find(parts, 5);
-		const sharp_type *types = sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), ce, ce, arguments);
+		const sharp_type *types =
+			sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), sharp_field_scope(ce, name), ce, arguments);
 		ZEND_ASSERT(types != NULL && "the compile writes each field's type as one PHP# type");
 		const sharp_type *type = types->members[0];
 		if (length) {
@@ -12789,7 +12800,8 @@ static bool sharp_fields_store(zend_class_entry *ce, const sharp_type *arguments
 			sharp_refuse_storage(ce, "the main constructor parameter `%s` holds no property", ZSTR_VAL(name));
 			return false;
 		}
-		const sharp_type *types = sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), ce, ce, arguments);
+		const sharp_type *types =
+			sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), sharp_field_scope(ce, name), ce, arguments);
 		ZEND_ASSERT(types != NULL && "the compile writes each field's type as one PHP# type");
 		const sharp_type *key = sharp_type_unstored_key(types->members[0]);
 		if (key) {
