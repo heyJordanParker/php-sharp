@@ -72,10 +72,18 @@ if [[ ${#gates[@]} -eq 0 ]]; then
   gates=("${all[@]}")
 fi
 
-# Runs a step of the gate, and marks the gate failed when it fails, so the gate's other steps still run. The step runs
-# in a subshell outside any condition, where errexit holds, so a step that is a function stops at the first command
-# that fails, and what it changes, such as its folder, stays in it.
+# Marks the gate failed, and names what failed in the list the run ends with, so one run names every failure, which
+# the output of the steps that passed would bury.
 gate_passed=true
+failed_steps=()
+fail() {
+  gate_passed=false
+  failed_steps+=("$gate: $1")
+}
+
+# Runs a step of the gate, and fails the gate when it fails, so the gate's other steps still run. The step runs in a
+# subshell outside any condition, where errexit holds, so a step that is a function stops at the first command that
+# fails, and what it changes, such as its folder, stays in it.
 step() {
   local status
   set +e
@@ -83,7 +91,7 @@ step() {
   status=$?
   set -e
   if ((status != 0)); then
-    gate_passed=false
+    fail "$* exited $status"
   fi
 }
 
@@ -205,7 +213,7 @@ gate_mago_checks() {
     step "$mago" lint
     step "$mago" analyze
   else
-    gate_passed=false
+    fail "cargo build --profile test-run --bin mago failed, so the test-run mago's checks didn't run"
   fi
 }
 
@@ -246,10 +254,12 @@ sharp_kinds() {
     | diff -u sharp/mago/crates/sharp-bridge/src/kind.rs -
 }
 # cargo builds nothing for the mago sharp/bin/test built, and its build.json names the out_dir of the bridge it links.
-# `-p mago-sharp-bridge` resolves other features, so it built a second bridge and its dependencies beside it.
+# `-p mago-sharp-bridge` resolves other features, so it built a second bridge and its dependencies beside it. A
+# MAGO_ENGINE in the environment names the engine that build linked, as BUILD_LINUX's restores it from its cache, so
+# build-mago links that one, where it would build the engine from nothing in a job that holds only its install.
 sharp_unit_header() {
   local line
-  sharp/docker/run sharp/bin/build-mago --quiet
+  sharp/docker/run env ${MAGO_ENGINE:+"MAGO_ENGINE=$MAGO_ENGINE"} sharp/bin/build-mago --quiet
   while read -r line; do
     if [[ $line == *'"reason":"build-script-executed"'* && $line == *mago-sharp-bridge* && $line =~ \"out_dir\":\"/src/([^\"]+)\" ]]; then
       diff -u ext/sharp/sharp_unit.h "${BASH_REMATCH[1]}/sharp_unit.h"
@@ -274,7 +284,7 @@ gate_generated() {
   step sharp_unit_header
 }
 
-# sharp/mago's workspace tests, in the sharp/docker image, as mago.yml's tests jobs run them in four slices.
+# sharp/mago's workspace tests, in the sharp/docker image, as sharp.yml's MAGO jobs and BUILD_LINUX run them in five slices.
 gate_mago_tests() {
   step sharp/bin/test --linux --mago
 }
@@ -402,7 +412,6 @@ gate_plain_php() {
 }
 
 cd "$root"
-failed=()
 times=()
 for gate in "${gates[@]}"; do
   echo
@@ -415,7 +424,6 @@ for gate in "${gates[@]}"; do
     result=passed
   else
     result=FAILED
-    failed+=("$gate")
   fi
   times+=("$(printf '%-15s %5ss  %s' "$gate" "$((SECONDS - start))" "$result")")
 done
@@ -423,7 +431,7 @@ done
 echo
 printf '%s\n' "${times[@]}"
 printf '%-15s %5ss\n' total "$SECONDS"
-if [[ ${#failed[@]} -gt 0 ]]; then
-  printf 'Failed: %s\n' "${failed[@]}" >&2
+if [[ ${#failed_steps[@]} -gt 0 ]]; then
+  printf 'Failed: %s\n' "${failed_steps[@]}" >&2
   exit 1
 fi
