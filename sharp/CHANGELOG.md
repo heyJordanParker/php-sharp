@@ -11,7 +11,6 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Fixed
 
-- A program Mago just wrote starts on Linux, as the Lean the first compile with a law unpacks into Mago's cache folder. 0.6.40 failed that compile with "Text file busy" when a process another thread started still held the descriptor Mago wrote the program through. Mago now starts a busy program again after a pause that doubles from 1 ms, for 10 tries, and an error after the last one names them.
 - Reflection lists the plain PHP traits a class uses, spec section 22: `Class<T>.traits()` gives the class's own, each followed by the traits it uses, then those of the classes it extends, each once, as `interfaces()` gives its interfaces. So `typeof(Novel).traits()` gives `[typeof(Copies)]` when `Novel` extends a `Book` that uses `Copies`, the traits `is` tests. 0.6.40 had no such member, and refused `type.traits()` as "Attempting to access a method on a non-object type (`Class<Object>`).". `x is SoftDeletes` and `x is not SoftDeletes` already test the class, its parents and their traits on 0.6.40, and report no redundant condition on a value of an open class.
 
 ## [0.6.40] - 2026-11-20
