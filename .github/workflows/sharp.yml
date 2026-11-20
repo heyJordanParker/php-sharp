@@ -11,12 +11,13 @@ on:
     - cron: '17 2 * * *'
 permissions:
   contents: read
-# A pull request's new commit cancels its run in progress. Master runs one push at a time, and only the newest push
-# waits, since its tree holds every merge before it, so the Mac never tests a tree master already moved past. A
-# schedule runs in a group of its own.
+# A pull request, and master, runs one push at a time, and only the newest push waits, since its tree holds every
+# commit before it. A run in progress always finishes, so a pull request whose pushes come faster than a run still
+# gets results: when each push cancelled the run before it, 69 of the last 150 runs were cancelled. A schedule runs in
+# a group of its own.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || (github.event_name == 'push' && github.ref) || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 jobs:
   # CI_PASSED is this workflow's one required check. Every push runs every check, whatever it changed: the Linux suites,
   # each job on 4 cores, the Mac's, the runtime image and the release's build, so every check that guards a release runs
