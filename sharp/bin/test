@@ -99,12 +99,13 @@ finish() {
   exit 0
 }
 
-# sharp/mago's workspace tests, through sharp/bin/nextest: every test binary sharp/bin/build-mago listed, each test in a
-# process of its own and the binaries at once, from its package's folder as cargo test runs it, with each test's time
-# and the slow ones named. Then the doc tests and the property tests of mago-codex, which builds with a feature of its
-# own. With --shard, every n-th test of all the binaries' tests, so a set of slow tests, such as the compile:: tests of
-# tests/main.rs, spreads over the slices, and the last slice also runs the doc and the property tests. With
-# --no-build, cargo runs nothing, so the doc and the property tests, which cargo builds, are left to a run that builds.
+# sharp/mago's workspace tests: every test binary the build.json of sharp/bin/build-mago names, run from its package's
+# folder as cargo test runs it, then the doc tests and the property tests of mago-codex, which builds with a
+# feature of its own. With --shard, every n-th test of all the binaries' tests, in binary and name order, from the i-th,
+# so a set of slow tests, such as the compile:: tests of tests/main.rs, spreads over the slices, and the last slice also
+# runs the doc and the property tests. A test binary runs the tests of its slice by skipping the others by exact name,
+# which both libtest and libtest-mimic's harnesses take as often as needed. With --no-build, cargo runs nothing, so the
+# doc and the property tests, which cargo builds, are left to a run that builds.
 if $mago; then
   # The tests run a PHP SDK worker from sharp/mago's vendor folder, and lake, which mago compile proves laws with:
   # installing the pinned Lean first keeps the tests that run lake at once from each installing it.
@@ -113,22 +114,44 @@ if $mago; then
   if $build; then
     "$root/sharp/bin/build-mago" --quiet
   fi
-  for listed in nextest-binaries.json cargo-metadata.json; do
-    if [[ ! -f $build_dir/mago/$listed ]]; then
-      echo "$build_dir/mago/$listed is missing. Run sharp/bin/build-mago first." >&2
-      exit 1
+  messages="$build_dir/mago/build.json"
+  if [[ ! -f $messages ]]; then
+    echo "$messages is missing. Run sharp/bin/build-mago first." >&2
+    exit 1
+  fi
+  binaries=()
+  while read -r line; do
+    if [[ $line == *'"reason":"compiler-artifact"'* && $line =~ \"profile\":\{[^}]*\"test\":true &&
+      $line =~ \"executable\":\"([^\"]+)\" ]]; then
+      executable="${BASH_REMATCH[1]}"
+      [[ $line =~ \"manifest_path\":\"([^\"]+)\" ]]
+      binaries+=("$executable"$'\t'"$(dirname "${BASH_REMATCH[1]}")")
     fi
-  done
+  done < "$messages"
+  mapfile -t binaries < <(printf '%s\n' "${binaries[@]}" | LC_ALL=C sort -u)
   # The tests write below the folder cargo names CARGO_TARGET_TMPDIR, which a build makes and a copy of the binaries
   # alone leaves out.
   mkdir -p "$build_dir/mago/tmp"
-  partition=()
-  if [[ -n $shard ]]; then
-    partition=(--partition "count:$shard")
-  fi
-  run_step "the workspace's tests" "$root" "$root/sharp/bin/nextest" run \
-    --binaries-metadata "$build_dir/mago/nextest-binaries.json" --cargo-metadata "$build_dir/mago/cargo-metadata.json" \
-    --no-fail-fast --test-threads "$jobs" "${partition[@]}"
+
+  index=0
+  for binary in "${binaries[@]}"; do
+    executable="${binary%%$'\t'*}"
+    folder="${binary#*$'\t'}"
+    skips=()
+    selected=0
+    while IFS= read -r name; do
+      if [[ -z $shard ]] || (( index % shard_count == shard_index - 1 )); then
+        selected=$((selected + 1))
+      else
+        skips+=(--skip "$name")
+      fi
+      index=$((index + 1))
+    done < <(cd "$folder" && "$executable" --list --format terse | sed -n 's/: test$//p')
+    if (( selected > 0 )); then
+      echo "== $selected tests of ${executable##*/}, from ${folder#"$root"/}"
+      run_step "${executable##*/}" "$folder" "$executable" --exact --test-threads "$jobs" "${skips[@]}"
+    fi
+  done
   if $build && { [[ -z $shard ]] || (( shard_index == shard_count )); }; then
     cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
     echo "== the doc tests"

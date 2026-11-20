@@ -293,16 +293,14 @@ jobs:
       - name: Build mago and its test binaries
         run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/build-mago --quiet
 
-      # The test binaries nextest-binaries.json names, mago, which the tests run, and the two lists sharp/bin/test runs
-      # them from, at the paths the image gave them. An artifact keeps no file's mode, so the files travel in a tar,
-      # compressed here, since Actions would compress them on one thread.
+      # The test binaries build.json names, mago, which the tests run, and build.json. An artifact keeps no file's mode,
+      # so the files travel in a tar, compressed here, since Actions would compress them on one thread.
       - name: Pack the test binaries
         run: |
           build="sharp/build/linux-$(uname -m)/mago"
-          jq -r '."rust-binaries"[]."binary-path" | ltrimstr("/src/")' "$build/nextest-binaries.json" \
-            | sort -u > "$RUNNER_TEMP/test-binaries"
-          tar --zstd -cf "$RUNNER_TEMP/tests.tar.zst" "$build/nextest-binaries.json" "$build/cargo-metadata.json" \
-            "$build/debug/mago" --files-from "$RUNNER_TEMP/test-binaries"
+          jq -r 'select(.reason == "compiler-artifact" and .profile.test and .executable) | .executable | ltrimstr("/src/")' \
+            "$build/build.json" | sort -u > "$RUNNER_TEMP/test-binaries"
+          tar --zstd -cf "$RUNNER_TEMP/tests.tar.zst" "$build/build.json" "$build/debug/mago" --files-from "$RUNNER_TEMP/test-binaries"
 
       - name: Upload the test binaries
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -322,9 +320,9 @@ jobs:
         with:
           end: true
 
-  # The workspace's tests on Linux, every fifth test of every test binary, through cargo-nextest's partitions, with
-  # sharp/bin/test --mago --shard, so a set of slow tests spreads over the jobs, on the build job's test binaries. The
-  # build job runs the fifth slice.
+  # The workspace's tests on Linux, every fifth test of every test binary, by exact name, with sharp/bin/test --mago
+  # --shard, so a set of slow tests spreads over the jobs, on the build job's test binaries. The build job runs the
+  # fifth slice.
   tests:
     name: tests (${{ matrix.shard }}/5)
     needs: [CHANGES, build]
@@ -381,9 +379,9 @@ jobs:
 
   # The workspace's tests on macOS arm64, which covers the few lines of Mago that differ there, such as the watch mode's
   # FSEvents, on the self-hosted Mac runner, for every pull request's push and a push to master whose tree no pull
-  # request's run passed. sharp/bin/build-mago builds in sharp/build/darwin-arm64/mago, which the runner keeps and
-  # sharp.yml's MACOS builds mago in, so it rebuilds only what changed: in sharp/mago/target, which clean-kept-build
-  # removes, it built every crate and took 23 minutes on the pushes of pull requests #351 and #352.
+  # request's run passed. cargo builds in the folder sharp/.cargo's config names, which the runner keeps and sharp.yml's MACOS builds
+  # mago in, so it rebuilds only what changed: in sharp/mago/target, which clean-kept-build removes, it built every
+  # crate and took 23 minutes on the pushes of pull requests #351 and #352.
   tests-macos:
     name: tests (macOS)
     needs: CHANGES
@@ -412,17 +410,22 @@ jobs:
         with:
           toolchain: ${{ needs.CHANGES.outputs.rust }}
 
-      # The workspace's tests run lake, which sharp/bin/test installs the pinned Lean of with elan.
+      # The self-hosted runners use their Homebrew PHP and Composer.
+      - name: Install composer dependencies
+        run: composer install
+
+      # The workspace's tests run lake.
       - name: Install elan and Lean
         uses: ./.github/actions/setup-lean
 
-      # sharp/bin/test builds the engine mago links, mago and the test binaries with sharp/bin/build-mago, in the
-      # sharp/build folder the runner keeps, so it builds only what changed since the runner's last build, and runs
-      # them through cargo-nextest, each test in a process of its own and the binaries at once, then the doc tests and
-      # mago-codex's property tests. It installs the Composer dependencies with the runner's Homebrew PHP and Composer.
-      - name: Test the workspace
+      # The PHP# engine mago links, which sharp/bin/build-mago --engine builds in the sharp/build folder the runner
+      # keeps, so it builds only what changed since the runner's last build.
+      - name: Build the engine mago links
         working-directory: ${{ github.workspace }}
-        run: sharp/bin/test --mago
+        run: sharp/bin/build-mago --engine
+
+      - name: cargo test
+        run: cargo test --workspace --locked
 
       - name: Write the job's CPU-seconds and peak memory
         if: always()

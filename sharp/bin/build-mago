@@ -215,24 +215,13 @@ fi
 # test binaries it names, as does a CI job that runs them on another job's build with sharp/bin/test --no-build. A
 # failed build leaves no build.json, so no run takes a build that failed for one that passed.
 messages="$target/build.json"
-rm -f "$messages" "$target/nextest-binaries.json" "$target/cargo-metadata.json"
+rm -f "$messages"
 mkdir -p "$target"
 PATH="$(dirname "$cargo"):$PATH" "$cargo" test --workspace --locked --no-run \
   --manifest-path "$root/sharp/mago/Cargo.toml" \
   --target-dir "$target" --jobs "$("$root/sharp/bin/jobs")" --message-format=json-render-diagnostics "$@" \
   > "$messages.part"
 mv "$messages.part" "$messages"
-
-# What sharp/bin/test --mago runs the tests from, in the same folder: cargo-nextest's list of the test binaries this
-# build made, which its list takes from a cargo test --no-run that finds every one fresh, and the workspace's cargo
-# metadata. So a run on this build, here or in a job that unpacks it at the same paths, builds nothing.
-PATH="$(dirname "$cargo"):$PATH" "$root/sharp/bin/nextest" list --list-type binaries-only --message-format json \
-  --workspace --locked --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$target" \
-  --build-jobs "$("$root/sharp/bin/jobs")" > "$target/nextest-binaries.json.part"
-PATH="$(dirname "$cargo"):$PATH" "$cargo" metadata --format-version 1 --locked \
-  --manifest-path "$root/sharp/mago/Cargo.toml" > "$target/cargo-metadata.json.part"
-mv "$target/nextest-binaries.json.part" "$target/nextest-binaries.json"
-mv "$target/cargo-metadata.json.part" "$target/cargo-metadata.json"
 
 # Cargo never deletes a copy of a crate it no longer uses. Each distinct `cargo test -p` or `cargo clippy -p` list
 # compiles its own copy of the shared crates, and so does each version bump or Cargo.lock change. A fresh build holds
