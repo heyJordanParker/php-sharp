@@ -38,6 +38,11 @@ for sha in $shas; do
   fi
   open=$(api "pulls?base=master&state=open&per_page=100" ".[] | select(.head.sha == \"$sha\") | .html_url")
   if [[ -n $open ]]; then
+    if [[ $(gh pr view "$open" --repo "$repo" --json autoMergeRequest --jq '.autoMergeRequest != null') != true ]]; then
+      gh pr merge "$open" --repo "$repo" --auto --merge --match-head-commit "$sha"
+      echo "$open lands $sha, and its auto-merge is on again."
+      exit 0
+    fi
     echo "$open already lands $sha."
     exit 0
   fi
@@ -48,6 +53,21 @@ for sha in $shas; do
   fi
   url=$(gh pr create --repo "$repo" --base master --head "$branch" --title "Land next at ${sha:0:11}" \
     --body "Lands $sha of next, whose PHP# run $php_sharp and Mago run $mago passed.")
+  # The ruleset turns auto-merge off when it is enabled before the pull request's Spec guard run reports: #551's went
+  # off a second after it went on, "Repository rule violations found", and stayed on once Spec guard had passed.
+  run=
+  for _ in {1..30}; do
+    run=$(gh run list --repo "$repo" --branch "$branch" --workflow completes.yml --json databaseId --jq '.[0].databaseId // empty')
+    if [[ -n $run ]]; then
+      break
+    fi
+    sleep 2
+  done
+  if [[ -z $run ]]; then
+    echo "$url has no Spec guard run after a minute, so auto-merge stays off. Run sharp/bin/land again." >&2
+    exit 1
+  fi
+  gh run watch "$run" --repo "$repo" --exit-status > /dev/null
   gh pr merge "$url" --auto --merge --match-head-commit "$sha"
   echo "$url lands $sha once its runs pass."
   exit 0
