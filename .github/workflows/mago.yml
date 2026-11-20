@@ -21,13 +21,14 @@ defaults:
     working-directory: sharp/mago
 
 jobs:
-  # ci-passed is this workflow's one required check. Every push runs every job, whatever it changed. A push to master
-  # runs none of the tests when a pull request's run passed ci-passed on its tree. It runs checks again, which saves the
-  # target every pull request's run restores, but for a release's push, which builds nothing. A push whose tree no pull
-  # request's run passed runs every job, and its red push opens an issue, as ci-passed does, for a pull request that
-  # fixes it forward. The workspace's tests run in sharp.yml, which CI_PASSED covers: on Linux in MAGO, on
-  # BUILD_LINUX's build, so Linux builds Mago's dev target once, and on macOS in release.yml's macOS build, the run's one
-  # Mac job, so a defect only macOS finds, such as one in the watch mode's FSEvents code, fails before the merge.
+  # ci-passed is this workflow's one required check. Every push runs every job, whatever it changed. A run runs none of
+  # the tests when a pull request's run passed ci-passed on its tree, as sharp.yml's CHANGES explains. A push to master
+  # runs checks again, which saves the target every pull request's run restores, but for a release's push, which builds
+  # nothing. A push whose tree no pull request's run passed runs every job, and its red push opens an issue, as
+  # ci-passed does, for a pull request that fixes it forward. The workspace's tests run in sharp.yml, which CI_PASSED
+  # covers: on Linux in MAGO, on BUILD_LINUX's build, so Linux builds Mago's dev target once, and on macOS in
+  # release.yml's macOS build, the run's one Mac job, so a defect only macOS finds, such as one in the watch mode's
+  # FSEvents code, fails before the merge.
   CHANGES:
     runs-on: ubuntu-latest
     permissions:
@@ -97,7 +98,6 @@ jobs:
 
       - name: Find the pull request run that passed this tree
         id: passed
-        if: github.event_name == 'push'
         uses: ./.github/actions/passed-tree
         with:
           workflow: mago.yml
@@ -118,10 +118,11 @@ jobs:
 
   # The gates on Linux with CHANGES's rust toolchain, the one sharp/mago/Cargo.toml's rust-version names and
   # release.yml builds the binaries with, and the Linux binary plain-php runs. On the push to master it saves its
-  # target, which every pull request's run restores.
+  # target, which every pull request's run restores, so it runs there even on a tree a pull request's run passed, as
+  # sharp.yml's BUILD_LINUX does.
   checks:
     needs: CHANGES
-    if: ${{ !(needs.CHANGES.outputs.passed && needs.CHANGES.outputs.bump == 'true') }}
+    if: ${{ !needs.CHANGES.outputs.passed || (github.event_name == 'push' && needs.CHANGES.outputs.bump != 'true') }}
     runs-on: ubuntu-latest
     # A build of the engine takes up to 20 more minutes, which the engine's cache spares a run whose engine
     # inputs an earlier run built.

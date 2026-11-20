@@ -24,12 +24,12 @@ jobs:
   # before the merge, on the tree that merges. GitHub runs 20 of the account's hosted jobs at once, across all its
   # repositories, and a job past them waits.
   #
-  # A tree runs the checks once, as bors's "not rocket science" rule tests the exact tree that lands once. A push to
-  # master runs none of them when a pull request's run passed CI_PASSED on its tree, as .github/actions/passed-tree
-  # explains, and links that run: it saves the caches every pull request's run restores and, for a release, publishes
-  # what that run built. A push whose tree no pull request's run passed runs every check, the Mac's among them, as the
-  # check of the merge, and a release publishes what that push builds. A red push opens an issue, as CI_PASSED does,
-  # for a pull request that fixes it forward.
+  # A tree runs the checks once, as bors's "not rocket science" rule tests the exact tree that lands once. A run runs
+  # none of them when a pull request's run passed CI_PASSED on its tree, as .github/actions/passed-tree explains, and
+  # links that run. So the pull request that lands a commit of next passes in a minute, and a push to master saves the
+  # caches every pull request's run restores and, for a release, publishes what that run built. A push whose tree no
+  # pull request's run passed runs every check, the Mac's among them, as the check of the merge, and a release publishes
+  # what that push builds. A red push opens an issue, as CI_PASSED does, for a pull request that fixes it forward.
   CHANGES:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-24.04
@@ -52,14 +52,17 @@ jobs:
       # pull request merged into master, so the tree it tests is that merge's, not its head's.
       - name: Name the tree this run tests
         run: echo "::notice title=Tested tree::$(git rev-parse 'HEAD^{tree}')"
+      # A run passed when it built the release's files, which RELEASE publishes from it, so a run that skipped a tree
+      # an earlier run passed never counts.
       - name: Find the pull request run that passed this tree
         id: passed
-        if: github.event_name == 'push'
         uses: ./.github/actions/passed-tree
         with:
           workflow: sharp.yml
           events: pull_request
-          passed: any(.jobs[]; .name == "CI_PASSED" and .conclusion == "success")
+          passed: >-
+            any(.jobs[]; .name == "CI_PASSED" and .conclusion == "success")
+            and any(.jobs[]; .name == "RELEASE_ASSETS / Write the SHA-256 of every asset" and .conclusion == "success")
       - name: The checks don't run again
         if: steps.passed.outputs.run
         env:
@@ -118,10 +121,11 @@ jobs:
   # request's run restores, as .github/actions/mago-cache explains. A cache only its own ref's runs would restore is no
   # use to the next pull request, so only master saves. So it runs on every push to master, even one whose tree a pull
   # request's run passed, but for the push that publishes a release, which builds nothing, so the next push saves them.
-  # CI_PASSED, which runs after it, deletes the caches it replaced.
+  # A pull request's run of a tree that passed saves nothing, so it doesn't run. CI_PASSED, which runs after it, deletes
+  # the caches it replaced.
   BUILD_LINUX:
     needs: CHANGES
-    if: ${{ !(needs.CHANGES.outputs.passed && needs.CHANGES.outputs.bump == 'true') }}
+    if: ${{ !needs.CHANGES.outputs.passed || (github.event_name == 'push' && needs.CHANGES.outputs.bump != 'true') }}
     runs-on: ubuntu-24.04
     # A build of the engine takes up to 20 more minutes, which the engine's cache spares a run whose engine
     # inputs an earlier run built.
@@ -396,7 +400,7 @@ jobs:
   # of FrankenPHP's packages, which every pull request's run restores, as BUILD_LINUX saves its caches.
   HOSTS:
     needs: [CHANGES, BUILD_LINUX]
-    if: ${{ !(needs.CHANGES.outputs.passed && needs.CHANGES.outputs.bump == 'true') }}
+    if: ${{ !needs.CHANGES.outputs.passed || (github.event_name == 'push' && needs.CHANGES.outputs.bump != 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:

@@ -20,7 +20,7 @@ Five **state** labels:
 - `needs-triage`: the maintainer has to evaluate it
 - `needs-info`: waiting on the reporter for a repro
 - `ready-for-agent`: verified and briefed, ready for a builder
-- `ready-for-human`: a syntax change the language owner decides
+- `ready-for-human`: a change to what a PHP# program says or means, which the language owner decides
 - `wontfix`: will not be built
 
 One **priority** label:
@@ -31,14 +31,16 @@ Every triaged issue carries exactly one category and one state label. A new issu
 
 ## Triage one problem
 
-A question about how to use PHP#, an audit of a consumer's own rules, or a request to pick a form for a consumer's code is not a problem. It gets no issue and no answer, because the spec answers it and the maintainer's time goes to PHP#. Only a defect, with a repro, or a missing capability enters triage.
+A question about how to use PHP#, an audit of a consumer's own rules, or a request to pick a form for a consumer's code is not a problem. It gets no issue and no answer, because the spec answers it and the maintainer's time goes to PHP#. Only a defect, with a repro, or a missing capability enters triage. A defect enters only when a project, a user or CI hit it. A defect a builder or a tool found by exploring, which nothing hit, gets no issue.
+
+Run all five steps in the turn the problem arrives. Filing is only step 1: nothing else in the loop verifies an issue left at `needs-triage`.
 
 1. **File it.** The issue states the problem as behavior: what a PHP# program does today, and why that's wrong. The tracker is public, so the issue never names a consumer project, its files or its people. Its repro is a generic program that shows the same failure.
-2. **Check that it's new.** Search the code for the capability by its concept, not the report's wording, and search closed issues. If PHP# already has the correct form, close the issue as `wontfix` with that form shown as code. A consumer project is a measurement, never a source of features: its feature request is built only when it is good for PHP# on its own, because it solves several problems, it helps agents write better code, and PHP# has no form for it today. Otherwise the consumer restructures on its side.
-3. **Verify the claim.** Reproduce it: a command that fails today, or a test that goes red. Record what happened: confirmed with its code path, failed, or not enough detail for `needs-info`.
-4. **Decide the Solution.** Read the code the change reaches: the function that resolves it, its callers and the tests beside it. Decide the Solution, every public name it adds, and every consumer it reaches, so the builder builds once. A Solution that adds or changes syntax goes to `ready-for-human` instead.
+2. **Check that it's new.** Search the code for the capability by its concept, not the report's wording, and search open and closed issues. A problem with the same root cause as an open issue joins that issue, and the newer of the two closes as its duplicate. If PHP# already has the correct form, close the issue as `wontfix` with that form shown as code. A consumer project is a measurement, never a source of features: its feature request is built only when it is good for PHP# on its own, because it solves several problems, it helps agents write better code, and PHP# has no form for it today. Otherwise the consumer restructures on its side.
+3. **Verify the claim.** Reproduce it: a command that fails today, or a test that goes red. Run the repro with the latest released `mago`, downloaded from its GitHub release into the scratchpad, never the shared target's build, which may be stale. A probe project's `composer.json` says `"type": "library"`, so the rules for applications stay out of the result. Record what happened: confirmed with its code path, failed, or not enough detail for `needs-info`.
+4. **Decide the Solution.** Find why the failing state can exist at all, from first principles, before any fix: a report names a symptom, and a member or function that handles a state PHP# should make impossible treats that symptom. Read the code the change reaches: the function that resolves it, its callers and the tests beside it. Decide the Solution, every public name it adds, every consumer it reaches, and every file it changes, so the builder builds once and its lane is known before dispatch. A rule has no exemptions. A report that a rule fires wrongly is either a bug in the rule, fixed in the rule for every program, or a correct refusal that stays. The fix the reporter asks for is never the default Solution. Pick the one that keeps the correct way the only way: often no change to PHP# and a restructure on the consumer's side, never an escape hatch or a second way that an agent could misuse. A Solution that changes what a PHP# program says or means goes to `ready-for-human` instead.
 5. **Apply the outcome:**
-   - `ready-for-agent`: post the brief, per [AGENT-BRIEF.md](AGENT-BRIEF.md).
-   - `ready-for-human`: post the proposal, in the shape `/maintain` gives.
+   - `ready-for-agent`: post the brief, per [AGENT-BRIEF.md](AGENT-BRIEF.md), with its `**Verified:**` and `**Root cause:**` from steps 3 and 4. A bug without both stays `needs-triage`, whoever reported it and whatever fix they proposed.
+   - `ready-for-human`: the issue holds the problem and what was verified. The proposal goes to the language owner in the conversation, per [PROPOSE.md](PROPOSE.md), and the issue gets the brief only after his ruling.
    - `needs-info`: post what is established and the specific questions left.
    - `wontfix`: close the issue with the reason, and with the correct form when one exists.

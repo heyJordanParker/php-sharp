@@ -6,7 +6,9 @@ name: PGO profile
 # latest release, so install.sh and mago self-update never see it. .github/pgo-profile.sha256 pins it by name and
 # SHA-256, in sha256sum's format, and this workflow commits the new pin to next, so the next landing builds with it.
 # The instrumented build and the training held the Mac for about 15 minutes of every release build, so they run here
-# and never on a push.
+# and never on a push. A profile goes stale fast: v0.6.20's cost 17f52a54a32's mago 15.4% more instructions and 14.6%
+# more CPU-seconds on corpus/ than its own, over 5 alternating rounds, with 30,558 functions left without profile data
+# against 1,280. So it trains on each release's bump, never on a schedule.
 on:
   workflow_dispatch:
 

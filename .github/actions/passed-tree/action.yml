@@ -6,13 +6,15 @@ description: >-
   a notice titled "Tested tree". A rerun of a run's failed jobs makes an attempt whose CHANGES is a copy of the earlier
   attempt's, which ran no step and carries no notice, so the tree is the notice of the newest attempt whose CHANGES ran:
   push run 44097336633's second attempt reran MACOS alone, and its CHANGES named no tree. Whether a run passed is what
-  its newest attempt concluded. It checks the commit's own runs, and the runs of the head of each
-  pull request into master that names the commit. So a merge commit passes on its pull request's last run whenever
-  master didn't move after that run started, even when the "master merge gate" ruleset merged the pull request behind
-  master: pull request #334's run tested tree b5fa192, the tree of its merge commit, whose push run still ran every
-  Linux suite again, because its head's tree differed. GitHub empties a run's pull requests once they merge, so a run is
-  tied to master through its pull request, and both workflows run only for a pull request into master. The calling job
-  needs actions: read, checks: read and pull-requests: read.
+  its newest attempt concluded. A push checks the commit's own runs, and the runs of the head of each pull request into
+  master that names the commit. So a merge commit passes on its pull request's last run whenever master didn't move
+  after that run started, even when the "master merge gate" ruleset merged the pull request behind master: pull request
+  #334's run tested tree b5fa192, the tree of its merge commit, whose push run still ran every Linux suite again,
+  because its head's tree differed. A pull request's run checks the runs of its head, so a pull request that lands a
+  commit of next, whose own pull request's run passed the same merge, passes in a minute: #550's run of 2b19aa793ac ran
+  every job again, the Mac's among them, on tree 0dffb6e, which #536's run 44791855760 had passed. GitHub empties a
+  run's pull requests once they merge, so a run is tied to master through its pull request, and both workflows run only
+  for a pull request into master. The calling job needs actions: read, checks: read and pull-requests: read.
 
 inputs:
   workflow:
@@ -43,15 +45,20 @@ runs:
         WORKFLOW: ${{ inputs.workflow }}
         EVENTS: ${{ inputs.events }}
         PASSED: ${{ inputs.passed }}
+        HEAD: ${{ github.event.pull_request.head.sha }}
       run: |
         api() { gh api "repos/$GITHUB_REPOSITORY/$1" --jq "$2"; }
         tree=$(api "git/commits/$GITHUB_SHA" .tree.sha)
-        commits=$GITHUB_SHA
-        for head in $(api "commits/$GITHUB_SHA/pulls" '.[] | select(.base.ref == "master") | .head.sha'); do
-          if [[ $head != "$GITHUB_SHA" ]]; then
-            commits+=" $head"
-          fi
-        done
+        if [[ -n $HEAD ]]; then
+          commits=$HEAD
+        else
+          commits=$GITHUB_SHA
+          for head in $(api "commits/$GITHUB_SHA/pulls" '.[] | select(.base.ref == "master") | .head.sha'); do
+            if [[ $head != "$GITHUB_SHA" ]]; then
+              commits+=" $head"
+            fi
+          done
+        fi
         runs=
         for commit in $commits; do
           for event in $EVENTS; do

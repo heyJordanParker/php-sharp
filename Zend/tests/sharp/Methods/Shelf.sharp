@@ -1,0 +1,47 @@
+namespace App.Shop;
+
+import Illuminate.Support.Collection;
+
+// Methods whose result and parameter types are generic classes, a PHP# one and a plain PHP one with two type
+// parameters, which reflection reads without running them.
+public class Shelf
+{
+    public Box<Order> boxed() => throw new LogicException("Reflection reads this method, and runs none.");
+
+    public void keep(Box<Order> box) { }
+
+    public Collection<int, string> names() => throw new LogicException("Reflection reads this method, and runs none.");
+
+    // Each generic method's result or parameter type, as its definition and its type arguments.
+    public static List<string> describe()
+    {
+        List<string> lines = [];
+        for (const method of typeof(Shelf).methods()) {
+            if (["boxed", "keep", "names"].contains(method.name)) {
+                const parameters = method.parameters().map(parameter => Shelf.generic(parameter.type));
+                lines.add(`${method.name}: ${Shelf.generic(method.type)} (${parameters.join(", ")})`);
+            }
+        }
+        return lines;
+    }
+
+    public static List<bool> compare()
+    {
+        const methods = typeof(Shelf).methods();
+        return [
+            methods[0].type.genericDefinition() == typeof(Box),
+            methods[0].type.typeArguments() == [typeof(Order)],
+            methods[1].parameters()[0].type.genericDefinition() == typeof(Box),
+            methods[1].parameters()[0].type.typeArguments() == [typeof(Order)],
+            methods[0].type == typeof(Box<Order>),
+            methods[2].type.genericDefinition() == typeof(Collection),
+            methods[2].type.typeArguments() == [typeof(int), typeof(string)],
+        ];
+    }
+
+    private static string generic(Class<Any?> type)
+    {
+        const arguments = type.typeArguments().map(argument => argument.name());
+        return `${type.genericDefinition()?.name() ?? "null"}[${arguments.join(", ")}]`;
+    }
+}
