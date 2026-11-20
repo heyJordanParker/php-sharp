@@ -4,16 +4,17 @@ name: Release
 # every asset and the release's notes. PHP# and Mago release at one version: ext/sharp/php_sharp.h's PHP_SHARP_VERSION
 # and sharp/mago/Cargo.toml's version must be equal, and sharp/CHANGELOG.md must have that version's section.
 #
-# sharp.yml's RELEASE_ASSETS calls this workflow beside the suites in every run that runs them, so a build that fails
-# fails before the merge, and in the push of a release's bump to master with publish, the one run that publishes, whose
-# files sharp.yml's RELEASE then publishes as they are. Its attestations name this workflow as their signer, which
+# A release builds its binaries once, as Humble and Farley's Continuous Delivery asks. sharp.yml's RELEASE_ASSETS calls
+# this workflow in every pull request's run, beside the suites, and sharp.yml's RELEASE publishes exactly a bump's files
+# when the merge's tree is the one that run passed. Its attestations name this workflow as their signer, which
 # install.sh and mago self-update verify, so the binaries build here and nowhere else.
 on:
   workflow_call:
     inputs:
-      # Only the binaries a release publishes build with profile-guided optimization. Every other run builds the same
-      # targets in the release profile without it, which proves the release profile compiles and links, where the
-      # profile-guided build of aarch64-apple-darwin held the Mac for 34 minutes at p50 on every push.
+      # Set in a release's bump, whose files RELEASE publishes. Only those binaries build with profile-guided
+      # optimization. Every other run builds the same targets in the release profile without it, which proves the
+      # release profile compiles and links, where the profile-guided build of aarch64-apple-darwin held the Mac for 34
+      # minutes at p50 on every push.
       publish:
         type: boolean
         required: true
@@ -177,7 +178,7 @@ jobs:
           # Each job in this matrix defines a build target. The following custom keys control the pipeline steps:
           # - `smoke: true`: Smoke-checks the built binary. Only targets the job's runner can execute set it.
           # - `pgo: true`: Builds with profile-guided optimization, profiled on corpus/. Only aarch64-apple-darwin
-          #   sets it, and only when the run publishes. On the M2 Max, fat LTO with one codegen unit and this profile
+          #   sets it, and only in a release's bump. On the M2 Max, fat LTO with one codegen unit and this profile
           #   analyzed and compiled a 14,860-file vendor tree in 15% fewer instructions and 15 to 19% fewer CPU-seconds
           #   than a thin-LTO build of the same source with 16 units, and a 1,536-file PHP# project in 1.6 to 2.4%
           #   fewer instructions. So the release's 37-minute build on the self-hosted Mac stays.
