@@ -18,7 +18,7 @@ Each step is its own command:
 2. `git fetch origin master`.
 3. `df -h /System/Volumes/Data`. Under 60 GiB, delete every build nothing running uses: the shared target's artifacts untouched for 2 hours, each idle CI runner's Mago and engine builds, and PHP# images older than the last release. Under 20 GiB, start no build.
 4. `sysctl -n vm.loadavg`.
-5. `gh pr list`, opening `next`'s PR with auto-merge if it has commits and none, and `gh issue list --search "label:blocking,needs-triage,ready-for-agent,ready-for-human"`.
+5. `sharp/bin/land`, which lands the newest commit of `next` whose runs passed, and `gh issue list --search "label:blocking,needs-triage,ready-for-agent,ready-for-human"`.
 6. `git worktree list`, the branches, local and on GitHub, and the scratchpad's folders. Only `master`, `next`, `speed`, `ci`, and their worktrees under `worktrees/` exist. Any other copy of the repository is deleted the same tick.
 7. The inbox, if one is installed: withdraw every PHP# item that is resolved or stale.
 8. Work the issues from the right: verify what builders returned, ship what is green, give ready issues to free lanes, then triage every `needs-triage` issue to its outcome. Retest any stop that holds every lane.
