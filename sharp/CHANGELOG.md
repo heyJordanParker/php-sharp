@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.41] - 2026-11-21
+
 ### Upgrading from 0.6.40
 
 - A `string` is text and always valid UTF-8, spec section 18, and binary data is `Bytes`, a struct in `Sharp` that every file names with no import. `text.toBytes()` gives a string's UTF-8 bytes, and `bytes.toText()` reads bytes back as text, each byte sequence that is not UTF-8 becoming U+FFFD. Each byte member moves to `Bytes`:
@@ -1542,7 +1544,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.40...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.41...HEAD
+[0.6.41]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.40...v0.6.41
 [0.6.40]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.39...v0.6.40
 [0.6.39]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.38...v0.6.39
 [0.6.38]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.37...v0.6.38
