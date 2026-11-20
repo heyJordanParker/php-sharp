@@ -6849,13 +6849,14 @@ static uint32_t sharp_type_arity(const sharp_type *type)
 }
 
 /* Spec section 25: `Class<T>.genericDefinition()`, the class value of the generic type `type` holds without its `?`,
- * without its type arguments: `List` for `List<int>` and `App.Crate` for `App.Crate<App.Mark>` and for `App.Crate`
- * itself. Null for a type that declares no type parameter. */
+ * without its type arguments: `List` for `List<int>`, `App.Crate` for `App.Crate<App.Mark>` and for `App.Crate`
+ * itself, and `Illuminate.Support.Collection` for a plain PHP class written with type arguments, whose type parameters
+ * only its docblock declares. Null for a type that declares no type parameter. */
 ZEND_FUNCTION(Sharp_Internal_genericDefinition)
 {
 	SHARP_CLASS_VALUE_FUNCTION_START();
 
-	if (type->kind != SHARP_TYPE_NAMED || !sharp_type_arity(type)) {
+	if (type->kind != SHARP_TYPE_NAMED || (!type->count && !sharp_type_arity(type))) {
 		return;
 	}
 	if (type->class_name) {
