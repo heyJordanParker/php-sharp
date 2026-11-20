@@ -554,6 +554,13 @@ foreach ($exceptions as $class) {
 foreach (['Attribute', 'Countable', 'JsonSerializable', 'Throwable'] as $class) {
     $externs[] = "extern $class uses none;";
 }
+// A plain PHP library hands PHP# code an SplFileInfo, as a file finder's results are one or a subclass of one, so it is
+// a standard root class too (decision 83). It reaches the file system, so it has `Files`, but each member that reads
+// only the path it holds is pure.
+$externs[] = 'extern SplFileInfo uses Files;';
+foreach (['__toString', 'getBasename', 'getExtension', 'getFilename', 'getPath', 'getPathname'] as $member) {
+    $externs[] = "extern SplFileInfo.$member uses none;";
+}
 // The classes of PHP 8.4's DOM that read and write markup, an HTML page or an XML document, are named by the standard
 // library, so a .sharp file names each through its import, as `import Dom.HTMLDocument;` (decision 83). Each may have
 // any effect, as `XMLDocument::createFromFile` reads a file.
