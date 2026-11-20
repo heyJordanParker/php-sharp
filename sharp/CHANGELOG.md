@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A law reasons about a machine's value as the closed set of its cases, spec sections 20.2 and 28, as it does about an enum's. `is` and `match` on it test which case it is, `this` in the machine's own methods included, and `==` between two of its values compares the case and its fields, as the machine's `==` does when it runs. So `law turningOnLights() => Lamp.off().turnOn().lit();` proves where `lit()` is `this is Lamp.On`, and so does `law turningOnLightsTheLamp() => Lamp.off().turnOn() == Lamp.On;`. 0.6.41 refused the first as "a match on this subject" and then as "the checker left out On", and the second as "the checker left out Lamp.operator ==", each of those last two called a bug in the PHP# checker.
+
 ## [0.6.41] - 2026-11-21
 
 ### Upgrading from 0.6.40
