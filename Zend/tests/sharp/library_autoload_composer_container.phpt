@@ -1,5 +1,5 @@
 --TEST--
-A post-autoload-dump callback, which Composer runs in its own process, uses PHP# classes through the PHP file mago compile writes beside one, the plugin's loader, Sharp\Container, a require and a require_once. Against the engine's own native bodies each runs. Compiled against a library built for other native bodies, each gets the refusal that names both versions: without opcache, when opcache preloads the same code, and with --no-plugins, where only Composer's loader runs
+A post-autoload-dump callback, which Composer runs in its own process, uses PHP# classes through the plugin's loader, Sharp\Container, a require and a require_once. Against the engine's own native bodies each runs. Compiled against a library built for other native bodies, each gets the refusal that names both versions: without opcache, when opcache preloads the same code, and with --no-plugins, where only Composer's loader runs
 --EXTENSIONS--
 opcache
 --SKIPIF--
@@ -117,7 +117,6 @@ PHP,
 <?php
 
 return [
-    'App\Greeting, through app/Greeting.php' => static fn (): string => (new App\Greeting('hello'))->now(),
     "App\\Tick\\Now, through the plugin's loader" => static fn (): string => (new App\Tick\Now('noon'))->at,
     'Sharp\Container' => static fn (): string => (new Sharp\Container())->get(App\Greeting::class)->now(),
     'a require of app/Clock.sharp' => static function (): string {
@@ -137,7 +136,7 @@ PHP,
     // loads no package's "files", so neither the library's autoload.php nor its loader runs.
     'composer_script.php' => composer_script('callback', 'autoload.php', null),
     'preload.php' => composer_script('preload', 'autoload.php', null),
-    'no_plugins.php' => composer_script('callback', 'composer/autoload_real.php', ['App\Greeting, through app/Greeting.php', 'a require of app/Clock.sharp', 'a require_once of app/Clock.sharp']),
+    'no_plugins.php' => composer_script('callback', 'composer/autoload_real.php', ['a require of app/Clock.sharp', 'a require_once of app/Clock.sharp']),
 ];
 foreach (LIBRARY_MODULE as $library) {
     $files["vendor/heyjordanparker/php-sharp-composer/library/Sharp/$library.sharp"] = file_get_contents("$package/library/Sharp/$library.sharp");
@@ -184,44 +183,36 @@ PHP, ['{who}' => $who, '{autoload}' => $autoload, '{rows}' => var_export($rows, 
 ?>
 --EXPECT--
 == the engine's own native bodies, without opcache
-callback through App\Greeting, through app/Greeting.php: hello
 callback through App\Tick\Now, through the plugin's loader: noon
 callback through Sharp\Container: no greeting
 callback through a require of app/Clock.sharp: noon
 callback through a require_once of app/Clock.sharp: noon
 == the engine's own native bodies, under opcache preloading
-preload through App\Greeting, through app/Greeting.php: hello
 preload through App\Tick\Now, through the plugin's loader: noon
 preload through Sharp\Container: no greeting
 preload through a require of app/Clock.sharp: noon
 preload through a require_once of app/Clock.sharp: noon
-callback through App\Greeting, through app/Greeting.php: hello
 callback through App\Tick\Now, through the plugin's loader: noon
 callback through Sharp\Container: no greeting
 callback through a require of app/Clock.sharp: noon
 callback through a require_once of app/Clock.sharp: noon
 == the engine's own native bodies, with --no-plugins
-callback through App\Greeting, through app/Greeting.php: hello
 callback through a require of app/Clock.sharp: noon
 callback through a require_once of app/Clock.sharp: noon
 == other native bodies, without opcache
-callback through App\Greeting, through app/Greeting.php: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
 callback through App\Tick\Now, through the plugin's loader: Error: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
-callback through Sharp\Container: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
+callback through Sharp\Container: Error: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
 callback through a require of app/Clock.sharp: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
 callback through a require_once of app/Clock.sharp: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
 == other native bodies, under opcache preloading
-preload through App\Greeting, through app/Greeting.php: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
 preload through App\Tick\Now, through the plugin's loader: Error: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
-preload through Sharp\Container: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
+preload through Sharp\Container: Error: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
 preload through a require of app/Clock.sharp: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
 preload through a require_once of app/Clock.sharp: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
-callback through App\Greeting, through app/Greeting.php: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
 callback through App\Tick\Now, through the plugin's loader: Error: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
-callback through Sharp\Container: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
+callback through Sharp\Container: Error: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
 callback through a require of app/Clock.sharp: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
 callback through a require_once of app/Clock.sharp: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
 == other native bodies, with --no-plugins
-callback through App\Greeting, through app/Greeting.php: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
 callback through a require of app/Clock.sharp: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.
 callback through a require_once of app/Clock.sharp: CompileError: This project's PHP# library is 9.9.x-dev, and the PHP# engine is <engine version>. Install PHP# 9.9.x-dev, or require heyjordanparker/php-sharp-composer <engine version>.

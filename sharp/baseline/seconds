@@ -60,6 +60,5 @@
 2	Zend/tests/sharp/library_autoload_missing_body.phpt
 2	Zend/tests/sharp/library_autoload_uncompiled.phpt
 1	Zend/tests/sharp/collection_readers_preload_jit_tracing.phpt
-1	Zend/tests/sharp/discovery.phpt
 1	Zend/tests/sharp/refusal_not_compiled.phpt
 1	Zend/tests/sharp/refusal_out_of_date_source.phpt

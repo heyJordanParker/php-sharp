@@ -13,6 +13,31 @@ const STUBS_VERSION = '0.4.43';
 const STUBS_SHA256 = '609c8dc1f27596f29c723700d9dff379602adb31c6b6dc16ca8027ad7724020f';
 const PHP_VERSION_ID_TARGET = 80500;
 
+// The classes of a namespace the standard library names, so a .sharp file names each through its import, as
+// `import Dom.HTMLDocument;` (decision 83): PHP 8.4's DOM, which reads and writes markup, an HTML page or an XML
+// document. `sharp/mago/scripts/regen-sharp-classes.php` reads this list into the checker's STANDARD_ROOT_CLASSES.
+const STANDARD_NAMESPACED_CLASSES = [
+    'Dom\\AdjacentPosition',
+    'Dom\\Attr',
+    'Dom\\CharacterData',
+    'Dom\\ChildNode',
+    'Dom\\Comment',
+    'Dom\\Document',
+    'Dom\\DocumentFragment',
+    'Dom\\DocumentType',
+    'Dom\\Element',
+    'Dom\\HTMLCollection',
+    'Dom\\HTMLDocument',
+    'Dom\\HTMLElement',
+    'Dom\\NamedNodeMap',
+    'Dom\\Node',
+    'Dom\\NodeList',
+    'Dom\\ParentNode',
+    'Dom\\Text',
+    'Dom\\TokenList',
+    'Dom\\XMLDocument',
+];
+
 // Each function's effects are the ones of the first rule whose extension and name pattern match it, written as they
 // follow `uses`, and null is pure, written `uses none`. A function that reads the clock, the environment or a file, or prints, only when an
 // argument is left out has that effect, as `date` has Clock and `imagepng` has Console. A handle can be a terminal or a
@@ -65,6 +90,12 @@ const RULES = [
     ['ctype', '~~', null],
     ['curl', '~~', 'Http'],
     ['dba', '~~', 'Database'],
+    // A DOM member that opens a path or a URL, to load, save, validate against or include a file, has Files. A member is
+    // named `Class::member`, which no function's name matches.
+    ['dom', '~::(C14NFile|createFromFile|relaxNgValidate|saveHtmlFile|saveXmlFile|schemaValidate|xinclude)$~', 'Files'],
+    // An XML document's text can name a DTD or a file to include, which its options make it load, so parsing one may
+    // read a file.
+    ['dom', '~^XMLDocument::createFromString$~', 'Files'],
     ['dom', '~~', null],
     ['enchant', '~~', 'Files'],
 
@@ -225,6 +256,9 @@ const ROWS = [
     ['ctype', 'ctype_digit', null],
     ['curl', 'curl_exec', 'Http'],
     ['dba', 'dba_open', 'Database'],
+    ['dom', 'HTMLDocument::createFromFile', 'Files'],
+    ['dom', 'XMLDocument::createFromString', 'Files'],
+    ['dom', 'HTMLDocument::createFromString', null],
     ['dom', 'dom_import_simplexml', null],
     ['enchant', 'enchant_broker_init', 'Files'],
 
@@ -554,12 +588,30 @@ foreach ($exceptions as $class) {
 foreach (['Attribute', 'Countable', 'JsonSerializable', 'Throwable'] as $class) {
     $externs[] = "extern $class uses none;";
 }
-// The classes of PHP 8.4's DOM that read and write markup, an HTML page or an XML document, are named by the standard
-// library, so a .sharp file names each through its import, as `import Dom.HTMLDocument;` (decision 83). Each may have
-// any effect, as `XMLDocument::createFromFile` reads a file.
-foreach (['AdjacentPosition', 'Attr', 'CharacterData', 'ChildNode', 'Comment', 'Document', 'DocumentFragment', 'DocumentType', 'Element', 'HTMLCollection', 'HTMLDocument', 'HTMLElement', 'NamedNodeMap', 'Node', 'NodeList', 'ParentNode', 'Text', 'TokenList', 'XMLDocument'] as $class) {
-    $imports[] = "import Dom.$class;";
-    $externs[] = "extern $class uses any;";
+// A plain PHP library hands PHP# code an SplFileInfo, as a file finder's results are one or a subclass of one, so it is
+// a standard root class too (decision 83). It reaches the file system, so it has `Files`, but each member that reads
+// only the path it holds is pure.
+$externs[] = 'extern SplFileInfo uses Files;';
+foreach (['__toString', 'getBasename', 'getExtension', 'getFilename', 'getPath', 'getPathname'] as $member) {
+    $externs[] = "extern SplFileInfo.$member uses none;";
+}
+// Each class of a namespace a .sharp file names is imported, and pure, as a DOM document built and read in memory
+// reaches nothing outside the process. Each member its own stub declares that RULES give an effect, as
+// `XMLDocument::createFromFile` reads a file, has a line of its own.
+foreach (STANDARD_NAMESPACED_CLASSES as $class) {
+    $path = $map->classes[strtolower($class)] ?? fail("php-8-stubs declares no $class.");
+    $parts = explode('/', $path);
+    $extension = $parts[1] === 'ext' ? $parts[2] : $parts[1];
+    $short = basename(str_replace('\\', '/', $class));
+    $imports[] = 'import ' . str_replace('\\', '.', $class) . ';';
+    $externs[] = "extern $short uses none;";
+    preg_match_all('~function (\w+)\(~', file_get_contents("$stubs/$path"), $members);
+    foreach ($members[1] as $member) {
+        $effect = effect(RULES, $extension, "$short::$member");
+        if ($effect !== null) {
+            $externs[] = "extern $short.$member uses $effect;";
+        }
+    }
 }
 // A date or a time zone is a value once created, and the members that create one from the clock list `Clock` below,
 // so holding and reading one is pure, as is reading any plain PHP date, such as a Carbon, through the interface every

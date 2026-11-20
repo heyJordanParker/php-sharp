@@ -1116,6 +1116,8 @@ paid.rawBody;   // ""
 
 **A constructor marked `required`** is one that `new Self(…)` can call on the class and on every subclass. Section 25 gives its rules.
 
+**A PHP# object is only built through its constructor,** so every object holds what its constructor checks. `new` and `createInstance` (section 25) run it, and so do plain PHP's `new`, `ReflectionClass::newInstance` and `newInstanceArgs`, and a lazy proxy's factory. `unserialize` builds a struct or a class through its `parse`, which runs the constructor (section 10). Each other way plain PHP creates an object throws an `Error` that names the type, "App.Account is built only through its constructor, which this creation doesn't run": `ReflectionClass::newInstanceWithoutConstructor`, `newLazyGhost` and `resetAsLazyGhost`, PDO's `FETCH_CLASS` and every driver's fetch into a class, and SOAP's class map. A plain PHP class that extends a PHP# class is built the same way, through a constructor chain that runs the PHP# constructor, so a test double that skips it, as PHPUnit's `createMock` makes, throws "App.Catalog is built only through its constructor, which this creation doesn't run".
+
 ### 9.1 Named constructors
 
 A class has one unnamed main constructor. Any other constructor has a name and passes control to the main one with `: this(…)`. Every creation is written `new Class…`.
@@ -1328,6 +1330,8 @@ OrderRecord record = OrderRecord.parse(row);   // a class parses the same way, b
 
 **`Json.encode` writes a struct or a class by the fields its `parse` reads,** so one declaration governs reading and writing. Each field is written under its key, a value as text as its `toString()`, and a field marked `[Key(omitNull: true)]` is left out when it is null. A missing key of such a field reads as null. A main constructor parameter that holds no property can't be written, so `Json.encode` of a type whose `parse` reads one is a compile error that names the parameter: "`Json.encode` writes `Price` from the properties its `parse` reads, and the main constructor parameter `cents` holds no property."
 
+**`serialize` writes a struct or a class as its stored form, the fields `Json.encode` writes, and `unserialize` builds it again through its `parse`,** so the constructor runs on every copy, as a queued job or a cached value is read back. A copy reads back `==` to the original, and data its type no longer reads, as a cached value written before its type changed, throws the error `parse` throws or the constructor's own. `serialize` of a type with no stored form throws an `Error` that names the class and says why: a main constructor parameter that holds no property, as a service a class takes, a field that holds a function, or a `Map` keyed by a type that has no text. A class whose plain PHP parent serializes its objects itself, through `__serialize` and `__unserialize`, as an ORM's model does, keeps the parent's. PHP# code declares none of `__serialize`, `__unserialize`, `__sleep` and `__wakeup`.
+
 **A family is a sealed interface, an abstract class or an enum whose cases carry data, marked `[Tag("type")]`.** Each variant below it, a class, a struct or an enum case, names itself with `[Key("card")]`. The family's `parse` reads the variant whose name the input holds under the tag's key, and `Json.encode` writes a variant with its name under that key, so renaming a class never changes stored data. An interface holds no static method body, so an interface family's `parse` is called from PHP# code. `typeof(Self).withTag(name)` gives the variant's class (section 25).
 
 <!-- example data-in-out -->
@@ -1381,7 +1385,7 @@ import Sharp.Encoding.Json;
 Json.encode(new Payment("https://shop.test/done", Decimal.parse("1.50"), null, new Card("4242")));   // "{\"return_url\":\"https://shop.test/done\",\"amount\":\"1.50\",\"method\":{\"type\":\"card\",\"last4\":\"4242\"}}"
 -->
 
-- A variant without `[Key]` is a compile error: "`Cash` is a variant of `PaymentMethod` and gives no name for it."
+- A variant without `[Key]` is a compile error: "`Cash` is a variant of `PaymentMethod` and gives no name for it." A backed machine's case is named by its value instead (section 20.2).
 - Two variants of one family with one name are a compile error: "`Debit` and `Card` are both named `card` in `PaymentMethod`."
 - A field of a variant read by the tag's key is a compile error: "`type` is read twice: by the tag of `PaymentMethod` and the main constructor parameter `type`."
 - A name the family has no variant of is the problem of the tag's key: "type: expected bank or card, got string 'cash'". The names are listed in their order.
@@ -1500,7 +1504,7 @@ inbox.holds(orders, message);   // compiles: TItem is inferred as Order, and val
 
 A collection's elements are still checked where it enters from plain PHP (section 12).
 
-**`serialize` keeps a collection,** so a queued job or a cached value may hold one. `unserialize` gives a `Map` back as a `Map` and a `Set` as a `Set`, with the same entries in the same order, alone or inside a `List`, a struct or a class, in the same process or a fresh one, and whatever classes it allows, as it gives back an array. A collection's type arguments are the types of its elements, so the copy is a `Map<string, int>` exactly when the original is, and a field whose read-back collection holds a wrong entry throws `TypeError`.
+**`serialize` keeps a collection,** so a queued job or a cached value may hold one. `unserialize` gives a `Map` back as a `Map` and a `Set` as a `Set`, with the same entries in the same order, alone or inside a `List`, a struct or a class, in the same process or a fresh one, and whatever classes it allows, as it gives back an array. A collection's type arguments are the types of its elements, so the copy is a `Map<string, int>` exactly when the original is, and a field whose read-back collection holds a wrong entry throws the `Sharp.InvalidFields` its struct's or class's `parse` throws (section 10).
 
 **Declaring type parameters:**
 
@@ -4046,6 +4050,8 @@ public enum CheckoutState
 
 A case with a value and a case with data in one enum is a compile error.
 
+A machine (section 20.2) is the one enum whose cases may carry data and a value at once.
+
 - **Each case is its own type,** so a method can take `PaymentResult.Paid` alone.
 - **Two cases are `==`** when they are the same case and each field is `==`, as two structs are (section 19). A case with a field that has no `==` gives its enum no `==`. An enum that declares its own `==` compares its cases by it instead, as a struct does.
 - **A not-backed enum may declare type parameters,** with bounds and without `in` or `out`, as `enum Lookup<T> { case Found(T value); case Missing; }`. A backed enum declares none.
@@ -4133,6 +4139,71 @@ public class PopupInteraction : Interaction { … }      // same namespace: allo
 
 Use an enum when the cases are small data. Use a sealed interface when each case is a full class with its own methods.
 
+### 20.2 Machines
+
+**A `machine` is a value that moves between cases, and it changes by its moves alone.** It declares its cases as an enum does, each with an optional value, and a case may hold a block of members. A move is a method that gives a case of the same machine: one in a case's block moves from that case, and one in the machine's body moves from each case that isn't `final`. An entry point is a static method of the machine that gives a case. Every other method is an ordinary member.
+
+<!-- example machine -->
+```csharp
+// app/Shop/OrderStatus.sharp
+namespace App.Shop;
+
+public machine OrderStatus : string
+{
+    case Draft = "draft"
+    {
+        public OrderStatus.Paid pay(int cents)
+        {
+            if (cents <= 0) {
+                throw new ValueError("A payment is positive.");
+            }
+            return OrderStatus.Paid(cents);
+        }
+
+        public OrderStatus.Cancelled cancel() => OrderStatus.Cancelled;
+    }
+
+    case Paid(int cents) = "paid"
+    {
+        public OrderStatus.Shipped ship() => OrderStatus.Shipped;
+    }
+
+    final case Shipped = "shipped";
+    final case Cancelled = "cancelled";
+
+    public static OrderStatus.Draft open() => OrderStatus.Draft;
+
+    law paidIsPositive(OrderStatus.Paid paid) => paid.cents > 0;
+}
+```
+
+<!-- example machine -->
+```csharp
+// app/Shop/Order.sharp
+namespace App.Shop;
+
+public class Order
+{
+    public Order(public int id { get; }) { }
+
+    public OrderStatus status { get; private set; } = OrderStatus.open();
+    public OrderStatus copied { get; set; } = OrderStatus.open();          // compile error: a machine property has a private set
+
+    public void pay(int cents) { this.status = this.status.pay(cents); }
+    public void copy(Order o) { this.status = o.status; }                   // compile error: it changes only by a move of its own
+    public void force() { this.status = OrderStatus.Paid(5); }              // compile error: only entry points and moves build a case
+}
+```
+
+- **Only entry points, moves, `parse` and `Json.decode` build a case.** A case with no fields is one object.
+- **A property of a machine type has a `private set`,** starts at an entry point, and changes only as `x = x.move(…)`. A promoted constructor parameter of a machine type is a compile error, since a caller could pass any case.
+- **A move called on a case it doesn't move from throws `Sharp\StateError`,** which names the machine, the case and the cases the move moves from: "OrderStatus is Paid, and pay moves from Draft."
+- **The checker checks the graph.** Every case is reachable from an entry point. A case with no move out is `final`, and a `final` case has no move out. When a machine has `final` cases, every case reaches one. Each is a compile error that names the case: "The case `OrderStatus.Paid` has no move out, so it is `final`."
+- **A law whose one parameter is a case of the machine is an invariant** (section 28): the checker proves it after every entry point and every move.
+- **A machine marked `[Tag]` stores as a family does** (section 10): `Json.encode` writes a case under its value under the tag's key and its fields, and `parse` and `Json.decode` read it back, refusing a name the machine has no case of and a field of the wrong type. A backed machine's values name its cases, so `[Key]` on a case of one is a compile error that names the value: "`OrderStatus.Paid` is named `paid` by its value, so it takes no `[Key]`." A machine with no backing names each case with `[Key]`, as a family names each variant. Each invariant of the case it reads runs as code, and one that fails throws a `ValueError` that names it: "OrderStatus.Paid breaks paidIsPositive."
+- **A `match` over a machine lists every case and takes no `default`** (section 21).
+- **Independent states are two machines on the holder,** and nested states are one machine of the flattened cases.
+
 ## 21. Pattern matching
 
 `match` is the only branching construct on a value. `switch` is removed. `match` works both as an expression and, with block arms, as a statement. It compares strictly and never falls through.
@@ -4166,6 +4237,7 @@ match (result) {
 
 - **On an enum,** arms that handle every case need no `default`. A missed case is a compile error that names it.
 - **On a sealed interface,** the same holds for its implementers (section 20.1).
+- **A machine's cases** (section 20.2), as an enum's are: adding a case makes every `match` that misses it a compile error.
 - **On a List,** arms that handle every list need no `default`. A list pattern without a rest handles lists of its number of items, and one with a rest every longer list too. Each element is covered by the same rules as a `match` on one value of the element type, so `[Circle c, ...]` and `[Square s, ...]` together handle every list of a sealed `Shape` with a first item. A typed rest must take any `List` of the element type, as `...List<Shape> rest` does. A missed list is a compile error that names it in plain words.
 - **On a nullable enum, sealed interface or List,** such as a `Status?` or a `List<Money>?`, the arms handle `null` too.
 - **On any other value,** `match` must have a `default` arm.
@@ -4658,7 +4730,7 @@ These are compile errors, whether the parent is PHP# or plain PHP:
 
 - a missing `override`
 - `override` when the parent has no such method
-- overriding a PHP# method that is not `virtual` or `abstract`, in PHP# or in a plain PHP class: the checker refuses every replacement written in the project, and a subclass a library generates while the app runs, as a test double or a lazy-loading proxy, may replace the method
+- overriding a PHP# method that is not `virtual` or `abstract`, in PHP# or in a plain PHP class: the checker refuses every replacement written in the project, and a subclass a library generates while the app runs may replace the method, though its objects are built only through the PHP# constructor (section 9), so no test double that skips it exists
 - overriding a plain PHP method marked `final`
 - an override that renames a parameter of the method it overrides. The error names both names.
 
@@ -6297,9 +6369,9 @@ constants[2].declaringClass == typeof(Limits);                // true
 constants[2].value();                                         // throws Error
 ```
 
-**`constructor()`, `createInstance` and `createLazy` reach a class's constructor through its class value.** `constructor()` gives a `Constructor`, with its `visibility`, `parameters()` and `attributes<TAttribute : Object>()`, or null for a class without one. `createInstance(arguments)` creates an object of the class, with the class value's type arguments, by its constructor with the `List<Any?>` of arguments, which the calling code reaches as a direct `new` would. `createLazy(initialize)` creates one empty, with no constructor run, as PHP 8.4's `newLazyGhost` does, and `initialize` runs on it at its first property read or write, as Doctrine loads an entity. Each throws `InvalidArgumentException` for an abstract class, an interface or an enum, and `createInstance` for arguments the constructor's parameters don't take. A `Property` reads the state of such an object:
+**`constructor()` and `createInstance` reach a class's constructor through its class value.** `constructor()` gives a `Constructor`, with its `visibility`, `parameters()` and `attributes<TAttribute : Object>()`, or null for a class without one. `createInstance(arguments)` creates an object of the class, with the class value's type arguments, by its constructor with the `List<Any?>` of arguments, which the calling code reaches as a direct `new` would. It throws `InvalidArgumentException` for an abstract class, an interface or an enum, and for arguments the constructor's parameters don't take. A `Property` reads the state of such an object:
 
-- **`isInitialized(receiver)`** holds when the property holds a value, so it is false for a `late` property no code has set and for a lazy object that has not loaded, which the read does not load. A `late` property is set once, so there is no reset.
+- **`isInitialized(receiver)`** holds when the property holds a value, so it is false for a `late` property no code has set. A `late` property is set once, so there is no reset.
 - **`getter()` and `setter()`** give the property's `get` and `set` accessors as a `Method`, named `$name::get` and `$name::set` as PHP names a property hook, or null for a plain stored property. That is how code tells a property with accessors apart. Their `createDelegate` and `createInvoker` give a function that reads or writes the property, as `get` and `set` do.
 
 <!-- example reflected-creation -->
@@ -6314,8 +6386,6 @@ public class Account
     public int doubled => this.id * 2;
 
     public Account(string owner) { this.owner = owner; }
-
-    public void load(string owner) { this.owner = owner; }
 }
 ```
 
@@ -6329,11 +6399,7 @@ typeof(Account).createInstance([]);                           // throws InvalidA
 const properties = typeof(Account).properties();
 properties[0].getter();                                       // null: id is stored
 properties[2].getter()?.name;                                 // "$doubled::get"
-const ghost = typeof(Account).createLazy((Account account) => account.load("grace"));
-typeof(Account).fields()[0].set(ghost, 7);
-ghost.id;                                                     // 7
-properties[1].isInitialized(ghost);                           // false
-ghost.owner;                                                  // "grace"
+properties[1].isInitialized(made);                            // true: the constructor set owner
 ```
 
 **`withTag(name)` gives the variant of a family whose `[Key]` is `name`** (section 10), as a class value of the family, or null for a name the family has no variant of and for a class that is no family. It is pure, so a single-table-inheritance base builds the class a row stores with `new (typeof(Self).withTag(row.kind) ?? throw new ValueError(…))(…)`, which needs the base's constructor to be `required` (section 9).
@@ -6493,7 +6559,7 @@ created(["Acme", "pro", 3]);                                  // throws Argument
 pause.createInvoker<Function<string(List<Any?>)>>();          // throws ValueError
 ```
 
-**A `Field` reads and writes storage, so it runs no code a project wrote.** `field.get(receiver)` and `field.set(receiver, value)` reach the storage as a direct use from the calling code would, with the access and type checks of `Property.get` and `set`, an auto-property's storage as its `get`, and its `set` or `init`, do. An `init` property's storage takes a write only while it holds no value, as only the object's creation writes it, and a write after that throws `Error`. They run no accessor, so `field.get`, `field.set` and `field.isInitialized` are pure, and a storage layer held to `uses Database` reads and writes a row through `fields()`. A receiver whose class gives the property an accessor, as a PHP 8.4 subclass may by declaring it again, throws `Error` from `get` and `set`, which run neither accessor. A lazy object that has not loaded runs its initializer at its first read, so `get` on one throws `Error` rather than load it. `set` writes its storage without loading it, as PHP 8.4's `setRawValueWithoutLazyInitialization` writes and as Doctrine gives an entity its identifier before it loads, so a later read of that storage never loads it either, and the object keeps the value once it loads. A static's `get` and `set` throw `Error` before its class has run its initial values. `field.defaultValue()` runs an initial value that is not constant, so it has the effects of the initial values it can run, as `property.defaultValue()` has (section 29). Reading the storage never makes a `Property` pure: `property.get` still runs whatever accessor the property has:
+**A `Field` reads and writes storage, so it runs no code a project wrote.** `field.get(receiver)` and `field.set(receiver, value)` reach the storage as a direct use from the calling code would, with the access and type checks of `Property.get` and `set`, an auto-property's storage as its `get`, and its `set` or `init`, do. An `init` property's storage takes a write only while it holds no value, as only the object's creation writes it, and a write after that throws `Error`. They run no accessor, so `field.get`, `field.set` and `field.isInitialized` are pure, and a storage layer held to `uses Database` reads and writes a row through `fields()`. A receiver whose class gives the property an accessor, as a PHP 8.4 subclass may by declaring it again, throws `Error` from `get` and `set`, which run neither accessor. A static's `get` and `set` throw `Error` before its class has run its initial values. `field.defaultValue()` runs an initial value that is not constant, so it has the effects of the initial values it can run, as `property.defaultValue()` has (section 29). Reading the storage never makes a `Property` pure: `property.get` still runs whatever accessor the property has:
 
 <!-- example reflection-effects -->
 ```csharp
@@ -6997,7 +7063,7 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 
 - **An edit that keeps a file's declarations keeps every file that reads it current.** A compiled file names the hash of its file's declarations: each type's and member's name and signature, a method's without its body. A file that reads another `.sharp` file of the project, through its declarations as `typeof(Money)` does or by calling its methods as `money.amount()` does, records that hash beside the other file's stamp. After an edit of a method body, the engine runs it while the other file's compiled file names the hash it recorded, reading that compiled file's header and never the edited source, and the next compile leaves its compiled file as it is, unless a return or an effect it took from the edited body changed. The edited file itself is out of date until it compiles. A file keeps the stamp of each plain PHP file and each file in `vendor/` it reads, of each source its laws reach, and of a `.sharp` file that states an `extern` line or declares an event or a struct, so any change to one makes it out of date.
 - **A deploy** runs `vendor/bin/mago compile` before the code runs.
-- **A compile with nothing to do returns at once.** A compile keeps `.sharp/inputs.json`, a record of everything it read and wrote and of what it printed: each `.php` and `.sharp` file under the configured paths, includes and patches with its real path, but for the folders the configuration excludes and the plain PHP files of the vendor folder, which `composer.lock`, Composer's `installed.json` and its autoload maps stand for, every `composer.json` the loader reads, Composer's `installed.json` and its autoload maps in `vendor/composer`, the baseline, each `.gitignore` someone else wrote in a folder of the compile's `.php` files, the configuration, the checker build, and each file it wrote. The next compile checks the record before it analyzes anything, and when nothing in it changed, it prints the same outcome, a refused file's errors included, exits as the compile did, and stops. A file whose size, times, inode or device changed is hashed. On a filesystem whose change time records every write, as APFS, ext4 and most others do, that sees a rewrite that keeps the size and sets the time back. On FAT and exFAT, and on a system other than macOS and Linux, the compile hashes every file. A compile that warns keeps no record, so the next one prints the same warnings, and so does one whose law checker refused a file, so the next one runs the checker again. A project with an extension host enabled compiles every time, because a host doesn't say what it reads. The compile for the hosts keeps the same record in its own folder, whatever it logs, since the run that follows it reports what the project's files hold.
+- **A compile with nothing to do returns at once.** A compile keeps `.sharp/inputs.json`, a record of everything it read and wrote and of what it printed: each `.php` and `.sharp` file under the configured paths, includes and patches with its real path, but for the folders the configuration excludes and the plain PHP files of the vendor folder, which `composer.lock`, Composer's `installed.json` and its autoload maps stand for, every `composer.json` the loader reads, Composer's `installed.json` and its autoload maps in `vendor/composer`, the baseline, the configuration, the checker build, and each file it wrote. The next compile checks the record before it analyzes anything, and when nothing in it changed, it prints the same outcome, a refused file's errors included, exits as the compile did, and stops. A file whose size, times, inode or device changed is hashed. On a filesystem whose change time records every write, as APFS, ext4 and most others do, that sees a rewrite that keeps the size and sets the time back. On FAT and exFAT, and on a system other than macOS and Linux, the compile hashes every file. A compile that warns keeps no record, so the next one prints the same warnings, and so does one whose law checker refused a file, so the next one runs the checker again. A project with an extension host enabled compiles every time, because a host doesn't say what it reads. The compile for the hosts keeps the same record in its own folder, whatever it logs, since the run that follows it reports what the project's files hold.
 - **A compile lowers again only the files an edit changes.** A `.sharp` file keeps its compiled file while its key holds: its source, and the declarations, inferred returns, sets of names, library forms and effects its check read. `.sharp/compiled.bin` keeps what each file read, so the next compile checks that without lowering it, and is set aside once the configuration or the checker changes. A law is proved once while its key holds: its statement and proof, those of each law it calls, and the text of every declaration they reach. `.sharp/proofs.json` keeps how each proof ended, proven or not, so an edit no law reaches proves nothing again, and an unproven law is reported again without Lean.
 - **In development, the engine compiles a file that isn't current when it loads,** so a request always runs the code on disk. The engine's `sharp.compile_command` setting names the command, in a dev `php.ini`:
 
@@ -7009,6 +7075,8 @@ sharp.compile_command = "vendor/bin/mago --no-version-check --no-extensions comp
 - **A project compiles once at a time.** A request holds the lock of `.sharp/compile.lock` while it runs the command. A request that finds a file stale while another compiles waits for it, checks its file again, and runs the command only when the file is still stale, so after a refused compile it gets the refusal from the record.
 - **The command ends with the request.** It runs in a process group of its own, and each process of the group still running once the command exits is killed, as is the whole group when the request ends first.
 - **`--no-extensions` leaves the extension hosts' rules out of the compile a request waits for.** They run in `mago analyze` and in CI.
+
+- **`mago analyze` of the whole project compiles it before it analyzes with the hosts.** It writes the `.sharp` folder as `mago --no-extensions compile` writes it, laws proven, and the hosts' folder, from one analysis without the hosts and one lowering, then analyzes with the hosts and reports each issue of both once. So a save needs `mago analyze` alone. A `mago analyze` of named files, of staged files or of standard input, or with `--scan-only`, compiles only the hosts' folder.
 - **A compile never starts another.** The command runs with `SHARP_COMPILING=1`, and so does every process `mago` starts. A process that has it set never runs the command.
 - **A command that fails adds how it ended to the refusal,** with its last lines of stderr:
 
@@ -7017,31 +7085,12 @@ app/Orders/Order.sharp is out of date (app/Shared/Database/BaseModel.php changed
 ```
 
 - **Production leaves the setting empty,** as the runtime images do. A stale deploy is then refused, and no request waits for a compile.
-- **`mago compile` writes `.sharp/preload.php`, which preloads every type it compiled.** A production `php.ini` names it in `opcache.preload`. The file requires the project's Composer autoloader, then each accepted `.sharp` file that declares a type, the packages' in `vendor/` included, so a type whose parent another file declares, plain PHP or PHP#, gets it from the autoloader, as in a request. PHP declares an anonymous class only when its code runs, so the file then loads each type, PHP's own left out, that an anonymous class in a file the preload loads names as its parent, an interface or a trait. Such a file is one Composer's autoloader loads up front, as `illuminate/reflection`'s `helpers.php`, or the file of a type a preloaded type extends. Opcache would warn otherwise that it can't preload the class. A file in an `autoload-dev` folder stays out, as it gets no `.php` file, so production never preloads a test. The compile rewrites it on every compile:
+- **`mago compile` writes `.sharp/preload.php`, which preloads every type it compiled.** A production `php.ini` names it in `opcache.preload`. The file requires the project's Composer autoloader, then each accepted `.sharp` file that declares a type, the packages' in `vendor/` included, so a type whose parent another file declares, plain PHP or PHP#, gets it from the autoloader, as in a request. PHP declares an anonymous class only when its code runs, so the file then loads each type, PHP's own left out, that an anonymous class in a file the preload loads names as its parent, an interface or a trait. Such a file is one Composer's autoloader loads up front, as `illuminate/reflection`'s `helpers.php`, or the file of a type a preloaded type extends. Opcache would warn otherwise that it can't preload the class. A file in an `autoload-dev` folder stays out, so production never preloads a test. The compile rewrites it on every compile:
 
 ```text
 opcache.preload = /srv/app/.sharp/preload.php
 ```
 
-- **`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type,** as `StoreService.php` beside `StoreService.sharp`. So PHP code that finds classes by listing `*.php` files and naming each class by its path, as route-attribute and event discovery do, finds PHP# classes too. The file loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error. It ends with the type's declaration in an `if (false)` that never runs, naming the type and its kind, so PHP code that reads `*.php` source, as Composer's class map generator and Symfony's attribute routing do, finds the type too. A type named after a word PHP reserves, as `Case` or `Match`, gets the file without the declaration, which PHP would refuse, so a tool that reads source never finds it, and Composer's PSR-4 rule still loads it. The engine declares the type once, from the `.sharp` file, and the checker reads the `.sharp` file and never the `.php` file. Once its `.sharp` file is deleted, it declares nothing until the next compile deletes it. Nobody edits it: a `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, and the next compile rewrites or deletes the file with its source.
-- **`mago compile` keeps the `.php` files out of git with a `.gitignore` of its own in each folder that holds one.** The file lists itself and each `.php` file the compile wrote there, so git shows neither. Each checkout of a repository, a linked worktree included, has its own working tree, so each ignores its own files and never another checkout's, and the compile needs no `git` program. The compile rewrites the file on every compile, and deletes it with the `.php` files once the folder holds no source, even when no other source brings the compile back to that folder. It is the compile's own only while its first line is this one and each other line names itself or a `.php` file:
-
-```text
-# mago compile writes this file and the files it lists. It rewrites it on every compile.
-/.gitignore
-/Publishable.php
-```
-
-- **A folder whose `.gitignore` someone else wrote keeps it as it is,** tracked or not, a compile's file with a line added included. The compile warns of each `.php` file it doesn't list as `/` and its name with no `!` line after, until it does, and of a `.gitignore` that is a link, which git doesn't read, or that it can't read:
-
-```text
-app/Tenant/.gitignore doesn't list /Order.php, so git may show app/Tenant/Order.php as untracked: add /Order.php to it.
-```
-
-- **A compile removes the blocks an earlier `mago compile` wrote in `.git/info/exclude`,** and keeps every other byte. A compile by an older `mago` in any checkout writes its block again, so every checkout needs this one. Every checkout of a repository shares that file, so a block hid one checkout's files in all of them. When the compile can't write the file, as with a read-only `.git/info` folder, it warns which folder to make writable.
-- **A `.sharp` file in an `autoload-dev` folder, and a package's in `vendor/`, gets no `.php` file.** A test class keeps one file, because PHPUnit loads a test class only from the file it lists, so `phpunit.xml` lists the PHP# tests as `<directory suffix="Test.sharp">tests</directory>`.
-- **Editors hide the `.php` files:** VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, and PhpStorm through file nesting of `.php` under `.sharp`.
-- **Formatters pass the `.php` files as written:** `mago fmt`, Laravel Pint's `laravel`, `per` and `psr12` presets, and PHP-CS-Fixer's `@PER-CS2x0`. PHPCS skips them, because each marks itself `// phpcs:ignoreFile` as generated. Two styles want each global name written in full with no import, as `\is_file`, which no text that also passes Pint's `laravel` preset can do. So a project on PHP-CS-Fixer's `@Symfony` set skips the files with `->notContains('// mago compile writes this file from')` on its Finder, and one on Pint's `symfony` preset lists them under `notPath` in `pint.json`.
 - **A type error stops the file from running, an import its module's `imports` line leaves out included.** So does a law the checker cannot prove, a compile error that names the law and what is still to show.
 - **A plain PHP class that doesn't satisfy a PHP# type it extends or implements stops `mago compile`** (section 22), and `mago compile` still writes every accepted `.sharp` file.
 - **`mago compile` hides exactly what `mago analyze` hides:** the same `ignore` entries and baseline hide a host rule's error from both, so the two commands report the same errors.
@@ -7286,22 +7335,22 @@ public class Steps
 }
 ```
 
-**A state machine gets its laws through a pure transition method on its status enum,** so a law covers every state and event:
+**A state machine is a `machine`** (section 20.2), and its invariants are its laws: the checker proves each one after every entry point and every move that gives its case, and a failed proof prints the moves that break it:
 
-<!-- example state-machine-law -->
+<!-- example machine-invariant -->
 ```csharp
-public enum Status : string
+// app/Refund.sharp
+public machine Refund
 {
-    case Open = "open";
-    case Paid = "paid";
-    case Refunded = "refunded";
+    case Open
+    {
+        public Refund.Paid pay(int cents) => Refund.Paid(cents);
+    }
+    final case Paid(int cents);
 
-    public Status after(Payment e) => match (this) {                               // pure: the next status for every status and event
-        Status.Open => Status.Paid,
-        Status.Paid => Status.Refunded,
-        Status.Refunded => Status.Refunded,
-    };
-    law refundedIsFinal(Payment e) => Status.Refunded.after(e) == Status.Refunded;
+    public static Refund.Open open() => Refund.Open;
+
+    law paidIsPositive(Refund.Paid paid) => paid.cents > 0;        // compile error: paidIsPositive breaks after open() → Open, pay(cents: 0) → Paid(cents: 0)
 }
 ```
 

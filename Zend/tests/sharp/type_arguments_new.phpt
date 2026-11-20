@@ -1,5 +1,5 @@
 --TEST--
-new of a generic PHP# class gives the object its type arguments before its constructor runs, a named constructor's too, clone copies them, and an object plain PHP creates has its class's bounds
+new of a generic PHP# class gives the object its type arguments before its constructor runs, a named constructor's too, clone copies them, an object plain PHP creates has its class's bounds, and a lazy proxy has its real instance's
 --FILE--
 <?php
 require __DIR__ . '/type_arguments.inc';
@@ -113,23 +113,21 @@ foreach ([
         echo $exception->getMessage(), "\n";
     }
 }
-// A ghost's type arguments are never lazy, so reading them leaves it lazy.
-$ghost = $class->newLazyGhost($construct);
-var_dump(arguments($ghost), $class->isUninitializedLazyObject($ghost));
-var_dump($ghost == Queue::entities(), $class->isUninitializedLazyObject($ghost));
-// Resetting an object keeps its type arguments.
-$reset = Queue::orders();
-$class->resetAsLazyGhost($reset, $construct);
-var_dump(arguments($reset));
+// A ghost's initializer fills the object in place of its constructor, so a PHP# class refuses one.
+foreach ([
+    static fn () => $class->newLazyGhost($construct),
+    static fn () => $class->resetAsLazyGhost(Queue::orders(), $construct),
+] as $make) {
+    try {
+        $make();
+    } catch (Error $error) {
+        echo $error->getMessage(), "\n";
+    }
+}
+// Resetting an object as a proxy keeps its type arguments.
 $reset = Queue::orders();
 $class->resetAsLazyProxy($reset, $orders);
 var_dump(arguments($reset));
-// Setting every visible property initializes a ghost, which never runs its initializer.
-$ghost = $class->newLazyGhost(static function (): void {
-    echo "the initializer ran\n";
-});
-$class->getProperty('items')->setRawValueWithoutLazyInitialization($ghost, []);
-var_dump($class->isUninitializedLazyObject($ghost));
 
 echo "the constructor\n";
 // PaginatedList's constructor hands this to Lib\Witness::see before it returns.
@@ -257,22 +255,12 @@ no orders
 no orders
 no orders
 no orders
-array(1) {
-  [0]=>
-  string(18) "App.DatabaseEntity"
-}
-bool(true)
-bool(true)
-bool(false)
+App.PaginatedList is built only through its constructor, which this creation doesn't run
+App.PaginatedList is built only through its constructor, which this creation doesn't run
 array(1) {
   [0]=>
   string(9) "App.Order"
 }
-array(1) {
-  [0]=>
-  string(9) "App.Order"
-}
-bool(false)
 the constructor
 App\PaginatedList: App.Order
 App\PaginatedList: App.DatabaseEntity

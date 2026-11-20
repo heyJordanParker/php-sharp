@@ -19,7 +19,7 @@ class Library
 {
     public static string initial(int code) => code.toByteString();
 
-    public static bool isNumber(string text) => Regex.matches("/^[0-9]+$/", text);
+    public static bool isNumber(string text) => Regex.parse("/^[0-9]+$/").matches(text);
 
     public static string escape(string html) => Html.escape(html);
 

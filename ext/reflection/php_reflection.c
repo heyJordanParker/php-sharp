@@ -5174,7 +5174,8 @@ ZEND_METHOD(ReflectionClass, isCloneable)
 	if (!Z_ISUNDEF(intern->obj)) {
 		RETURN_BOOL(Z_OBJ_HANDLER(intern->obj, clone_obj) != NULL);
 	} else {
-		if (UNEXPECTED(object_init_ex(&obj, ce) != SUCCESS)) {
+		/* PHP#: the probe never leaves this function, so no code reaches a PHP# object its constructor didn't build. */
+		if (UNEXPECTED(object_init_to_build(&obj, ce) != SUCCESS)) {
 			return;
 		}
 		/* We're not calling the constructor, so don't call the destructor either. */
@@ -5262,7 +5263,7 @@ ZEND_METHOD(ReflectionClass, newInstance)
 
 	GET_REFLECTION_OBJECT_PTR(ce);
 
-	if (UNEXPECTED(object_init_ex(return_value, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(return_value, ce) != SUCCESS)) {
 		return;
 	}
 
@@ -5339,7 +5340,7 @@ ZEND_METHOD(ReflectionClass, newInstanceArgs)
 		argc = zend_hash_num_elements(args);
 	}
 
-	if (UNEXPECTED(object_init_ex(return_value, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(return_value, ce) != SUCCESS)) {
 		return;
 	}
 

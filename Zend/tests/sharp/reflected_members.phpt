@@ -1,5 +1,5 @@
 --TEST--
-Reflection reads and writes a static through its Property and invokes a static method with no receiver, creates an object from a class value and refuses arguments its constructor does not take, reads whether a late property holds a value, gives a computed and an observed property's accessors, which invoke as a read and a write, and none for a stored one, and creates a lazy object that loads at its first read, beside a property written before the load, and each reflection member value keys a Map and joins a Set as the member it reflects, whenever reflection read it, a static that runs accessors is listed, read and written through them as a direct use reaches it, a non-constant initial value is a default each read evaluates anew, and a Field's write before a lazy object loads reaches the storage as a direct write would and stays once it loads
+Reflection reads and writes a static through its Property and invokes a static method with no receiver, creates an object from a class value and refuses arguments its constructor does not take, reads whether a late property holds a value, gives a computed and an observed property's accessors, which invoke as a read and a write, and none for a stored one, and each reflection member value keys a Map and joins a Set as the member it reflects, whenever reflection read it, a static that runs accessors is listed, read and written through them as a direct use reaches it, and a non-constant initial value is a default each read evaluates anew
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -8,7 +8,6 @@ var_dump(ReflectedMembers\Report::statics());
 var_dump(ReflectedMembers\Report::created());
 var_dump(ReflectedMembers\Report::initialized());
 var_dump(ReflectedMembers\Report::accessors());
-var_dump(ReflectedMembers\Report::lazy());
 var_dump(ReflectedMembers\Report::keys());
 var_dump(ReflectedMembers\Report::staticAccessors());
 var_dump(ReflectedMembers\Report::defaults());
@@ -66,30 +65,6 @@ array(10) {
   NULL
   [9]=>
   NULL
-}
-array(7) {
-  [0]=>
-  int(99)
-  [1]=>
-  array(1) {
-    [0]=>
-    string(101) "Cannot modify private(set) property ReflectedMembers\Account::$pin from scope ReflectedMembers\Report"
-  }
-  [2]=>
-  array(2) {
-    [0]=>
-    bool(true)
-    [1]=>
-    bool(false)
-  }
-  [3]=>
-  int(0)
-  [4]=>
-  string(5) "grace"
-  [5]=>
-  int(1)
-  [6]=>
-  int(99)
 }
 array(10) {
   [0]=>

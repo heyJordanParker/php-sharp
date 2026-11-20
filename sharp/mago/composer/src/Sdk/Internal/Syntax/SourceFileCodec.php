@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Mago\Sdk\Internal\Syntax;
 
 use Mago\Sdk\Exception\ProtocolException;
-use Mago\Sdk\Internal\Protocol\PayloadReader;
+use Mago\Sdk\Internal\Protocol\ValueReader;
 use Mago\Sdk\PHPVersion;
 use Mago\Sdk\Syntax\NodeKind;
 use Mago\Sdk\Syntax\SourceFile;
@@ -24,10 +24,12 @@ final class SourceFileCodec
     private const MAXIMUM_NODE_KINDS = 65_536;
 
     /**
+     * Reads the snapshot from the fields of a message of values, where each table is one string of packed records.
+     *
      * @param list<NodeKind> $kinds
      */
-    public static function read(
-        PayloadReader $reader,
+    public static function readValues(
+        ValueReader $reader,
         PHPVersion $phpVersion,
         array $kinds,
         string $path,
@@ -36,23 +38,19 @@ final class SourceFileCodec
         $targetCount = $reader->readU32();
         $targetIds = $reader->readU32List($targetCount);
         $nodeCount = $reader->readU32();
-        $nodeBytes = $nodeCount * NodeStore::RECORD_SIZE;
-        $nodeRecords = $reader->readRaw($nodeBytes);
-        $read = strlen($nodeRecords);
         // `NodeStore` reads each node's kind byte by byte, and a byte past the end of the records reads as 0 with only
         // a warning.
-        if ($read !== $nodeBytes) {
-            throw new ProtocolException(
-                "The source snapshot holds {$read} bytes of node records, where its {$nodeCount} nodes take {$nodeBytes}.",
-            );
-        }
-        $nodes = new NodeStore($kinds, $nodeRecords, $nodeCount);
+        $nodes = new NodeStore(
+            $kinds,
+            self::readRecords($reader, 'node', $nodeCount, NodeStore::RECORD_SIZE),
+            $nodeCount,
+        );
         $nameCount = $reader->readU32();
-        $nameStarts = $reader->readRaw($nameCount * ResolvedNameStore::START_SIZE);
-        $nameRecords = $reader->readRaw($nameCount * ResolvedNameStore::RECORD_SIZE);
+        $nameStarts = self::readRecords($reader, 'name start', $nameCount, ResolvedNameStore::START_SIZE);
+        $nameRecords = self::readRecords($reader, 'name', $nameCount, ResolvedNameStore::RECORD_SIZE);
         $names = new ResolvedNameStore($nameStarts, $nameRecords, $reader->readBytes(), $nameCount);
         $triviaCount = $reader->readU32();
-        $triviaRecords = $reader->readRaw($triviaCount * TriviaStore::RECORD_SIZE);
+        $triviaRecords = self::readRecords($reader, 'trivia', $triviaCount, TriviaStore::RECORD_SIZE);
 
         return new SourceFile(
             $phpVersion,
@@ -68,7 +66,7 @@ final class SourceFileCodec
     /**
      * @return list<NodeKind>
      */
-    public static function readNodeKinds(PayloadReader $reader): array
+    public static function readNodeKinds(ValueReader $reader): array
     {
         $kinds = NodeKind::cases();
         $count = $reader->readCount(self::MAXIMUM_NODE_KINDS);
@@ -87,5 +85,25 @@ final class SourceFileCodec
         }
 
         return $kinds;
+    }
+
+    /**
+     * Reads the string that packs `$count` records of `$size` bytes each.
+     *
+     * @param int<0, max> $count
+     * @param positive-int $size
+     */
+    private static function readRecords(ValueReader $reader, string $table, int $count, int $size): string
+    {
+        $records = $reader->readBytes();
+        $read = strlen($records);
+        $expected = $count * $size;
+        if ($read !== $expected) {
+            throw new ProtocolException(
+                "The source snapshot holds {$read} bytes of {$table} records, where its {$count} records take {$expected}.",
+            );
+        }
+
+        return $records;
     }
 }

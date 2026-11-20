@@ -20,14 +20,9 @@ defaults:
     working-directory: sharp/mago
 
 jobs:
-  # ci-passed is this workflow's one required check, so the workflow always runs, and every other job skips a change
-  # that leaves Mago alone: one outside sharp/mago/, sharp/composer/, the sharp/harness/Psr/ interfaces sharp/composer's
-  # mago.toml includes, sharp/phpunit/, this workflow, the scripts its jobs run, the sharp/docker image the Linux tests
-  # run in, and the actions it runs, as sharp.yml's CHANGES skips a change to documentation alone. sharp/bin/check
-  # --changes holds these rules, so sharp/bin/check on a machine chooses its gates as this job does.
-  # A release's pull request, whose sharp/mago/Cargo.toml version has no tag yet, also runs the macOS jobs, as
-  # sharp.yml's CHANGES explains, so a defect only macOS finds, such as one in the watch mode's FSEvents code, fails
-  # before the release merges. A push to master runs none of the tests when a pull request's run passed ci-passed on its
+  # ci-passed is this workflow's one required check. Every push runs every job, whatever it changed, the macOS ones
+  # among them, so a defect only macOS finds, such as one in the watch mode's FSEvents code, fails before the merge. A
+  # push to master runs none of the tests when a pull request's run passed ci-passed on its
   # tree. It runs checks again, which saves the target every pull request's run restores, but for a release's push,
   # which builds nothing. A push whose tree no pull request's run passed runs every job, the macOS ones among them, and
   # its red push opens an issue, as ci-passed does, for a pull request that fixes it forward.
@@ -43,14 +38,9 @@ jobs:
         working-directory: .
     outputs:
       base: ${{ steps.base.outputs.sha }}
-      bump: ${{ steps.diff.outputs.bump }}
-      mago: ${{ steps.diff.outputs.mago }}
+      bump: ${{ steps.version.outputs.bump }}
       passed: ${{ steps.passed.outputs.run }}
       rust: ${{ steps.rust.outputs.version }}
-      # A release's pull request, or a push whose tree no pull request's run passed, runs every job.
-      full: >-
-        ${{ (github.event_name == 'pull_request' && steps.diff.outputs.bump == 'true'
-        || github.event_name == 'push' && !steps.passed.outputs.run) && 'true' || '' }}
     steps:
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -98,18 +88,10 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "This push's changes start at ${sha:-no commit, so every job runs}."
 
-      # A release's bump, and no base, as sharp.yml's CHANGES explains.
-      - name: Find changes to Mago, and a release's bump
-        id: diff
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || steps.base.outputs.sha }}
-        run: |
-          if [[ -n $BASE ]]; then
-            git fetch --depth=1 origin "$BASE"
-          else
-            BASE=$(git hash-object -t tree /dev/null)
-          fi
-          sharp/bin/check --changes "$BASE" | tee -a "$GITHUB_OUTPUT"
+      # A release's bump, as sharp.yml's CHANGES explains.
+      - name: Find whether it is a release's bump
+        id: version
+        run: sharp/bin/check --release | tee -a "$GITHUB_OUTPUT"
 
       - name: Find the pull request run that passed this tree
         id: passed
@@ -137,7 +119,7 @@ jobs:
   # target, which every pull request's run restores.
   checks:
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true' && !(needs.CHANGES.outputs.passed && needs.CHANGES.outputs.bump == 'true')
+    if: ${{ !(needs.CHANGES.outputs.passed && needs.CHANGES.outputs.bump == 'true') }}
     runs-on: ubuntu-latest
     # A build of the engine takes up to 20 more minutes, which the engine's cache spares a run whose engine
     # inputs an earlier run built.
@@ -246,7 +228,7 @@ jobs:
   # file changed.
   build:
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true' && !needs.CHANGES.outputs.passed
+    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: ubuntu-24.04
     # A build of the engine takes up to 20 more minutes, which the engine's cache spares a run whose engine
     # inputs an earlier run built.
@@ -344,7 +326,7 @@ jobs:
   tests:
     name: tests (${{ matrix.shard }}/5)
     needs: [CHANGES, build]
-    if: needs.CHANGES.outputs.mago == 'true' && !needs.CHANGES.outputs.passed
+    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -396,14 +378,14 @@ jobs:
           end: true
 
   # The workspace's tests on macOS arm64, which covers the few lines of Mago that differ there, such as the watch mode's
-  # FSEvents, on the self-hosted Mac runner, for a release's pull request and a push whose tree no pull request's run
-  # passed. cargo builds in the folder sharp/.cargo's config names, which the runner keeps and sharp.yml's MACOS builds
+  # FSEvents, on the self-hosted Mac runner, for every pull request's push and a push to master whose tree no pull
+  # request's run passed. cargo builds in the folder sharp/.cargo's config names, which the runner keeps and sharp.yml's MACOS builds
   # mago in, so it rebuilds only what changed: in sharp/mago/target, which clean-kept-build removes, it built every
   # crate and took 23 minutes on the pushes of pull requests #351 and #352.
   tests-macos:
     name: tests (macOS)
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true' && needs.CHANGES.outputs.full == 'true'
+    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: macos-arm64-local
     timeout-minutes: 90
 
@@ -457,7 +439,7 @@ jobs:
   # It runs when tests (macOS) does.
   release-build:
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true' && needs.CHANGES.outputs.full == 'true'
+    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: macos-arm64-local
     timeout-minutes: 60
 
@@ -518,17 +500,17 @@ jobs:
   # upstream's carthage-software/mago at the release this checker left from, as an extension host does,
   # installs no second checker, and one that requires a later release installs nothing. Then runs mago on
   # a one-class .sharp project with the binary the job before built, and sharp/phpunit's tests, which stop.
-  # Its macOS leg runs on the self-hosted Mac runner, where release-build runs, and only when release-build does, so
-  # another run needs only checks' binary.
+  # Its macOS leg runs on the self-hosted Mac runner, with the binary release-build made there. A push to master whose
+  # tree a pull request's run passed runs neither leg.
   plain-php:
     needs: [CHANGES, checks, release-build]
     if: >-
-      ${{ !cancelled() && needs.checks.result == 'success'
-      && (needs.CHANGES.outputs.full != 'true' || needs.release-build.result == 'success') }}
+      ${{ !cancelled() && !needs.CHANGES.outputs.passed && needs.checks.result == 'success'
+      && needs.release-build.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(needs.CHANGES.outputs.full == 'true' && '["ubuntu-latest", "macos-arm64-local"]' || '["ubuntu-latest"]') }}
+        os: [ubuntu-latest, macos-arm64-local]
     runs-on: ${{ matrix.os }}
 
     permissions:
@@ -574,10 +556,9 @@ jobs:
         with:
           end: true
 
-  # The one required check of this workflow: it passes only when every job above passed, or skipped a change that
-  # leaves Mago alone, so a job added later blocks merges without a change to the repository's rules. It runs always,
-  # so it reports on every pull request, even one whose every other job skipped. The macOS jobs skip but on a release's
-  # pull request and a push whose tree no pull request's run passed, as CHANGES explains.
+  # The one required check of this workflow: it passes only when every job above passed, or skipped a push to master
+  # whose tree a pull request's run passed, so a job added later blocks merges without a change to the repository's
+  # rules. It runs always, so it reports on every run, even one whose every other job skipped.
   ci-passed:
     if: always()
     needs: [CHANGES, checks, build, tests, tests-macos, release-build, plain-php]
@@ -600,7 +581,7 @@ jobs:
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
 
-      - name: Every job passed, or skipped a change that leaves Mago alone
+      - name: Every job passed, or skipped a tree that a pull request's run passed
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
           allowed-skips: checks, build, tests, tests-macos, release-build, plain-php

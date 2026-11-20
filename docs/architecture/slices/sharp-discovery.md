@@ -2,6 +2,8 @@
 
 Dated design record of this slice. `docs/spec.md` holds the current rules.
 
+**Decision 81 reversed this slice's fix for discovery.** `mago compile` writes no `<Name>.php` file and no `.gitignore` beside a `.sharp` file. A PHP# class loads by its name, and an app names each one through its framework's explicit registration. The fix for the first compile stands.
+
 Two fixes found by moving part of a real Laravel app to PHP#. Spec section 27, and section 32 where the standard library's module is read. This note is the design only. team-lead approves it before anyone builds.
 
 Every state below was observed on master 754ab7ce08, in the `php-sharp:754ab7ce08` image, with the `mago` built from that commit's `sharp/mago/`, in neutral fixture projects. The fixtures, commands and outputs are under [Evidence](#evidence).

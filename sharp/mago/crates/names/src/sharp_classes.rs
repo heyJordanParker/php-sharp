@@ -4,7 +4,7 @@
 
 /// The class-likes declared directly in `Sharp`: each public one of the standard library, and each one of the
 /// prelude. Sorted.
-pub(crate) const SHARP_CLASSES: [&str; 45] = [
+pub(crate) const SHARP_CLASSES: [&str; 46] = [
     "Sharp\\Behavior",
     "Sharp\\BigInteger",
     "Sharp\\Bool",
@@ -45,6 +45,7 @@ pub(crate) const SHARP_CLASSES: [&str; 45] = [
     "Sharp\\Scope",
     "Sharp\\Set",
     "Sharp\\SetMembers",
+    "Sharp\\StateError",
     "Sharp\\Tag",
     "Sharp\\TupleElement",
     "Sharp\\TypeKind",
@@ -56,8 +57,9 @@ pub(crate) const SHARP_CLASSES: [&str; 45] = [
 /// of a namespace, as `Dom\HTMLDocument`, through its import.
 ///
 /// `Builtins.sharp` declares each: the exception classes, `Throwable`, `Attribute`, the interfaces a PHP# class
-/// implements for a plain PHP library, and the DOM that reads and writes markup. Sorted.
-pub const STANDARD_ROOT_CLASSES: [&str; 70] = [
+/// implements for a plain PHP library, the classes a plain PHP library hands PHP# code, and the DOM that reads and
+/// writes markup. Sorted.
+pub const STANDARD_ROOT_CLASSES: [&str; 71] = [
     "ArgumentCountError",
     "ArithmeticError",
     "AssertionError",
@@ -120,6 +122,7 @@ pub const STANDARD_ROOT_CLASSES: [&str; 70] = [
     "SQLite3Exception",
     "SoapFault",
     "SodiumException",
+    "SplFileInfo",
     "Throwable",
     "TypeError",
     "UnderflowException",

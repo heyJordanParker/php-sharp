@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The checks a pull request's required jobs run, on this machine. With no gate, it runs every gate
-# the change since the merge base with origin/master needs, as CI's CHANGES jobs choose the jobs, fastest first, and
-# prints each gate's time. Every build and test runs the jobs sharp/bin/jobs prints. A gate CI runs in the sharp/docker
-# image runs there, and one CI runs on the runner itself runs on this machine, so each check meets the platform it meets
-# in CI. CI's jobs run the gates no other script holds through this script: BUILD_LINUX the generated files,
-# WORKFLOWS the workflows, and mago.yml's checks and plain-php theirs.
+# The checks a pull request's required jobs run, on this machine. With no gate, it runs every gate, as every CI run
+# runs every job, fastest first, and prints each gate's time. Every build and test runs the jobs sharp/bin/jobs prints.
+# A gate CI runs in the sharp/docker image runs there, and one CI runs on the runner itself runs on this machine, so
+# each check meets the platform it meets in CI. CI's jobs run the gates no other script holds through this script:
+# BUILD_LINUX the generated files, WORKFLOWS the workflows, and mago.yml's checks and plain-php theirs.
 #
-# With --changes <base>, it prints what the change since <base> needs, as CI's CHANGES jobs write it to $GITHUB_OUTPUT,
-# sharp/mago/Cargo.toml's version, and bump: whether origin has no tag yet for that version, so the change releases
-# it. A release runs every check, so a bump's code and mago are true.
+# With --release, it prints what CI's CHANGES jobs write to $GITHUB_OUTPUT: sharp/mago/Cargo.toml's version, and
+# bump: whether origin has no tag yet for that version, so the change releases it.
 usage() {
   echo "usage: sharp/bin/check [workflows | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php]..." >&2
-  echo "       sharp/bin/check --changes <base>" >&2
+  echo "       sharp/bin/check --release" >&2
   exit 2
 }
 
@@ -23,31 +21,6 @@ target="${CARGO_TARGET_DIR:-$root/sharp/build/$os-$(uname -m)/mago}"
 rust="$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' "$root/sharp/mago/Cargo.toml")"
 CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")"
 export CARGO_BUILD_JOBS
-
-# What a change since <base> needs: code, when it changes more than documentation, and mago, when it changes Mago or
-# what its gates run on. The working tree counts, and so do the files git doesn't track yet, so a check before a commit
-# sees the change.
-changes() {
-  local base="$1" file code=false mago=false
-  while read -r file; do
-    case "$file" in
-      docs/spec.md | README.md | sharp/spec-self-test.md) code=true ;;
-      .github/CODEOWNERS | .github/ISSUE_TEMPLATE/* | *.md | *.rst | docs/*) ;;
-      EXTENSIONS | LICENSE | NEWS | UPGRADING | UPGRADING.INTERNALS) ;;
-      *) code=true ;;
-    esac
-    case "$file" in
-      sharp/mago/* | sharp/composer/* | sharp/harness/Psr/* | sharp/phpunit/* | sharp/docker/* \
-        | sharp/bin/check | sharp/bin/build-mago | sharp/bin/jobs | sharp/bin/test \
-        | .github/workflows/mago.yml | .github/actions/setup-lean/* | .github/actions/clean-kept-build/* \
-        | .github/actions/mago-cache/* | .github/actions/mago-cache-prune/* | .github/actions/red-master-issue/*)
-        mago=true
-        ;;
-    esac
-  done < <(cd "$root" && git diff --name-only --no-renames "$base" && git ls-files --others --exclude-standard)
-  echo "code=$code"
-  echo "mago=$mago"
-}
 
 # git ls-remote --exit-code exits 2 when origin has no such ref, and with another code when it can't ask.
 bump() {
@@ -65,17 +38,11 @@ bump() {
   esac
 }
 
-if [[ ${1:-} == --changes ]]; then
-  if [[ $# -ne 2 ]]; then
+if [[ ${1:-} == --release ]]; then
+  if [[ $# -ne 1 ]]; then
     usage
   fi
-  release="$(bump)"
-  if [[ $release == *bump=true ]]; then
-    printf 'code=true\nmago=true\n'
-  else
-    changes "$2"
-  fi
-  echo "$release"
+  bump
   exit 0
 fi
 
@@ -102,17 +69,7 @@ base() {
 
 gates=("$@")
 if [[ ${#gates[@]} -eq 0 ]]; then
-  needs="$(changes "$(base)")"
-  gates=(workflows spec-guard)
-  if [[ $needs == *mago=true* ]]; then
-    gates+=(mago-checks)
-  fi
-  if [[ $needs == *code=true* ]]; then
-    gates+=(linux upstream hosts generated)
-  fi
-  if [[ $needs == *mago=true* ]]; then
-    gates+=(mago-tests plain-php)
-  fi
+  gates=("${all[@]}")
 fi
 
 # Runs a step of the gate, and marks the gate failed when it fails, so the gate's other steps still run. The step runs

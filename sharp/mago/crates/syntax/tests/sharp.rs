@@ -751,6 +751,68 @@ fn an_enum_declares_type_parameters_after_its_name() {
     assert!(result.runs_as_classes());
 }
 
+/// Spec section 20.2: a machine declares its cases as an enum does, a case that carries data takes a backing value, a
+/// case takes `final` and a block of members in place of its `;`, and the members after the cases parse on.
+/// Everywhere else `machine` is a name.
+#[test]
+fn a_machine_declares_its_cases_with_their_moves() {
+    fn moves<'arena>(case: &EnumCase<'arena>) -> Vec<&'arena [u8]> {
+        case.members()
+            .iter()
+            .filter_map(|member| match member {
+                ClassLikeMember::Method(method) => Some(method.name.value),
+                _ => None,
+            })
+            .collect()
+    }
+
+    const CODE: &str = "public machine OrderStatus : string\n{\n    case Draft = \"draft\"\n    {\n        public OrderStatus.Paid pay(int cents) => OrderStatus.Paid(cents);\n    }\n    case Paid(int cents) = \"paid\"\n    {\n        public OrderStatus.Shipped ship() => OrderStatus.Shipped;\n    }\n    final case Shipped = \"shipped\";\n\n    public static OrderStatus.Draft open() => OrderStatus.Draft;\n}\n";
+    let arena = LocalArena::new();
+    let program = parse(&arena, "src/OrderStatus.sharp", CODE);
+
+    assert!(program.errors.is_empty(), "{:#?}", program.errors);
+    let Some(Statement::Enum(machine)) = program.statements.first() else {
+        panic!("expected a machine, got {:#?}", program.statements);
+    };
+    assert!(machine.is_machine());
+    assert!(machine.runs_as_classes());
+    assert_eq!(source(CODE, machine), CODE.trim_end());
+    let [
+        ClassLikeMember::EnumCase(draft),
+        ClassLikeMember::EnumCase(paid),
+        ClassLikeMember::EnumCase(shipped),
+        ClassLikeMember::Method(open),
+    ] = machine.members.as_slice()
+    else {
+        panic!("expected the cases `Draft`, `Paid` and `Shipped` and the method `open`, got {:#?}", machine.members);
+    };
+    assert_eq!(moves(draft), [b"pay".as_slice()]);
+    assert_eq!(moves(paid), [b"ship".as_slice()]);
+    assert!(moves(shipped).is_empty());
+    assert!(!draft.is_final() && !paid.is_final() && shipped.is_final());
+    let EnumCaseItem::Data(paid_item) = &paid.item else {
+        panic!("expected `Paid` to carry data, got {:#?}", paid.item);
+    };
+    let Some(backing) = &paid_item.backing else {
+        panic!("expected `Paid` to have a backing value, got {paid_item:#?}");
+    };
+    assert_eq!(source(CODE, backing.value), "\"paid\"");
+    assert_eq!(
+        source(CODE, paid),
+        "case Paid(int cents) = \"paid\"\n    {\n        public OrderStatus.Shipped ship() => OrderStatus.Shipped;\n    }"
+    );
+    assert_eq!(source(CODE, shipped), "final case Shipped = \"shipped\";");
+    assert_eq!(open.name.value, b"open");
+
+    let program = parse(
+        &arena,
+        "src/Shop.sharp",
+        "class Shop\n{\n    string machine = \"a\";\n\n    void run(int machine)\n    {\n        const kept = machine;\n    }\n}\n",
+    );
+    assert!(program.errors.is_empty(), "{:#?}", program.errors);
+    assert!(!parse(&arena, "src/OrderStatus.php", "<?php\n\nmachine OrderStatus { case Draft; }\n").errors.is_empty());
+}
+
 /// Spec section 31: `try` before a value is a prefix operator at `!`'s precedence, so a member read or a call binds
 /// tighter and `+` looser, and parentheses read a member of the `Ok` value. `try {` stays the statement.
 #[test]
@@ -5296,7 +5358,7 @@ fn a_law_without_a_semicolon_or_a_body_after_its_claim_is_a_parse_error() {
     assert_eq!(program.errors.len(), 1, "{:#?}", program.errors);
 }
 
-/// Spec section 28 gives a state machine its laws on its status enum, beside the cases and the transition method.
+/// Spec section 28: a law in an enum follows its cases and its methods, as one over a pure transition method does.
 #[test]
 fn a_law_in_an_enum_follows_its_cases_and_methods() {
     const CODE: &str = "public enum Status : string\n{\n    case Open = \"open\";\n    case Refunded = \"refunded\";\n\n    public Status after(Payment e) => this;\n    law refundedIsFinal(Payment e) => Status.Refunded.after(e) == Status.Refunded;\n}\n";

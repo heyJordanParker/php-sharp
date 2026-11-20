@@ -245,7 +245,7 @@ public class Carton
 
     public static int secondTotal() => Carton.totals[1] * 2;
 
-    // The constructor sets it, so an object plain PHP creates without the constructor holds it uninitialized.
+    // The constructor sets it, so it is uninitialized only once plain PHP unsets it.
     public List<int> later { get; set; }
 
     public Carton()

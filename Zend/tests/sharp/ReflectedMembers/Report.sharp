@@ -165,30 +165,4 @@ public static class Report
             Report.property(typeof(Shelf<string>), "made").defaultValue(),
         ];
     }
-
-    // A lazy object loads at its first property read, and storage its Field wrote before the load reads without it and
-    // keeps the value once it loads.
-    public static List<Any?> lazy()
-    {
-        Account.opened = 0;
-        const account = typeof(Account).createLazy(loaded => {
-            Account.opened += 1;
-            loaded.owner = "grace";
-        });
-        Report.field(typeof(Account), "balance").set(account, 99);
-        List<string> refused = [];
-        try {
-            Report.field(typeof(Account), "pin").set(account, 1234);
-        } catch (Throwable failure) {
-            refused.add(failure.getMessage());
-        }
-        const preset = account.balance;
-        const held = [
-            Report.property(typeof(Account), "balance").isInitialized(account),
-            Report.property(typeof(Account), "owner").isInitialized(account),
-        ];
-        const before = Account.opened;
-        const owner = account.owner;
-        return [preset, refused, held, before, owner, Account.opened, account.balance];
-    }
 }

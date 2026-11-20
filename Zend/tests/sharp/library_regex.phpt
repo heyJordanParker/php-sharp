@@ -1,5 +1,8 @@
 --TEST--
-A PHP# class calls every method of Sharp.Text.Regex, a named group gives both its number and its name, and an invalid pattern throws ValueError with no warning
+A PHP# class parses a Sharp.Text.Regex and calls each of its methods, a named group gives both its number and its name, tryParse gives null for a pattern that doesn't compile, parse throws ValueError naming it with no warning, and a failure while matching still throws ValueError
+--INI--
+pcre.jit=0
+pcre.backtrack_limit=1000
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -15,14 +18,11 @@ var_dump(RegexCalls::replace('/\s+/', ' ', "a  b\t c"));
 var_dump(RegexCalls::split('/,\s*/', 'a, b,c'));
 var_dump(RegexCalls::filter('/^a/', ['apple', 'banana', 'avocado']));
 var_dump(RegexCalls::escape('a.b/c*'));
+var_dump(RegexCalls::tryMatches('/[/', 'q'), RegexCalls::tryMatches('/[a-z]/', 'q'));
 
 $invalid = [
-    fn () => RegexCalls::matches('/(/', 'a'),
-    fn () => RegexCalls::match('/(/', 'a'),
-    fn () => RegexCalls::matchAll('/(/', 'a'),
-    fn () => RegexCalls::replace('/(/', 'b', 'a'),
-    fn () => RegexCalls::split('/(/', 'a'),
-    fn () => RegexCalls::filter('/(/', ['a']),
+    fn () => RegexCalls::matches('/[/', 'a'),
+    fn () => RegexCalls::matches('/(?:\D+|<\d+>)*[!?]/', 'foobar foobar foobar'),
 ];
 foreach ($invalid as $call) {
     try {
@@ -94,9 +94,7 @@ array(2) {
   string(7) "avocado"
 }
 string(9) "a\.b\/c\*"
-ValueError: Regex.matches: the pattern failed: Internal error
-ValueError: Regex.match: the pattern failed: Internal error
-ValueError: Regex.matchAll: the pattern failed: Internal error
-ValueError: Regex.replace: the pattern failed: Internal error
-ValueError: Regex.split: the pattern failed: Internal error
-ValueError: Regex.filter: the pattern failed: Internal error
+NULL
+bool(true)
+ValueError: Regex.parse: "/[/" does not compile
+ValueError: Regex.matches: the pattern failed: Backtrack limit exhausted

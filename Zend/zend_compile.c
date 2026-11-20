@@ -9935,9 +9935,10 @@ static void zend_compile_class_decl(znode *result, zend_ast *ast, bool toplevel)
 		zend_alloc_ce_cache(ce->name);
 	}
 	/* PHP# names are case-sensitive, spec section 24, so a class of a .sharp file keys its methods by exact name, and the
-	 * class table keys a named one by its exact name. */
+	 * class table keys a named one by its exact name. Its objects are built only through its constructor, spec section
+	 * 9. */
 	if (zend_compiling_sharp_file()) {
-		ce->sharp_flags |= SHARP_CLASS_EXACT_NAMES;
+		ce->sharp_flags |= SHARP_CLASS_EXACT_NAMES | SHARP_CLASS_BUILT_BY_CONSTRUCTOR;
 		if (!(decl->flags & ZEND_ACC_ANON_CLASS)) {
 			ce->sharp_flags |= SHARP_CLASS_EXACT_KEY;
 		}

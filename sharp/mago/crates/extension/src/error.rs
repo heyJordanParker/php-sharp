@@ -18,6 +18,14 @@ pub enum PayloadError {
     CountExceeded { field: &'static str, count: usize, maximum: usize },
     /// A message contained bytes after its last expected field.
     TrailingBytes { remaining: usize },
+    /// A value message ended before the field `field`.
+    MissingValue { field: &'static str },
+    /// A value message's field `field` held a value of another type than `expected`.
+    UnexpectedValue { field: &'static str, expected: &'static str },
+    /// A value message's integer field `field` held `value`, outside the field's range.
+    OutOfRange { field: &'static str, value: i64 },
+    /// A value message contained fields after its last expected one.
+    TrailingValues { remaining: usize },
 }
 
 impl std::fmt::Display for PayloadError {
@@ -36,6 +44,10 @@ impl std::fmt::Display for PayloadError {
                 write!(formatter, "{field} count {count} exceeds limit {maximum}")
             }
             Self::TrailingBytes { remaining } => write!(formatter, "payload contains {remaining} trailing bytes"),
+            Self::MissingValue { field } => write!(formatter, "message ended before {field}"),
+            Self::UnexpectedValue { field, expected } => write!(formatter, "{field} is not {expected}"),
+            Self::OutOfRange { field, value } => write!(formatter, "{field} holds {value}, outside its range"),
+            Self::TrailingValues { remaining } => write!(formatter, "message contains {remaining} trailing fields"),
         }
     }
 }
@@ -55,6 +67,8 @@ pub enum WorkerError {
     Clash { class: String, first: String, second: String },
     /// Two hosts set the environment variable `name` to different values.
     Variable { name: String, first: String, second: String },
+    /// Two hosts set the PHP setting `name` to different values.
+    Setting { name: String, first: String, second: String },
     /// The host's worker failed the request, with what it threw.
     Remote { host: String, message: String },
     /// A request made no progress within its deadline: `running` is the unit the worker last said the request started,
@@ -80,6 +94,10 @@ impl std::fmt::Display for WorkerError {
             Self::Variable { name, first, second } => write!(
                 formatter,
                 "extension hosts `{first}` and `{second}` set the environment variable `{name}` to different values, which their shared interpreters can't both read"
+            ),
+            Self::Setting { name, first, second } => write!(
+                formatter,
+                "extension hosts `{first}` and `{second}` set the PHP setting `{name}` to different values, which their shared interpreters can't both run with"
             ),
             Self::Remote { host, message } => {
                 write!(formatter, "extension host `{host}` failed the request: {message}")

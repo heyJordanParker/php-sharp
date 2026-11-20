@@ -30,7 +30,8 @@ use crate::reduction;
 
 include!(concat!(env!("OUT_DIR"), "/sdk.rs"));
 
-/// The SDK's entry that serves one request with a host's worker, as `[true, response]` or `[false, message]`.
+/// The SDK's entry that serves one request with a host's worker, as `[true, response]` or `[false, message]`. A
+/// request and its response are both a list of values, or both a string of bytes.
 const HANDLE: &str = "Mago\\Sdk\\Internal\\Hosts::handle";
 /// The SDK's entry that runs a host's file, which registers the host's worker.
 const LOAD: &str = "Mago\\Sdk\\Internal\\Hosts::load";
@@ -57,6 +58,8 @@ pub struct HostFile {
     pub deadline: Duration,
     /// The environment variables the host's worker reads.
     pub environment: BTreeMap<String, String>,
+    /// The PHP settings the host's worker runs with, by name.
+    pub ini: BTreeMap<String, String>,
 }
 
 /// Answers the codebase queries a worker asks while it serves a request.
@@ -66,14 +69,14 @@ pub trait WorkerRequestHandler {
     /// # Errors
     ///
     /// Returns why the query failed, which the worker receives as an exception.
-    fn handle(&mut self, query: &[u8]) -> Result<Vec<u8>, Vec<u8>>;
+    fn handle(&mut self, query: &[Value]) -> Result<Vec<Value>, Vec<u8>>;
 }
 
 impl<F> WorkerRequestHandler for F
 where
-    F: FnMut(&[u8]) -> Result<Vec<u8>, Vec<u8>>,
+    F: FnMut(&[Value]) -> Result<Vec<Value>, Vec<u8>>,
 {
-    fn handle(&mut self, query: &[u8]) -> Result<Vec<u8>, Vec<u8>> {
+    fn handle(&mut self, query: &[Value]) -> Result<Vec<Value>, Vec<u8>> {
         self(query)
     }
 }
@@ -84,7 +87,7 @@ struct Bootstrap {
     sequence: u64,
     host: usize,
     group: Option<u64>,
-    request: Vec<u8>,
+    request: Vec<Value>,
 }
 
 /// What one thread's interpreter has done: its id, the last bootstrap it received, and how many reloads it checked.
@@ -125,13 +128,14 @@ impl Hosts {
     ///
     /// # Errors
     ///
-    /// Returns an error when two hosts set one environment variable to different values, the SDK can't be written, or
-    /// the engine can't start.
+    /// Returns an error when two hosts set one environment variable or one PHP setting to different values, the SDK
+    /// can't be written, or the engine can't start.
     pub fn new(hosts: Vec<HostFile>, directory: PathBuf, cache: &Path) -> Result<Arc<Self>, WorkerError> {
         let id = NEXT_HOSTS.fetch_add(1, Ordering::Relaxed);
-        let variables = variables(&hosts)?;
+        let variables = shared(&hosts, Shared::Variable)?;
+        let settings = shared(&hosts, Shared::Setting)?;
         let preload = write_sdk(cache, id).map_err(WorkerError::Sdk)?;
-        let engine = Engine::new(vec![preload], variables).map_err(WorkerError::Start)?;
+        let engine = Engine::new(vec![preload], variables, settings).map_err(WorkerError::Start)?;
         let reducing = hosts.iter().map(|_| AtomicBool::new(false)).collect();
 
         Ok(Arc::new(Self {
@@ -194,7 +198,7 @@ impl Hosts {
 
     /// Gives the calling thread's interpreter each bootstrap after `replayed`, in order.
     fn replay(&self, replayed: u64) -> Result<(), WorkerError> {
-        let pending: Vec<(u64, usize, Vec<u8>)> = lock(&self.bootstraps)
+        let pending: Vec<(u64, usize, Vec<Value>)> = lock(&self.bootstraps)
             .iter()
             .filter(|bootstrap| bootstrap.sequence > replayed)
             .map(|bootstrap| (bootstrap.sequence, bootstrap.host, bootstrap.request.clone()))
@@ -275,37 +279,39 @@ impl Hosts {
         }
     }
 
-    /// Serves `request` with the worker of host `host` in the calling thread's interpreter, answering its codebase
-    /// queries with `handler`. `running` names the request for its deadline's error, unless the worker names the unit
-    /// it started.
+    /// Serves `request`, a message of values, with the worker of host `host` in the calling thread's interpreter, which
+    /// answers with one, answering its codebase queries with `handler`. `running` names the request for its deadline's
+    /// error, unless the worker names the unit it started.
     fn handle(
         &self,
         host: usize,
-        request: Vec<u8>,
+        request: Vec<Value>,
         running: Option<&dyn Display>,
         handler: &mut dyn WorkerRequestHandler,
-    ) -> Result<Vec<u8>, WorkerError> {
+    ) -> Result<Vec<Value>, WorkerError> {
         let file = &self.files[host];
         let mut progressed = None;
         let index = i64::try_from(host).unwrap_or(i64::MAX);
-        let returned =
-            self.engine.call(HANDLE, &[Value::Int(index), Value::String(request)], file.deadline, &mut |asked| {
-                match asked.as_slice() {
-                    [Value::String(question), Value::String(query)] if question == b"query" => {
-                        handler.handle(query).map(Value::String).map_err(|error| String::from_utf8_lossy(&error).into())
-                    }
-                    [Value::String(question), Value::String(unit)] if question == b"progress" => {
-                        progressed = Some(String::from_utf8_lossy(unit).into_owned());
-                        self.engine.restart_deadline();
-                        Ok(Value::Null)
-                    }
-                    _ => Err("mago answers a `query` or a `progress` with one string".to_owned()),
+        let returned = self.engine.call(
+            HANDLE,
+            &[Value::Int(index), Value::List(request)],
+            file.deadline,
+            &mut |asked| match asked.as_slice() {
+                [Value::String(question), Value::List(query)] if question == b"query" => {
+                    handler.handle(query).map(Value::List).map_err(|error| String::from_utf8_lossy(&error).into())
                 }
-            });
+                [Value::String(question), Value::String(unit)] if question == b"progress" => {
+                    progressed = Some(String::from_utf8_lossy(unit).into_owned());
+                    self.engine.restart_deadline();
+                    Ok(Value::Null)
+                }
+                _ => Err("mago answers a `query` of one list or a `progress` of one string".to_owned()),
+            },
+        );
 
         match returned {
             Ok(Value::List(answer)) => match <[Value; 2]>::try_from(answer) {
-                Ok([Value::Bool(true), Value::String(response)]) => Ok(response),
+                Ok([Value::Bool(true), Value::List(response)]) => Ok(response),
                 Ok([Value::Bool(false), Value::String(message)]) => Err(WorkerError::Remote {
                     host: file.name.clone(),
                     message: String::from_utf8_lossy(&message).into(),
@@ -325,7 +331,7 @@ impl Hosts {
     /// Runs the worker reducers of host `host`: collects each interpreter's state, on the thread it runs on, and reduces
     /// it all in the calling thread's interpreter.
     fn reduce(&self, host: usize) -> Result<(), WorkerError> {
-        let collect = || -> Option<Result<Vec<u8>, WorkerError>> {
+        let collect = || -> Option<Result<Vec<Value>, WorkerError>> {
             let current = self.engine.interpreter();
             PREPARED
                 .with_borrow(|prepared| prepared.get(&self.id).copied())
@@ -333,7 +339,7 @@ impl Hosts {
 
             Some(self.handle(host, reduction::collect_request(), None, &mut no_queries))
         };
-        let mut collected: Vec<Result<Vec<u8>, WorkerError>> = if self.pooled.load(Ordering::Acquire) {
+        let mut collected: Vec<Result<Vec<Value>, WorkerError>> = if self.pooled.load(Ordering::Acquire) {
             rayon::broadcast(|_| collect()).into_iter().flatten().collect()
         } else {
             Vec::new()
@@ -391,23 +397,28 @@ impl Host {
         &self.hosts.files[self.index].name
     }
 
-    /// Sends `request` to the host's worker in every interpreter, this thread's now and each other one before its next
-    /// request, and returns this thread's response.
+    /// Sends `request`, a message of values, to the host's worker in every interpreter, this thread's now and each other
+    /// one before its next request, and returns this thread's response.
     ///
     /// # Errors
     ///
     /// Returns an error when the interpreter can't be made ready or the worker fails the request.
-    pub fn broadcast(&self, request: &[u8]) -> Result<Vec<u8>, WorkerError> {
+    pub fn broadcast(&self, request: &[Value]) -> Result<Vec<Value>, WorkerError> {
         Ok(self.broadcast_sequence(None, &[request.to_vec()])?.pop().unwrap_or_default())
     }
 
-    /// Sends `requests` in order as [`Self::broadcast`] sends one. Those of a `group` replace the ones an earlier
-    /// sequence of that group sent, so an interpreter that starts later receives only the latest.
+    /// Sends `requests` in order as [`Self::broadcast`] sends one, and keeps each as a bootstrap. Those of a `group`
+    /// replace the ones an earlier sequence of that group sent, so an interpreter that starts later receives only the
+    /// latest.
     ///
     /// # Errors
     ///
     /// Returns an error when the interpreter can't be made ready or the worker fails a request.
-    pub fn broadcast_sequence(&self, group: Option<u64>, requests: &[Vec<u8>]) -> Result<Vec<Vec<u8>>, WorkerError> {
+    pub fn broadcast_sequence(
+        &self,
+        group: Option<u64>,
+        requests: &[Vec<Value>],
+    ) -> Result<Vec<Vec<Value>>, WorkerError> {
         let hosts = &self.hosts;
         hosts.prepare()?;
         let responses = requests
@@ -428,8 +439,9 @@ impl Host {
         Ok(responses)
     }
 
-    /// Sends `request` to the host's worker in the calling thread's interpreter, answering its codebase queries with
-    /// `handler`. `running` names the request for its deadline's error, unless the worker names the unit it started.
+    /// Sends `request`, a message of values, to the host's worker in the calling thread's interpreter, answering its
+    /// codebase queries with `handler`. `running` names the request for its deadline's error, unless the worker names
+    /// the unit it started.
     ///
     /// # Errors
     ///
@@ -437,10 +449,10 @@ impl Host {
     /// its deadline.
     pub fn request(
         &self,
-        request: Vec<u8>,
+        request: Vec<Value>,
         running: Option<&dyn Display>,
         handler: &mut dyn WorkerRequestHandler,
-    ) -> Result<Vec<u8>, WorkerError> {
+    ) -> Result<Vec<Value>, WorkerError> {
         self.hosts.prepare()?;
         self.hosts.handle(self.index, request, running, handler)
     }
@@ -457,18 +469,47 @@ impl Host {
     }
 }
 
-/// The variables of every host, which every interpreter reads.
-fn variables(hosts: &[HostFile]) -> Result<Vec<(CString, CString)>, WorkerError> {
+/// What every host sets for each interpreter, which all hosts share: an environment variable, or a PHP setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Shared {
+    Variable,
+    Setting,
+}
+
+impl Shared {
+    fn of(self, host: &HostFile) -> &BTreeMap<String, String> {
+        match self {
+            Self::Variable => &host.environment,
+            Self::Setting => &host.ini,
+        }
+    }
+
+    /// The error of the hosts `first` and `second`, which set `name` to different values.
+    fn clash(self, name: String, first: String, second: String) -> WorkerError {
+        match self {
+            Self::Variable => WorkerError::Variable { name, first, second },
+            Self::Setting => WorkerError::Setting { name, first, second },
+        }
+    }
+}
+
+impl std::fmt::Display for Shared {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Variable => "environment variable",
+            Self::Setting => "PHP setting",
+        })
+    }
+}
+
+/// The `kind` every host sets, by name, which every interpreter reads.
+fn shared(hosts: &[HostFile], kind: Shared) -> Result<Vec<(CString, CString)>, WorkerError> {
     let mut set: BTreeMap<&str, (&str, &str)> = BTreeMap::new();
     for host in hosts {
-        for (name, value) in &host.environment {
+        for (name, value) in kind.of(host) {
             match set.get(name.as_str()) {
                 Some((first, held)) if held != value => {
-                    return Err(WorkerError::Variable {
-                        name: name.clone(),
-                        first: (*first).to_owned(),
-                        second: host.name.clone(),
-                    });
+                    return Err(kind.clash(name.clone(), (*first).to_owned(), host.name.clone()));
                 }
                 Some(_) => {}
                 None => {
@@ -483,7 +524,7 @@ fn variables(hosts: &[HostFile]) -> Result<Vec<(CString, CString)>, WorkerError>
             (Ok(name), Ok(value)) => Ok((name, value)),
             _ => Err(WorkerError::Load {
                 host: host.to_owned(),
-                message: format!("its environment variable `{name}` holds a NUL byte"),
+                message: format!("its {kind} `{name}` holds a NUL byte"),
             }),
         })
         .collect()
@@ -538,7 +579,7 @@ fn path_value(path: &Path) -> Value {
 }
 
 /// Answers a worker that asks a codebase query during a request that takes none.
-fn no_queries(_: &[u8]) -> Result<Vec<u8>, Vec<u8>> {
+fn no_queries(_: &[Value]) -> Result<Vec<Value>, Vec<u8>> {
     Err(b"mago answers no codebase query during this request".to_vec())
 }
 
@@ -570,6 +611,7 @@ mod tests {
                     file,
                     deadline: Duration::from_secs(5),
                     environment: BTreeMap::new(),
+                    ini: BTreeMap::new(),
                 }
             })
             .collect();
@@ -584,7 +626,7 @@ mod tests {
         let declaring = format!("final class Shared {{}}\n\n{WORKER}");
         let hosts = hosts_of("clash", &[("routes", &declaring), ("models", &declaring)]);
 
-        let error = hosts.hosts()[0].broadcast(b"describe").unwrap_err();
+        let error = hosts.hosts()[0].broadcast(&[Value::String(b"describe".to_vec())]).unwrap_err();
 
         assert_eq!(
             error.to_string(),
@@ -592,11 +634,44 @@ mod tests {
         );
     }
 
+    /// A host's file runs with the PHP settings of its configuration, as `php -d` set them for its worker process: its
+    /// `memory_limit`, and its `error_log`, the file PHP logs to, from the configuration's directory.
+    #[test]
+    fn a_host_runs_with_its_php_settings_and_logs_to_its_error_log() {
+        let directory = std::env::temp_dir().join(format!("mago-hosts-ini-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let log = directory.join("host-errors.log");
+        let _ = std::fs::remove_file(&log);
+        let file = directory.join("reports.php");
+        std::fs::write(
+            &file,
+            format!("<?php\n\nerror_log('memory_limit is ' . ini_get('memory_limit'));\n\n{WORKER}\n"),
+        )
+        .unwrap();
+        let host = HostFile {
+            name: "reports".to_owned(),
+            file,
+            deadline: Duration::from_secs(5),
+            environment: BTreeMap::new(),
+            ini: BTreeMap::from([
+                ("memory_limit".to_owned(), "2G".to_owned()),
+                ("error_log".to_owned(), "host-errors.log".to_owned()),
+            ]),
+        };
+        let hosts = Hosts::new(vec![host], directory.clone(), &directory.join("sdk")).unwrap();
+
+        let served = hosts.hosts()[0].broadcast(&[Value::String(b"describe".to_vec())]);
+
+        assert!(matches!(served, Err(WorkerError::Remote { .. })), "the host loaded and its worker served: {served:?}");
+        let logged = std::fs::read_to_string(&log).unwrap();
+        assert!(logged.ends_with("] memory_limit is 2G\n"), "{logged}");
+    }
+
     #[test]
     fn a_host_whose_file_registers_no_worker_is_refused_naming_it() {
         let hosts = hosts_of("silent", &[("routes", "final class Quiet {}")]);
 
-        let error = hosts.hosts()[0].broadcast(b"describe").unwrap_err().to_string();
+        let error = hosts.hosts()[0].broadcast(&[Value::String(b"describe".to_vec())]).unwrap_err().to_string();
 
         assert!(error.starts_with("extension host `routes` could not load: "), "{error}");
         assert!(error.contains("must call Mago\\Sdk\\Worker::run() once"), "{error}");
@@ -616,23 +691,41 @@ mod tests {
         assert_eq!(redeclared("PHP Fatal error:  Allowed memory size exhausted"), None);
     }
 
-    #[test]
-    fn two_hosts_that_set_one_variable_to_different_values_are_refused() {
-        let host = |name: &str, value: &str| HostFile {
+    /// The host `name`, which sets the environment variable `APP_ENV` and the PHP setting `memory_limit` to `value`.
+    fn setting(name: &str, value: &str) -> HostFile {
+        HostFile {
             name: name.to_owned(),
             file: PathBuf::from(format!("{name}.php")),
             deadline: Duration::from_secs(1),
             environment: BTreeMap::from([("APP_ENV".to_owned(), value.to_owned())]),
-        };
+            ini: BTreeMap::from([("memory_limit".to_owned(), value.to_owned())]),
+        }
+    }
 
-        let same = variables(&[host("routes", "analysis"), host("models", "analysis")]);
-        let different = variables(&[host("routes", "analysis"), host("models", "test")]);
+    #[test]
+    fn two_hosts_that_set_one_variable_to_different_values_are_refused() {
+        let same = shared(&[setting("routes", "2G"), setting("models", "2G")], Shared::Variable);
+        let different = shared(&[setting("routes", "2G"), setting("models", "1G")], Shared::Variable);
 
         assert_eq!(same.map(|variables| variables.len()).ok(), Some(1));
         assert_eq!(
             different.err().map(|error| error.to_string()).as_deref(),
             Some(
                 "extension hosts `routes` and `models` set the environment variable `APP_ENV` to different values, which their shared interpreters can't both read"
+            )
+        );
+    }
+
+    #[test]
+    fn two_hosts_that_set_one_php_setting_to_different_values_are_refused() {
+        let same = shared(&[setting("routes", "2G"), setting("models", "2G")], Shared::Setting);
+        let different = shared(&[setting("routes", "2G"), setting("models", "1G")], Shared::Setting);
+
+        assert_eq!(same.map(|settings| settings.len()).ok(), Some(1));
+        assert_eq!(
+            different.err().map(|error| error.to_string()).as_deref(),
+            Some(
+                "extension hosts `routes` and `models` set the PHP setting `memory_limit` to different values, which their shared interpreters can't both run with"
             )
         );
     }

@@ -1237,18 +1237,34 @@ fn enter(node: Node<'_, '_>, place: Place, context: &mut Context<'_, '_, '_>) ->
 
             Some(Enum)
         }
+        // A machine's case, spec section 20.2, takes `final` and a block of members, which `check_enum` keeps to a
+        // machine, and its members are checked as the machine's own.
         (Node::EnumCase(case), Enum) => {
             check_declared_name(case.item.name().value, case.item.name().span, "Enum case", NameCase::Pascal, context);
+            for attribute_list in &case.attribute_lists {
+                enter_tree(Node::AttributeList(attribute_list), Enum, context);
+            }
+            enter_tree(Node::EnumCaseItem(&case.item), Enum, context);
+            for member in case.members() {
+                enter_tree(Node::ClassLikeMember(member), Enum, context);
+            }
 
-            Some(Enum)
+            None
         }
         (
             Node::ClassLikeMember(ClassLikeMember::EnumCase(_)) | Node::EnumCaseItem(_) | Node::EnumCaseUnitItem(_),
             Enum,
         ) => Some(Enum),
         // A case's data are its fields, which run as the public get-only properties of the case's class, as an
-        // event's parameters do.
-        (Node::EnumCaseDataItem(_), Enum) => Some(Place::Case),
+        // event's parameters do. A machine's case backs them with a value, as a backed case does.
+        (Node::EnumCaseDataItem(item), Enum) => {
+            enter_tree(Node::FunctionLikeParameterList(&item.parameter_list), Place::Case, context);
+            if let Some(backing) = &item.backing {
+                enter_tree(Node::Expression(backing.value), Constant, context);
+            }
+
+            None
+        }
         (Node::FunctionLikeParameter(parameter), Place::Case) => check_property_parameter(parameter, Place::Case, context),
         (Node::EnumCaseBackedItem(_), Enum) => Some(Constant),
         // Spec section 13: a field or a property keeps its value with `{ get; }`, and only a computed property's type,
@@ -6537,14 +6553,33 @@ pub fn check_try_catch_clause(try_catch_clause: &TryCatchClause, context: &mut C
     }
 }
 
+/// Checks the name of a parameter. A parameter of a method written `override` keeps its parent's name, which the
+/// analyzer holds it to, so its case is its parent's choice, as an override field's is. The walk keeps no member on its
+/// ancestors, so the file names the method, and only for a name out of camel case.
 #[inline]
 pub fn check_parameter(parameter: &FunctionLikeParameter, context: &mut Context<'_, '_, '_>) {
-    if parameter.variable.name.starts_with(b"$") {
+    let name = parameter.variable.name;
+    let named_by_parent = || {
+        Node::Program(context.program)
+            .filter_map(|node| match node {
+                Node::Method(method)
+                    if method.parameter_list.parameters.iter().any(|own| own.span() == parameter.span()) =>
+                {
+                    Some(method.modifiers.iter().any(|modifier| matches!(modifier, Modifier::Override(_))))
+                }
+                _ => None,
+            })
+            .into_iter()
+            .next()
+            .unwrap_or(false)
+    };
+
+    if name.starts_with(b"$") {
         report_unexpected(parameter.variable.span, context);
-    } else {
+    } else if is_camel_case(name) || is_magic_name(name) || !named_by_parent() {
         // A parameter with an access level or accessors also declares the property of its name.
         let kind = if parameter.is_promoted_property() { "property" } else { "parameter" };
-        check_local_name(parameter.variable.name, parameter.variable.span, kind, context);
+        check_local_name(name, parameter.variable.span, kind, context);
     }
 }
 

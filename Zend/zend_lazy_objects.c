@@ -48,6 +48,7 @@
 #include "zend_types.h"
 #include "zend_variables.h"
 #include "zend_lazy_objects.h"
+#include "ext/sharp/php_sharp.h"
 
 /**
  * Information about each lazy object is stored outside of zend_objects, in
@@ -259,6 +260,15 @@ ZEND_API zend_object *zend_object_make_lazy(zend_object *obj,
 				ZSTR_VAL(reflection_ce->name), ZSTR_VAL(parent->name));
 			return NULL;
 		}
+	}
+
+	/* PHP#: a ghost's initializer fills the object in place of its constructor, and a PHP# object is built only through
+	 * its constructor, spec section 9. A proxy's factory gives a real object, which its constructor built. */
+	const zend_class_entry *made = obj ? obj->ce : reflection_ce;
+	if (UNEXPECTED((made->sharp_flags & SHARP_CLASS_BUILT_BY_CONSTRUCTOR)
+			&& (flags & ZEND_LAZY_OBJECT_STRATEGY_MASK) == ZEND_LAZY_OBJECT_STRATEGY_GHOST)) {
+		sharp_refuse_creation(made);
+		return NULL;
 	}
 
 	int lazy_properties_count = 0;
@@ -731,9 +741,10 @@ zend_object *zend_lazy_object_clone(zend_object *old_obj)
 	if (UNEXPECTED(!zend_lazy_object_initialized(old_obj) && !zend_lazy_object_init(old_obj))) {
 		ZEND_ASSERT(EG(exception));
 		/* Clone handler must always return an object. It is discarded later due
-		 * to the exception. */
+		 * to the exception. PHP#: so no code reaches it, and it may be of a
+		 * PHP# class. */
 		zval zv;
-		object_init_ex(&zv, old_obj->ce);
+		object_init_to_build(&zv, old_obj->ce);
 		GC_ADD_FLAGS(Z_OBJ(zv), IS_OBJ_DESTRUCTOR_CALLED);
 		return Z_OBJ(zv);
 	}

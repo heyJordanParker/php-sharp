@@ -11110,7 +11110,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_CONS
 		HANDLE_EXCEPTION();
 	}
 
-	if (UNEXPECTED(object_init_ex(result, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(result, ce) != SUCCESS)) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -11744,7 +11744,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_CONS
 		HANDLE_EXCEPTION();
 	}
 
-	if (UNEXPECTED(object_init_ex(result, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(result, ce) != SUCCESS)) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -30653,7 +30653,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_VAR_
 		HANDLE_EXCEPTION();
 	}
 
-	if (UNEXPECTED(object_init_ex(result, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(result, ce) != SUCCESS)) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -32356,7 +32356,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_VAR_
 		HANDLE_EXCEPTION();
 	}
 
-	if (UNEXPECTED(object_init_ex(result, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(result, ce) != SUCCESS)) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -39889,7 +39889,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_UNUS
 		HANDLE_EXCEPTION();
 	}
 
-	if (UNEXPECTED(object_init_ex(result, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(result, ce) != SUCCESS)) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -40321,7 +40321,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_UNUS
 		HANDLE_EXCEPTION();
 	}
 
-	if (UNEXPECTED(object_init_ex(result, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(result, ce) != SUCCESS)) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -68779,7 +68779,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_CONST_TMP
 		HANDLE_EXCEPTION();
 	}
 
-	if (UNEXPECTED(object_init_ex(result, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(result, ce) != SUCCESS)) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -69311,7 +69311,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_CONST_UNU
 		HANDLE_EXCEPTION();
 	}
 
-	if (UNEXPECTED(object_init_ex(result, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(result, ce) != SUCCESS)) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -88120,7 +88120,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_VAR_TMP_T
 		HANDLE_EXCEPTION();
 	}
 
-	if (UNEXPECTED(object_init_ex(result, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(result, ce) != SUCCESS)) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -89823,7 +89823,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_VAR_UNUSE
 		HANDLE_EXCEPTION();
 	}
 
-	if (UNEXPECTED(object_init_ex(result, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(result, ce) != SUCCESS)) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -97356,7 +97356,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_UNUSED_TM
 		HANDLE_EXCEPTION();
 	}
 
-	if (UNEXPECTED(object_init_ex(result, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(result, ce) != SUCCESS)) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -97788,7 +97788,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_UNUSED_UN
 		HANDLE_EXCEPTION();
 	}
 
-	if (UNEXPECTED(object_init_ex(result, ce) != SUCCESS)) {
+	if (UNEXPECTED(object_init_to_build(result, ce) != SUCCESS)) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}

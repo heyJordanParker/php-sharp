@@ -6,7 +6,7 @@
 extern zend_module_entry sharp_module_entry;
 #define phpext_sharp_ptr &sharp_module_entry
 
-#define PHP_SHARP_VERSION "0.6.39"
+#define PHP_SHARP_VERSION "0.6.40"
 
 #define SHARP_FILE_EXTENSION ".sharp"
 
@@ -225,6 +225,9 @@ typedef enum {
 	SHARP_BUILT_IN_CLASS,
 	/* The result of a function that never returns, spec section 8, which no value is of and which fits every type. */
 	SHARP_BUILT_IN_NEVER,
+	/* A function value of any shape, spec section 7, as a plain PHP `callable` parameter takes, which holds what PHP's
+	 * `is_callable` holds. */
+	SHARP_BUILT_IN_CALLABLE,
 } sharp_built_in;
 
 typedef struct _sharp_type sharp_type;
@@ -439,5 +442,28 @@ typedef zend_class_entry *(*sharp_type_class_resolver)(zend_string *name, void *
  * bounds. */
 zend_result sharp_type_arguments_unserialize(
 	zend_object *object, const zval *text, sharp_type_class_resolver resolve, void *context);
+
+/* Throws the Error a creation of an object of the PHP# class `ce` throws when it runs no constructor, spec section 9:
+ * `App.Email is built only through its constructor, which this creation doesn't run`. */
+ZEND_COLD void sharp_refuse_creation(const zend_class_entry *ce);
+
+/* Whether serialize writes an object of `ce` as its stored form, spec section 9, and unserialize builds one from it
+ * through its constructor: `ce` is a PHP# class, and no plain PHP parent gives it a serialization of its own, as
+ * __serialize, __unserialize, Serializable, __sleep or __wakeup. */
+bool sharp_owns_storage(const zend_class_entry *ce);
+
+/* The stored form of `object`, whose class sharp_owns_storage holds for, as serialize writes it: an array of the fields
+ * Json.encode writes, under their keys, or, for a value as text, its text under `value`. Throws an Error that names the
+ * class, and fails, for a type with no stored form: one with a main constructor parameter that holds no property, a
+ * field that holds a function, a field's Map whose key has no text, or a `parse` of its own. */
+zend_result sharp_stored_form(zend_object *object, zval *stored);
+
+/* Builds in `built` an object of `ce`, whose class sharp_owns_storage holds for, from `stored`, the array its stored
+ * form reads back as, as its `parse` builds one: through its constructor. `type_arguments` is the text serialize kept
+ * for an object of a generic class, or UNDEF, and each class it names resolves through `resolve`. Fails with the error
+ * the constructor or the `parse` threw, or one Sharp\InvalidFields for every bad field, and with no exception for
+ * type arguments that don't resolve. */
+zend_result sharp_read_stored_form(zend_class_entry *ce, zval *stored, const zval *type_arguments,
+	sharp_type_class_resolver resolve, void *context, zval *built);
 
 #endif

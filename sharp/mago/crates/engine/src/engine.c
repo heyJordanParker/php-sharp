@@ -41,11 +41,11 @@ static ZEND_FUNCTION(ask)
 	}
 }
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_classCount, 0, 0, IS_LONG, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_count, 0, 0, IS_LONG, 0)
 ZEND_END_ARG_INFO()
 
 /* How many classes, interfaces, traits and enums the interpreter has declared, which grows with each one it declares. */
-static ZEND_FUNCTION(classCount)
+static ZEND_FUNCTION(class_count)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 
@@ -54,7 +54,7 @@ static ZEND_FUNCTION(classCount)
 
 static const zend_function_entry engine_functions[] = {
 	ZEND_NS_FE("Mago\\Engine", ask, arginfo_ask)
-	ZEND_NS_FE("Mago\\Engine", classCount, arginfo_classCount)
+	ZEND_NS_FE("Mago\\Engine", class_count, arginfo_class_count)
 	ZEND_FE_END
 };
 
@@ -156,6 +156,17 @@ int engine_interpreter_start(void)
 	SG(headers_sent) = 1;
 	SG(request_info).no_headers = 1;
 	return 0;
+}
+
+/* Sets the PHP setting name to value for the running interpreter's request, as `php -d` sets it, a setting only
+ * php.ini may change included. */
+int engine_set(const char *name, size_t name_length, const char *value, size_t value_length)
+{
+	zend_string *setting = zend_string_init(name, name_length, 0);
+	zend_result set = zend_alter_ini_entry_chars(setting, value, value_length, ZEND_INI_ALL, ZEND_INI_STAGE_ACTIVATE);
+	zend_string_release(setting);
+
+	return set == SUCCESS ? 0 : -1;
 }
 
 void engine_interpreter_stop(void)

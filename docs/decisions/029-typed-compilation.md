@@ -29,7 +29,7 @@ project/
     └── app/Orders/Order.sharpc     <- what the engine runs; a missing, stale or mismatched one is refused, naming the fix
 ```
 
-The checker compiles, and the engine runs its output. `mago compile` mirrors the source paths into one folder, vendor packages included, so nothing is written into `vendor/`. A deploy runs `mago compile`, which also writes the `.php` file decision 81 puts beside each of the project's sources that declares a type. In development, `sharp.compile_command` compiles a stale file on demand. A check that reads the whole project, such as a cycle between two modules' `imports` lines, can lag in development until the next full compile, and is exact at deploy.
+The checker compiles, and the engine runs its output. `mago compile` mirrors the source paths into one folder, vendor packages included, so nothing is written into `vendor/`. A deploy runs `mago compile`. In development, `sharp.compile_command` compiles a stale file on demand. A check that reads the whole project, such as a cycle between two modules' `imports` lines, can lag in development until the next full compile, and is exact at deploy.
 
 ### Rejected: each file compiles alone
 

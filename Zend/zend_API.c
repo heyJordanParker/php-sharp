@@ -35,6 +35,7 @@
 #include "zend_object_handlers.h"
 #include "zend_observer.h"
 #include "zend_system_id.h"
+#include "ext/sharp/php_sharp.h"
 
 #include <stdarg.h>
 
@@ -1838,8 +1839,17 @@ ZEND_API void object_properties_load(zend_object *object, HashTable *properties)
  * class and all props being public. If only a subset is given or the class
  * has protected members then you need to merge the properties separately by
  * calling zend_merge_properties(). */
-static zend_always_inline zend_result _object_and_properties_init(zval *arg, zend_class_entry *class_type, HashTable *properties) /* {{{ */
+static zend_always_inline zend_result _object_and_properties_init(zval *arg, zend_class_entry *class_type, HashTable *properties, bool builds) /* {{{ */
 {
+	/* PHP#: a PHP# object is built only through its constructor, spec section 9, so only a creator that builds it next
+	 * creates one. */
+	if (UNEXPECTED((class_type->sharp_flags & SHARP_CLASS_BUILT_BY_CONSTRUCTOR) && !builds)) {
+		sharp_refuse_creation(class_type);
+		ZVAL_NULL(arg);
+		Z_OBJ_P(arg) = NULL;
+		return FAILURE;
+	}
+
 	if (UNEXPECTED(class_type->ce_flags & ZEND_ACC_UNINSTANTIABLE)) {
 		if (class_type->ce_flags & ZEND_ACC_INTERFACE) {
 			zend_throw_error(NULL, "Cannot instantiate interface %s", ZSTR_VAL(class_type->name));
@@ -1882,19 +1892,25 @@ static zend_always_inline zend_result _object_and_properties_init(zval *arg, zen
 
 ZEND_API zend_result object_and_properties_init(zval *arg, zend_class_entry *class_type, HashTable *properties) /* {{{ */
 {
-	return _object_and_properties_init(arg, class_type, properties);
+	return _object_and_properties_init(arg, class_type, properties, false);
 }
 /* }}} */
 
 ZEND_API zend_result object_init_ex(zval *arg, zend_class_entry *class_type) /* {{{ */
 {
-	return _object_and_properties_init(arg, class_type, NULL);
+	return _object_and_properties_init(arg, class_type, NULL, false);
+}
+/* }}} */
+
+ZEND_API zend_result object_init_to_build(zval *arg, zend_class_entry *class_type) /* {{{ */
+{
+	return _object_and_properties_init(arg, class_type, NULL, true);
 }
 /* }}} */
 
 ZEND_API zend_result object_init_with_constructor(zval *arg, zend_class_entry *class_type, uint32_t param_count, zval *params, HashTable *named_params) /* {{{ */
 {
-	zend_result status = _object_and_properties_init(arg, class_type, NULL);
+	zend_result status = _object_and_properties_init(arg, class_type, NULL, true);
 	if (UNEXPECTED(status == FAILURE)) {
 		ZVAL_UNDEF(arg);
 		return FAILURE;

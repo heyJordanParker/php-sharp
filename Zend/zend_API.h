@@ -577,6 +577,11 @@ static zend_always_inline bool _array_finit_ex(zval *arg, size_t size, bool pack
 ZEND_API void object_init(zval *arg);
 ZEND_API bool object_finit(zval *arg);
 ZEND_API zend_result object_init_ex(zval *arg, zend_class_entry *ce);
+/* PHP#: object_init_ex for a creator that builds the object next, as its class builds one: through its constructor, as
+ * `new` and object_init_with_constructor do, or, for a PHP# class whose plain PHP parent serializes it, through that
+ * parent's unserialization. object_init_ex and object_and_properties_init refuse a class with
+ * SHARP_CLASS_BUILT_BY_CONSTRUCTOR, so every other creation of a PHP# object throws, spec section 9. */
+ZEND_API zend_result object_init_to_build(zval *arg, zend_class_entry *ce);
 ZEND_API zend_result object_init_with_constructor(zval *arg, zend_class_entry *class_type, uint32_t param_count, zval *params, HashTable *named_params);
 ZEND_API zend_result object_and_properties_init(zval *arg, zend_class_entry *ce, HashTable *properties);
 ZEND_API void object_properties_init(zend_object *object, zend_class_entry *class_type);

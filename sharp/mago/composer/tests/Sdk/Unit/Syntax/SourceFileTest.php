@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace Mago\Tests\Sdk\Unit\Syntax;
 
 use Mago\Sdk\Exception\ProtocolException;
-use Mago\Sdk\Internal\Analyzer\Protocol as AnalyzerProtocol;
-use Mago\Sdk\Internal\Linter\Protocol as LinterProtocol;
-use Mago\Sdk\Internal\Protocol\PayloadReader;
+use Mago\Sdk\Internal\Protocol\ValueReader;
 use Mago\Sdk\Internal\Syntax\NodeStore;
 use Mago\Sdk\Internal\Syntax\ResolvedNameStore;
 use Mago\Sdk\Internal\Syntax\SourceFileCodec;
@@ -18,7 +16,6 @@ use Mago\Sdk\Syntax\Node;
 use Mago\Sdk\Syntax\NodeKind;
 use Mago\Sdk\Syntax\SourceFile;
 use Mago\Sdk\Syntax\TriviaKind;
-use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 use function array_fill;
@@ -87,16 +84,16 @@ final class SourceFileTest extends TestCase
         self::assertSame(NodeKind::FunctionCall, $looked->getMany([1])[0]->kind);
     }
 
+    /** A snapshot whose node records hold fewer nodes than it counts is refused, as any malformed message is. */
     public function testASnapshotWhoseNodeRecordsEndEarlyIsRefused(): void
     {
         $noNode = 4_294_967_295;
-        $payload = pack('NN', 0, 2) . pack('nNNNNN', 0, 0, 10, $noNode, $noNode, $noNode);
+        $nodes = pack('nNNNNN', 0, 0, 10, $noNode, $noNode, $noNode);
 
         $this->expectException(ProtocolException::class);
-        $this->expectExceptionMessage('The source snapshot holds 22 bytes of node records, where its 2 nodes take 44.');
 
-        SourceFileCodec::read(
-            new PayloadReader($payload),
+        SourceFileCodec::readValues(
+            new ValueReader([0, 2, $nodes]),
             PHPVersion::fromParts(8, 4),
             [NodeKind::Program],
             'a.php',
@@ -135,38 +132,6 @@ final class SourceFileTest extends TestCase
                 static fn(Node $node): bool => $node->kind === NodeKind::FunctionCall,
             )),
         );
-    }
-
-    /**
-     * @return iterable<string, array{class-string<AnalyzerProtocol|LinterProtocol>, string, string}>
-     */
-    public static function previousProtocolVersions(): iterable
-    {
-        yield 'analyzer' => [
-            AnalyzerProtocol::class,
-            pack('N3', 0x4D41_4E41, 0x0001_000A, 1 << 16),
-            '`mago` speaks analyzer protocol 1.10,',
-        ];
-        yield 'linter' => [
-            LinterProtocol::class,
-            pack('N3', 0x4D4C_4E54, 0x0001_0001, 1 << 16),
-            '`mago` speaks linter protocol 1.1,',
-        ];
-    }
-
-    /**
-     * @param class-string<AnalyzerProtocol|LinterProtocol> $protocol
-     */
-    #[DataProvider('previousProtocolVersions')]
-    public function testASnapshotMessageFromThePreviousProtocolVersionIsRefused(
-        string $protocol,
-        string $header,
-        string $message,
-    ): void {
-        $this->expectException(ProtocolException::class);
-        $this->expectExceptionMessage($message);
-
-        $protocol::readRequest($header);
     }
 
     public function testABindingIsOneTheSnapshotCanCarry(): void

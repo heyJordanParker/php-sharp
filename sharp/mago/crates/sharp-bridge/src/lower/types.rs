@@ -18,6 +18,7 @@ use mago_codex::metadata::attribute::ConstantExpression;
 use mago_codex::metadata::class_like::ClassLikeMetadata;
 use mago_codex::metadata::class_like::ParsedField;
 use mago_codex::metadata::function_like::FunctionLikeMetadata;
+use mago_codex::metadata::machine::MachineMetadata;
 use mago_codex::metadata::module::ModuleMetadata;
 use mago_codex::metadata::module::dispatcher;
 use mago_codex::metadata::parameter::FunctionLikeParameterMetadata;
@@ -2001,12 +2002,18 @@ impl<'analysis> Types<'analysis> {
         self.codebase.get_class_like(class).is_some_and(|class| class.tag_key().is_some())
     }
 
+    /// The cases and moves of the PHP# machine `class`, spec section 20.2. None for any other class.
+    #[must_use]
+    pub fn machine(&self, class: Word) -> Option<&'analysis MachineMetadata> {
+        self.codebase.get_class_like(class)?.machine.as_ref()
+    }
+
     /// The key of the family above the class `class` and the class's name in it, which its encoding writes first, as
     /// `("type", "card")`. None for a class that is no named variant of a family.
     pub(crate) fn variant_tag(&self, class: &[u8]) -> Option<(&'analysis [u8], &'analysis [u8])> {
         let class = self.codebase.get_class_like(word(class))?;
 
-        Some((self.codebase.family_of(class)?.tag_key()?, class.variant_name()?))
+        Some((self.codebase.family_of(class)?.tag_key()?, self.codebase.variant_name(class)?))
     }
 
     /// The fields the `parse` of the struct or PHP# class `class` reads, as the codex gives them.

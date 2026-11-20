@@ -140,25 +140,28 @@ Works. `compile p5` refused `Clock.sharp` with `impure-law`, and `compile p1` pr
 
 - Mechanism: none new for classes. A module law gets the same check, because codex sees it as a class-like law.
 
-## A state machine's laws
+## A state machine's invariants
 
-"A state machine gets its laws through a pure transition method on its status enum, so a law covers every state and event."
+"A state machine is a `machine` (section 20.2), and its invariants are its laws: the checker proves each one after every entry point and every move that gives its case, and a failed proof prints the moves that break it."
 
 ```csharp
-public enum Status : string
+public machine Refund
 {
-    case Open = "open";
-    case Paid = "paid";
-    case Refunded = "refunded";
+    case Open
+    {
+        public Refund.Paid pay(int cents) => Refund.Paid(cents);
+    }
+    final case Paid(int cents);
 
-    public Status after(Payment e) => match (this) { … };                          // pure: the next status for every status and event
-    law refundedIsFinal(Payment e) => Status.Refunded.after(e) == Status.Refunded;
+    public static Refund.Open open() => Refund.Open;
+
+    law paidIsPositive(Refund.Paid paid) => paid.cents > 0;        // compile error: paidIsPositive breaks after open() → Open, pay(cents: 0) → Paid(cents: 0)
 }
 ```
 
-Works, with the `…` filled in. `compile p1` proved `refundedIsFinal` and wrote `theorem refundedIsFinal : App.Shop.Status.refundedIsFinal := by` into `app/Shop/Status.lean`.
+Works. `sharp-lean`'s `translate/machine.rs` states one theorem for each invariant and each entry point or move whose result can be the invariant's case. A theorem that fails runs `Sharp.Machine.search` of `Law.lean`, which tries move sequences breadth-first from each entry point, 3 moves deep, with a few small values for each argument, and prints the first that breaks the invariant.
 
-- Mechanism: none new. `tests/compile.rs` `compile_proves_spec_section_28_1_s_state_machine_law_over_an_enum_match` already covers it.
+- Mechanism: `tests/compile.rs` `compile_proves_a_machine_s_invariant_after_each_move_that_gives_its_case` and `a_move_that_breaks_a_machine_s_invariant_is_refused_with_the_moves_that_break_it`.
 
 ## 28.1 Lean files
 
@@ -248,7 +251,7 @@ The lens: `Server::get_lens(file)` returns one `CodeLensItem` above each method 
 
 # Lean on a user's machine
 
-**Master today:** `crates/sharp-lean/src/library.rs` `toolchain` finds the Lean a law runs on one way: the Lean Mago installed in its cache folder, else elan's toolchain of the pinned version in `$ELAN_HOME` or `~/.elan`, else the Lean Mago downloads into its cache folder. A `lake` on the `PATH` never runs. When Mago cannot install Lean, every file that needs Lean is refused with `law-checker-unavailable`, a fixed sentence that names no tool and no folder of one: "The law checker could not be installed. Run vendor/bin/mago compile again to retry, with MAGO_LOG=debug to see why." The debug log holds what failed. Only CI installs elan (`.github/actions/setup-lean/action.yml`). Neither `heyjordanparker/mago-sharp`'s Composer package nor `sharp/docker/runtime/Dockerfile` ships Lean (`trace grep -i "elan|\blean\b" sharp .github` in php-sharp finds nothing).
+**Master today:** `crates/sharp-lean/src/library.rs` `toolchain` finds the Lean a law runs on one way: the Lean Mago installed in its cache folder, else elan's toolchain of the pinned version in `$ELAN_HOME` or `~/.elan`, else the Lean Mago downloads into its cache folder. A `lake` on the `PATH` never runs. A release `mago` embeds the law checker's build, the zstd archive of its `.lake/build` that the release job writes with `cargo run -p mago-sharp-lean --example checker`, and unpacks it into its cache folder under the build lock on the first compile that proves a law, so no machine runs `lake build`, and the build's name hashes the archive, so a `mago` runs only its own checker. A build without the archive, as a dev build, builds the checker with that Lean's `lake`. When Mago cannot install Lean, every file that needs Lean is refused with `law-checker-unavailable`, a fixed sentence that names no tool and no folder of one: "The law checker could not be installed. Run vendor/bin/mago compile again to retry, with MAGO_LOG=debug to see why." The debug log holds what failed. Only CI installs elan (`.github/actions/setup-lean/action.yml`). Neither `heyjordanparker/mago-sharp`'s Composer package nor `sharp/docker/runtime/Dockerfile` ships Lean (`trace grep -i "elan|\blean\b" sharp .github` in php-sharp finds nothing).
 
 **The precedent:** `composer/bin/mago` calls `ensure_binary` in `composer/src/internal.php`, which downloads the pinned release archive for the machine's target triple on first run, into a per-version folder, under a file lock. `crates/sharp-lean/src/library.rs` already builds the Lean runtime library once per Mago build in Mago's cache folder, under a lock. The `mago` binary already links `ureq`, `tar` and `flate2` for `mago self-update` (`src/updater/github.rs`, `src/updater/archive.rs`). `mago-sharp-lean` gains them as workspace dependencies. The engine never links `mago-sharp-lean`, since that crate depends on `mago-sharp-bridge` and not the reverse.
 

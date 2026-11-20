@@ -1,0 +1,7 @@
+namespace Queued;
+
+// A struct with a field that holds a function, which no stored form holds.
+public struct Hook
+{
+    public Hook(public Function<int(int)> step { get; }) { }
+}

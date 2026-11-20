@@ -490,6 +490,35 @@ fn write(root: &Path, name: &str, contents: &str) {
     std::fs::write(path, contents).unwrap();
 }
 
+/// Spec section 20.2: `mago machine` prints a machine's graph as a Mermaid state diagram, each arrow named by the entry
+/// point or the move that makes it, and each `final` case leading to the end. A name no machine has fails.
+#[test]
+fn machine_prints_a_machine_s_graph_as_a_mermaid_state_diagram() {
+    let directory = tempfile::tempdir().unwrap();
+    write(directory.path(), "mago.toml", include_str!("fixtures/sharp/mago.toml"));
+    write(directory.path(), "composer.json", LIBRARY);
+    write(
+        directory.path(),
+        "src/Shop/OrderStatus.sharp",
+        "namespace Shop;\n\npublic machine OrderStatus\n{\n    case Draft\n    {\n        public OrderStatus.Paid pay(int cents) => OrderStatus.Paid(cents);\n        public OrderStatus.Cancelled cancel() => OrderStatus.Cancelled;\n    }\n    case Paid(int cents)\n    {\n        public OrderStatus.Shipped ship() => OrderStatus.Shipped;\n    }\n    final case Shipped;\n    final case Cancelled;\n\n    public static OrderStatus.Draft open() => OrderStatus.Draft;\n}\n",
+    );
+
+    let output = run(directory.path(), "machine", &["Shop.OrderStatus"]);
+    let missing = run(directory.path(), "machine", &["Shop.Order"]);
+
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "stateDiagram-v2\n    [*] --> Draft: open()\n    Draft --> Paid: pay(cents)\n    Draft --> Cancelled: cancel()\n    Paid --> Shipped: ship()\n    Shipped --> [*]\n    Cancelled --> [*]\n"
+    );
+    assert!(!missing.status.success());
+    assert!(
+        String::from_utf8_lossy(&missing.stderr).contains("The project declares no machine named `Shop.Order`."),
+        "{}",
+        String::from_utf8_lossy(&missing.stderr)
+    );
+}
+
 /// The standard library's members of `string`, with a native body, spec section 29, and the `split` `Http` calls.
 const STRING_MEMBERS: &str = include_str!("../../composer/library/Sharp/Text/StringMembers.sharp");
 
@@ -977,10 +1006,12 @@ fn a_list_index_write_without_the_standard_library_is_refused() {
     }
 }
 
-/// `mago analyze` reports nothing in vendored files, so another package's `extern` method under `Sharp` gets no
-/// report. The engine registers no native function for it, so a call of it fails when it runs.
+/// `mago analyze` reports nothing in vendored files, so its analysis of the project's files gives another package's
+/// `extern` method under `Sharp` no report. The engine registers no native function for it, so a call of it fails when
+/// it runs, and the compile refuses the package's file: `mago analyze` of the whole project compiles it too, and
+/// reports that refusal.
 #[test]
-fn analyze_trusts_a_vendored_file_of_another_package_under_sharp() {
+fn analyze_trusts_a_vendored_file_of_another_package_under_sharp_that_its_compile_refuses() {
     let directory = library_workspace(
         "namespace App;\n\nimport Sharp.Tools.Tools;\n\npublic class Page\n{\n    public string slug() => Tools.slug(\"Hello\");\n}\n",
     );
@@ -991,12 +1022,22 @@ fn analyze_trusts_a_vendored_file_of_another_package_under_sharp() {
         "namespace Sharp.Tools;\n\npublic static class Tools\n{\n    public static extern string slug(string title);\n}\n",
     );
 
-    let output = run(directory.path(), "analyze", &[]);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let named = run(directory.path(), "analyze", &["src"]);
+    let whole = run(directory.path(), "analyze", &["--reporting-format", "emacs"]);
+    let printed = |output: &Output| {
+        format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr))
+    };
 
-    assert!(output.status.success(), "{stdout}{stderr}");
-    assert!(stderr.contains("No issues found."), "{stdout}{stderr}");
+    assert!(named.status.success(), "{}", printed(&named));
+    assert!(printed(&named).contains("No issues found."), "{}", printed(&named));
+    assert_eq!(whole.status.code(), Some(1), "{}", printed(&whole));
+    for refusal in [
+        "vendor/acme/tools/src/Sharp/Tools/Tools.sharp:1:11:error - reserved-name-outside-library:",
+        "vendor/acme/tools/src/Sharp/Tools/Tools.sharp:5:33:error - native-body-outside-library:",
+        "vendor/acme/tools/src/Sharp/Tools/Tools.sharp comes from the Composer package acme/tools.",
+    ] {
+        assert_eq!(printed(&whole).matches(refusal).count(), 1, "{refusal}\n{}", printed(&whole));
+    }
 }
 
 /// Spec section 23's example: the renamed import leaves the bare `Key` to name the standard attribute.

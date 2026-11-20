@@ -978,7 +978,7 @@ ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate_inner(
 				return FAILURE;
 			}
 
-			if (object_init_ex(result, ce) != SUCCESS) {
+			if (object_init_to_build(result, ce) != SUCCESS) {
 				return FAILURE;
 			}
 

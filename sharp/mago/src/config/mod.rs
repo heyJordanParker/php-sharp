@@ -239,7 +239,7 @@ pub struct Configuration {
     ///   version is a warning. While the major version is 0 a minor release
     ///   may change the configuration, so `mago init` writes this
     ///   `{major}.{minor}` pin.
-    /// - `"0.6.39"`: exact pin; any drift is a warning, and this is the only
+    /// - `"0.6.40"`: exact pin; any drift is a warning, and this is the only
     ///   form that `mago self-update --to-project-version` can target without
     ///   ambiguity.
     ///
@@ -922,6 +922,7 @@ mod tests {
 file = "vendor/acme/host.php"
 request-timeout-ms = 1234
 environment = { APP_ENV = "test" }
+ini = { memory_limit = "2G" }
 "#,
         );
 
@@ -936,6 +937,7 @@ environment = { APP_ENV = "test" }
                 file: directory.join("vendor/acme/host.php"),
                 deadline: std::time::Duration::from_millis(1234),
                 environment: [("APP_ENV".to_owned(), "test".to_owned())].into(),
+                ini: [("memory_limit".to_owned(), "2G".to_owned())].into(),
             }
         );
     }

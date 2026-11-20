@@ -1,5 +1,5 @@
 --TEST--
-unserialize checks each PHP# property it fills, spelled with the type arguments it reads after them, and PHP# code checks a property a back-reference fills when it reads it
+unserialize builds a PHP# object through its constructor, which checks each field, spelled with the type arguments it reads after them, and a back-reference to another object of the data
 --FILE--
 <?php
 require __DIR__ . '/type_arguments_entry.inc';
@@ -17,6 +17,6 @@ attempt(fn () => unserialize(str_replace('a:0:{}', 'a:1:{i:0;s:1:"x";}', seriali
 ?>
 --EXPECT--
 bool(true)
-Cannot assign App.Box<Checks.Customer> to property Checks\Rack::$own of type App.Box<App.Order>?
-Cannot assign App\Box to property Checks\Rack::$items of type List<App.Order>
-Cannot assign array to property Checks\Tally::$amounts of type List<float>: [0] expected float, got string 'x'
+own: expected App.Box<App.Order>?, got object App.Box<Checks.Customer>
+items: expected List<App.Order>, got object App.Box<App.Order>
+amounts[0]: expected float, got string 'x'

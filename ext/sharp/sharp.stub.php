@@ -35,6 +35,10 @@ final class ContainerError extends \Error
 {
 }
 
+final class StateError extends \Error
+{
+}
+
 /**
  * @strict-properties
  * @not-serializable
@@ -118,8 +122,6 @@ function writeGlobal(string $name, mixed $value, ?string $key = null): void {}
 function includeGlobal(string $path): void {}
 
 function accessors(string $type, string $name): array {}
-
-function createLazy(string $type, callable $initialize): object {}
 
 function arrayOf(mixed $value, mixed $receiver = null): mixed {}
 

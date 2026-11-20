@@ -1,6 +1,5 @@
 //! Runs `mago compile` on a project that mixes PHP# and PHP files, with a PHP# package in `vendor/`.
 
-use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -604,8 +603,8 @@ final class ReadsTheCompiledFile implements Plugin, BeforeAnalysisHook
 
 /// A Roslyn source generator sees the compilation's symbols, and a Kotlin compiler plugin sees the module's own
 /// classes, so a host sees each PHP# file compiled from its current source, on a fresh tree and after an edit. The
-/// hosts' compile lives outside the project, so `mago analyze` leaves the project's `.sharp` folder as `mago compile`
-/// wrote it.
+/// hosts' compile lives outside the project, and `mago analyze` compiles the project's `.sharp` folder from the same
+/// lowering, as `mago --no-extensions compile` writes it.
 #[test]
 fn a_host_sees_each_php_sharp_file_compiled_from_its_current_source() {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -638,7 +637,63 @@ fn a_host_sees_each_php_sharp_file_compiled_from_its_current_source() {
 
     assert!(analyzed.status.success(), "{}", printed(&analyzed));
     assert_eq!(std::fs::read_to_string(root.join("host.log")).unwrap(), "first\nsecond\n");
-    assert_eq!(std::fs::read(compiled(root, "app/Word.sharp")).unwrap(), compiled_by_compile);
+    let compiled_by_analyze = std::fs::read(compiled(root, "app/Word.sharp")).unwrap();
+    assert_ne!(compiled_by_analyze, compiled_by_compile, "analyze compiled the edit into the `.sharp` folder");
+    let without_hosts = process::output(
+        Command::new(env!("CARGO_BIN_EXE_mago"))
+            .args(["--no-version-check", "--colors", "never", "--no-extensions", "compile"])
+            .env("XDG_CACHE_HOME", Path::new(env!("CARGO_TARGET_TMPDIR")).join("cache"))
+            .current_dir(root),
+    )
+    .unwrap();
+    assert!(without_hosts.status.success(), "{}", printed(&without_hosts));
+    assert_eq!(std::fs::read(compiled(root, "app/Word.sharp")).unwrap(), compiled_by_analyze);
+}
+
+/// `mago analyze` compiles the project's `.sharp` folder and the hosts' folder from one analysis without the hosts and
+/// one lowering before it analyzes with the hosts, so on a fresh tree its log holds one compile, and the host and the
+/// `.sharp` folder each get every file.
+#[test]
+fn analyze_compiles_the_sharp_folder_and_the_hosts_folder_from_one_lowering() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the one lowering test") {
+        return;
+    }
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    write(
+        root,
+        "app/Word.sharp",
+        "namespace App;\n\npublic class Word\n{\n    public static string text() => \"first\";\n}\n",
+    );
+    write(root, "tools/host.php", HOST_READING_THE_COMPILED_FILE);
+    write(
+        root,
+        "mago.toml",
+        "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n\n[extension-hosts.reader]\nfile = \"tools/host.php\"\n",
+    );
+    let cache = tempfile::tempdir().unwrap();
+
+    let analyzed = process::output(
+        Command::new(env!("CARGO_BIN_EXE_mago"))
+            .args(["--no-version-check", "--colors", "never", "analyze"])
+            .env("MAGO_LOG", "debug")
+            .env("XDG_CACHE_HOME", cache.path())
+            .current_dir(root),
+    )
+    .unwrap();
+
+    assert!(analyzed.status.success(), "{}", printed(&analyzed));
+    assert_eq!(
+        printed(&analyzed).matches("Kept the compiled file of 0 PHP# files").count(),
+        1,
+        "{}",
+        printed(&analyzed)
+    );
+    assert_eq!(std::fs::read_to_string(root.join("host.log")).unwrap(), "first\n");
+    for name in ["app/Order.sharp", MONEY_PATH, "app/Word.sharp"] {
+        assert!(compiled(root, name).exists(), "{name}");
+    }
 }
 
 /// An editor's `mago analyze` and a terminal's start together after an edit, and each compiles the project into the one
@@ -924,22 +979,18 @@ fn the_hosts_compile_keeps_its_record_whatever_its_worker_threads_log() {
     }
     let cache = tempfile::tempdir().unwrap();
     let compile = || process::output(command(root, "never").env("XDG_CACHE_HOME", cache.path())).unwrap();
-    // The first run's own compile writes `app/Order.php` after the hosts' compile read the project, so the second run's
-    // hosts' compile reads it too.
-    for _ in 0..2 {
-        let output = compile();
-        assert!(output.status.success(), "{}", printed(&output));
-        assert!(printed(&output).contains("parsing error(s) in 'vendor/acme/torn/src/Torn"), "{}", printed(&output));
-    }
+    let output = compile();
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(printed(&output).contains("parsing error(s) in 'vendor/acme/torn/src/Torn"), "{}", printed(&output));
     let hosts = cache.path().join("mago/hosts");
     let folder = std::fs::read_dir(&hosts).unwrap().next().expect("the hosts' compile wrote its folder").unwrap();
     let record = folder.path().join("inputs.json");
     assert!(record.exists(), "the hosts' compile kept its record");
     let recorded = std::fs::metadata(&record).unwrap().modified().unwrap();
 
-    let third = compile();
+    let again = compile();
 
-    assert!(third.status.success(), "{}", printed(&third));
+    assert!(again.status.success(), "{}", printed(&again));
     assert_eq!(
         std::fs::metadata(&record).unwrap().modified().unwrap(),
         recorded,
@@ -2075,368 +2126,70 @@ fn compile_replaces_a_compiled_file_by_rename_so_no_reader_sees_a_partial_file()
     assert_eq!(files_under(&root.join(".sharp/app")), [Path::new("Order.sharpc")], "no temporary file is left");
 }
 
-/// The PHP file `mago compile` writes beside `app/Order.sharp`, spec section 27.
-const ORDER_PHP: &str = r#"<?php
-
-// mago compile writes this file from Order.sharp, so PHP code that finds *.php files finds its type.
-// phpcs:ignoreFile
-
-declare(strict_types=1);
-
-namespace App;
-
-use Error;
-
-use function function_exists;
-use function is_file;
-use function sprintf;
-
-if (is_file(sprintf('%s/Order.sharp', __DIR__))) {
-    function_exists('Sharp\Internal\requireNative')
-        || throw new Error(
-            'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
-        );
-
-    require_once sprintf('%s/Order.sharp', __DIR__);
-}
-
-if (false) {
-    class Order
-    {
-        // The engine declares Order from Order.sharp, and this declaration never runs.
-    }
-}
-"#;
-
-/// Spec section 27: each of the project's PHP# sources that declares a type gets a PHP file of the type's name beside
-/// it, so PHP code that finds classes by listing `*.php` files finds it. A module's file declares none, and a package
-/// in `vendor/` is never written to.
+/// A PHP# project's tree holds only what its authors wrote: the compile writes every file of its own in the `.sharp`
+/// folder, and no PHP file and no `.gitignore` beside a source, in the project's folders or in `vendor/`.
 #[test]
-fn compile_writes_a_php_file_beside_each_project_source_that_declares_a_type() {
+fn compile_writes_nothing_beside_a_source() {
     let directory = project(ORDER, MONEY);
     let root = directory.path();
-    write(
-        root,
-        "app/Shop/Module.sharp",
-        "namespace App.Shop;\n\nimport App.Order;\n\nmodule\n{\n    transient Order = Order;\n}\n",
-    );
+    std::fs::remove_file(root.join("app/Legacy.php")).unwrap();
+    write(root, "app/Shop/StoreService.sharp", "namespace App.Shop;\n\npublic class StoreService\n{\n}\n");
     let vendor = files_under(&root.join("vendor"));
 
     compile_succeeds(root);
 
-    assert_eq!(std::fs::read_to_string(root.join("app/Order.php")).unwrap(), ORDER_PHP);
-    assert_eq!(
-        files_under(&root.join("app")),
-        [
-            Path::new(".gitignore"),
-            Path::new("Legacy.php"),
-            Path::new("Order.php"),
-            Path::new("Order.sharp"),
-            Path::new("Shop/Module.sharp")
-        ]
-    );
+    assert!(compiled(root, "app/Shop/StoreService.sharp").exists());
+    assert_eq!(files_under(&root.join("app")), [Path::new("Order.sharp"), Path::new("Shop/StoreService.sharp")]);
     assert_eq!(files_under(&root.join("vendor")), vendor, "nothing is written under vendor/");
 }
 
-/// The PHP file states the type's kind, an interface's and an enum's included, and a type named after a PHP keyword
-/// gets none, which PHP would refuse. A type named `Error` declares the name the file would import, so its file names
-/// `\Error` in full instead, and a type in no namespace imports nothing, which PHP would warn of.
+/// A PHP file and a PHP# source that declare one class are two declarations of it, which the analysis refuses as it
+/// refuses any two.
 #[test]
-fn compile_writes_the_php_file_of_each_kind_of_type() {
+fn analyze_refuses_a_php_file_and_a_source_that_declare_one_class() {
     let directory = project(ORDER, MONEY);
     let root = directory.path();
-    let types = [
-        ("Payable", "public interface Payable\n{\n}\n", PAYABLE_PHP),
-        ("Status", "public enum Status\n{\n    case Open;\n    case Paid;\n}\n", STATUS_PHP),
-        ("Match", "public class Match\n{\n}\n", MATCH_PHP),
-        ("Error", "public class Error\n{\n}\n", ERROR_PHP),
-    ];
-    for (name, declaration, _) in types {
-        write(root, &format!("app/Billing/{name}.sharp"), &format!("namespace App.Billing;\n\n{declaration}"));
-    }
-    write(root, "app/Rootless.sharp", "public class Rootless\n{\n}\n");
+    write(root, "app/Shop/StoreService.sharp", "namespace App.Shop;\n\npublic class StoreService\n{\n}\n");
+    write(root, "app/Shop/StoreService.php", "<?php\n\nnamespace App\\Shop;\n\nfinal class StoreService\n{\n}\n");
 
-    compile_succeeds(root);
+    let output = analyze(root, &[]);
 
-    assert_eq!(std::fs::read_to_string(root.join("app/Order.php")).unwrap(), ORDER_PHP);
-    for (name, _, php) in types {
-        assert_eq!(std::fs::read_to_string(root.join(format!("app/Billing/{name}.php"))).unwrap(), php, "{name}");
-    }
-    assert_eq!(std::fs::read_to_string(root.join("app/Rootless.php")).unwrap(), ROOTLESS_PHP);
-}
-
-const PAYABLE_PHP: &str = r#"<?php
-
-// mago compile writes this file from Payable.sharp, so PHP code that finds *.php files finds its type.
-// phpcs:ignoreFile
-
-declare(strict_types=1);
-
-namespace App\Billing;
-
-use Error;
-
-use function function_exists;
-use function is_file;
-use function sprintf;
-
-if (is_file(sprintf('%s/Payable.sharp', __DIR__))) {
-    function_exists('Sharp\Internal\requireNative')
-        || throw new Error(
-            'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
-        );
-
-    require_once sprintf('%s/Payable.sharp', __DIR__);
-}
-
-if (false) {
-    interface Payable
-    {
-        // The engine declares Payable from Payable.sharp, and this declaration never runs.
-    }
-}
-"#;
-
-const STATUS_PHP: &str = r#"<?php
-
-// mago compile writes this file from Status.sharp, so PHP code that finds *.php files finds its type.
-// phpcs:ignoreFile
-
-declare(strict_types=1);
-
-namespace App\Billing;
-
-use Error;
-
-use function function_exists;
-use function is_file;
-use function sprintf;
-
-if (is_file(sprintf('%s/Status.sharp', __DIR__))) {
-    function_exists('Sharp\Internal\requireNative')
-        || throw new Error(
-            'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
-        );
-
-    require_once sprintf('%s/Status.sharp', __DIR__);
-}
-
-if (false) {
-    enum Status
-    {
-        // The engine declares Status from Status.sharp, and this declaration never runs.
-    }
-}
-"#;
-
-const MATCH_PHP: &str = r#"<?php
-
-// mago compile writes this file from Match.sharp, so PHP code that finds *.php files finds its type.
-// phpcs:ignoreFile
-
-declare(strict_types=1);
-
-namespace App\Billing;
-
-use Error;
-
-use function function_exists;
-use function is_file;
-use function sprintf;
-
-if (is_file(sprintf('%s/Match.sharp', __DIR__))) {
-    function_exists('Sharp\Internal\requireNative')
-        || throw new Error(
-            'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
-        );
-
-    require_once sprintf('%s/Match.sharp', __DIR__);
-}
-"#;
-
-const ERROR_PHP: &str = r#"<?php
-
-// mago compile writes this file from Error.sharp, so PHP code that finds *.php files finds its type.
-// phpcs:ignoreFile
-
-declare(strict_types=1);
-
-namespace App\Billing;
-
-use function function_exists;
-use function is_file;
-use function sprintf;
-
-if (is_file(sprintf('%s/Error.sharp', __DIR__))) {
-    function_exists('Sharp\Internal\requireNative')
-        || throw new \Error(
-            'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
-        );
-
-    require_once sprintf('%s/Error.sharp', __DIR__);
-}
-
-if (false) {
-    class Error
-    {
-        // The engine declares Error from Error.sharp, and this declaration never runs.
-    }
-}
-"#;
-
-const ROOTLESS_PHP: &str = r#"<?php
-
-// mago compile writes this file from Rootless.sharp, so PHP code that finds *.php files finds its type.
-// phpcs:ignoreFile
-
-declare(strict_types=1);
-
-if (is_file(sprintf('%s/Rootless.sharp', __DIR__))) {
-    function_exists('Sharp\Internal\requireNative')
-        || throw new Error(
-            'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
-        );
-
-    require_once sprintf('%s/Rootless.sharp', __DIR__);
-}
-
-if (false) {
-    class Rootless
-    {
-        // The engine declares Rootless from Rootless.sharp, and this declaration never runs.
-    }
-}
-"#;
-
-/// A source in an `autoload-dev` folder gets no PHP file, so a test class keeps one file: PHPUnit loads a test class
-/// only from the file it lists, and a project lists its PHP# tests with `suffix="Test.sharp"`.
-#[test]
-fn compile_writes_no_php_file_beside_a_source_in_an_autoload_dev_folder() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    write(
-        root,
-        "composer.json",
-        "{\"type\": \"library\", \"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}, \"autoload-dev\": {\"psr-4\": {\"Tests\\\\\": \"tests/\"}}}\n",
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "error[duplicate-definition]: Class `App\\Shop\\StoreService` is already defined in `app/Shop/StoreService.sharp`."
+        ),
+        "{}",
+        printed(&output)
     );
-    write(root, "tests/Shop/CheckoutTest.sharp", "namespace Tests.Shop;\n\npublic class CheckoutTest\n{\n}\n");
-    write(
-        root,
-        "mago.toml",
-        "php-version = \"8.4\"\n\n[source]\npaths = [\"app\", \"tests\"]\nincludes = [\"vendor\"]\n",
+}
+
+/// Composer's loader finds a class's `.php` file before the PHP# loader finds its `.sharp` file, so a plain PHP class
+/// that takes a PHP# class's name is what a request would run. It meets that PHP# type, and the compile refuses its file
+/// with the analysis's duplicate-definition error, and still compiles the `.sharp` file.
+#[test]
+fn compile_refuses_a_plain_php_class_that_takes_a_php_sharp_class_s_name() {
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    write(root, "app/Shop/StoreService.sharp", "namespace App.Shop;\n\npublic class StoreService\n{\n}\n");
+    write(root, "app/Shop/StoreService.php", "<?php\n\nnamespace App\\Shop;\n\nfinal class StoreService\n{\n}\n");
+
+    let output = compile(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "app/Shop/StoreService.php:5:1: error[duplicate-definition]: Class `App\\Shop\\StoreService` is already defined in `app/Shop/StoreService.sharp`."
+        ),
+        "{}",
+        printed(&output)
     );
-
-    compile_succeeds(root);
-
-    assert!(compiled(root, "tests/Shop/CheckoutTest.sharp").exists());
-    assert_eq!(files_under(&root.join("tests")), [Path::new("Shop/CheckoutTest.sharp")]);
-    assert_eq!(std::fs::read_to_string(root.join("app/Order.php")).unwrap(), ORDER_PHP);
+    assert!(printed(&output).contains("1 plain PHP file was refused"), "{}", printed(&output));
+    assert!(compiled(root, "app/Shop/StoreService.sharp").exists());
 }
 
-/// mago reads the PHP# source and never the PHP file beside it, as `tsc` reads `Order.ts` and never the `Order.d.ts`
-/// beside it: the class has one declaration, and a project's lint reports nothing on a file nobody edits.
-#[test]
-fn mago_reads_the_source_and_never_the_php_file_beside_it() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    compile_succeeds(root);
-
-    let mago = |arguments: &[&str]| {
-        process::output(
-            Command::new(env!("CARGO_BIN_EXE_mago"))
-                .args(["--no-version-check", "--colors", "never"])
-                .args(arguments)
-                .env("XDG_CACHE_HOME", Path::new(env!("CARGO_TARGET_TMPDIR")).join("cache"))
-                .current_dir(root),
-        )
-        .unwrap()
-    };
-    let analyzed = mago(&["analyze", "app"]);
-    let linted = mago(&["lint", "app/Order.php"]);
-
-    assert!(analyzed.status.success(), "{}", printed(&analyzed));
-    assert!(!printed(&analyzed).contains("duplicate-definition"), "{}", printed(&analyzed));
-    assert!(printed(&linted).contains("No files found to lint."), "{}", printed(&linted));
-}
-
-/// The PHP file is in mago's own format, so a project's `mago fmt --check` passes on a file nobody edits.
-#[test]
-fn the_php_file_beside_a_source_passes_fmt_check() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    compile_succeeds(root);
-
-    let output = process::output(
-        Command::new(env!("CARGO_BIN_EXE_mago"))
-            .args(["--no-version-check", "--colors", "never", "fmt", "--check", "app/Order.php"])
-            .env("XDG_CACHE_HOME", Path::new(env!("CARGO_TARGET_TMPDIR")).join("cache"))
-            .current_dir(root),
-    )
-    .unwrap();
-
-    assert!(output.status.success(), "{}", printed(&output));
-}
-
-/// A second compile leaves a current PHP file as it is, and puts back one whose text changed.
-#[test]
-fn compile_keeps_the_php_file_beside_a_source_current() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    compile_succeeds(root);
-    let written = std::fs::metadata(root.join("app/Order.php")).unwrap().modified().unwrap();
-
-    compile_succeeds(root);
-    assert_eq!(std::fs::metadata(root.join("app/Order.php")).unwrap().modified().unwrap(), written);
-
-    write(root, "app/Order.php", &ORDER_PHP.replace("require_once", "require"));
-    compile_succeeds(root);
-    assert_eq!(std::fs::read_to_string(root.join("app/Order.php")).unwrap(), ORDER_PHP);
-}
-
-/// The PHP file goes with its source, and a PHP file someone wrote stays.
-#[test]
-fn compile_deletes_the_php_file_of_a_renamed_or_removed_source() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    compile_succeeds(root);
-
-    std::fs::remove_file(root.join("app/Order.sharp")).unwrap();
-    write(root, "app/Invoice.sharp", &ORDER.replace("class Order", "class Invoice"));
-    compile_succeeds(root);
-    assert_eq!(
-        files_under(&root.join("app")),
-        [Path::new(".gitignore"), Path::new("Invoice.php"), Path::new("Invoice.sharp"), Path::new("Legacy.php")]
-    );
-
-    std::fs::remove_file(root.join("app/Invoice.sharp")).unwrap();
-    compile_succeeds(root);
-    assert_eq!(files_under(&root.join("app")), [Path::new("Legacy.php")]);
-}
-
-/// The compile finds the PHP files it wrote on disk, so a project whose analyzer loads only PHP# files deletes them
-/// too, the file of a folder whose every source is gone included.
-#[test]
-fn compile_deletes_the_php_file_of_a_removed_source_whatever_the_analyzer_loads() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    write(
-        root,
-        "mago.toml",
-        "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\nextensions = [\"sharp\"]\n",
-    );
-    write(root, "app/Shop/Cart.sharp", "namespace App.Shop;\n\npublic class Cart\n{\n}\n");
-    compile_succeeds(root);
-    assert!(root.join("app/Order.php").exists() && root.join("app/Shop/Cart.php").exists());
-
-    std::fs::remove_file(root.join("app/Order.sharp")).unwrap();
-    std::fs::remove_file(root.join("app/Shop/Cart.sharp")).unwrap();
-    compile_succeeds(root);
-
-    assert_eq!(files_under(&root.join("app")), [Path::new("Legacy.php")]);
-}
-
-/// The compiled files and the PHP files get the mode any new file gets, `0644` under the usual umask, as the source
-/// itself got, so a server that runs PHP as another user, as PHP-FPM's pool user, reads them.
+/// The compiled files get the mode any new file gets, `0644` under the usual umask, as the source itself got, so a
+/// server that runs PHP as another user, as PHP-FPM's pool user, reads them.
 #[cfg(unix)]
 #[test]
 fn compile_writes_files_with_the_mode_of_a_new_file() {
@@ -2448,89 +2201,15 @@ fn compile_writes_files_with_the_mode_of_a_new_file() {
 
     let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
     let source = mode(&root.join("app/Order.sharp"));
-    for written in [root.join("app/Order.php"), compiled(root, "app/Order.sharp"), root.join(".sharp/listeners.php")] {
+    for written in [compiled(root, "app/Order.sharp"), root.join(".sharp/listeners.php")] {
         assert_eq!(mode(&written), source, "{}", written.display());
     }
 }
 
-/// A PHP file someone wrote beside a source is what PHP loads for its name, so the compile refuses it, names both
-/// files and the class, leaves it as it is, still writes the compiled file, and prints its summary as an error.
+/// A compile leaves every compiled file current, as the engine checks it, a file whose namespace holds a class named
+/// like a default class included: its compiled file stamps the PHP file that class's name could name as an input.
 #[test]
-fn compile_refuses_a_php_file_someone_wrote_beside_a_source() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    write(root, "app/Order.php", "<?php\n\nnamespace App;\n\nfinal class OrderLegacy {}\n");
-
-    let output = compile(root);
-
-    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
-    assert!(
-        printed(&output).contains(
-            "app/Order.php and app/Order.sharp both name App.Order. Delete app/Order.php, or rename one of them."
-        ),
-        "{}",
-        printed(&output)
-    );
-    let summary =
-        printed(&output).lines().find(|line| line.contains("Compiled 2 PHP# files into .sharp/.")).map(String::from);
-    assert!(summary.as_deref().is_some_and(|line| line.contains(" ERROR ")), "{}", printed(&output));
-    assert_eq!(
-        std::fs::read_to_string(root.join("app/Order.php")).unwrap(),
-        "<?php\n\nnamespace App;\n\nfinal class OrderLegacy {}\n"
-    );
-    assert!(compiled(root, "app/Order.sharp").exists());
-}
-
-/// PHP names a class whatever its case, so a PHP file whose name differs from the source's only in case names the same
-/// class. The compile refuses it by its exact name on every disk, one that ignores case included, and writes no file
-/// of the source's name, which such a disk would write over it.
-#[test]
-fn compile_refuses_a_php_file_whose_name_differs_from_the_source_only_in_case() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    write(root, "app/order.php", "<?php\n\nnamespace App;\n\nfinal class OrderLegacy {}\n");
-
-    let output = compile(root);
-
-    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
-    assert!(
-        printed(&output).contains(
-            "app/order.php and app/Order.sharp both name App.Order. Delete app/order.php, or rename one of them."
-        ),
-        "{}",
-        printed(&output)
-    );
-    assert_eq!(
-        files_under(&root.join("app")),
-        [Path::new("Legacy.php"), Path::new("Order.sharp"), Path::new("order.php")]
-    );
-    assert_eq!(
-        std::fs::read_to_string(root.join("app/order.php")).unwrap(),
-        "<?php\n\nnamespace App;\n\nfinal class OrderLegacy {}\n"
-    );
-}
-
-/// A PHP file the compile wrote under another case, as for a source whose class was renamed only in case, gives way to
-/// the file of the source's exact name, on a disk that ignores case and on one that does not.
-#[test]
-fn compile_names_the_php_file_exactly_like_its_source() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    write(root, "app/order.php", &ORDER_PHP.replace("Order.sharp", "order.sharp"));
-
-    compile_succeeds(root);
-
-    assert_eq!(
-        files_under(&root.join("app")),
-        [Path::new(".gitignore"), Path::new("Legacy.php"), Path::new("Order.php"), Path::new("Order.sharp")]
-    );
-    assert_eq!(std::fs::read_to_string(root.join("app/Order.php")).unwrap(), ORDER_PHP);
-}
-
-/// Writing the PHP files leaves every compiled file current, as the engine checks it, a file whose namespace holds a
-/// class named like a default class included: its compiled file stamps that class's PHP file as an input.
-#[test]
-fn every_compiled_file_is_current_after_the_php_files_are_written() {
+fn every_compiled_file_is_current_after_a_compile() {
     let directory = project(ORDER, MONEY);
     let root = directory.path();
     write(
@@ -2546,7 +2225,6 @@ fn every_compiled_file_is_current_after_the_php_files_are_written() {
 
     compile_succeeds(root);
 
-    assert!(root.join("app/Environment.php").exists() && root.join("app/Report.php").exists());
     for name in ["app/Environment.sharp", "app/Order.sharp", "app/Report.sharp", MONEY_PATH] {
         let bytes = std::fs::read(compiled(root, name)).unwrap();
         assert!(!inputs_changed(&std::fs::canonicalize(root).unwrap(), &bytes).unwrap(), "{name}");
@@ -2769,22 +2447,6 @@ fn compile_writes_each_compiled_file_again_once_a_module_file_appears_at_the_roo
     assert_ne!(compiled_at(root, "app/Order.sharp"), written, "the compile ran");
 }
 
-/// The loader reads which folder `autoload-dev` maps from `composer.json`, so moving a folder there drops the PHP file
-/// beside each of its sources.
-#[test]
-fn compile_deletes_the_php_file_of_a_source_whose_folder_moved_to_autoload_dev() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    write(root, "composer.json", "{\"type\": \"library\", \"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n");
-    compile_succeeds(root);
-    assert!(root.join("app/Order.php").exists());
-
-    write(root, "composer.json", "{\"type\": \"library\", \"autoload-dev\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n");
-    compile_succeeds(root);
-
-    assert!(!root.join("app/Order.php").exists());
-}
-
 /// The deprecated `perform-heuristic-checks`, which serde never writes back, changes the analysis, so a change of it
 /// makes the compile run and write its record again.
 #[test]
@@ -2898,20 +2560,20 @@ fn a_compile_after_a_refused_one_with_nothing_changed_refuses_the_file_again_wit
     assert!(compiled(root, "app/Order.sharp").exists());
 }
 
-/// A compile that fails with an error of its own, as a PHP file someone wrote where a source's PHP file goes, prints
-/// it again from its record while nothing changed.
+/// A compile that fails with an error of its own, as a source that links to a file outside the project, prints it
+/// again from its record while nothing changed.
+#[cfg(unix)]
 #[test]
 fn a_compile_after_a_failed_one_with_nothing_changed_prints_each_error_again() {
     let directory = project(ORDER, MONEY);
     let root = directory.path();
-    write(root, "app/Order.php", "<?php\n\nnamespace App;\n\nfinal class Order {}\n");
+    let elsewhere = tempfile::tempdir().unwrap();
+    write(elsewhere.path(), "Money.sharp", MONEY);
+    std::fs::remove_file(root.join(MONEY_PATH)).unwrap();
+    std::os::unix::fs::symlink(elsewhere.path().join("Money.sharp"), root.join(MONEY_PATH)).unwrap();
     let failed = compile(root);
     assert_eq!(failed.status.code(), Some(1), "{}", printed(&failed));
-    assert!(
-        printed(&failed).contains("app/Order.php and app/Order.sharp both name App.Order."),
-        "{}",
-        printed(&failed)
-    );
+    assert!(printed(&failed).contains("vendor/acme/money/src/Money.sharp is a link to"), "{}", printed(&failed));
 
     let again = compile(root);
 
@@ -2933,81 +2595,9 @@ fn compile_keeps_the_engine_s_compile_lock() {
     assert!(root.join(".sharp/compile.lock").exists());
 }
 
-/// A file someone writes over one the compile wrote, while the compile still runs, makes the compile keep no record,
-/// as a compile that ran at once does, so the next compile sees the file. `composer.lock` is a named pipe here, which
-/// holds the compile at its read of it, after it wrote `app/Order.php`, until the test wrote its own `app/Order.php`.
-#[cfg(unix)]
-#[test]
-fn compile_refuses_a_php_file_someone_wrote_over_its_own_while_it_ran() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    let lock = root.join("composer.lock");
-    std::fs::remove_file(&lock).unwrap();
-    assert!(process::status(Command::new("mkfifo").arg(&lock)).unwrap().success());
-    let running = process::spawn(command(root, "never").stdout(Stdio::piped()).stderr(Stdio::piped())).unwrap();
-
-    // The pipe opens once the compile opens it to read it.
-    let mut pipe = std::fs::OpenOptions::new().write(true).open(&lock).unwrap();
-    assert!(written_by_compile(&root.join("app/Order.php")));
-    write(root, "app/Order.php", "<?php\n\nnamespace App;\n\nfinal class Order {}\n");
-    pipe.write_all(b"{}\n").unwrap();
-    drop(pipe);
-    let swapped = running.wait_with_output().unwrap();
-    assert!(swapped.status.success(), "{}", printed(&swapped));
-    assert!(!root.join(".sharp/inputs.json").exists(), "the compile kept no record");
-    std::fs::remove_file(&lock).unwrap();
-    write(root, "composer.lock", "{}\n");
-
-    let output = compile(root);
-
-    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
-    assert!(
-        printed(&output).contains("app/Order.php and app/Order.sharp both name App.Order."),
-        "{}",
-        printed(&output)
-    );
-}
-
-/// Whether the PHP file at `path` is one the compile wrote, which loads its `.sharp` file through the engine.
-fn written_by_compile(path: &Path) -> bool {
-    std::fs::read_to_string(path).is_ok_and(|contents| contents.contains("needs the PHP# engine"))
-}
-
-/// The `.gitignore` the compile writes beside its PHP files is one of its outputs, so a compile writes it again once
-/// it is gone.
-#[test]
-fn compile_writes_its_gitignore_again_once_it_is_gone() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    compile_succeeds(root);
-    let gitignore = std::fs::read_to_string(root.join("app/.gitignore")).unwrap();
-
-    std::fs::remove_file(root.join("app/.gitignore")).unwrap();
-    compile_succeeds(root);
-
-    assert_eq!(std::fs::read_to_string(root.join("app/.gitignore")).unwrap(), gitignore);
-}
-
-/// A `.gitignore` someone else wrote beside the compile's PHP files is an input of the compile, so one that stops
-/// listing a PHP file makes the compile run and warn of it.
-#[test]
-fn compile_warns_once_a_gitignore_someone_else_wrote_stops_listing_its_php_file() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    write(root, "app/.gitignore", "/Order.php\n");
-    let listed = compile(root);
-    assert!(listed.status.success() && !printed(&listed).contains("doesn't list"), "{}", printed(&listed));
-
-    write(root, "app/.gitignore", "/Other.php\n");
-    let output = compile(root);
-
-    assert!(output.status.success(), "{}", printed(&output));
-    assert!(printed(&output).contains("app/.gitignore doesn't list /Order.php"), "{}", printed(&output));
-}
-
 /// The walk follows a link as the loader does, and the compile writes the compiled file at the source's real path, so
 /// a link someone points at an identical copy elsewhere, as `ln -sfn` does, makes the compile run, though no file's
-/// bytes changed. A module file declares no type, so no PHP file the compile wrote sits behind the link.
+/// bytes changed.
 #[cfg(unix)]
 #[test]
 fn compile_writes_the_compiled_file_at_the_new_target_of_a_link_to_an_identical_copy() {
@@ -3052,424 +2642,11 @@ fn compile_warns_again_until_the_cause_of_its_warning_is_gone() {
     assert!(root.join(".sharp/inputs.json").exists(), "a compile with no warning keeps its record");
 }
 
-/// Runs git in `folder`, and fails the test when git fails.
-fn git(folder: &Path, arguments: &[&str]) -> String {
-    let output = process::output(
-        Command::new("git")
-            .args(["-c", "user.name=PHP#", "-c", "user.email=sharp@example.com", "-c", "init.defaultBranch=main"])
-            .args(arguments)
-            .current_dir(folder),
-    )
-    .unwrap();
-    assert!(output.status.success(), "git {arguments:?}: {}", printed(&output));
-
-    String::from_utf8_lossy(&output.stdout).into_owned()
-}
-
-/// The files `git status` lists as untracked in `folder`.
-fn untracked(folder: &Path) -> String {
-    git(folder, &["status", "--porcelain", "--untracked-files=all"])
-}
-
-/// The `.gitignore` `mago compile` writes in a folder where the PHP files it wrote are `files`, one `/<name>` line each.
-fn gitignore(files: &str) -> String {
-    format!(
-        "# mago compile writes this file and the files it lists. It rewrites it on every compile.\n/.gitignore\n{files}"
-    )
-}
-
-/// Each checkout of a repository has its own working tree, so the `.gitignore` a compile writes there hides the PHP
-/// files of that checkout alone. A PHP file someone wrote at the same path in a linked worktree stays where git shows
-/// it, so a branch switch there can't overwrite it unseen, as it could while the compile listed its files in the
-/// `info/exclude` every checkout shares.
-#[test]
-fn compile_hides_its_php_files_from_git_in_its_own_checkout_alone() {
-    let directory = project(ORDER, MONEY);
-    let clone = std::fs::canonicalize(directory.path()).unwrap();
-    git(&clone, &["init", "--quiet"]);
-    git(&clone, &["add", "--all"]);
-    git(&clone, &["commit", "--quiet", "--message", "project"]);
-    let worktrees = tempfile::tempdir().unwrap();
-    let worktree = std::fs::canonicalize(worktrees.path()).unwrap().join("feature");
-    git(&clone, &["worktree", "add", "--quiet", worktree.to_str().unwrap()]);
-    write(&worktree, "app/Tenant/Publishable.php", "<?php\n\nnamespace App\\Tenant;\n\ninterface Publishable {}\n");
-    write(&clone, "app/Tenant/Publishable.sharp", "namespace App.Tenant;\n\npublic interface Publishable\n{\n}\n");
-
-    compile_succeeds(&clone);
-
-    assert!(clone.join("app/Tenant/Publishable.php").exists());
-    assert_eq!(untracked(&worktree), "?? app/Tenant/Publishable.php\n");
-}
-
-/// The compile writes a `.gitignore` in each folder that holds a PHP file it wrote, listing itself and each such file,
-/// so git shows neither, and still shows a new `.sharp` source as untracked.
-#[test]
-fn compile_writes_a_gitignore_that_lists_itself_and_each_php_file_it_wrote() {
-    let directory = project(ORDER, MONEY);
-    let clone = std::fs::canonicalize(directory.path()).unwrap();
-    write(&clone, ".gitignore", "/.sharp/\n");
-    git(&clone, &["init", "--quiet"]);
-    git(&clone, &["add", "--all"]);
-    git(&clone, &["commit", "--quiet", "--message", "project"]);
-    write(&clone, "app/Refund.sharp", "namespace App;\n\npublic class Refund\n{\n}\n");
-
-    compile_succeeds(&clone);
-
-    assert_eq!(std::fs::read_to_string(clone.join("app/.gitignore")).unwrap(), gitignore("/Order.php\n/Refund.php\n"));
-    assert_eq!(untracked(&clone), "?? app/Refund.sharp\n");
-}
-
-/// A `.gitignore` the compile didn't write, here a tracked one, stays as it is. The compile warns of each PHP file it
-/// doesn't list, which git shows as untracked, and is quiet once the file lists it.
-#[test]
-fn compile_leaves_a_gitignore_it_did_not_write_and_names_each_php_file_it_does_not_list() {
-    let directory = project(ORDER, MONEY);
-    let clone = std::fs::canonicalize(directory.path()).unwrap();
-    write(&clone, ".gitignore", "/.sharp/\n");
-    write(&clone, "app/.gitignore", "*.log\n");
-    git(&clone, &["init", "--quiet"]);
-    git(&clone, &["add", "--all"]);
-    git(&clone, &["commit", "--quiet", "--message", "project"]);
-
-    let output = compile(&clone);
-
-    assert!(output.status.success(), "{}", printed(&output));
-    assert!(printed(&output).contains(UNLISTED_ORDER), "{}", printed(&output));
-    assert_eq!(std::fs::read_to_string(clone.join("app/.gitignore")).unwrap(), "*.log\n");
-    assert_eq!(untracked(&clone), "?? app/Order.php\n");
-
-    write(&clone, "app/.gitignore", "*.log\n/Order.php\n");
-    let output = compile(&clone);
-
-    assert!(output.status.success(), "{}", printed(&output));
-    assert!(!printed(&output).contains("doesn't list"), "{}", printed(&output));
-    assert_eq!(std::fs::read_to_string(clone.join("app/.gitignore")).unwrap(), "*.log\n/Order.php\n");
-}
-
-/// The warning of a `.gitignore` the compile didn't write and that doesn't list `app/Order.php`.
-const UNLISTED_ORDER: &str =
-    "app/.gitignore doesn't list /Order.php, so git may show app/Order.php as untracked: add /Order.php to it.";
-
-/// A `.gitignore` the compile didn't write lists a PHP file when a line names it as `/` and its name and no `!` line
-/// after that names it again, which git reads as showing the file. A byte order mark before the first line is no part
-/// of that line.
-#[test]
-fn compile_reads_a_gitignore_it_did_not_write_as_git_reads_it() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-
-    for (contents, listed) in [
-        ("/Order.php\n!/Order.php\n", false),
-        ("/Order.php\n!Order.php\n", false),
-        ("!/Order.php\n/Order.php\n", true),
-        ("\u{feff}/Order.php\n", true),
-        ("/Order.php\r\n", true),
-    ] {
-        write(root, "app/.gitignore", contents);
-
-        let output = compile(root);
-
-        assert!(output.status.success(), "{contents:?}: {}", printed(&output));
-        assert_eq!(printed(&output).contains(UNLISTED_ORDER), !listed, "{contents:?}: {}", printed(&output));
-        assert_eq!(std::fs::read_to_string(root.join("app/.gitignore")).unwrap(), contents);
-    }
-}
-
-/// A `.gitignore` that starts with the compile's first line but holds a line the compile never writes is someone
-/// else's: the compile writes nothing to it, never deletes it, and warns of each PHP file it doesn't list.
-#[test]
-fn compile_leaves_its_gitignore_once_someone_adds_a_line() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    compile_succeeds(root);
-    let edited = gitignore("*.log\n");
-    write(root, "app/.gitignore", &edited);
-
-    let output = compile(root);
-
-    assert!(output.status.success(), "{}", printed(&output));
-    assert!(printed(&output).contains(UNLISTED_ORDER), "{}", printed(&output));
-    assert_eq!(std::fs::read_to_string(root.join("app/.gitignore")).unwrap(), edited);
-
-    std::fs::remove_file(root.join("app/Order.sharp")).unwrap();
-    compile_succeeds(root);
-
-    assert_eq!(std::fs::read_to_string(root.join("app/.gitignore")).unwrap(), edited, "it deletes no file of another");
-}
-
-/// Git reads no `.gitignore` that is a link, so the compile counts one as listing nothing: it warns of each PHP file,
-/// and writes nothing through the link.
+/// A `.sharp` folder the compile can't open fails the compile with the path it failed on and what the compile was
+/// doing, here the law checker's package in it. Root opens a folder of mode 000, so the test has nothing to show there.
 #[cfg(unix)]
 #[test]
-fn compile_warns_of_a_gitignore_that_is_a_link() {
-    let directory = project(ORDER, MONEY);
-    let root = std::fs::canonicalize(directory.path()).unwrap();
-    write(&root, ".gitignore", "/.sharp/\n/ignores\n");
-    write(&root, "ignores", "/Order.php\n");
-    std::os::unix::fs::symlink(root.join("ignores"), root.join("app/.gitignore")).unwrap();
-    git(&root, &["init", "--quiet"]);
-
-    let output = compile(&root);
-
-    assert!(output.status.success(), "{}", printed(&output));
-    assert!(
-        printed(&output).contains(
-            "app/.gitignore is a link, which git doesn't read, so git may show app/Order.php as untracked: make it a file that lists /Order.php."
-        ),
-        "{}",
-        printed(&output)
-    );
-    assert!(std::fs::symlink_metadata(root.join("app/.gitignore")).unwrap().file_type().is_symlink());
-    assert_eq!(std::fs::read_to_string(root.join("ignores")).unwrap(), "/Order.php\n");
-    assert!(untracked(&root).contains("?? app/Order.php\n"), "{}", untracked(&root));
-}
-
-/// A `.gitignore` the compile can't read, as a folder of that name or a file of mode 000, fails no compile: the compile
-/// leaves it as it is, and warns which PHP files git may show. Root reads a file of mode 000, so the test has nothing to
-/// show there.
-#[cfg(unix)]
-#[test]
-fn compile_warns_of_a_gitignore_it_cannot_read() {
-    use std::os::unix::fs::PermissionsExt;
-
-    let folder = project(ORDER, MONEY);
-    std::fs::create_dir(folder.path().join("app/.gitignore")).unwrap();
-    let closed = project(ORDER, MONEY);
-    write(closed.path(), "app/.gitignore", "/Order.php\n");
-    let file = closed.path().join("app/.gitignore");
-    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o000)).unwrap();
-    let mut cases = vec![(folder.path(), "is a directory")];
-    if std::fs::read(&file).is_err() {
-        cases.push((closed.path(), "permission denied"));
-    }
-
-    for (root, reason) in cases {
-        let output = compile(root);
-
-        assert!(output.status.success(), "{}", printed(&output));
-        assert!(
-            printed(&output).contains(&format!(
-                "app/.gitignore can't be read: {reason}, so git may show app/Order.php as untracked. Make it a file mago compile can read, and run vendor/bin/mago compile again."
-            )),
-            "{}",
-            printed(&output)
-        );
-    }
-    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
-    assert!(folder.path().join("app/.gitignore").is_dir());
-    assert_eq!(std::fs::read_to_string(&file).unwrap(), "/Order.php\n");
-}
-
-/// A refused source gets its PHP file and its line in the folder's `.gitignore`, and no compiled file. Once it is
-/// deleted, only that `.gitignore` brings the compile back to a folder that holds no other source. The compile deletes
-/// the PHP file it wrote there, keeps one someone wrote in another's place, and deletes its `.gitignore`, so git shows
-/// that file.
-#[test]
-fn compile_visits_a_folder_its_gitignore_alone_names() {
-    let directory = project(ORDER, MONEY);
-    let clone = std::fs::canonicalize(directory.path()).unwrap();
-    write(&clone, ".gitignore", "/.sharp/\n");
-    git(&clone, &["init", "--quiet"]);
-    git(&clone, &["add", "--all"]);
-    git(&clone, &["commit", "--quiet", "--message", "project"]);
-    let refused = |name: &str| {
-        format!("namespace App.Billing;\n\npublic class {name}\n{{\n    public int owed() => \"one\";\n}}\n")
-    };
-    write(&clone, "app/Billing/Refund.sharp", &refused("Refund"));
-    write(&clone, "app/Billing/Credit.sharp", &refused("Credit"));
-
-    let output = compile(&clone);
-
-    assert!(!output.status.success(), "{}", printed(&output));
-    assert_eq!(
-        std::fs::read_to_string(clone.join("app/Billing/.gitignore")).unwrap(),
-        gitignore("/Credit.php\n/Refund.php\n")
-    );
-    assert!(!compiled(&clone, "app/Billing/Refund.sharp").exists());
-
-    std::fs::remove_file(clone.join("app/Billing/Refund.sharp")).unwrap();
-    std::fs::remove_file(clone.join("app/Billing/Credit.sharp")).unwrap();
-    let written = "<?php\n\nnamespace App\\Billing;\n\nfinal class Refund {}\n";
-    write(&clone, "app/Billing/Refund.php", written);
-    compile_succeeds(&clone);
-
-    assert_eq!(files_under(&clone.join("app/Billing")), [Path::new("Refund.php")]);
-    assert_eq!(std::fs::read_to_string(clone.join("app/Billing/Refund.php")).unwrap(), written);
-    assert_eq!(untracked(&clone), "?? app/Billing/Refund.php\n");
-}
-
-/// The compile deletes its `.gitignore` once the folder holds no PHP file it wrote.
-#[test]
-fn compile_deletes_its_gitignore_once_the_folder_holds_no_php_file_it_wrote() {
-    let directory = project(ORDER, MONEY);
-    let root = std::fs::canonicalize(directory.path()).unwrap();
-    compile_succeeds(&root);
-    assert_eq!(std::fs::read_to_string(root.join("app/.gitignore")).unwrap(), gitignore("/Order.php\n"));
-
-    std::fs::remove_file(root.join("app/Order.sharp")).unwrap();
-    compile_succeeds(&root);
-
-    assert_eq!(files_under(&root.join("app")), [Path::new("Legacy.php")]);
-}
-
-/// The compile's walk for its `.gitignore` files skips each folder the analysis's walk skips, so a folder the
-/// `excludes` name, by a path or by a pattern, is never visited: its `.gitignore` and the PHP file it lists stay as they
-/// are.
-#[test]
-fn compile_never_visits_a_folder_the_excludes_name() {
-    let directory = project(ORDER, MONEY);
-    let root = directory.path();
-    write(
-        root,
-        "mago.toml",
-        "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\nexcludes = [\"app/Cache\", \"app/Logs/**\"]\n",
-    );
-    for folder in ["app/Cache", "app/Logs"] {
-        write(root, &format!("{folder}/.gitignore"), &gitignore("/Order.php\n"));
-        write(root, &format!("{folder}/Order.php"), ORDER_PHP);
-    }
-
-    compile_succeeds(root);
-
-    for folder in ["app/Cache", "app/Logs"] {
-        assert_eq!(files_under(&root.join(folder)), [Path::new(".gitignore"), Path::new("Order.php")], "{folder}");
-        assert_eq!(std::fs::read_to_string(root.join(folder).join(".gitignore")).unwrap(), gitignore("/Order.php\n"));
-    }
-}
-
-/// A compile that can't run git, as in a runtime image that ships none, keeps the PHP files out of git all the same, in
-/// a clone and in a linked worktree, because the `.gitignore` it writes needs no git.
-#[test]
-fn compile_keeps_the_php_files_out_of_git_with_no_git_to_run() {
-    let directory = project(ORDER, MONEY);
-    let clone = std::fs::canonicalize(directory.path()).unwrap();
-    git(&clone, &["init", "--quiet"]);
-    git(&clone, &["add", "--all"]);
-    git(&clone, &["commit", "--quiet", "--message", "project"]);
-    let worktrees = tempfile::tempdir().unwrap();
-    let worktree = std::fs::canonicalize(worktrees.path()).unwrap().join("feature");
-    git(&clone, &["worktree", "add", "--quiet", worktree.to_str().unwrap()]);
-
-    for checkout in [&clone, &worktree] {
-        let output = process::output(command(checkout, "never").env("PATH", "")).unwrap();
-        assert!(output.status.success(), "{}", printed(&output));
-        assert!(checkout.join("app/Order.php").exists());
-        assert_eq!(
-            untracked(checkout),
-            "?? .sharp/app/Order.sharpc\n?? .sharp/compiled.bin\n?? .sharp/inputs.json\n?? .sharp/listeners.php\n?? .sharp/preload.php\n?? .sharp/vendor/acme/money/src/Money.sharpc\n",
-            "{}",
-            checkout.display()
-        );
-    }
-}
-
-/// The `.gitignore` needs no repository, so a compile writes it where none is reachable: in a folder outside any git
-/// repository, and in a dev container that mounts a linked worktree without the repository its `.git` names. Git reads
-/// it once the checkout is back where the repository is, and the compile warns of nothing.
-#[test]
-fn compile_writes_its_gitignore_where_no_git_repository_is_reachable() {
-    let outside = project(ORDER, MONEY);
-    let mounted = project(ORDER, MONEY);
-    write(mounted.path(), ".git", "gitdir: /missing/repository/.git/worktrees/feature\n");
-
-    for root in [outside.path(), mounted.path()] {
-        let output = compile(root);
-
-        assert!(output.status.success(), "{}", printed(&output));
-        assert!(!printed(&output).contains("WARN"), "{}", printed(&output));
-        assert_eq!(std::fs::read_to_string(root.join("app/.gitignore")).unwrap(), gitignore("/Order.php\n"));
-    }
-}
-
-/// The block of `info/exclude` that an earlier `mago compile` kept for the workspace `place`, listing `paths`.
-fn excluded(place: &Path, paths: &str) -> String {
-    format!("# mago compile: the files it writes in {}\n{paths}# mago compile: end\n", place.display())
-}
-
-/// A compile removes every block an earlier `mago compile` kept in the `info/exclude` every checkout of a repository
-/// shares, whichever checkout it names, here from a linked worktree, and keeps every other line.
-#[test]
-fn compile_removes_the_blocks_it_kept_in_info_exclude() {
-    let directory = project(ORDER, MONEY);
-    let clone = std::fs::canonicalize(directory.path()).unwrap();
-    git(&clone, &["init", "--quiet"]);
-    git(&clone, &["add", "--all"]);
-    git(&clone, &["commit", "--quiet", "--message", "project"]);
-    let worktrees = tempfile::tempdir().unwrap();
-    let worktree = std::fs::canonicalize(worktrees.path()).unwrap().join("feature");
-    git(&clone, &["worktree", "add", "--quiet", worktree.to_str().unwrap()]);
-    let kept = "# git ls-files --others --exclude-from=.git/info/exclude\n*.log\n";
-    write(
-        &clone,
-        ".git/info/exclude",
-        &format!(
-            "{}{kept}{}",
-            excluded(&clone, "/app/Order.php\n"),
-            excluded(&worktrees.path().join("gone"), "/app/Refund.php\n")
-        ),
-    );
-
-    compile_succeeds(&worktree);
-
-    assert_eq!(std::fs::read_to_string(clone.join(".git/info/exclude")).unwrap(), kept);
-}
-
-/// The compile removes its blocks byte for byte: a heading, the `/` lines right after it, and the end line when it
-/// comes next. Every other byte stays, a CRLF line end, a byte that is no UTF-8 and a last line with no line end
-/// included, and a block torn before its end line loses only its own `/` lines.
-#[test]
-fn compile_removes_its_blocks_from_info_exclude_and_keeps_every_other_byte() {
-    let directory = project(ORDER, MONEY);
-    let root = std::fs::canonicalize(directory.path()).unwrap();
-    git(&root, &["init", "--quiet"]);
-    let exclude = root.join(".git/info/exclude");
-    let block = "# mago compile: the files it writes in /gone\r\n/app/Order.php\r\n# mago compile: end\r\n";
-    let torn = "# mago compile: the files it writes in /torn\n/app/Refund.php\n";
-    std::fs::write(&exclude, [b"*.log\r\n", block.as_bytes(), b"\xff\xfe\n", torn.as_bytes(), b"*.tmp"].concat())
-        .unwrap();
-
-    compile_succeeds(&root);
-
-    assert_eq!(std::fs::read(&exclude).unwrap(), b"*.log\r\n\xff\xfe\n*.tmp");
-}
-
-/// An `info/exclude` that can't be written, as in a read-only `.git`, keeps the blocks an earlier `mago compile` kept,
-/// which hide their files in every checkout, so the compile names the folder to make writable, which the file is
-/// renamed into, and keeps quiet about the temporary file.
-#[cfg(unix)]
-#[test]
-fn compile_warns_when_its_blocks_in_info_exclude_cannot_be_removed() {
-    use std::os::unix::fs::PermissionsExt;
-
-    let directory = project(ORDER, MONEY);
-    let root = std::fs::canonicalize(directory.path()).unwrap();
-    git(&root, &["init", "--quiet"]);
-    write(&root, ".git/info/exclude", &excluded(&root, "/app/Order.php\n"));
-    let info = root.join(".git/info");
-    std::fs::set_permissions(&info, std::fs::Permissions::from_mode(0o555)).unwrap();
-
-    let output = compile(&root);
-    std::fs::set_permissions(&info, std::fs::Permissions::from_mode(0o755)).unwrap();
-
-    assert!(output.status.success(), "{}", printed(&output));
-    assert!(
-        printed(&output).contains(&format!(
-            "{}/exclude can't be replaced, as {} can't be written: permission denied, so its mago compile blocks still hide their files in every checkout of the repository. Make {} writable, and run vendor/bin/mago compile again.",
-            info.display(),
-            info.display(),
-            info.display()
-        )),
-        "{}",
-        printed(&output)
-    );
-    assert!(!printed(&output).contains(&format!("{}/.tmp", info.display())), "{}", printed(&output));
-}
-
-/// A `.sharp` folder the compile can't open fails the compile with the folder's path and what the compile was doing.
-/// Root opens a folder of mode 000, so the test has nothing to show there.
-#[cfg(unix)]
-#[test]
-fn compile_names_the_sharp_folder_it_cannot_open() {
+fn compile_names_the_path_in_the_sharp_folder_it_cannot_open() {
     use std::os::unix::fs::PermissionsExt;
 
     let directory = project(ORDER, MONEY);
@@ -3488,19 +2665,19 @@ fn compile_names_the_sharp_folder_it_cannot_open() {
     assert!(!output.status.success(), "{}", printed(&output));
     assert!(
         printed(&output).contains(&format!(
-            "mago: can't open the folder `{}`: Permission denied (os error 13)",
-            compiled.display()
+            "The laws could not be checked: can't delete the folder `{}`: Permission denied (os error 13)",
+            compiled.join(".lean").display()
         )),
         "{}",
         printed(&output)
     );
 }
 
-/// A folder the compile's walk of `.sharp` reaches and can't open is the one the error names, not `.sharp`. Root opens
-/// a folder of mode 000, so the test has nothing to show there.
+/// A folder below `.sharp` the compile can't open fails the compile with the path it failed on there, not `.sharp`.
+/// Root opens a folder of mode 000, so the test has nothing to show there.
 #[cfg(unix)]
 #[test]
-fn compile_names_the_folder_its_walk_of_the_sharp_folder_cannot_open() {
+fn compile_names_the_path_below_the_sharp_folder_it_cannot_open() {
     use std::os::unix::fs::PermissionsExt;
 
     let directory = project(ORDER, MONEY);
@@ -3518,8 +2695,10 @@ fn compile_names_the_folder_its_walk_of_the_sharp_folder_cannot_open() {
 
     assert!(!output.status.success(), "{}", printed(&output));
     assert!(
-        printed(&output)
-            .contains(&format!("mago: can't open the folder `{}`: Permission denied (os error 13)", app.display())),
+        printed(&output).contains(&format!(
+            "can't read the file `{}`: Permission denied (os error 13)",
+            app.join("Order.sharpc").display()
+        )),
         "{}",
         printed(&output)
     );
@@ -4673,8 +3852,10 @@ fn compile_proves_a_law_through_an_extension_member_as_the_static_call_it_runs_a
     assert!(compiled(root, "app/Shared/Shape.sharp").exists());
 }
 
+/// Spec section 28: a law covers every status and event through an enum's pure transition method, whose `match`
+/// gives the next status.
 #[test]
-fn compile_proves_spec_section_28_1_s_state_machine_law_over_an_enum_match() {
+fn compile_proves_a_transition_law_over_an_enum_match() {
     let directory = lawful_project(&[
         (
             "app/Shop/Payment.sharp",
@@ -4771,16 +3952,15 @@ fn a_law_reaches_a_backed_enum_s_from_and_try_from() {
     }
 }
 
-/// Spec section 28's `state-machine-law` example as it stands.
-const STATE_MACHINE: &str = "namespace App.Shop;\n\npublic enum Status : string\n{\n    case Open = \"open\";\n    case Paid = \"paid\";\n    case Refunded = \"refunded\";\n\n    public Status after(Payment e) => match (this) {                               // pure: the next status for every status and event\n        Status.Open => Status.Paid,\n        Status.Paid => Status.Refunded,\n        Status.Refunded => Status.Refunded,\n    };\n    law refundedIsFinal(Payment e) => Status.Refunded.after(e) == Status.Refunded;\n}\n";
+/// An enum whose pure transition method gives the next status for every status and event, and a law over it.
+const STATUS_TRANSITION: &str = "namespace App.Shop;\n\npublic enum Status : string\n{\n    case Open = \"open\";\n    case Paid = \"paid\";\n    case Refunded = \"refunded\";\n\n    public Status after(Payment e) => match (this) {                               // pure: the next status for every status and event\n        Status.Open => Status.Paid,\n        Status.Paid => Status.Refunded,\n        Status.Refunded => Status.Refunded,\n    };\n    law refundedIsFinal(Payment e) => Status.Refunded.after(e) == Status.Refunded;\n}\n";
 
-/// Spec section 28's `state-machine-law` example, whose `Payment` is an interface: the law holds for every class that
-/// implements it.
+/// Spec section 28: a transition law whose `Payment` is an interface holds for every class that implements it.
 #[test]
-fn compile_proves_spec_section_28_s_state_machine_law_over_an_interface() {
+fn compile_proves_a_transition_law_over_an_interface() {
     let directory = lawful_project(&[
         ("app/Shop/Payment.sharp", "namespace App.Shop;\n\npublic interface Payment\n{\n}\n"),
-        ("app/Shop/Status.sharp", STATE_MACHINE),
+        ("app/Shop/Status.sharp", STATUS_TRANSITION),
     ]);
     let root = directory.path();
 
@@ -4791,13 +3971,13 @@ fn compile_proves_spec_section_28_s_state_machine_law_over_an_interface() {
     assert!(compiled(root, "app/Shop/Status.sharp").exists());
 }
 
-/// Spec section 28's `state-machine-law` example, called with a class that implements `Payment` as its event: Lean
-/// takes the class's value as a `Payment` it knows nothing about, so the law proves for every event.
+/// Spec section 28: a transition law called with a class that implements `Payment` as its event: Lean takes the
+/// class's value as a `Payment` it knows nothing about, so the law proves for every event.
 #[test]
-fn compile_proves_spec_section_28_s_state_machine_law_with_a_class_as_its_event() {
+fn compile_proves_a_transition_law_with_a_class_as_its_event() {
     let directory = lawful_project(&[
         ("app/Shop/Payment.sharp", "namespace App.Shop;\n\npublic interface Payment\n{\n}\n"),
-        ("app/Shop/Status.sharp", STATE_MACHINE),
+        ("app/Shop/Status.sharp", STATUS_TRANSITION),
         (
             "app/Shop/Card.sharp",
             "namespace App.Shop;\n\npublic class Card : Payment\n{\n    public Card(public int cents { get; }) { }\n\n    law cardRefundIsFinal(int cents) => Status.Refunded.after(new Card(cents)) == Status.Refunded;\n}\n",
@@ -4810,6 +3990,106 @@ fn compile_proves_spec_section_28_s_state_machine_law_with_a_class_as_its_event(
     assert!(output.status.success(), "{}", printed(&output));
     assert!(compiled(root, "app/Shop/Card.sharp").exists());
     assert_eq!(source_lean_files(root), Vec::<PathBuf>::new());
+}
+
+/// The machine of spec section 20.2's specimen, whose `pay` runs `check` before it gives `Paid`.
+fn order_status(check: &str) -> String {
+    format!(
+        "namespace App.Shop;\n\nextern ValueError uses none;\n\npublic machine OrderStatus : string\n{{\n    case Draft = \"draft\"\n    {{\n        public OrderStatus.Paid pay(int cents)\n        {{\n{check}            return OrderStatus.Paid(cents);\n        }}\n\n        public OrderStatus.Cancelled cancel() => OrderStatus.Cancelled;\n    }}\n\n    case Paid(int cents) = \"paid\"\n    {{\n        public OrderStatus.Shipped ship() => OrderStatus.Shipped;\n    }}\n\n    final case Shipped = \"shipped\";\n    final case Cancelled = \"cancelled\";\n\n    public static OrderStatus.Draft open() => OrderStatus.Draft;\n\n    law paidIsPositive(OrderStatus.Paid paid) => paid.cents > 0;\n}}\n"
+    )
+}
+
+/// Spec section 20.2: an invariant of a machine, a law whose one parameter is a case, is proved after each entry point
+/// and each move that gives the case. The specimen's `pay` throws on a payment that isn't positive, so
+/// `paidIsPositive` holds after it.
+#[test]
+fn compile_proves_a_machine_s_invariant_after_each_move_that_gives_its_case() {
+    let checked = "            if (cents <= 0) {\n                throw new ValueError(\"A payment is positive.\");\n            }\n";
+    let directory = lawful_project(&[("app/Shop/OrderStatus.sharp", &order_status(checked))]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Shop/OrderStatus.sharp").exists());
+}
+
+/// Spec section 20.2: a move that breaks an invariant is refused with the moves that break it, the first the checker
+/// finds breadth-first from each entry point, on small values of each parameter.
+#[test]
+fn a_move_that_breaks_a_machine_s_invariant_is_refused_with_the_moves_that_break_it() {
+    let directory = lawful_project(&[("app/Shop/OrderStatus.sharp", &order_status(""))]);
+
+    let output = compile(directory.path());
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "error[law-unproven]: `paidIsPositive` breaks after `open() → Draft`, `pay(cents: 0) → Paid(cents: 0)`\n"
+        ),
+        "{}",
+        printed(&output)
+    );
+}
+
+/// Spec section 20.2: a move that breaks an invariant only on a value no small value of its parameters is, as
+/// `pay(7)`, is refused by its name and the names of its parameters.
+#[test]
+fn a_move_that_breaks_a_machine_s_invariant_on_no_small_value_is_refused_by_name() {
+    let checked = "            if (cents <= 0) {\n                throw new ValueError(\"A payment is positive.\");\n            }\n            if (cents == 7) {\n                return OrderStatus.Paid(0);\n            }\n";
+    let directory = lawful_project(&[("app/Shop/OrderStatus.sharp", &order_status(checked))]);
+
+    let output = compile(directory.path());
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains("error[law-unproven]: `paidIsPositive` breaks after `pay(cents)`\n"),
+        "{}",
+        printed(&output)
+    );
+}
+
+/// `Holder`, which holds a `JsonValue?`, whose `Any?` a law cannot read, beside the law `law`.
+fn holder(law: &str) -> String {
+    format!(
+        "namespace App.Shared;\n\nimport Sharp.Encoding.JsonValue;\n\npublic final class Holder\n{{\n    public Holder(public int id {{ get; }}, public JsonValue? payload {{ get; }} = null) {{}}\n\n    {law}\n}}\n"
+    )
+}
+
+/// Spec section 28: a value whose type a law cannot read is one the law knows nothing inside, so a law that only
+/// builds and carries it proves, as `Holder`'s `JsonValue?` here.
+#[test]
+fn a_law_that_only_carries_a_value_it_cannot_read_proves() {
+    let directory = library_project(&[(
+        "app/Shared/Holder.sharp",
+        &holder("law holdingKeepsTheId(int id) => new Holder(id, null).id == id;"),
+    )]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Shared/Holder.sharp").exists());
+}
+
+/// A law that reads into a value whose type a law cannot read is refused for what it reads, as `JsonValue`'s `Any?`.
+#[test]
+fn a_law_that_reads_into_a_value_it_cannot_read_is_refused() {
+    let law = "law readsThePayload(int id, JsonValue payload) => new Holder(id, payload).payload?.value == null;";
+    let directory = library_project(&[("app/Shared/Holder.sharp", &holder(law))]);
+    let root = directory.path();
+
+    let output = compile_without_lean(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "error - unmodeled-construct: Law readsThePayload reaches Any in JsonValue. It reads types while the code runs."
+        ),
+        "{}",
+        printed(&output)
+    );
+    assert!(!compiled(root, "app/Shared/Holder.sharp").exists());
 }
 
 /// A law never calls an interface's method, which a law cannot reason about, even when every implementation is
@@ -5338,10 +4618,9 @@ fn a_law_reaching_a_type_test_over_an_open_interface_is_refused() {
 }
 
 /// `mago analyze` refuses a law that reaches a construct the law translation does not model with the issue `mago
-/// compile` refuses it with, and proves no law: it writes no Lean package and no record of proofs, beside a law that
-/// would prove.
+/// compile` refuses it with, once, though both its analysis and its compile refuse it, and compiles no file it refuses.
 #[test]
-fn analyze_refuses_a_law_that_reaches_an_unmodeled_construct_as_compile_does_and_starts_no_lean() {
+fn analyze_refuses_a_law_that_reaches_an_unmodeled_construct_once_as_compile_does() {
     let directory = library_project(&[
         (
             "app/Shared/Shape.sharp",
@@ -5362,13 +4641,15 @@ fn analyze_refuses_a_law_that_reaches_an_unmodeled_construct_as_compile_does_and
     .unwrap();
 
     assert_eq!(analyzed.status.code(), Some(1), "{}", printed(&analyzed));
-    assert!(
-        printed(&analyzed).contains(&format!("app/Shared/Shape.sharp:5:60: error[unmodeled-construct]: {refusal}")),
+    assert_eq!(
+        printed(&analyzed)
+            .matches(&format!("app/Shared/Shape.sharp:5:60: error[unmodeled-construct]: {refusal}"))
+            .count(),
+        1,
         "{}",
         printed(&analyzed)
     );
-    assert!(!root.join(".sharp").join(PACKAGE_FOLDER).exists(), "{}", printed(&analyzed));
-    assert!(!root.join(".sharp/proofs.json").exists(), "{}", printed(&analyzed));
+    assert!(!compiled(root, "app/Shared/Shape.sharp").exists(), "{}", printed(&analyzed));
 
     let compiled = compile_without_lean(root);
 
@@ -5387,31 +4668,21 @@ fn analyze_scan_only_refuses_no_law() {
         "app/Level.sharp",
         "namespace App;\n\npublic final class Level\n{\n    public Level(public int rank { get; }) { }\n\n    public bool meets(Level other) => this.rank >= other.rank;\n\n    law meetsItself(Level a) => a.meets(a);\n}\n",
     )]);
-    let analyze = |arguments: &[&str]| {
-        process::output(
-            Command::new(env!("CARGO_BIN_EXE_mago"))
-                .args(["--no-version-check", "--colors", "never", "analyze"])
-                .args(arguments)
-                .env("MAGO_REPORTING_FORMAT", "medium")
-                .env("XDG_CACHE_HOME", Path::new(env!("CARGO_TARGET_TMPDIR")).join("cache"))
-                .current_dir(directory.path()),
-        )
-        .unwrap()
-    };
 
     for arguments in [&["--scan-only"][..], &[]] {
-        let analyzed = analyze(arguments);
+        let analyzed = analyze(directory.path(), arguments);
 
         assert_eq!(analyzed.status.code(), Some(0), "{arguments:?}: {}", printed(&analyzed));
         assert!(printed(&analyzed).contains("No issues found."), "{arguments:?}: {}", printed(&analyzed));
     }
 }
 
-/// `mago analyze` of `root`, with every issue on one line.
-fn analyze(root: &Path) -> Output {
+/// `mago analyze` of `paths` in `root`, of the whole project when it names none, with every issue on one line.
+fn analyze(root: &Path, paths: &[&str]) -> Output {
     process::output(
         Command::new(env!("CARGO_BIN_EXE_mago"))
             .args(["--no-version-check", "--colors", "never", "analyze"])
+            .args(paths)
             .env("MAGO_REPORTING_FORMAT", "medium")
             .env("XDG_CACHE_HOME", Path::new(env!("CARGO_TARGET_TMPDIR")).join("cache"))
             .current_dir(root),
@@ -5428,7 +4699,7 @@ fn analyze_proves_a_law_that_reaches_the_standard_library() {
         "namespace App;\n\nimport Sharp.Time.Instant;\n\npublic struct Stamp\n{\n    public Stamp(public Instant at { get; }) { }\n\n    law keepsTheInstant(Instant at) => new Stamp(at).at.epochSeconds == at.epochSeconds && new Stamp(at).at.nanosecond == at.nanosecond;\n}\n",
     )]);
 
-    let analyzed = analyze(directory.path());
+    let analyzed = analyze(directory.path(), &[]);
 
     assert_eq!(analyzed.status.code(), Some(0), "{}", printed(&analyzed));
     assert!(printed(&analyzed).contains("No issues found."), "{}", printed(&analyzed));
@@ -5447,7 +4718,7 @@ fn analyze_refuses_a_law_that_reaches_a_file_with_errors_for_its_errors() {
         ),
     ]);
 
-    let analyzed = analyze(directory.path());
+    let analyzed = analyze(directory.path(), &[]);
 
     assert_eq!(analyzed.status.code(), Some(1), "{}", printed(&analyzed));
     assert!(
@@ -5460,7 +4731,8 @@ fn analyze_refuses_a_law_that_reaches_a_file_with_errors_for_its_errors() {
 }
 
 /// `mago analyze` refuses a law that reaches a package's PHP# file with an error for that file's errors, as `mago
-/// compile` does, and reports no issue of the package's own.
+/// compile` does. An analyze of the project's files reports no issue of the package's own, and an analyze of the whole
+/// project, which compiles it, reports the compile's refusal of the package's file once.
 #[test]
 fn analyze_refuses_a_law_that_reaches_a_package_file_with_errors_for_its_errors() {
     let money = LAWFUL_MONEY
@@ -5478,17 +4750,21 @@ fn analyze_refuses_a_law_that_reaches_a_package_file_with_errors_for_its_errors(
         ),
     ]);
 
-    let analyzed = analyze(directory.path());
+    let named = analyze(directory.path(), &["app"]);
+    let whole = analyze(directory.path(), &[]);
+    let refused = "app/Shared/Ledger.sharp:7:5: error[law-unproven]: Law addKeeps is not proven: it reaches Money.add, whose file has errors. Fix them, then run vendor/bin/mago compile again.";
 
-    assert_eq!(analyzed.status.code(), Some(1), "{}", printed(&analyzed));
-    assert!(
-        printed(&analyzed).contains(
-            "app/Shared/Ledger.sharp:7:5: error[law-unproven]: Law addKeeps is not proven: it reaches Money.add, whose file has errors. Fix them, then run vendor/bin/mago compile again."
-        ),
-        "{}",
-        printed(&analyzed)
-    );
-    assert!(!printed(&analyzed).contains("Money.sharp"), "{}", printed(&analyzed));
+    assert_eq!(named.status.code(), Some(1), "{}", printed(&named));
+    assert!(printed(&named).contains(refused), "{}", printed(&named));
+    assert!(!printed(&named).contains("Money.sharp"), "{}", printed(&named));
+    assert_eq!(whole.status.code(), Some(1), "{}", printed(&whole));
+    for issue in [
+        refused,
+        "vendor/acme/money/src/Money.sharp:8:28: error[invalid-return-statement]",
+        "vendor/acme/money/src/Money.sharp comes from the Composer package acme/money.",
+    ] {
+        assert_eq!(printed(&whole).matches(issue).count(), 1, "{issue}\n{}", printed(&whole));
+    }
 }
 
 /// Spec section 28's `app/Tenant/Store/Module.sharp`, whose law spans `Receipts` and `Refunds`.
@@ -6928,7 +6204,7 @@ fn a_law_reaching_a_value_pattern_on_a_list_is_refused() {
 /// the value is out of a law's reach.
 #[test]
 fn each_refusal_a_law_reaches_says_what_to_write_instead() {
-    let source = "namespace App.Shared;\n\nextern InvalidArgumentException uses none;\n\npublic class Shape\n{\n    public Shape(public int value { get; }) { }\n    public static bool operator ==(Shape a, Shape b) => a.value == b.value;\n    public int hash() => this.value;\n\n    public static int union(int|string x) => 1;\n    public static int power(int a) => a ** 2;\n    public static int complement(int a) => ~a;\n    public static string template(int a) => `n ${a}`;\n    public static int guard(int a) => match (a) {\n        int m when m + 1 > 2 => 1,\n        default => 0,\n    };\n    public static int defaulted(int a = 1) => a;\n    public static int named(int a) => Shape.defaulted(a: a);\n    public static int thrown(int a) => a > 0 ? a : throw new InvalidArgumentException(\"no\");\n    public static int compound(int a)\n    {\n        let x = a;\n        x **= 2;\n        return x;\n    }\n    public static int inner(int a)\n    {\n        let x = 0;\n        return (x = a) + 1;\n    }\n\n    law l1(int a) => Shape.union(a) == 1;\n    law l2(int a) => Shape.power(a) == Shape.power(a);\n    law l3(int a) => Shape.complement(a) == Shape.complement(a);\n    law l4(int a) => Shape.template(a) == Shape.template(a);\n    law l5(int a) => Shape.guard(a) == Shape.guard(a);\n    law l6(int a) => Shape.named(a) == a;\n    law l7(int a) => Shape.thrown(a) == Shape.thrown(a);\n    law l8(int a) => Shape.compound(a) == Shape.compound(a);\n    law l9(int a) => Shape.inner(a) == Shape.inner(a);\n}\n";
+    let source = "namespace App.Shared;\n\npublic class Shape\n{\n    public Shape(public int value { get; }) { }\n    public static bool operator ==(Shape a, Shape b) => a.value == b.value;\n    public int hash() => this.value;\n\n    public static int union(int|string x) => 1;\n    public static int power(int a) => a ** 2;\n    public static int complement(int a) => ~a;\n    public static string template(int a) => `n ${a}`;\n    public static int guard(int a) => match (a) {\n        int m when m + 1 > 2 => 1,\n        default => 0,\n    };\n    public static int defaulted(int a = 1) => a;\n    public static int named(int a) => Shape.defaulted(a: a);\n    public static int compound(int a)\n    {\n        let x = a;\n        x **= 2;\n        return x;\n    }\n    public static int inner(int a)\n    {\n        let x = 0;\n        return (x = a) + 1;\n    }\n\n    law l1(int a) => Shape.union(a) == 1;\n    law l2(int a) => Shape.power(a) == Shape.power(a);\n    law l3(int a) => Shape.complement(a) == Shape.complement(a);\n    law l4(int a) => Shape.template(a) == Shape.template(a);\n    law l5(int a) => Shape.guard(a) == Shape.guard(a);\n    law l6(int a) => Shape.named(a) == a;\n    law l7(int a) => Shape.compound(a) == Shape.compound(a);\n    law l8(int a) => Shape.inner(a) == Shape.inner(a);\n}\n";
     let directory = lawful_project(&[("app/Shared/Shape.sharp", source)]);
     let root = directory.path();
 
@@ -6943,9 +6219,8 @@ fn each_refusal_a_law_reaches_says_what_to_write_instead() {
         "Law l4 reaches a string template in Shape.template. Join the strings with `+`.",
         "Law l5 reaches a guard that can throw in Shape.guard. Write the guard without calls or arithmetic, which can throw, and compute such a value in the arm.",
         "Law l6 reaches a named or spread argument in Shape.named. Pass each argument by its position.",
-        "Law l7 reaches a throw in Shape.thrown. Return a value that tells the failure apart, such as `null` or an enum case, in place of the exception.",
-        "Law l8 reaches the operator `**=` in Shape.compound. Update an int with `+=`, `-=`, `*=`, `/=` or `%=`, or a string with `+=`.",
-        "Law l9 reaches an assignment inside an expression in Shape.inner. Assign the value in a statement of its own, before the expression that reads it.",
+        "Law l7 reaches the operator `**=` in Shape.compound. Update an int with `+=`, `-=`, `*=`, `/=` or `%=`, or a string with `+=`.",
+        "Law l8 reaches an assignment inside an expression in Shape.inner. Assign the value in a statement of its own, before the expression that reads it.",
     ] {
         assert!(printed.contains(&format!("error - unmodeled-construct: {message}")), "{message}\n{printed}");
     }

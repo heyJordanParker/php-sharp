@@ -254,6 +254,11 @@ final class Container
 final class ContainerError extends \Error {}
 
 /**
+ * A move called on a case of a machine it doesn't move from, as `pay` on an `OrderStatus` that is `Paid`.
+ */
+final class StateError extends \Error {}
+
+/**
  * The handle of a listener `Events.on` starts: the engine stops the listener when the handle is destroyed.
  */
 final class Listening
@@ -741,22 +746,6 @@ function constant(string $class, string $name): mixed {}
  * @throws \InvalidArgumentException
  */
 function createInstance(string $type, array $arguments): object {}
-
-/**
- * A new lazy object of the class the class value `$type` names, with its type arguments, created empty with no
- * constructor run, as `ReflectionClass::newLazyGhost` creates one: `$initialize` runs on it at its first property read
- * or write. The standard library's `Class<T>.createLazy()` returns it.
- *
- * @template T of object
- *
- * @param class-string<T> $type
- * @param \Closure(T): void $initialize
- *
- * @return T
- *
- * @throws \InvalidArgumentException
- */
-function createLazy(string $type, callable $initialize): object {}
 
 /**
  * The accessors of the property `$name` of the class the class value `$type` names, as `ReflectionProperty::getHook`

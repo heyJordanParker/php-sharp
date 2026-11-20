@@ -1927,13 +1927,13 @@ fn a_sharp_import_passes_the_use_statement_and_casing_checks_as_in_php() {
 /// `Sharp\Text\Regex`, a plain PHP class with a static method.
 const REGEX: (&str, &str) = (
     "src/Sharp/Text/Regex.php",
-    "<?php\n\nnamespace Sharp\\Text;\n\nfinal class Regex\n{\n    public static function matches(string $pattern, string $text): bool\n    {\n        return preg_match($pattern, $text) === 1;\n    }\n}\n",
+    "<?php\n\nnamespace Sharp\\Text;\n\nfinal class Regex\n{\n    public static function escape(string $text): string\n    {\n        return preg_quote($text, '/');\n    }\n}\n",
 );
 
 /// The PHP twin of a `.sharp` file that calls `Sharp\Text\Regex` through `import … as Rx`.
 const RENAMED_REGEX_CALL: (&str, &str) = (
     "src/Demo/Report.php",
-    "<?php\n\ndeclare(strict_types=1);\n\nnamespace Demo;\n\nuse Sharp\\Text\\Regex as Rx;\n\nclass Report\n{\n    public static function run(string $text): bool\n    {\n        return Rx::matches('/a/', $text) && Rx::matches(1, $text);\n    }\n}\n",
+    "<?php\n\ndeclare(strict_types=1);\n\nnamespace Demo;\n\nuse Sharp\\Text\\Regex as Rx;\n\nclass Report\n{\n    public static function run(string $text): bool\n    {\n        return Rx::escape($text) === Rx::escape(1);\n    }\n}\n",
 );
 
 /// The issues of `RENAMED_REGEX_CALL`.
@@ -1946,22 +1946,22 @@ fn a_php_call_through_a_use_renamed_with_as_is_checked_as_the_imported_class() {
     assert_eq!(codes(&renamed_regex_call_issues()), ["invalid-argument"]);
 }
 
-/// Spec section 23: `Rx.matches(…)` calls `Sharp\Text\Regex::matches` when the file imports the class as `Rx`, so its
+/// Spec section 23: `Rx.escape(…)` calls `Sharp\Text\Regex::escape` when the file imports the class as `Rx`, so its
 /// arguments are checked against that method, as in PHP.
 #[test]
 fn a_call_through_a_renamed_import_is_checked_as_the_imported_class_as_in_php() {
-    let sharp = "namespace Demo;\n\nimport Sharp.Text.Regex as Rx;\n\nclass Report\n{\n    public static bool run(string text) => Rx.matches(\"/a/\", text) && Rx.matches(1, text);\n}\n";
+    let sharp = "namespace Demo;\n\nimport Sharp.Text.Regex as Rx;\n\nclass Report\n{\n    public static bool run(string text) => Rx.escape(text) == Rx.escape(1);\n}\n";
 
     let sharp_issues = analyze(&PLUGIN_REGISTRY, settings(), ("src/Demo/Report.sharp", sharp), &[REGEX]);
     let located_issues: Vec<String> = sharp_issues.iter().map(|issue| located(sharp, issue)).collect();
 
-    assert_eq!(located_issues, ["7:82 invalid-argument"]);
+    assert_eq!(located_issues, ["7:73 invalid-argument"]);
     assert_eq!(codes(&located_issues), codes(&renamed_regex_call_issues()));
-    assert!(sharp_issues[0].message.contains("`Rx.matches`"), "{}", sharp_issues[0].message);
+    assert!(sharp_issues[0].message.contains("`Rx.escape`"), "{}", sharp_issues[0].message);
     assert_eq!(
         messages(RENAMED_REGEX_CALL, &[REGEX]),
         [
-            "Invalid argument type for argument #1 of `Sharp\\Text\\Regex::matches`: expected `string`, but found `int(1)`."
+            "Invalid argument type for argument #1 of `Sharp\\Text\\Regex::escape`: expected `string`, but found `int(1)`."
         ]
     );
 }
@@ -4117,6 +4117,29 @@ fn replacing_a_php_method_follows_php_rules_with_override_required() {
             "Invalid `#[Override]` attribute on `Demo\\StrayReport::footer`.",
             "Parameter #1 of `Demo\\RenamedReport::resize()` is named `$w` but parent `Lib\\Report::resize()` names it `$width`",
             "Parameter #2 of `Demo\\RenamedReport::resize()` is named `$h` but parent `Lib\\Report::resize()` names it `$height`",
+        ]
+    );
+}
+
+/// A method written `override` keeps its parent's parameter names, which `incompatible-parameter-name` holds, so a
+/// plain PHP parent's snake case name draws no case warning there. A parameter of a method that overrides nothing is
+/// still in camel case, and a rename of an inherited name is still refused.
+#[test]
+fn an_override_keeps_its_parents_parameter_names() {
+    let library = "<?php\n\nnamespace Lib;\n\nclass Db\n{\n    public function get_var(?string $query = null, int $column_offset = 0)\n    {\n        return null;\n    }\n}\n";
+    let tenant = "namespace Demo;\n\nimport Lib.Db;\n\npublic class TenantDb : Db\n{\n    public override Any? get_var(string? query = null, int column_offset = 0) => null;\n\n    public Any? read(int row_offset) => row_offset;\n}\n";
+    let renamed = "namespace Demo;\n\nimport Lib.Db;\n\npublic class RenamedDb : Db\n{\n    public override Any? get_var(string? query = null, int columnOffset = 0) => null;\n}\n";
+    let library = ("src/Lib/Db.php", library);
+
+    assert_eq!(
+        [
+            explained(("src/Demo/TenantDb.sharp", tenant), &[library]),
+            explained(("src/Demo/RenamedDb.sharp", renamed), &[library])
+        ]
+        .concat(),
+        [
+            "9:26 semantics Parameter name `row_offset` should be in camel case. Rename it `rowOffset`.",
+            "7:26 incompatible-parameter-name Parameter #2 of `RenamedDb.get_var` is named `columnOffset` but parent `Db.get_var` names it `column_offset` Name it `column_offset`, as the parent does.",
         ]
     );
 }
@@ -13018,6 +13041,26 @@ fn a_type_test_of_a_plain_php_trait_tests_the_class_and_its_parents() {
     );
 }
 
+/// Spec section 22: a value of a type parameter bounded by an open class may be of a subclass that uses a plain PHP
+/// trait, so `is` and `is not` of the trait may go either way and the narrowed value has the trait's members. A value
+/// of a final class that doesn't use the trait never matches.
+#[test]
+fn a_trait_test_on_a_bounded_type_parameter_may_match() {
+    let library = "<?php\n\nnamespace Lib;\n\ntrait SoftDeletes\n{\n    public function getDeletedAtColumn(): string\n    {\n        return 'deleted_at';\n    }\n}\n\nabstract class Model\n{\n}\n\nfinal class Ledger extends Model\n{\n}\n\n/** @template TModel of Model */\nclass Builder\n{\n    /** @return TModel */\n    public function getModel()\n    {\n        throw new \\LogicException();\n    }\n}\n";
+    let base = (
+        "src/Demo/BaseModel.sharp",
+        "namespace Demo;\n\nimport Lib.Model;\n\npublic abstract class BaseModel : Model\n{\n}\n",
+    );
+    let sharp = "namespace Demo;\n\nimport Lib.Builder;\nimport Lib.Ledger;\nimport Lib.SoftDeletes;\n\npublic class RowQuery<TRow : BaseModel> : Builder<TRow>\n{\n    public string onlyTrashed()\n    {\n        if (this.getModel() is SoftDeletes trashable)\n        {\n            return trashable.getDeletedAtColumn();\n        }\n        return \"\";\n    }\n\n    public bool dropsTrash()\n    {\n        if (this.getModel() is not SoftDeletes)\n        {\n            return true;\n        }\n        return false;\n    }\n\n    public static bool ledger(Ledger ledger) => ledger is SoftDeletes;\n}\n";
+
+    assert_eq!(
+        explained(("src/Demo/RowQuery.sharp", sharp), &[base, ("src/Lib/Models.php", library)]),
+        [
+            "27:59 impossible-type-comparison This pattern never matches the value it tests. Remove the pattern, or test a value that can match it."
+        ]
+    );
+}
+
 /// An issue that names two types whose short names match names each by its full name, as `App.Schema.Type` and
 /// `Lib.Type`, so the message never reads "expected `List<Type>`, but found `List<Type>`". A `List` of one class
 /// passed where a `List`, an array or an `iterable` of that class is declared fits, and one passed where a
@@ -21702,6 +21745,21 @@ fn a_type_test_the_value_always_passes_says_the_value_already_has_the_type() {
     );
 }
 
+/// Spec section 21: a pattern binds a name only through a typed declaration, so an arm that reads its value in its
+/// `when` writes `string n when …` though the subject is a `string`. That declaration binds without a type test, and
+/// neither it nor its `when` is redundant. A type test that binds nothing and always holds is still reported.
+#[test]
+fn a_guard_binding_of_the_subjects_own_type_is_not_redundant() {
+    let sharp = "namespace Demo;\n\npublic class Plugins\n{\n    public static string kind(string name) => match (name) {\n        string n when n != \"wp\" => \"core\",\n        default => \"plugin\",\n    };\n\n    public static bool always(string name) => name is string;\n}\n";
+
+    assert_eq!(
+        explained(("src/Demo/Plugins.sharp", sharp), &[]),
+        [
+            "10:52 redundant-type-comparison `name` is already a `string`, so `is string` is always true. Remove the test."
+        ]
+    );
+}
+
 /// Spec section 21: `as` converts a value to a type, or gives null, so its type is the target type made nullable, for a
 /// class, an interface, an intersection, a collection, and a type parameter with a bound and without one, whatever the
 /// value's type, its bound's type included. Only a value already of the target type never gives null, and that `as` is
@@ -23219,7 +23277,7 @@ fn a_type_parameter_without_a_bound_passes_as_any_nullable_and_never_as_any() {
 }
 
 /// An unused type parameter is named with the kind that declares it, and the help removes it from the declaration as
-/// PHP# writes it. The PHP twin keeps Mago's `@template` text.
+/// PHP# writes it. The PHP twin keeps Mago's `@template` text. A PHP# interface's type parameter is never reported.
 #[test]
 fn an_unused_type_parameter_is_named_as_sharp_declares_it() {
     let sharp = [
@@ -23244,10 +23302,70 @@ fn an_unused_type_parameter_is_named_as_sharp_declares_it() {
         each_file(worded, &sharp, &[]).concat(),
         [
             "3:14 unused-template-parameter Type parameter `TItem` is never used in class `Page`. | Type parameter `TItem` is defined on this class but never referenced | Remove `TItem` from `Page<…>`.",
-            "3:18 unused-template-parameter Type parameter `TItem` is never used in interface `Feed`. | Type parameter `TItem` is defined on this interface but never referenced | Remove `TItem` from `Feed<…>`.",
             "5:24 unused-template-parameter Type parameter `TItem` is never used in method `run`. | Type parameter `TItem` is defined on this method but never referenced | Remove `TItem` from `run<…>`.",
         ]
     );
+}
+
+/// Spec section 11: a type argument is real while the code runs, so a class's type parameter that only its members'
+/// code reads, through `typeof`, `is`, `as`, a type argument or a pattern, is used. One no member names is still
+/// reported, and so is one only a method's own type parameter of the same name hides.
+#[test]
+fn a_type_parameter_read_through_typeof_is_used() {
+    let sharp = [
+        (
+            "src/Demo/RecordReference.sharp",
+            "namespace Demo;\n\npublic class RecordReference<TRecord>\n{\n    public Class<Any?> document() => typeof(TRecord);\n}\n",
+        ),
+        (
+            "src/Demo/Check.sharp",
+            "namespace Demo;\n\npublic class Check<TValue>\n{\n    public bool holds(Any? value) => value is TValue;\n}\n",
+        ),
+        (
+            "src/Demo/Cast.sharp",
+            "namespace Demo;\n\npublic class Cast<TValue>\n{\n    public Any? cast(Any? value) => value as TValue;\n}\n",
+        ),
+        (
+            "src/Demo/Bucket.sharp",
+            "namespace Demo;\n\npublic class Bucket<TItem>\n{\n    public int size()\n    {\n        List<TItem> items = [];\n        return items.count();\n    }\n}\n",
+        ),
+        (
+            "src/Demo/Matcher.sharp",
+            "namespace Demo;\n\npublic class Matcher<TValue>\n{\n    public bool held(Any? value)\n    {\n        if (value is TValue held)\n        {\n            return held != null;\n        }\n        return false;\n    }\n}\n",
+        ),
+        (
+            "src/Demo/Tag.sharp",
+            "namespace Demo;\n\npublic class Tag<TItem>\n{\n    public string name() => \"tag\";\n}\n",
+        ),
+        (
+            "src/Demo/Shadow.sharp",
+            "namespace Demo;\n\npublic class Shadow<T>\n{\n    public static Class<Any?> named<T>() => typeof(T);\n}\n",
+        ),
+    ];
+
+    assert_eq!(
+        each_file(explained, &sharp, &[]).concat(),
+        [
+            "3:14 unused-template-parameter Type parameter `TItem` is never used in class `Tag`. Remove `TItem` from `Tag<…>`.",
+            "3:14 unused-template-parameter Type parameter `T` is never used in class `Shadow`. Remove `T` from `Shadow<…>`.",
+        ]
+    );
+}
+
+/// Each implementer of an interface gives its type parameter a type argument, which reflection and `is Keyed<int>`
+/// read, so an interface's type parameter is used though no member names it.
+#[test]
+fn an_interface_type_parameter_is_used_by_its_implementers() {
+    let sharp = [
+        ("src/Demo/Keyed.sharp", "namespace Demo;\n\npublic interface Keyed<T>\n{\n}\n"),
+        ("src/Demo/Account.sharp", "namespace Demo;\n\npublic class Account : Keyed<int>\n{\n}\n"),
+        (
+            "src/Demo/Report.sharp",
+            "namespace Demo;\n\npublic class Report\n{\n    public static Class<Any?> key() => Class.of(new Account()).interfaces()[0].typeArguments()[0];\n}\n",
+        ),
+    ];
+
+    assert_eq!(each_file(explained, &sharp, &REFLECTION).concat(), Vec::<String>::new());
 }
 
 /// An override returns what the member it overrides returns, as C# requires: `int` is no `T` and no `TItem`. A method
@@ -29783,6 +29901,34 @@ fn a_name_lookup_of_php_has_the_effect_dns() {
     );
 }
 
+/// Decision 83: a plain PHP library hands PHP# code an `SplFileInfo`, as a file finder's results are one or a subclass
+/// of one, so it is a standard class a `.sharp` file names bare, with no import and no `extern` line of its own. The
+/// standard library declares it `uses Files`, and each member that reads only the path it holds `uses none`, so a
+/// method a pure interface declares reads the path, of a package's subclass too, and is refused the size.
+#[test]
+fn a_sharp_file_names_spl_file_info_bare_and_reads_its_path_purely() {
+    let found = (
+        "vendor/acme/finder/src/FoundFile.php",
+        "<?php\n\nnamespace Acme\\Finder;\n\nclass FoundFile extends \\SplFileInfo\n{\n    public function getRelativePath(): string\n    {\n        return '';\n    }\n}\n",
+    );
+    let paths = (
+        "app/Shop/Paths.sharp",
+        "namespace App.Shop;\n\nimport Acme.Finder.FoundFile;\n\npublic interface Paths\n{\n    string path(SplFileInfo file);\n\n    string named(FoundFile file);\n\n    Any size(SplFileInfo file);\n}\n",
+    );
+    let scan = (
+        "app/Shop/Scan.sharp",
+        "namespace App.Shop;\n\nimport Acme.Finder.FoundFile;\n\npublic class Scan : Paths\n{\n    public string path(SplFileInfo file) => file.getPathname();\n\n    public string named(FoundFile file) => file.getFilename();\n\n    public Any size(SplFileInfo file) => file.getSize();\n}\n",
+    );
+
+    assert_eq!(worded(scan, &[paths, found, BUILTINS]), Vec::<String>::new());
+    assert_eq!(
+        effect_issues(&[scan, paths, found, BUILTINS]),
+        [
+            "app/Shop/Scan.sharp:11:42 incompatible-effects: `Scan.size` calls `SplFileInfo.getSize`, which has the effect `Files`, so the pure `Paths.size` cannot accept it."
+        ]
+    );
+}
+
 /// Spec section 21: `is bool` tests a value PHP gives as `false` or a resource, as `tmpfile()` gives one, and it can
 /// hold after `||` as it can on its own line.
 #[test]
@@ -29893,11 +30039,23 @@ fn the_standard_library_names_the_interfaces_a_plain_php_library_needs_with_no_i
 }
 
 /// The standard classes are the class-likes `Builtins.sharp` names: each root class it declares with no import, which a
-/// bare name names, and each class of a namespace it imports and declares `uses any`, the DOM's, as
-/// `Dom\HTMLDocument`, by its full name. A class of a namespace it declares with its effects, as
+/// bare name names, and each class of a namespace `sharp/bin/builtins` lists in `STANDARD_NAMESPACED_CLASSES`, whose
+/// imports it writes, by its full name. A class of a namespace it imports only to declare its effects, as
 /// `Random\RandomException`, and a root class it imports, as `DateTimeImmutable`, only take the effects its lines give.
 #[test]
 fn the_standard_classes_are_the_classes_the_standard_library_names() {
+    let generator = include_str!("../../../../bin/builtins");
+    let listed = generator
+        .split_once("\nconst STANDARD_NAMESPACED_CLASSES = [")
+        .and_then(|(_, rest)| rest.split_once("\n];"))
+        .map(|(list, _)| list)
+        .expect("sharp/bin/builtins declares STANDARD_NAMESPACED_CLASSES");
+    let mut namespaced: Vec<String> = listed
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix('\'')?.strip_suffix("',"))
+        .map(|class| class.replace("\\\\", "\\"))
+        .collect();
+    namespaced.sort_unstable();
     let imported: HashMap<&str, String> = BUILTINS
         .1
         .lines()
@@ -29907,21 +30065,18 @@ fn the_standard_classes_are_the_classes_the_standard_library_names() {
             (alias, full.replace('.', "\\"))
         })
         .collect();
-    let classes =
-        || BUILTINS.1.lines().filter_map(|line| line.strip_prefix("extern ")?.strip_suffix(';')?.split_once(" uses "));
-    let any: HashSet<&str> = classes().filter(|(_, uses)| *uses == "any").map(|(name, _)| name).collect();
-    let mut root: Vec<&str> = classes()
-        .map(|(name, _)| name)
+    let mut root: Vec<&str> = BUILTINS
+        .1
+        .lines()
+        .filter_map(|line| Some(line.strip_prefix("extern ")?.strip_suffix(';')?.split_once(" uses ")?.0))
         .filter(|name| !name.contains(['.', ' ']) && !imported.contains_key(name))
         .collect();
     root.sort_unstable();
-    let mut named: Vec<String> = imported
-        .iter()
-        .filter(|(name, full)| full.contains('\\') && any.contains(*name))
-        .map(|(_, full)| full.clone())
-        .chain(root.iter().map(|name| (*name).to_owned()))
-        .collect();
+    let mut named: Vec<String> = namespaced.iter().cloned().chain(root.iter().map(|name| (*name).to_owned())).collect();
     named.sort_unstable();
+    let mut imported_namespaced: Vec<String> =
+        imported.values().filter(|full| namespaced.contains(full)).cloned().collect();
+    imported_namespaced.sort_unstable();
     let mut standard: Vec<String> = STANDARD_ROOT_CLASSES.iter().map(|class| (*class).to_owned()).collect();
     standard.sort_unstable();
     let mut bare: Vec<&str> = default_root_classes().collect();
@@ -29929,7 +30084,7 @@ fn the_standard_classes_are_the_classes_the_standard_library_names() {
 
     assert_eq!(standard, named);
     assert_eq!(bare, root);
-    assert!(standard.iter().any(|class| class == "Dom\\HTMLDocument"));
+    assert_eq!(imported_namespaced, namespaced);
     assert!(!standard.iter().any(|class| class == "Random\\RandomException"));
 }
 
@@ -29951,6 +30106,31 @@ fn a_sharp_file_imports_the_html_dom_the_standard_library_names() {
     assert_eq!(issues(page, &[]), Vec::<String>::new());
     assert_ne!(issues(bare, &[]), Vec::<String>::new());
     assert_eq!(issues(legacy, &[]), ["3:8 non-existent-use-import"]);
+}
+
+/// Spec section 29: a DOM document built and read in memory reaches nothing outside the process, so the standard
+/// library declares each `Dom` class `uses none`, and only a member that opens a path, as `createFromFile` does, or
+/// whose options can make it load one, as XML's `createFromString` does, `uses Files`. A method a pure interface
+/// declares builds an element and is refused the file.
+#[test]
+fn a_dom_document_built_in_memory_is_pure_and_its_file_members_have_files() {
+    let pages = (
+        "app/Shop/Pages.sharp",
+        "namespace App.Shop;\n\npublic interface Pages\n{\n    string paragraph();\n\n    string loaded(string path);\n\n    string parsed(string xml);\n}\n",
+    );
+    let page = (
+        "app/Shop/Page.sharp",
+        "namespace App.Shop;\n\nimport Dom.HTMLDocument;\nimport Dom.XMLDocument;\n\npublic class Page : Pages\n{\n    public string paragraph() => HTMLDocument.createEmpty().createElement(\"p\").tagName;\n\n    public string loaded(string path) => HTMLDocument.createFromFile(path).title;\n\n    public string parsed(string xml) => XMLDocument.createFromString(xml).title;\n}\n",
+    );
+
+    assert_eq!(worded(page, &[pages, BUILTINS]), Vec::<String>::new());
+    assert_eq!(
+        effect_issues(&[page, pages, BUILTINS]),
+        [
+            "app/Shop/Page.sharp:10:42 incompatible-effects: `Page.loaded` calls `HTMLDocument.createFromFile`, which has the effect `Files`, so the pure `Pages.loaded` cannot accept it.",
+            "app/Shop/Page.sharp:12:41 incompatible-effects: `Page.parsed` calls `XMLDocument.createFromString`, which has the effect `Files`, so the pure `Pages.parsed` cannot accept it.",
+        ]
+    );
 }
 
 /// Decision 83: a `.sharp` file reads and writes XML through `Dom.XMLDocument`, which the standard library names beside
@@ -31368,6 +31548,24 @@ fn typeof_void_and_never_are_class_values_as_any_other() {
     assert_eq!(messages(report, &REFLECTION), ["A local cannot be `void`: `void` is only a return type."]);
 }
 
+/// Spec section 25: two class values are equal when they name the same class, and a `Class<T>` holds `T` or a class
+/// that extends it, so an `==` or `!=` with a class literal holds always only for a class value that is that one class.
+/// A chain of them, a `Class<Order>` and a `Class<T>` bounded by `Order` compared with `typeof(Order)` report nothing.
+#[test]
+fn a_chain_of_class_value_comparisons_is_not_redundant() {
+    let order = ("src/App/Order.sharp", "namespace App;\n\npublic class Order\n{\n}\n");
+    let invoice = ("src/App/Invoice.sharp", "namespace App;\n\npublic class Invoice\n{\n}\n");
+    let refund = ("src/App/Refund.sharp", "namespace App;\n\npublic class Refund\n{\n}\n");
+    let kinds = "namespace App;\n\npublic static class Kinds\n{\n    public static bool billable(Class<Any> type) => type == typeof(Order) || type == typeof(Invoice) || type == typeof(Refund);\n\n    public static bool unbilled(Class<Any> type, bool early) => type != typeof(Order) || early;\n\n    public static bool ordered(Class<Order> type, bool early) => early || type == typeof(Order);\n\n    public static bool bounded<T : Order>(Class<T> type, bool early) => early || type == typeof(Order);\n\n    public static bool always(bool early)\n    {\n        const type = typeof(Order);\n        return early || type == typeof(Order);\n    }\n}\n";
+
+    assert_eq!(
+        explained(("src/App/Kinds.sharp", kinds), &[order, invoice, refund]),
+        [
+            "16:25 redundant-type-comparison Redundant condition: variable `type` (type `Class<Order>`) is already known to be `Class<Order>`. This condition is always `true` and the associated code block will always execute if reached. Consider simplifying."
+        ]
+    );
+}
+
 /// Spec section 25: a reflection boolean is named `isNullable` and `isOptional`, as the standard library names every
 /// boolean, so 0.6.10's `nullable` and `optional` name no member.
 #[test]
@@ -31629,44 +31827,6 @@ fn a_field_read_or_write_runs_no_project_code() {
             "app/Shop/PropertyWrite.sharp:7:9 incompatible-effects: `PropertyWrite.sync` reaches `Property.set`, which may have every effect, so `uses Database` on `Store.sync` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
         ]
     );
-}
-
-/// Spec sections 25 and 29: `Field.set` writes a lazy object that has not loaded without loading it, and runs no
-/// accessor, so a method held to `uses Database, Events` creates a ghost with `createLazy` and gives it its identity
-/// before it loads, as a model's reference does. `Property.set` runs a `set` body, so it still may have every effect,
-/// and `Property` has no `setBeforeLoad`.
-#[test]
-fn a_write_before_a_lazy_object_loads_goes_through_its_field() {
-    let saves = (
-        "app/Shop/Saves.sharp",
-        "namespace App.Shop;\n\npublic interface Saves\n{\n    Row reference(int id) uses Database, Events;\n}\n",
-    );
-    let row = (
-        "app/Shop/Row.sharp",
-        "namespace App.Shop;\n\npublic class Row\n{\n    public int id { get; set; } = 0;\n\n    public string name { get; set; } = \"\";\n}\n",
-    );
-    let ghosts = (
-        "app/Shop/Ghosts.sharp",
-        "namespace App.Shop;\n\npublic class Ghosts : Saves\n{\n    public Row reference(int id)\n    {\n        const ghost = typeof(Row).createLazy(loaded => { loaded.name = \"ada\"; });\n        typeof(Row).fields()[0].set(ghost, id);\n\n        return ghost;\n    }\n}\n",
-    );
-    let written = (
-        "app/Shop/Written.sharp",
-        "namespace App.Shop;\n\npublic class Written : Saves\n{\n    public Row reference(int id)\n    {\n        const ghost = typeof(Row).createLazy(loaded => { loaded.name = \"ada\"; });\n        typeof(Row).properties()[0].set(ghost, id);\n\n        return ghost;\n    }\n}\n",
-    );
-    let preset = (
-        "app/Shop/Preset.sharp",
-        "namespace App.Shop;\n\npublic class Preset\n{\n    public Row reference(int id)\n    {\n        const ghost = typeof(Row).createLazy(loaded => { loaded.name = \"ada\"; });\n        typeof(Row).properties()[0].setBeforeLoad(ghost, id);\n\n        return ghost;\n    }\n}\n",
-    );
-    let [a, b, c, d, e, f, g] = REFLECTION;
-
-    assert_eq!(issues(ghosts, &[saves, row, a, b, c, d, e, f, g]), Vec::<String>::new());
-    assert_eq!(
-        effect_issues(&[ghosts, written, saves, row, a, b, c, d, e, f, g]),
-        [
-            "app/Shop/Written.sharp:8:9 incompatible-effects: `Written.reference` reaches `Property.set`, which may have every effect, so `uses Database, Events` on `Saves.reference` cannot accept it. Help: It runs code no `uses` can name, so call it where no `uses` limits the effects.",
-        ]
-    );
-    assert_eq!(messages(preset, &[row, a, b, c, d, e, f, g]), ["Method `Property.setBeforeLoad` does not exist."]);
 }
 
 /// Spec sections 25 and 29: `Parameter.defaultValue()` reads only a default that runs no code, and the engine refuses
@@ -32353,7 +32513,7 @@ fn a_law_over_pure_code_reports_no_issue() {
     assert_eq!(effect_issues(&[LAWFUL_MONEY]), Vec::<String>::new());
 }
 
-/// Spec section 28's state machine: a law covers every state and event through the enum's pure transition method.
+/// Spec section 28: a law covers every status and event through an enum's pure transition method.
 #[test]
 fn a_law_over_an_enum_transition_reports_no_issue() {
     let payment = (
@@ -36270,4 +36430,160 @@ fn a_family_enum_reads_its_cases_by_name_and_tag_and_key_go_only_on_a_family() {
         refusals(report, &[KEY, TAG, JSON, JSON_VALUE, result, code]),
         ["7:60 invalid-struct `Outcome.parse` can't read `Hooked.run`: `Function<int()>` is a function. | "]
     );
+}
+
+/// The machine of spec section 20.2's specimen: each case's block holds the moves out of it, `open` is its entry
+/// point, and `Shipped` and `Cancelled` are `final`.
+const ORDER_STATUS: (&str, &str) = (
+    "src/Shop/OrderStatus.sharp",
+    "namespace Shop;\n\npublic machine OrderStatus : string\n{\n    case Draft = \"draft\"\n    {\n        public OrderStatus.Paid pay(int cents)\n        {\n            if (cents <= 0) {\n                throw new ValueError(\"A payment is positive.\");\n            }\n            return OrderStatus.Paid(cents);\n        }\n\n        public OrderStatus.Cancelled cancel() => OrderStatus.Cancelled;\n    }\n\n    case Paid(int cents) = \"paid\"\n    {\n        public OrderStatus.Shipped ship() => OrderStatus.Shipped;\n    }\n\n    final case Shipped = \"shipped\";\n    final case Cancelled = \"cancelled\";\n\n    public static OrderStatus.Draft open() => OrderStatus.Draft;\n\n    law paidIsPositive(OrderStatus.Paid paid) => paid.cents > 0;\n}\n",
+);
+
+/// Spec section 20.2: the specimen's machine compiles, and its holder compiles where it changes its machine property by
+/// a move of its own, and is refused at each other way of changing it.
+#[test]
+fn a_machine_property_changes_only_by_a_move_of_its_own() {
+    let order = (
+        "src/Shop/Order.sharp",
+        "namespace Shop;\n\npublic class Order\n{\n    public Order(public int id { get; }) { }\n\n    public OrderStatus status { get; private set; } = OrderStatus.open();\n    public OrderStatus copied { get; set; } = OrderStatus.open();\n    public OrderStatus started { get; private set; } = OrderStatus.Shipped;\n\n    public void pay(int cents) { this.status = this.status.pay(cents); }\n    public void copy(Order o) { this.status = o.status; }\n    public void force() { this.status = OrderStatus.Paid(5); }\n    public void restart() { this.status = OrderStatus.open(); }\n}\n",
+    );
+
+    assert_eq!(refusals(ORDER_STATUS, &[order]), Vec::<String>::new());
+    assert_eq!(
+        refusals(order, &[ORDER_STATUS]),
+        [
+            "12:47 invalid-machine `this.status` holds the machine `OrderStatus`, so it changes only by a move of its own, as `this.status = this.status.pay(…)`. | Call a move of `this.status`.",
+            "13:41 invalid-machine Only the entry points and moves of `OrderStatus` build its case `OrderStatus.Paid`. | Call an entry point, as `OrderStatus.open()`, or a move of a value of `OrderStatus`.",
+            "14:43 invalid-machine `this.status` holds the machine `OrderStatus`, so it changes only by a move of its own, as `this.status = this.status.pay(…)`. | Call a move of `this.status`.",
+            "8:24 invalid-machine `Order.copied` holds the machine `OrderStatus`, so its `set` is `private`. | Write `{ get; private set; }`, and change it only by a move, as `this.copied = this.copied.pay(…)`.",
+            "9:56 invalid-machine `Order.started` holds the machine `OrderStatus`, so its initial value is an entry point of `OrderStatus`, as `OrderStatus.open()`. | Start it with an entry point.",
+        ]
+    );
+}
+
+/// Spec section 20.2: a constructor starts a machine property with an entry point, and a property the constructor
+/// takes is refused, since its caller's value came from no entry point.
+#[test]
+fn a_constructor_starts_a_machine_property_with_an_entry_point() {
+    let started = (
+        "src/Shop/Order.sharp",
+        "namespace Shop;\n\npublic class Order\n{\n    public OrderStatus status { get; private set; }\n\n    public Order()\n    {\n        this.status = OrderStatus.open();\n    }\n}\n",
+    );
+    let taken = (
+        "src/Shop/Order.sharp",
+        "namespace Shop;\n\npublic class Order\n{\n    public Order(public OrderStatus status { get; private set; }) { }\n}\n",
+    );
+
+    assert_eq!(refusals(started, &[ORDER_STATUS]), Vec::<String>::new());
+    assert_eq!(
+        refusals(taken, &[ORDER_STATUS]),
+        [
+            "5:37 invalid-machine `Order.status` holds the machine `OrderStatus`, so its initial value is an entry point of `OrderStatus`, as `OrderStatus.open()`. | Start it with an entry point."
+        ]
+    );
+}
+
+/// Spec section 20.2: `final`, a block of members and a value beside a case's data are a machine's alone, and a case
+/// takes no other modifier.
+#[test]
+fn only_a_machine_case_takes_final_members_and_a_value_beside_its_data() {
+    let status = (
+        "src/Shop/Status.sharp",
+        "namespace Shop;\n\npublic enum Status\n{\n    final case Open;\n    case Paid(int cents) = 1;\n    case Shipped\n    {\n        public int rank() => 1;\n    }\n}\n",
+    );
+    let ticket = (
+        "src/Shop/Ticket.sharp",
+        "namespace Shop;\n\npublic machine Ticket\n{\n    public case Open\n    {\n        public Ticket.Closed close() => Ticket.Closed;\n    }\n\n    final case Closed;\n\n    public static Ticket.Open open() => Ticket.Open;\n}\n",
+    );
+
+    assert_eq!(
+        refusals(status, &[]),
+        [
+            "5:5 semantics Case `Open` of enum `Status` takes no `final`: only a machine's case does. | Remove `final`.",
+            "6:26 semantics Case `Paid` of enum `Status` carries data and takes no value: only a machine's case takes both. | Remove the value, or the data.",
+            "8:5 semantics Case `Shipped` of enum `Status` takes no members: only a machine's case holds the moves out of it. | End the case with `;`, or declare `Status` as a `machine`.",
+        ]
+    );
+    assert_eq!(
+        refusals(ticket, &[]),
+        ["5:5 semantics Case `Open` takes no `public`: only a machine's case takes `final`. | Remove `public`."]
+    );
+}
+
+/// Spec section 20.2: a machine's graph is checked. Every case is reachable from an entry point, a case with no move
+/// out is `final`, a `final` case has no move out, and every case reaches a `final` one when the machine has one.
+#[test]
+fn a_machine_graph_names_each_case_it_refuses() {
+    let machine = (
+        "src/Shop/Ticket.sharp",
+        "namespace Shop;\n\npublic machine Ticket\n{\n    case Open\n    {\n        public Ticket.Working take() => Ticket.Working;\n        public Ticket.Closed close() => Ticket.Closed;\n    }\n\n    case Working\n    {\n        public Ticket.Waiting wait() => Ticket.Waiting;\n    }\n\n    case Waiting\n    {\n        public Ticket.Working resume() => Ticket.Working;\n    }\n\n    case Stuck;\n\n    final case Closed\n    {\n        public Ticket.Open reopen() => Ticket.Open;\n    }\n\n    case Lost\n    {\n        public Ticket.Closed close() => Ticket.Closed;\n    }\n\n    public static Ticket.Open open() => Ticket.Open;\n}\n",
+    );
+
+    assert_eq!(
+        refusals(machine, &[]),
+        [
+            "11:10 invalid-machine The case `Ticket.Working` reaches no `final` case. | Give `Ticket.Working` a move that leads to a `final` case.",
+            "16:10 invalid-machine The case `Ticket.Waiting` reaches no `final` case. | Give `Ticket.Waiting` a move that leads to a `final` case.",
+            "21:10 invalid-machine The case `Ticket.Stuck` has no move out, so it is `final`. | Write `final case Stuck`, or give it a move.",
+            "21:10 invalid-machine No entry point or move reaches the case `Ticket.Stuck`. | Give `Ticket` an entry point or a move that gives `Ticket.Stuck`, or remove it.",
+            "23:16 invalid-machine The `final` case `Ticket.Closed` has a move out, `reopen`. | Remove `final`, or remove the move.",
+            "28:10 invalid-machine No entry point or move reaches the case `Ticket.Lost`. | Give `Ticket` an entry point or a move that gives `Ticket.Lost`, or remove it.",
+        ]
+    );
+}
+
+/// Spec sections 20.2 and 21: a `match` over a machine lists its cases and takes no `default`, so a case added to the
+/// machine makes a `match` that misses it a compile error.
+#[test]
+fn a_match_over_a_machine_lists_every_case() {
+    let report = (
+        "src/Shop/Report.sharp",
+        "namespace Shop;\n\npublic class Report\n{\n    public static int rank(OrderStatus status) => match (status) {\n        OrderStatus.Draft => 1,\n        OrderStatus.Paid => 2,\n        OrderStatus.Shipped => 3,\n    };\n\n    public static int kind(OrderStatus status) => match (status) {\n        OrderStatus.Paid paid => paid.cents,\n        default => 2,\n    };\n}\n",
+    );
+
+    assert_eq!(
+        refusals(report, &[ORDER_STATUS]),
+        [
+            "5:51 match-not-exhaustive This `match` misses `OrderStatus.Cancelled`. | Add an arm for each value it misses, or add `default => …` as the last arm.",
+            "13:9 match-not-exhaustive A `match` on `OrderStatus` lists its cases; missing: `OrderStatus.Draft`, `OrderStatus.Shipped` and `OrderStatus.Cancelled`. | Replace `default` with arms for the cases it misses, and join the cases that share an arm with `or`.",
+        ]
+    );
+}
+
+/// Spec sections 10 and 20.2: a machine marked `[Tag]` is a family whose cases are its variants, so `Json.encode`
+/// writes a case and `Json.decode` reads one as a family's variant. A backed machine's values name its cases, so a
+/// `[Key]` on its case is refused, naming the value, and a machine with no backing names each case with `[Key]`.
+#[test]
+fn a_tagged_machine_reads_and_writes_its_cases_as_a_family() {
+    let status = (
+        "src/Shop/OrderStatus.sharp",
+        "namespace Shop;\n\nimport Sharp.Tag;\n\n[Tag(\"status\")]\npublic machine OrderStatus : string\n{\n    case Draft = \"draft\"\n    {\n        public OrderStatus.Paid pay(int cents) => OrderStatus.Paid(cents);\n    }\n\n    case Paid(int cents) = \"paid\"\n    {\n        public OrderStatus.Shipped ship() => OrderStatus.Shipped;\n    }\n\n    final case Shipped = \"shipped\";\n\n    public static OrderStatus.Draft open() => OrderStatus.Draft;\n}\n",
+    );
+    let keyed = (
+        "src/Shop/OrderStatus.sharp",
+        "namespace Shop;\n\nimport Sharp.Key;\nimport Sharp.Tag;\n\n[Tag(\"status\")]\npublic machine OrderStatus : string\n{\n    case Draft = \"draft\"\n    {\n        public OrderStatus.Paid pay(int cents) => OrderStatus.Paid(cents);\n    }\n\n    [Key(\"paid\")] case Paid(int cents) = \"paid\"\n    {\n        public OrderStatus.Shipped ship() => OrderStatus.Shipped;\n    }\n\n    final case Shipped = \"shipped\";\n\n    public static OrderStatus.Draft open() => OrderStatus.Draft;\n}\n",
+    );
+    let unbacked = (
+        "src/Shop/Ticket.sharp",
+        "namespace Shop;\n\nimport Sharp.Key;\nimport Sharp.Tag;\n\n[Tag(\"state\")]\npublic machine Ticket\n{\n    [Key(\"open\")] case Open\n    {\n        public Ticket.Closed close() => Ticket.Closed;\n    }\n\n    final case Closed;\n\n    public static Ticket.Open open() => Ticket.Open;\n}\n",
+    );
+    let stored = (
+        "src/Shop/Stored.sharp",
+        "namespace Shop;\n\nimport Sharp.Encoding.Json;\n\npublic class Stored\n{\n    public static string encode(OrderStatus status) => Json.encode(status);\n\n    public static OrderStatus decode(string json) => Json.decode<OrderStatus>(json);\n}\n",
+    );
+
+    assert_eq!(refusals(status, &[KEY, TAG]), Vec::<String>::new());
+    assert_eq!(
+        refusals(keyed, &[KEY, TAG]),
+        [
+            "14:6 invalid-struct `OrderStatus.Paid` is named `paid` by its value, so it takes no `[Key]`. | Remove the `[Key]`, and change the value to store the case under another name."
+        ]
+    );
+    assert_eq!(
+        refusals(unbacked, &[KEY, TAG]),
+        [
+            "14:16 invalid-struct `Closed` is a variant of `Ticket` and gives no name for it. | Name it with `[Key(\"…\")]`, the name its input holds under the tag's key."
+        ]
+    );
+    assert_eq!(refusals(stored, &[KEY, TAG, JSON, JSON_VALUE, status]), Vec::<String>::new());
 }

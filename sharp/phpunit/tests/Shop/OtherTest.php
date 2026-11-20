@@ -16,13 +16,12 @@ final class OtherTest extends TestCase
         $this->assertSame('smtp', Probe::mailer());
     }
 
-    // `usedMailer` is not `virtual`, so mago refuses a class that replaces it, and the double PHPUnit generates while
-    // the test runs replaces it.
-    public function testDoublesAMethodThatIsNotVirtual(): void
+    // A PHP# object is built only through its constructor, spec section 9, and the double PHPUnit generates skips it.
+    public function testRefusesADoubleOfAPhpSharpClass(): void
     {
-        $checkout = $this->createMock(Checkout::class);
-        $checkout->expects($this->never())->method('usedMailer');
+        $this->expectException(\Error::class);
+        $this->expectExceptionMessage("App.Shop.Checkout is built only through its constructor, which this creation doesn't run");
 
-        $this->assertInstanceOf(Checkout::class, $checkout);
+        $this->createMock(Checkout::class);
     }
 }

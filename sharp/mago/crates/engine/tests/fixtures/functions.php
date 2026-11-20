@@ -69,6 +69,11 @@ function variable(string $name): array
     return [getenv($name), $_ENV[$name] ?? false, $_SERVER[$name] ?? false];
 }
 
+function setting(string $name): string|false
+{
+    return ini_get($name);
+}
+
 function settings(): array
 {
     return [
@@ -92,8 +97,8 @@ function write_variable_at_shutdown(string $name, string $file): void
 
 function class_count_around_a_declaration(): array
 {
-    $before = \Mago\Engine\classCount();
+    $before = \Mago\Engine\class_count();
     eval('namespace Mago\\Tests\\Engine; interface Declared {}');
 
-    return [$before, \Mago\Engine\classCount()];
+    return [$before, \Mago\Engine\class_count()];
 }

@@ -309,7 +309,8 @@ function reader_list_writes_into_other_slots(): string
     Carton::$totals = [1, 2];
     Carton::$totals[1] = 3;
     $seen[] = 'static that fits ' . Carton::secondTotal();
-    $box = (new ReflectionClass(Carton::class))->newInstanceWithoutConstructor();
+    $box = new Carton();
+    unset($box->later);
     $box->later[] = 'z';
     $seen[] = 'uninitialized ' . reader_attempt(fn () => $box->laterText());
     $held = Held::ofList();
@@ -493,8 +494,8 @@ function reader_sharp_changes_checked(): string
     return implode(' / ', $seen);
 }
 
-// After a write PHP# reads as wrong, plain PHP's own readers never throw, and its clone shares the property as stock
-// PHP's does, which PHP# then reads checked.
+// After a write PHP# reads as wrong, plain PHP's own readers never throw, serialize, which writes the stored form PHP#
+// reads, throws, and plain PHP's clone shares the property as stock PHP's does, which PHP# then reads checked.
 function reader_plain_readers_after_wrong_write(): string
 {
     $box = new Carton();
@@ -506,7 +507,7 @@ function reader_plain_readers_after_wrong_write(): string
 
     return implode(' / ', [
         'var_dump ' . (str_contains($dumped, 'string(1) "z"') ? 'holds "z"' : 'no "z"'),
-        'serialize ' . (str_contains(serialize($box), 's:1:"z"') ? 'holds "z"' : 'no "z"'),
+        'serialize ' . reader_attempt(fn () => serialize($box)),
         '(array) ' . json_encode(((array) $box)['counts']),
         'get_object_vars ' . json_encode(get_object_vars($box)['counts']),
         'clone ' . json_encode($clone->counts) . ' ' . reader_attempt(fn () => $clone->countsText()),

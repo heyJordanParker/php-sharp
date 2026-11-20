@@ -2081,6 +2081,8 @@ ZEND_API void zend_do_inheritance_ex(zend_class_entry *ce, zend_class_entry *par
 	}
 
 	zend_inherit_exact_names(ce, parent_ce);
+	/* PHP#: an object of a class below a PHP# class is built only through a constructor chain that runs the PHP# one. */
+	ce->sharp_flags |= parent_ce->sharp_flags & SHARP_CLASS_BUILT_BY_CONSTRUCTOR;
 	if (zend_hash_num_elements(&parent_ce->function_table)) {
 		zend_hash_extend(&ce->function_table,
 			zend_hash_num_elements(&ce->function_table) +
