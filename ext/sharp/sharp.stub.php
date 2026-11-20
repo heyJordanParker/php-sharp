@@ -145,6 +145,8 @@ function isNullable(string $type): bool {}
 
 function nonNullable(string $type): string {}
 
+function text(string $bytes): string {}
+
 function typeParts(string $type): array {}
 
 function tupleNames(string $type): array {}

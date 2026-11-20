@@ -18,8 +18,8 @@ function refused(Closure $call): void
 $bytes = "\xfb\xff\xbf?a";
 echo EncodingQueries::encode($bytes, false), ' ', EncodingQueries::encode($bytes, true), "\n";
 echo EncodingQueries::encode('a', false), ' ', EncodingQueries::encode('a', true), ' [', EncodingQueries::encode('', true), "]\n";
-var_dump(EncodingQueries::decode('-_-_P2E', true) === $bytes, EncodingQueries::decode('-_-_P2E=', true) === $bytes);
-var_dump(EncodingQueries::decode('YQ', true), EncodingQueries::decode('YQ==', true), EncodingQueries::decode('+/+/P2E=', false) === $bytes);
+var_dump(EncodingQueries::decode('-_-_P2E', true) === bin2hex($bytes), EncodingQueries::decode('-_-_P2E=', true) === bin2hex($bytes));
+var_dump(EncodingQueries::decode('YQ', true), EncodingQueries::decode('YQ==', true), EncodingQueries::decode('+/+/P2E=', false) === bin2hex($bytes));
 refused(fn () => EncodingQueries::decode('+/+/P2E=', true));
 refused(fn () => EncodingQueries::decode('YQ=', true));
 refused(fn () => EncodingQueries::decode('a b', true));
@@ -30,8 +30,8 @@ refused(fn () => EncodingQueries::decode('-_-_P2E=', false));
 YQ== YQ []
 bool(true)
 bool(true)
-string(1) "a"
-string(1) "a"
+string(2) "61"
+string(2) "61"
 bool(true)
 ValueError: Base64.decode: the text is not valid URL-safe base64
 ValueError: Base64.decode: the text is not valid URL-safe base64

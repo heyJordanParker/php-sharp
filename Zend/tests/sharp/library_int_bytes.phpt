@@ -7,12 +7,12 @@ require __DIR__ . '/vendor/autoload.php';
 use Demo\EncodingQueries;
 use Sharp\ByteOrder;
 
-echo bin2hex(EncodingQueries::bigEndian(258)), ' ', bin2hex(EncodingQueries::toBytes(258, ByteOrder::Big)), ' ', bin2hex(EncodingQueries::toBytes(258, ByteOrder::Little)), "\n";
-echo bin2hex(EncodingQueries::bigEndian(-1)), ' ', bin2hex(EncodingQueries::bigEndian(PHP_INT_MIN)), ' ', bin2hex(EncodingQueries::toBytes(PHP_INT_MAX, ByteOrder::Little)), "\n";
+echo EncodingQueries::bigEndian(258), ' ', EncodingQueries::toBytes(258, ByteOrder::Big), ' ', EncodingQueries::toBytes(258, ByteOrder::Little), "\n";
+echo EncodingQueries::bigEndian(-1), ' ', EncodingQueries::bigEndian(PHP_INT_MIN), ' ', EncodingQueries::toBytes(PHP_INT_MAX, ByteOrder::Little), "\n";
 $read = [];
 foreach ([0, 258, -1, -258, PHP_INT_MAX, PHP_INT_MIN] as $value) {
     foreach ([ByteOrder::Big, ByteOrder::Little] as $order) {
-        $read[] = EncodingQueries::fromBytes(EncodingQueries::toBytes($value, $order), $order) === $value ? 'same' : "differs for $value";
+        $read[] = EncodingQueries::fromBytes(hex2bin(EncodingQueries::toBytes($value, $order)), $order) === $value ? 'same' : "differs for $value";
     }
 }
 echo implode(' ', $read), "\n", EncodingQueries::fromBigEndian(hex2bin('0000000000000102')), ' ', EncodingQueries::fromBytes(hex2bin('0201000000000000'), ByteOrder::Little), "\n";
@@ -29,6 +29,6 @@ foreach (['', "\x01", str_repeat("\x00", 9)] as $bytes) {
 ffffffffffffffff 8000000000000000 ffffffffffffff7f
 same same same same same same same same same same same same
 258 258
-ValueError: Int.fromBytes: an int is 8 bytes, and the text holds 0
-ValueError: Int.fromBytes: an int is 8 bytes, and the text holds 1
-ValueError: Int.fromBytes: an int is 8 bytes, and the text holds 9
+ValueError: Int.fromBytes: an int is 8 bytes, and the bytes hold 0
+ValueError: Int.fromBytes: an int is 8 bytes, and the bytes hold 1
+ValueError: Int.fromBytes: an int is 8 bytes, and the bytes hold 9

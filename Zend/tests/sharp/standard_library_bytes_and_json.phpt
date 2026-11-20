@@ -1,5 +1,5 @@
 --TEST--
-A string reads as its bytes, trims the characters it is given, Json.encode takes its switches, Json.parse compares by structure, and a string-backed enum case gives its value, and no other name becomes one
+A string gives its UTF-8 bytes, which read back as text with U+FFFD for each byte sequence that is not UTF-8, trims the characters it is given, Json.encode takes its switches, Json.parse compares by structure, and a string-backed enum case gives its value, and no other name becomes one
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -29,10 +29,10 @@ try {
 }
 ?>
 --EXPECT--
-[5,6,[195,169,99,111,108,101],"é","cole",[192,168,0,1],16,[]]
-OutOfRangeException: `byteSubstring` takes a range inside the bytes, and the range is outside it.
-OutOfRangeException: `byteSubstring` takes a range inside the bytes, and the range is outside it.
-OutOfRangeException: `byteSubstring` takes a range inside the bytes, and the range is outside it.
+[5,6,[195,169,99,111,108,101],"é","cole",[192,168,0,1],16,[],"�"]
+OutOfRangeException: `slice` takes a range inside the bytes, and the range is outside it.
+OutOfRangeException: `slice` takes a range inside the bytes, and the range is outside it.
+OutOfRangeException: `slice` takes a range inside the bytes, and the range is outside it.
 ["sku","sku","sku--","/path","-a-","a"]
 {"url":"https://example.com/a","name":"école","total":1.0}
 {"url":"https:\/\/example.com\/a","name":"\u00e9cole","total":1}
