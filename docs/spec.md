@@ -6314,7 +6314,7 @@ typeof(List).makeGenericType([typeof(int)]) == typeof(List<int>);  // true
 typeof(int?).nonNullable() == typeof(int);                         // true
 ```
 
-**A class value reads every fact its class's declaration states:** `baseType()`, the class it extends with the type arguments it gives it, or null; `interfaces()`, each with its type arguments; `isAbstract()`, `isInterface()`, `isStruct()` and `isEnum()`; and an enum's `enumBackingType()`, null for a pure enum, and `enumCases()`, each an `EnumCase` with its `name`, its `value`, the case itself, its `backingValue`, null for a pure enum's, and `attributes<TAttribute : Object>()`:
+**A class value reads every fact its class's declaration states:** `baseType()`, the class it extends with the type arguments it gives it, or null; `interfaces()`, each with its type arguments; `traits()`, the plain PHP traits it, the classes it extends and those traits use, each once (section 22); `isAbstract()`, `isInterface()`, `isStruct()` and `isEnum()`; and an enum's `enumBackingType()`, null for a pure enum, and `enumCases()`, each an `EnumCase` with its `name`, its `value`, the case itself, its `backingValue`, null for a pure enum's, and `attributes<TAttribute : Object>()`:
 
 <!-- example declared-facts -->
 ```csharp
