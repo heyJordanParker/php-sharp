@@ -1116,6 +1116,8 @@ paid.rawBody;   // ""
 
 **A constructor marked `required`** is one that `new Self(…)` can call on the class and on every subclass. Section 25 gives its rules.
 
+**A PHP# object is only built through its constructor,** so every object holds what its constructor checks. `new` and `createInstance` (section 25) run it, and so do plain PHP's `new`, `ReflectionClass::newInstance` and `newInstanceArgs`, and a lazy proxy's factory. `unserialize` builds a struct or a class through its `parse`, which runs the constructor (section 10). Each other way plain PHP creates an object throws an `Error` that names the type, "App.Account is built only through its constructor, which this creation doesn't run": `ReflectionClass::newInstanceWithoutConstructor`, `newLazyGhost` and `resetAsLazyGhost`, PDO's `FETCH_CLASS` and every driver's fetch into a class, and SOAP's class map. A plain PHP class that extends a PHP# class is built the same way, through a constructor chain that runs the PHP# constructor, so a test double that skips it, as PHPUnit's `createMock` makes, throws "App.Catalog is built only through its constructor, which this creation doesn't run".
+
 ### 9.1 Named constructors
 
 A class has one unnamed main constructor. Any other constructor has a name and passes control to the main one with `: this(…)`. Every creation is written `new Class…`.
@@ -1328,6 +1330,8 @@ OrderRecord record = OrderRecord.parse(row);   // a class parses the same way, b
 
 **`Json.encode` writes a struct or a class by the fields its `parse` reads,** so one declaration governs reading and writing. Each field is written under its key, a value as text as its `toString()`, and a field marked `[Key(omitNull: true)]` is left out when it is null. A missing key of such a field reads as null. A main constructor parameter that holds no property can't be written, so `Json.encode` of a type whose `parse` reads one is a compile error that names the parameter: "`Json.encode` writes `Price` from the properties its `parse` reads, and the main constructor parameter `cents` holds no property."
 
+**`serialize` writes a struct or a class as its stored form, the fields `Json.encode` writes, and `unserialize` builds it again through its `parse`,** so the constructor runs on every copy, as a queued job or a cached value is read back. A copy reads back `==` to the original, and data its type no longer reads, as a cached value written before its type changed, throws the error `parse` throws or the constructor's own. `serialize` of a type with no stored form throws an `Error` that names the class and says why: a main constructor parameter that holds no property, as a service a class takes, a field that holds a function, or a `Map` keyed by a type that has no text. A class whose plain PHP parent serializes its objects itself, through `__serialize` and `__unserialize`, as an ORM's model does, keeps the parent's. PHP# code declares none of `__serialize`, `__unserialize`, `__sleep` and `__wakeup`.
+
 **A family is a sealed interface, an abstract class or an enum whose cases carry data, marked `[Tag("type")]`.** Each variant below it, a class, a struct or an enum case, names itself with `[Key("card")]`. The family's `parse` reads the variant whose name the input holds under the tag's key, and `Json.encode` writes a variant with its name under that key, so renaming a class never changes stored data. An interface holds no static method body, so an interface family's `parse` is called from PHP# code. `typeof(Self).withTag(name)` gives the variant's class (section 25).
 
 <!-- example data-in-out -->
@@ -1500,7 +1504,7 @@ inbox.holds(orders, message);   // compiles: TItem is inferred as Order, and val
 
 A collection's elements are still checked where it enters from plain PHP (section 12).
 
-**`serialize` keeps a collection,** so a queued job or a cached value may hold one. `unserialize` gives a `Map` back as a `Map` and a `Set` as a `Set`, with the same entries in the same order, alone or inside a `List`, a struct or a class, in the same process or a fresh one, and whatever classes it allows, as it gives back an array. A collection's type arguments are the types of its elements, so the copy is a `Map<string, int>` exactly when the original is, and a field whose read-back collection holds a wrong entry throws `TypeError`.
+**`serialize` keeps a collection,** so a queued job or a cached value may hold one. `unserialize` gives a `Map` back as a `Map` and a `Set` as a `Set`, with the same entries in the same order, alone or inside a `List`, a struct or a class, in the same process or a fresh one, and whatever classes it allows, as it gives back an array. A collection's type arguments are the types of its elements, so the copy is a `Map<string, int>` exactly when the original is, and a field whose read-back collection holds a wrong entry throws the `Sharp.InvalidFields` its struct's or class's `parse` throws (section 10).
 
 **Declaring type parameters:**
 
@@ -4658,7 +4662,7 @@ These are compile errors, whether the parent is PHP# or plain PHP:
 
 - a missing `override`
 - `override` when the parent has no such method
-- overriding a PHP# method that is not `virtual` or `abstract`, in PHP# or in a plain PHP class: the checker refuses every replacement written in the project, and a subclass a library generates while the app runs, as a test double or a lazy-loading proxy, may replace the method
+- overriding a PHP# method that is not `virtual` or `abstract`, in PHP# or in a plain PHP class: the checker refuses every replacement written in the project, and a subclass a library generates while the app runs may replace the method, though its objects are built only through the PHP# constructor (section 9), so no test double that skips it exists
 - overriding a plain PHP method marked `final`
 - an override that renames a parameter of the method it overrides. The error names both names.
 
@@ -6297,9 +6301,9 @@ constants[2].declaringClass == typeof(Limits);                // true
 constants[2].value();                                         // throws Error
 ```
 
-**`constructor()`, `createInstance` and `createLazy` reach a class's constructor through its class value.** `constructor()` gives a `Constructor`, with its `visibility`, `parameters()` and `attributes<TAttribute : Object>()`, or null for a class without one. `createInstance(arguments)` creates an object of the class, with the class value's type arguments, by its constructor with the `List<Any?>` of arguments, which the calling code reaches as a direct `new` would. `createLazy(initialize)` creates one empty, with no constructor run, as PHP 8.4's `newLazyGhost` does, and `initialize` runs on it at its first property read or write, as Doctrine loads an entity. Each throws `InvalidArgumentException` for an abstract class, an interface or an enum, and `createInstance` for arguments the constructor's parameters don't take. A `Property` reads the state of such an object:
+**`constructor()` and `createInstance` reach a class's constructor through its class value.** `constructor()` gives a `Constructor`, with its `visibility`, `parameters()` and `attributes<TAttribute : Object>()`, or null for a class without one. `createInstance(arguments)` creates an object of the class, with the class value's type arguments, by its constructor with the `List<Any?>` of arguments, which the calling code reaches as a direct `new` would. It throws `InvalidArgumentException` for an abstract class, an interface or an enum, and for arguments the constructor's parameters don't take. A `Property` reads the state of such an object:
 
-- **`isInitialized(receiver)`** holds when the property holds a value, so it is false for a `late` property no code has set and for a lazy object that has not loaded, which the read does not load. A `late` property is set once, so there is no reset.
+- **`isInitialized(receiver)`** holds when the property holds a value, so it is false for a `late` property no code has set. A `late` property is set once, so there is no reset.
 - **`getter()` and `setter()`** give the property's `get` and `set` accessors as a `Method`, named `$name::get` and `$name::set` as PHP names a property hook, or null for a plain stored property. That is how code tells a property with accessors apart. Their `createDelegate` and `createInvoker` give a function that reads or writes the property, as `get` and `set` do.
 
 <!-- example reflected-creation -->
@@ -6314,8 +6318,6 @@ public class Account
     public int doubled => this.id * 2;
 
     public Account(string owner) { this.owner = owner; }
-
-    public void load(string owner) { this.owner = owner; }
 }
 ```
 
@@ -6329,11 +6331,7 @@ typeof(Account).createInstance([]);                           // throws InvalidA
 const properties = typeof(Account).properties();
 properties[0].getter();                                       // null: id is stored
 properties[2].getter()?.name;                                 // "$doubled::get"
-const ghost = typeof(Account).createLazy((Account account) => account.load("grace"));
-typeof(Account).fields()[0].set(ghost, 7);
-ghost.id;                                                     // 7
-properties[1].isInitialized(ghost);                           // false
-ghost.owner;                                                  // "grace"
+properties[1].isInitialized(made);                            // true: the constructor set owner
 ```
 
 **`withTag(name)` gives the variant of a family whose `[Key]` is `name`** (section 10), as a class value of the family, or null for a name the family has no variant of and for a class that is no family. It is pure, so a single-table-inheritance base builds the class a row stores with `new (typeof(Self).withTag(row.kind) ?? throw new ValueError(…))(…)`, which needs the base's constructor to be `required` (section 9).
@@ -6493,7 +6491,7 @@ created(["Acme", "pro", 3]);                                  // throws Argument
 pause.createInvoker<Function<string(List<Any?>)>>();          // throws ValueError
 ```
 
-**A `Field` reads and writes storage, so it runs no code a project wrote.** `field.get(receiver)` and `field.set(receiver, value)` reach the storage as a direct use from the calling code would, with the access and type checks of `Property.get` and `set`, an auto-property's storage as its `get`, and its `set` or `init`, do. An `init` property's storage takes a write only while it holds no value, as only the object's creation writes it, and a write after that throws `Error`. They run no accessor, so `field.get`, `field.set` and `field.isInitialized` are pure, and a storage layer held to `uses Database` reads and writes a row through `fields()`. A receiver whose class gives the property an accessor, as a PHP 8.4 subclass may by declaring it again, throws `Error` from `get` and `set`, which run neither accessor. A lazy object that has not loaded runs its initializer at its first read, so `get` on one throws `Error` rather than load it. `set` writes its storage without loading it, as PHP 8.4's `setRawValueWithoutLazyInitialization` writes and as Doctrine gives an entity its identifier before it loads, so a later read of that storage never loads it either, and the object keeps the value once it loads. A static's `get` and `set` throw `Error` before its class has run its initial values. `field.defaultValue()` runs an initial value that is not constant, so it has the effects of the initial values it can run, as `property.defaultValue()` has (section 29). Reading the storage never makes a `Property` pure: `property.get` still runs whatever accessor the property has:
+**A `Field` reads and writes storage, so it runs no code a project wrote.** `field.get(receiver)` and `field.set(receiver, value)` reach the storage as a direct use from the calling code would, with the access and type checks of `Property.get` and `set`, an auto-property's storage as its `get`, and its `set` or `init`, do. An `init` property's storage takes a write only while it holds no value, as only the object's creation writes it, and a write after that throws `Error`. They run no accessor, so `field.get`, `field.set` and `field.isInitialized` are pure, and a storage layer held to `uses Database` reads and writes a row through `fields()`. A receiver whose class gives the property an accessor, as a PHP 8.4 subclass may by declaring it again, throws `Error` from `get` and `set`, which run neither accessor. A static's `get` and `set` throw `Error` before its class has run its initial values. `field.defaultValue()` runs an initial value that is not constant, so it has the effects of the initial values it can run, as `property.defaultValue()` has (section 29). Reading the storage never makes a `Property` pure: `property.get` still runs whatever accessor the property has:
 
 <!-- example reflection-effects -->
 ```csharp

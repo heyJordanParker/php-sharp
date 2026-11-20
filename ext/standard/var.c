@@ -779,9 +779,11 @@ static inline zend_long php_add_var_hash(php_serialize_data_t data, zval *var, b
 	} else if (!in_rcn_array
 	 && Z_REFCOUNT_P(var) == 1
 	 && (Z_OBJ_P(var)->properties == NULL || GC_REFCOUNT(Z_OBJ_P(var)->properties) == 1)
-	 /* __serialize and __sleep may arbitrarily increase the refcount */
+	 /* __serialize and __sleep may arbitrarily increase the refcount, and so may the code that gives a PHP# object's
+	  * stored form */
 	 && Z_OBJCE_P(var)->__serialize == NULL
-	 && zend_hash_find_known_hash(&Z_OBJCE_P(var)->function_table, ZSTR_KNOWN(ZEND_STR_SLEEP)) == NULL) {
+	 && zend_hash_find_known_hash(&Z_OBJCE_P(var)->function_table, ZSTR_KNOWN(ZEND_STR_SLEEP)) == NULL
+	 && !sharp_owns_storage(Z_OBJCE_P(var))) {
 		return 0;
 	}
 
@@ -959,6 +961,16 @@ static int php_var_serialize_call_magic_serialize(zval *retval, zval *obj) /* {{
 	return SUCCESS;
 }
 /* }}} */
+
+/* PHP#: the stored form of the PHP# object `obj`, spec section 9, which code of its class gives, as __serialize does. */
+static zend_result php_var_serialize_stored_form(zval *retval, zval *obj)
+{
+	BG(serialize_lock)++;
+	zend_result result = sharp_stored_form(Z_OBJ_P(obj), retval);
+	BG(serialize_lock)--;
+
+	return result;
+}
 
 static int php_var_serialize_try_add_sleep_prop(
 		HashTable *ht, HashTable *props, zend_string *name, zend_string *error_name, zval *struc) /* {{{ */
@@ -1253,14 +1265,18 @@ again:
 					return;
 				}
 
-				if (ce->__serialize) {
+				/* PHP#: a PHP# object writes its stored form as __serialize would write it, spec section 9, and
+				 * unserialize builds it again through its constructor. */
+				bool stored = sharp_owns_storage(ce);
+				if (ce->__serialize || stored) {
 					zval retval, obj;
 					zend_string *key;
 					zval *data;
 					zend_ulong index;
 
 					ZVAL_OBJ_COPY(&obj, Z_OBJ_P(struc));
-					if (php_var_serialize_call_magic_serialize(&retval, &obj) == FAILURE) {
+					if ((stored ? php_var_serialize_stored_form(&retval, &obj)
+							: php_var_serialize_call_magic_serialize(&retval, &obj)) == FAILURE) {
 						if (!EG(exception)) {
 							smart_str_appendl(buf, "N;", 2);
 						}

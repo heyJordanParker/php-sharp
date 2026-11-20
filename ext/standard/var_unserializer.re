@@ -240,6 +240,74 @@ static zval *var_access(php_unserialize_data_t *var_hashx, zend_long id)
 	return var_hash->data[id];
 }
 
+/* Runs the delayed call that the var_dtor entry `zv` holds, unless an earlier one failed, as `delayed_call_failed`
+ * says: a __wakeup, an __unserialize of the data in the entry after it, or PHP#'s check of an object's properties.
+ * Gives whether a delayed call failed, this one or an earlier one. */
+static bool var_call_delayed(zval *zv, bool delayed_call_failed)
+{
+	if (Z_EXTRA_P(zv) == VAR_WAKEUP_FLAG) {
+		/* Perform delayed __wakeup calls */
+		if (!delayed_call_failed) {
+			zval retval;
+			zend_fcall_info fci;
+			zend_fcall_info_cache fci_cache;
+
+			ZEND_ASSERT(Z_TYPE_P(zv) == IS_OBJECT);
+
+			fci.size = sizeof(fci);
+			fci.object = Z_OBJ_P(zv);
+			fci.retval = &retval;
+			fci.param_count = 0;
+			fci.params = NULL;
+			fci.named_params = NULL;
+			ZVAL_UNDEF(&fci.function_name);
+
+			fci_cache.function_handler = zend_hash_find_ptr(
+				&fci.object->ce->function_table, ZSTR_KNOWN(ZEND_STR_WAKEUP));
+			fci_cache.object = fci.object;
+			fci_cache.called_scope = fci.object->ce;
+
+			BG(serialize_lock)++;
+			if (zend_call_function(&fci, &fci_cache) == FAILURE || Z_ISUNDEF(retval) || ZEND_HAS_OOM()) {
+				delayed_call_failed = 1;
+				GC_ADD_FLAGS(Z_OBJ_P(zv), IS_OBJ_DESTRUCTOR_CALLED);
+			}
+			BG(serialize_lock)--;
+
+			zval_ptr_dtor(&retval);
+		} else {
+			GC_ADD_FLAGS(Z_OBJ_P(zv), IS_OBJ_DESTRUCTOR_CALLED);
+		}
+	} else if (Z_EXTRA_P(zv) == VAR_UNSERIALIZE_FLAG) {
+		/* Perform delayed __unserialize calls */
+		if (!delayed_call_failed) {
+			zval param;
+			ZVAL_COPY(&param, zv + 1);
+
+			BG(serialize_lock)++;
+			zend_call_known_instance_method_with_1_params(
+				Z_OBJCE_P(zv)->__unserialize, Z_OBJ_P(zv), NULL, &param);
+			if (EG(exception) || ZEND_HAS_OOM()) {
+				delayed_call_failed = 1;
+				GC_ADD_FLAGS(Z_OBJ_P(zv), IS_OBJ_DESTRUCTOR_CALLED);
+			}
+			BG(serialize_lock)--;
+			zval_ptr_dtor(&param);
+		} else {
+			GC_ADD_FLAGS(Z_OBJ_P(zv), IS_OBJ_DESTRUCTOR_CALLED);
+		}
+	} else if (Z_EXTRA_P(zv) == VAR_SHARP_CHECK_FLAG) {
+		/* PHP#: the object came before the __unserialize of each Map and Set it holds, so its properties'
+		 * PHP# types check now, with every entry in place. */
+		if (delayed_call_failed || !sharp_object_properties_accept(Z_OBJ_P(zv))) {
+			delayed_call_failed = 1;
+			GC_ADD_FLAGS(Z_OBJ_P(zv), IS_OBJ_DESTRUCTOR_CALLED);
+		}
+	}
+
+	return delayed_call_failed;
+}
+
 PHPAPI void var_destroy(php_unserialize_data_t *var_hashx)
 {
 	void *next;
@@ -265,66 +333,7 @@ PHPAPI void var_destroy(php_unserialize_data_t *var_hashx)
 			fprintf(stderr, "var_destroy dtor(%p, %ld)\n", &var_dtor_hash->data[i], Z_REFCOUNT_P(&var_dtor_hash->data[i]));
 #endif
 
-			if (Z_EXTRA_P(zv) == VAR_WAKEUP_FLAG) {
-				/* Perform delayed __wakeup calls */
-				if (!delayed_call_failed) {
-					zval retval;
-					zend_fcall_info fci;
-					zend_fcall_info_cache fci_cache;
-
-					ZEND_ASSERT(Z_TYPE_P(zv) == IS_OBJECT);
-
-					fci.size = sizeof(fci);
-					fci.object = Z_OBJ_P(zv);
-					fci.retval = &retval;
-					fci.param_count = 0;
-					fci.params = NULL;
-					fci.named_params = NULL;
-					ZVAL_UNDEF(&fci.function_name);
-
-					fci_cache.function_handler = zend_hash_find_ptr(
-						&fci.object->ce->function_table, ZSTR_KNOWN(ZEND_STR_WAKEUP));
-					fci_cache.object = fci.object;
-					fci_cache.called_scope = fci.object->ce;
-
-					BG(serialize_lock)++;
-					if (zend_call_function(&fci, &fci_cache) == FAILURE || Z_ISUNDEF(retval) || ZEND_HAS_OOM()) {
-						delayed_call_failed = 1;
-						GC_ADD_FLAGS(Z_OBJ_P(zv), IS_OBJ_DESTRUCTOR_CALLED);
-					}
-					BG(serialize_lock)--;
-
-					zval_ptr_dtor(&retval);
-				} else {
-					GC_ADD_FLAGS(Z_OBJ_P(zv), IS_OBJ_DESTRUCTOR_CALLED);
-				}
-			} else if (Z_EXTRA_P(zv) == VAR_UNSERIALIZE_FLAG) {
-				/* Perform delayed __unserialize calls */
-				if (!delayed_call_failed) {
-					zval param;
-					ZVAL_COPY(&param, &var_dtor_hash->data[i + 1]);
-
-					BG(serialize_lock)++;
-					zend_call_known_instance_method_with_1_params(
-						Z_OBJCE_P(zv)->__unserialize, Z_OBJ_P(zv), NULL, &param);
-					if (EG(exception) || ZEND_HAS_OOM()) {
-						delayed_call_failed = 1;
-						GC_ADD_FLAGS(Z_OBJ_P(zv), IS_OBJ_DESTRUCTOR_CALLED);
-					}
-					BG(serialize_lock)--;
-					zval_ptr_dtor(&param);
-				} else {
-					GC_ADD_FLAGS(Z_OBJ_P(zv), IS_OBJ_DESTRUCTOR_CALLED);
-				}
-			} else if (Z_EXTRA_P(zv) == VAR_SHARP_CHECK_FLAG) {
-				/* PHP#: the object came before the __unserialize of each Map and Set it holds, so its properties'
-				 * PHP# types check now, with every entry in place. */
-				if (delayed_call_failed || !sharp_object_properties_accept(Z_OBJ_P(zv))) {
-					delayed_call_failed = 1;
-					GC_ADD_FLAGS(Z_OBJ_P(zv), IS_OBJ_DESTRUCTOR_CALLED);
-				}
-			}
-
+			delayed_call_failed = var_call_delayed(zv, delayed_call_failed);
 			i_zval_ptr_dtor(zv);
 		}
 		next = var_dtor_hash->next;
@@ -336,6 +345,31 @@ PHPAPI void var_destroy(php_unserialize_data_t *var_hashx)
 		zend_hash_destroy((*var_hashx)->ref_props);
 		FREE_HASHTABLE((*var_hashx)->ref_props);
 	}
+}
+
+/* PHP#: runs now, in order, each delayed call queued from slot `from` of the var_dtor block `block` on, or from the
+ * first block's first slot when `block` is NULL, and clears its flag, so var_destroy runs none of them again. A PHP#
+ * object is built from its stored form as soon as it is read, and each Map and Set that form holds gets its entries
+ * from such a call. False when a call failed. */
+static bool var_call_delayed_since(php_unserialize_data_t *var_hashx, var_dtor_entries *block, zend_long from)
+{
+	bool failed = false;
+
+	if (!block) {
+		block = (*var_hashx)->first_dtor;
+		from = 0;
+	}
+	for (; block; block = block->next, from = 0) {
+		for (zend_long i = from; i < block->used_slots; i++) {
+			zval *zv = &block->data[i];
+			if (Z_EXTRA_P(zv)) {
+				failed = var_call_delayed(zv, failed);
+				Z_EXTRA_P(zv) = 0;
+			}
+		}
+	}
+
+	return !failed;
 }
 
 /* }}} */
@@ -518,8 +552,9 @@ static int process_type_arguments(UNSERIALIZE_PARAMETER, zend_object *obj)
 	return filled;
 }
 
-/* `obj` is the object whose __unserialize gets the data, NULL for an array. */
-static zend_always_inline int process_nested_array_data(UNSERIALIZE_PARAMETER, HashTable *ht, zend_long elements, zend_object *obj)
+/* `obj` is the object whose __unserialize gets the data, NULL for an array. `type_arguments` is where the stored form of
+ * a PHP# object, which has no object yet, keeps the type arguments serialize wrote, as a string, or NULL. */
+static zend_always_inline int process_nested_array_data(UNSERIALIZE_PARAMETER, HashTable *ht, zend_long elements, zend_object *obj, zval *type_arguments)
 {
 	if (var_hash) {
 		if ((*var_hash)->max_depth > 0 && (*var_hash)->cur_depth >= (*var_hash)->max_depth) {
@@ -557,10 +592,19 @@ numeric_key:
 				zval_ptr_dtor_str(&key);
 				goto numeric_key;
 			}
-			if (UNEXPECTED(obj && zend_string_equals(Z_STR(key), sharp_type_arguments_key))) {
+			if (UNEXPECTED((obj || type_arguments) && zend_string_equals(Z_STR(key), sharp_type_arguments_key))) {
 				zval_ptr_dtor_str(&key);
-				if (!process_type_arguments(UNSERIALIZE_PASSTHRU, obj)) {
-					goto failure;
+				if (obj) {
+					if (!process_type_arguments(UNSERIALIZE_PASSTHRU, obj)) {
+						goto failure;
+					}
+				} else {
+					/* Serialize gives the text no number, so no R: or r: names it. */
+					zval_ptr_dtor(type_arguments);
+					ZVAL_UNDEF(type_arguments);
+					if (!php_var_unserialize_internal(type_arguments, p, max, NULL) || Z_TYPE_P(type_arguments) != IS_STRING) {
+						goto failure;
+					}
 				}
 				continue;
 			}
@@ -973,7 +1017,7 @@ static inline int object_common(UNSERIALIZE_PARAMETER, zend_long elements, bool 
 		if (UNEXPECTED(!array_finit_size_mixed(&ary, elements))) {
 			return 0;
 		}
-		if (!process_nested_array_data(UNSERIALIZE_PASSTHRU, Z_ARRVAL(ary), elements, Z_OBJ_P(rval))) {
+		if (!process_nested_array_data(UNSERIALIZE_PASSTHRU, Z_ARRVAL(ary), elements, Z_OBJ_P(rval), NULL)) {
 			ZVAL_DEREF(rval);
 			GC_ADD_FLAGS(Z_OBJ_P(rval), IS_OBJ_DESTRUCTOR_CALLED);
 			zval_ptr_dtor(&ary);
@@ -1024,6 +1068,44 @@ static inline int object_common(UNSERIALIZE_PARAMETER, zend_long elements, bool 
 #ifdef PHP_WIN32
 # pragma optimize("", on)
 #endif
+
+/* PHP#: reads the stored form serialize wrote for an object of the PHP# class `ce`, `elements` entries as __serialize
+ * writes them, and builds the object in `rval` from it through its constructor, as its `parse` builds one, spec
+ * section 9. Each Map and Set the form holds gets its entries first, from the delayed calls its data queued, and data
+ * that names the object inside its own form names no object. The form's values keep the numbers R: and r: name them by,
+ * so the array lives until the payload ends. */
+static int object_stored(UNSERIALIZE_PARAMETER, zend_class_entry *ce, zend_long elements)
+{
+	zval stored, type_arguments;
+	var_dtor_entries *queued = (*var_hash)->last_dtor;
+	zend_long queued_from = queued ? queued->used_slots : 0;
+
+	if (elements >= HT_MAX_SIZE) {
+		return 0;
+	}
+	if (UNEXPECTED(!array_finit_size_mixed(&stored, elements))) {
+		return 0;
+	}
+	ZVAL_UNDEF(&type_arguments);
+	ZVAL_NULL(rval);
+
+	int built = process_nested_array_data(UNSERIALIZE_PASSTHRU, Z_ARRVAL(stored), elements, NULL, &type_arguments)
+		&& finish_nested_data(UNSERIALIZE_PASSTHRU)
+		&& var_call_delayed_since(var_hash, queued, queued_from);
+	if (built) {
+		BG(serialize_lock)++;
+		built = sharp_read_stored_form(ce, &stored, &type_arguments, unserialize_type_argument_class, var_hash, rval)
+			== SUCCESS;
+		BG(serialize_lock)--;
+	}
+	zval_ptr_dtor(&type_arguments);
+	var_push_dtor_value(var_hash, &stored);
+	if (!built) {
+		ZVAL_NULL(rval);
+	}
+
+	return built;
+}
 
 PHPAPI int php_var_unserialize(UNSERIALIZE_PARAMETER)
 {
@@ -1307,7 +1389,7 @@ use_double:
 	 * prohibit "r:" references to non-objects, as we only generate them for objects. */
 	HT_ALLOW_COW_VIOLATION(Z_ARRVAL_P(rval));
 
-	if (!process_nested_array_data(UNSERIALIZE_PASSTHRU, Z_ARRVAL_P(rval), elements, /* obj */ NULL)) {
+	if (!process_nested_array_data(UNSERIALIZE_PASSTHRU, Z_ARRVAL_P(rval), elements, /* obj */ NULL, NULL)) {
 		return 0;
 	}
 
@@ -1527,6 +1609,12 @@ object ":" uiv ":" ["]	{
 
 	*p += 2;
 
+	/* PHP#: a PHP# object is built only through its constructor, spec section 9, so its stored form builds it. */
+	if (!incomplete_class && sharp_owns_storage(ce)) {
+		zend_string_release_ex(class_name, 0);
+		return object_stored(UNSERIALIZE_PASSTHRU, ce, elements);
+	}
+
 	has_unserialize = !incomplete_class && ce->__unserialize;
 
 	/* If this class implements Serializable, it should not land here but in object_custom().
@@ -1539,7 +1627,9 @@ object ":" uiv ":" ["]	{
 		return 0;
 	}
 
-	if (object_init_ex(rval, ce) == FAILURE) {
+	/* The class's own __unserialize, __wakeup or properties build the object: a PHP# class's come from its plain PHP
+	 * parent, whose job its storage is. */
+	if (object_init_to_build(rval, ce) == FAILURE) {
 		zend_string_release_ex(class_name, 0);
 		return 0;
 	}

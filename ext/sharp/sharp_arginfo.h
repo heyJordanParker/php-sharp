@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: ef90abd01a00cb14907f76a548ac2704e066e158 */
+ * Stub hash: fe724573a7095468074794c1bdded66caf9185ed */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
@@ -74,11 +74,6 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accessors, 0, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_createLazy, 0, 2, IS_OBJECT, 0)
-	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
-	ZEND_ARG_TYPE_INFO(0, initialize, IS_CALLABLE, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_arrayOf, 0, 1, IS_MIXED, 0)
@@ -491,7 +486,6 @@ ZEND_FUNCTION(Sharp_Internal_readGlobal);
 ZEND_FUNCTION(Sharp_Internal_writeGlobal);
 ZEND_FUNCTION(Sharp_Internal_includeGlobal);
 ZEND_FUNCTION(Sharp_Internal_accessors);
-ZEND_FUNCTION(Sharp_Internal_createLazy);
 ZEND_FUNCTION(Sharp_Internal_arrayOf);
 ZEND_FUNCTION(Sharp_Internal_returned);
 ZEND_FUNCTION(Sharp_Internal_elements);
@@ -603,7 +597,6 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "writeGlobal"), zif_Sharp_Internal_writeGlobal, arginfo_Sharp_Internal_writeGlobal, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "includeGlobal"), zif_Sharp_Internal_includeGlobal, arginfo_Sharp_Internal_includeGlobal, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "accessors"), zif_Sharp_Internal_accessors, arginfo_Sharp_Internal_accessors, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "createLazy"), zif_Sharp_Internal_createLazy, arginfo_Sharp_Internal_createLazy, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "arrayOf"), zif_Sharp_Internal_arrayOf, arginfo_Sharp_Internal_arrayOf, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "returned"), zif_Sharp_Internal_returned, arginfo_Sharp_Internal_returned, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "elements"), zif_Sharp_Internal_elements, arginfo_Sharp_Internal_elements, 0, NULL, NULL)

@@ -437,7 +437,9 @@ ZEND_API int zend_user_unserialize(zval *object, zend_class_entry *ce, const uns
 {
 	zval zdata;
 
-	if (UNEXPECTED(object_init_ex(object, ce) != SUCCESS)) {
+	/* PHP#: a class with this unserializer serializes itself, so its `unserialize` builds the object. A PHP# class gets one
+	 * only from a plain PHP parent, whose job its storage is. */
+	if (UNEXPECTED(object_init_to_build(object, ce) != SUCCESS)) {
 		return FAILURE;
 	}
 

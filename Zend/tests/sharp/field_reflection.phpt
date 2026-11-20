@@ -1,5 +1,5 @@
 --TEST--
-Class<T>.fields() lists each field and each closed accessor-less auto-property's storage, and no other property, properties() lists no field, and a Field reads and writes the storage as a direct use from the calling code would, refuses an `init` storage that holds a value, refuses a read of a lazy object that has not loaded rather than load it, and writes one without loading it
+Class<T>.fields() lists each field and each closed accessor-less auto-property's storage, and no other property, properties() lists no field, and a Field reads and writes the storage as a direct use from the calling code would, and refuses an `init` storage that holds a value
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -9,7 +9,6 @@ var_dump(Fields\Report::facts());
 var_dump(Fields\Report::own());
 var_dump(Fields\Report::autoProperty());
 var_dump(Fields\Report::refused());
-var_dump(Fields\Report::lazy());
 ?>
 --EXPECT--
 array(2) {
@@ -95,22 +94,4 @@ array(3) {
   string(126) "Error: `set` writes the storage of Fields\Row::$code, which `init` lets the object's creation write once, and it holds a value"
   [2]=>
   string(73) "TypeError: Cannot assign int to property Fields\Row::$name of type string"
-}
-array(8) {
-  [0]=>
-  string(112) "Error: `get` reads the storage of Fields\Row::$name, and the lazy object has not loaded, which `get` never loads"
-  [1]=>
-  int(0)
-  [2]=>
-  bool(true)
-  [3]=>
-  string(3) "ada"
-  [4]=>
-  int(0)
-  [5]=>
-  string(5) "plain"
-  [6]=>
-  int(1)
-  [7]=>
-  string(3) "ada"
 }

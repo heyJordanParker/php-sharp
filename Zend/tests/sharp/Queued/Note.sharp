@@ -1,0 +1,9 @@
+namespace Queued;
+
+import Lib.Archived;
+
+// A PHP# class whose plain PHP parent serializes it, so its storage is the parent's job.
+public class Note : Archived
+{
+    public Note(string text) : super(text) { }
+}

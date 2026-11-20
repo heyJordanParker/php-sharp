@@ -119,8 +119,6 @@ function includeGlobal(string $path): void {}
 
 function accessors(string $type, string $name): array {}
 
-function createLazy(string $type, callable $initialize): object {}
-
 function arrayOf(mixed $value, mixed $receiver = null): mixed {}
 
 function returned(mixed $result, object|string|null $implementer, string $method, string $types, string $target): mixed {}

@@ -11,8 +11,11 @@ final class PlainHolder
 }
 
 $holder = new ReflectionClass(Holder::class);
-$ghost = $holder->newLazyGhost(static function (Holder $holder): void {});
-echo 'a lazy ghost reads its collections: ', json_encode([$ghost->items, $ghost->counts, $ghost->tags]), "\n";
+try {
+    $holder->newLazyGhost(static function (Holder $holder): void {});
+} catch (Error $error) {
+    echo 'a lazy ghost, which no constructor builds: ', $error->getMessage(), "\n";
+}
 $proxy = $holder->newLazyProxy(static fn (): Holder => new Holder());
 echo 'a lazy proxy reads its collections: ', json_encode([$proxy->items, $proxy->counts, $proxy->tags]), "\n";
 
@@ -22,7 +25,7 @@ foreach (['items', 'counts', 'tags'] as $name) {
         $initialized = [];
         foreach ([Holder::class, PlainHolder::class] as $class) {
             $reflection = new ReflectionClass($class);
-            $proxy = $reflection->newLazyProxy(static fn (): object => $reflection->newInstanceWithoutConstructor());
+            $proxy = $reflection->newLazyProxy(static fn (): object => new $class());
             $property = new ReflectionProperty($class, $name);
             $property->$read($proxy);
             $initialized[] = var_export($property->isInitialized($proxy), true);

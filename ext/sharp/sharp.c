@@ -6452,11 +6452,9 @@ static bool sharp_is_init(const zend_property_info *info, zend_string *name)
  * as .NET's FieldInfo.GetValue and SetValue reach a field. The code reaches the storage as a direct use from it would,
  * and a written value is checked against its type as `Property.set` checks it, since `writeField` runs in strict mode
  * (PHP_MINIT_FUNCTION). The storage of an `init` property takes a write only while it holds no value, as only the
- * object's creation writes it. A write into a lazy object that has not loaded writes the storage without loading it,
- * as PHP 8.4's ReflectionProperty::setRawValueWithoutLazyInitialization writes: the property stops being lazy, and the
- * object counts as loaded once it has no lazy property left. No code a project wrote runs, so a receiver whose class
- * gives the property an accessor, as a PHP 8.4 subclass may by declaring it again, a read of a lazy object that has
- * not loaded and statics whose initial values have not run throw Error rather than run that code. */
+ * object's creation writes it. No code a project wrote runs, so a receiver whose class gives the property an accessor,
+ * as a PHP 8.4 subclass may by declaring it again, and statics whose initial values have not run throw Error rather than
+ * run that code. */
 static void sharp_storage_use(zend_execute_data *execute_data, zend_object *receiver, zend_string *class_name,
 	zend_string *name, zval *value, zval *return_value)
 {
@@ -6498,12 +6496,6 @@ static void sharp_storage_use(zend_execute_data *execute_data, zend_object *rece
 			member, use, ZSTR_VAL(ce->name), ZSTR_VAL(name), ZSTR_VAL(receiver->ce->name), member);
 		RETURN_THROWS();
 	}
-	bool unloaded = zend_object_is_lazy(receiver) && !zend_lazy_object_initialized(receiver);
-	if (unloaded && (!value || !info)) {
-		zend_throw_error(NULL, "`%s` %s the storage of %s::$%s, and the lazy object has not loaded, which `%s` never "
-			"loads", member, use, ZSTR_VAL(ce->name), ZSTR_VAL(name), member);
-		RETURN_THROWS();
-	}
 	if (value && info && IS_VALID_PROPERTY_OFFSET(info->offset) && !Z_ISUNDEF_P(OBJ_PROP(receiver, info->offset))
 			&& sharp_is_init(info, name)) {
 		zend_throw_error(NULL, "`set` writes the storage of %s::$%s, which `init` lets the object's creation write "
@@ -6524,23 +6516,7 @@ static void sharp_storage_use(zend_execute_data *execute_data, zend_object *rece
 		}
 		RETURN_COPY_VALUE(&read);
 	}
-	if (!unloaded) {
-		zend_update_property_ex(scope, receiver, name, value);
-		return;
-	}
-	zval *slot = OBJ_PROP(receiver, info->offset);
-	bool was_lazy = Z_PROP_FLAG_P(slot) & IS_PROP_LAZY;
-	Z_PROP_FLAG_P(slot) &= ~IS_PROP_LAZY;
 	zend_update_property_ex(scope, receiver, name, value);
-	if (!was_lazy) {
-		return;
-	}
-	/* A refused write leaves the property lazy, as PHP leaves it. */
-	if (EG(exception) && Z_TYPE_P(slot) == IS_UNDEF) {
-		Z_PROP_FLAG_P(slot) |= IS_PROP_LAZY;
-	} else if (zend_lazy_object_decr_lazy_props(receiver)) {
-		zend_lazy_object_realize(receiver);
-	}
 }
 
 /* Spec section 25: `Field.get(receiver)`, see sharp_storage_use. */
@@ -7378,14 +7354,20 @@ static bool sharp_class_value_is(const zval *value, const sharp_type *type)
 	return is;
 }
 
+/* Appends the class `ce` as PHP# writes it, `App.Order`. */
+static void sharp_class_text(smart_str *text, const zend_class_entry *ce)
+{
+	const zend_string *name = ce->name;
+	for (size_t i = 0; i < ZSTR_LEN(name); i++) {
+		smart_str_appendc(text, ZSTR_VAL(name)[i] == '\\' ? '.' : ZSTR_VAL(name)[i]);
+	}
+}
+
 /* Appends an object's class as PHP# writes it, `App.Order`, with its type arguments when its class is generic,
  * `App.Box<int>`. */
 static void sharp_object_text(smart_str *text, zend_object *object)
 {
-	const zend_string *name = object->ce->name;
-	for (size_t i = 0; i < ZSTR_LEN(name); i++) {
-		smart_str_appendc(text, ZSTR_VAL(name)[i] == '\\' ? '.' : ZSTR_VAL(name)[i]);
-	}
+	sharp_class_text(text, object->ce);
 
 	const sharp_type *arguments = sharp_type_arguments(object);
 	if (arguments) {
@@ -8739,23 +8721,21 @@ zend_class_entry *sharp_new_class(const zval *created, const sharp_type **argume
 	return ce;
 }
 
-/* Throws the InvalidArgumentException of the member `member` of `Class<T>`, `createInstance` or `createLazy`, for `ce`,
- * with the reason `format` gives. */
-static ZEND_COLD void sharp_create_refused(const char *member, const zend_class_entry *ce, const char *format, ...)
+/* Throws the InvalidArgumentException of `Class<T>.createInstance` for `ce`, with the reason `format` gives. */
+static ZEND_COLD void sharp_create_refused(const zend_class_entry *ce, const char *format, ...)
 {
 	va_list arguments;
 	va_start(arguments, format);
 	zend_string *reason = zend_vstrpprintf(0, format, arguments);
 	va_end(arguments);
-	zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0, "`%s` cannot create %s: %s.", member,
+	zend_throw_exception_ex(spl_ce_InvalidArgumentException, 0, "`createInstance` cannot create %s: %s.",
 		ZSTR_VAL(ce->name), ZSTR_VAL(reason));
 	zend_string_release_ex(reason, false);
 }
 
-/* The class the class value `value` names, with its type arguments in `arguments`, when the member `member` of
- * `Class<T>` can create an object of it: no interface, trait, enum or abstract class. NULL with an exception
- * otherwise. */
-static zend_class_entry *sharp_creatable_class(zend_string *value, const sharp_type **arguments, const char *member)
+/* The class the class value `value` names, with its type arguments in `arguments`, when `Class<T>.createInstance` can
+ * create an object of it: no interface, trait, enum or abstract class. NULL with an exception otherwise. */
+static zend_class_entry *sharp_creatable_class(zend_string *value, const sharp_type **arguments)
 {
 	zval created;
 	ZVAL_STR(&created, value);
@@ -8764,12 +8744,12 @@ static zend_class_entry *sharp_creatable_class(zend_string *value, const sharp_t
 		return NULL;
 	}
 	if (ce->ce_flags & (ZEND_ACC_INTERFACE | ZEND_ACC_TRAIT | ZEND_ACC_ENUM)) {
-		sharp_create_refused(member, ce, "it is %s", (ce->ce_flags & ZEND_ACC_INTERFACE) ? "an interface"
+		sharp_create_refused(ce, "it is %s", (ce->ce_flags & ZEND_ACC_INTERFACE) ? "an interface"
 			: (ce->ce_flags & ZEND_ACC_TRAIT) ? "a trait" : "an enum");
 		return NULL;
 	}
 	if (ce->ce_flags & (ZEND_ACC_EXPLICIT_ABSTRACT_CLASS | ZEND_ACC_IMPLICIT_ABSTRACT_CLASS)) {
-		sharp_create_refused(member, ce, "it is abstract");
+		sharp_create_refused(ce, "it is abstract");
 		return NULL;
 	}
 
@@ -8792,7 +8772,7 @@ ZEND_FUNCTION(Sharp_Internal_createInstance)
 	ZEND_PARSE_PARAMETERS_END();
 
 	const sharp_type *arguments;
-	zend_class_entry *ce = sharp_creatable_class(value, &arguments, "createInstance");
+	zend_class_entry *ce = sharp_creatable_class(value, &arguments);
 	if (!ce) {
 		RETURN_THROWS();
 	}
@@ -8802,7 +8782,7 @@ ZEND_FUNCTION(Sharp_Internal_createInstance)
 	uint32_t most = constructor ? constructor->common.num_args : 0;
 	bool variadic = constructor && (constructor->common.fn_flags & ZEND_ACC_VARIADIC);
 	if (count < required || (count > most && !variadic)) {
-		sharp_create_refused("createInstance", ce,
+		sharp_create_refused(ce,
 			"its constructor takes %s%" PRIu32 " argument%s, and was given %" PRIu32, required == most ? "" : count < required ? "at least " : "at most ", count < required ? required : most,
 			(count < required ? required : most) == 1 ? "" : "s", count);
 		RETURN_THROWS();
@@ -8819,7 +8799,7 @@ ZEND_FUNCTION(Sharp_Internal_createInstance)
 		ZEND_HASH_FOREACH_VAL(given, argument) {
 			if (position < most && !sharp_type_holds(types->members[position + 1], argument, SHARP_HOLDS_ENTRY, NULL)) {
 				if (!EG(exception)) {
-					sharp_create_refused("createInstance", ce, "its parameter `%s` takes %s, and was given %s",
+					sharp_create_refused(ce, "its parameter `%s` takes %s, and was given %s",
 						sharp_parameter_name(constructor, position), ZSTR_VAL(types->members[position + 1]->text),
 						zend_zval_value_name(argument));
 				}
@@ -8828,7 +8808,7 @@ ZEND_FUNCTION(Sharp_Internal_createInstance)
 			position++;
 		} ZEND_HASH_FOREACH_END();
 	}
-	if (object_init_ex(return_value, ce) != SUCCESS) {
+	if (object_init_to_build(return_value, ce) != SUCCESS) {
 		RETURN_THROWS();
 	}
 	if (arguments) {
@@ -8848,44 +8828,6 @@ ZEND_FUNCTION(Sharp_Internal_createInstance)
 		RETVAL_NULL();
 		RETURN_THROWS();
 	}
-}
-
-/* Spec section 25: `Class<T>.createLazy(initialize)`, a new lazy object of the class `type` names, with its type
- * arguments, created empty with no constructor run, as PHP 8.4's `ReflectionClass::newLazyGhost` creates one, which
- * runs `initialize` on the object at its first property read or write. Its type arguments are no property, so reading
- * them never loads it. Throws InvalidArgumentException for an abstract class, an interface, a trait and an enum, and
- * for a class PHP cannot make lazy, one that extends a class of PHP's own. */
-ZEND_FUNCTION(Sharp_Internal_createLazy)
-{
-	zend_string *value;
-	zval *initializer;
-	zend_fcall_info fci;
-	zend_fcall_info_cache fcc;
-
-	ZEND_PARSE_PARAMETERS_START(2, 2)
-		Z_PARAM_STR(value)
-		Z_PARAM_FUNC(fci, fcc)
-	ZEND_PARSE_PARAMETERS_END();
-	initializer = &fci.function_name;
-
-	const sharp_type *arguments;
-	zend_class_entry *ce = sharp_creatable_class(value, &arguments, "createLazy");
-	if (!ce) {
-		RETURN_THROWS();
-	}
-	if (!zend_class_can_be_lazy(ce)) {
-		sharp_create_refused("createLazy", ce, "it extends a class of PHP's own, which PHP cannot make lazy");
-		RETURN_THROWS();
-	}
-	zend_object *object = zend_object_make_lazy(NULL, ce, initializer, &fcc, ZEND_LAZY_OBJECT_STRATEGY_GHOST);
-	if (!object) {
-		RETURN_THROWS();
-	}
-	if (arguments) {
-		sharp_type_arguments_store(object, arguments);
-		Z_PROP_FLAG_P(OBJ_PROP(object, sharp_type_arguments_slot(ce)->offset)) &= ~IS_PROP_LAZY;
-	}
-	RETURN_OBJ(object);
 }
 
 /* The type a TypeError gives `value`, as PHP# writes the expected type: an object's dotted class name, with the type
@@ -10307,11 +10249,13 @@ static bool sharp_type_arguments_fit(
 	return true;
 }
 
-zend_result sharp_type_arguments_unserialize(
-	zend_object *object, const zval *text, sharp_type_class_resolver resolve, void *context)
+/* The type arguments `text` spells for an object of `ce`, from serialized data, as sharp_type_arguments_unserialize
+ * reads them, or NULL. */
+static const sharp_type *sharp_type_arguments_read(
+	const zend_class_entry *ce, const zval *text, sharp_type_class_resolver resolve, void *context)
 {
-	if (!sharp_type_arguments_slot(object->ce) || Z_TYPE_P(text) != IS_STRING) {
-		return FAILURE;
+	if (!sharp_type_arguments_slot(ce) || Z_TYPE_P(text) != IS_STRING) {
+		return NULL;
 	}
 
 	/* The text parses whole and each class it names resolves before any of it is interned. */
@@ -10320,11 +10264,18 @@ zend_result sharp_type_arguments_unserialize(
 	sharp_type_node *arguments = sharp_type_read_list(&reader);
 	const sharp_type *list = NULL;
 	if (arguments && !reader.names && sharp_type_node_accept(arguments, resolve, context, &reader)
-		&& sharp_type_arguments_fit(arguments, object->ce, &reader)) {
+		&& sharp_type_arguments_fit(arguments, ce, &reader)) {
 		list = sharp_type_intern(arguments, SHARP_TYPE_FROM_INPUT, &reader.arena);
 	}
 	zend_arena_destroy(reader.arena);
 
+	return list;
+}
+
+zend_result sharp_type_arguments_unserialize(
+	zend_object *object, const zval *text, sharp_type_class_resolver resolve, void *context)
+{
+	const sharp_type *list = sharp_type_arguments_read(object->ce, text, resolve, context);
 	if (!list) {
 		return FAILURE;
 	}
@@ -10940,7 +10891,7 @@ static bool sharp_container_build(zend_class_entry *ce, zval *object)
 		built = sharp_container_arguments(ce->constructor, namespace, ce, &arguments);
 		zend_string_release(namespace);
 	}
-	if (built && object_init_ex(object, ce) == SUCCESS) {
+	if (built && object_init_to_build(object, ce) == SUCCESS) {
 		if (ce->constructor) {
 			zend_call_known_instance_method(ce->constructor, Z_OBJ_P(object), NULL,
 				zend_hash_num_elements(Z_ARRVAL(arguments)), Z_ARRVAL(arguments)->arPacked);
@@ -12055,7 +12006,9 @@ static ZEND_COLD void sharp_family_out_of_date(const zend_string *family)
 		ZSTR_VAL(family));
 }
 
-/* Throws one Sharp\InvalidFields of `problems`, each problem under its path, as a struct's parse throws it. */
+/* Throws one Sharp\InvalidFields of `problems`, each problem under its path, as a struct's parse throws it. Where the
+ * class doesn't load, as in a request whose autoloader doesn't reach the standard library, it throws a ValueError with
+ * the message InvalidFields gives: each problem after its path, the parts joined by "; ". */
 static ZEND_COLD void sharp_throw_invalid_fields(zval *problems)
 {
 	zend_string *name = zend_string_init_interned("Sharp\\InvalidFields", sizeof("Sharp\\InvalidFields") - 1, false);
@@ -12063,10 +12016,35 @@ static ZEND_COLD void sharp_throw_invalid_fields(zval *problems)
 	zval exception;
 
 	zend_string_release(name);
-	if (!ce || object_init_with_constructor(&exception, ce, 1, problems, NULL) == FAILURE) {
+	if (EG(exception)) {
 		return;
 	}
-	zend_throw_exception_object(&exception);
+	if (ce) {
+		if (object_init_with_constructor(&exception, ce, 1, problems, NULL) == SUCCESS) {
+			zend_throw_exception_object(&exception);
+		}
+		return;
+	}
+	smart_str message = {0};
+	zend_string *path;
+	zend_ulong index;
+	zval *problem;
+	ZEND_HASH_FOREACH_KEY_VAL(Z_ARRVAL_P(problems), index, path, problem) {
+		if (message.s) {
+			smart_str_appendl(&message, "; ", 2);
+		}
+		if (!path) {
+			smart_str_append_unsigned(&message, index);
+			smart_str_appendl(&message, ": ", 2);
+		} else if (ZSTR_LEN(path) > 0) {
+			smart_str_append(&message, path);
+			smart_str_appendl(&message, ": ", 2);
+		}
+		smart_str_append(&message, Z_STR_P(problem));
+	} ZEND_HASH_FOREACH_END();
+	smart_str_0(&message);
+	zend_throw_exception(zend_ce_value_error, message.s ? ZSTR_VAL(message.s) : "", 0);
+	smart_str_free(&message);
 }
 
 /* The value `value`, a struct's input, holds under `key`: an array's element, a Map's value or an object's public
@@ -12248,7 +12226,7 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 	if (!EG(exception) && zend_hash_num_elements(problems) > found) {
 		sharp_read_fail(read);
 	} else if (!EG(exception)) {
-		object_init_ex(built, ce);
+		object_init_to_build(built, ce);
 		if (arguments) {
 			sharp_type_arguments_store(Z_OBJ_P(built), arguments);
 		}
@@ -12671,6 +12649,244 @@ static void sharp_parse_as(const sharp_type *type, zval *value, bool text, zval 
 		zval_ptr_dtor(return_value);
 		ZVAL_NULL(return_value);
 	}
+}
+
+/* The method that gives an object of `ce` as text, as spec section 18 shows it: its PHP# `toString()`, or PHP's
+ * `__toString()`, or NULL. */
+static zend_function *sharp_to_string_method(const zend_class_entry *ce)
+{
+	zend_function *to_string = (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES)
+		? zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("toString"))
+		: zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("tostring"));
+
+	return to_string ? to_string : ce->__tostring;
+}
+
+ZEND_COLD void sharp_refuse_creation(const zend_class_entry *ce)
+{
+	/* A plain PHP class below a PHP# class, as a test double's, is named by the PHP# class whose constructor it skips. */
+	while (!sharp_class_is_sharp(ce) && ce->parent) {
+		ce = ce->parent;
+	}
+	smart_str name = {0};
+	sharp_class_text(&name, ce);
+	smart_str_0(&name);
+	zend_throw_error(NULL, "%s is built only through its constructor, which this creation doesn't run",
+		ZSTR_VAL(name.s));
+	smart_str_free(&name);
+}
+
+bool sharp_owns_storage(const zend_class_entry *ce)
+{
+	return (ce->sharp_flags & SHARP_CLASS_BUILT_BY_CONSTRUCTOR)
+		&& !ce->__serialize && !ce->__unserialize && !ce->serialize && !ce->unserialize
+		&& !zend_hash_exists(&ce->function_table, ZSTR_KNOWN(ZEND_STR_SLEEP))
+		&& !zend_hash_exists(&ce->function_table, ZSTR_KNOWN(ZEND_STR_WAKEUP));
+}
+
+/* Throws the Error serialize gives for the PHP# class `ce`, which has no stored form, `reason` saying why. */
+static ZEND_COLD void sharp_refuse_storage(const zend_class_entry *ce, const char *reason, ...)
+{
+	va_list arguments;
+	va_start(arguments, reason);
+	zend_string *why = zend_vstrpprintf(0, reason, arguments);
+	va_end(arguments);
+	smart_str name = {0};
+	sharp_class_text(&name, ce);
+	smart_str_0(&name);
+	zend_throw_error(NULL, "`serialize` writes the stored form of %s, the fields `Json.encode` writes, and %s.",
+		ZSTR_VAL(name.s), ZSTR_VAL(why));
+	smart_str_free(&name);
+	zend_string_release_ex(why, false);
+}
+
+/* Whether a Map key of `type` has the text a stored form keys it by, as sharp_table_json_key gives it: an int, a
+ * string, a backed enum case, or an object of a class with toString(). A type parameter's and an `Any`'s key is decided
+ * by its value, as is the key of a class no autoloader finds. */
+static bool sharp_type_keys_text(const sharp_type *type)
+{
+	switch (type->kind) {
+		case SHARP_TYPE_UNION:
+			for (uint32_t i = 0; i < type->count; i++) {
+				if (!sharp_type_keys_text(type->members[i])) {
+					return false;
+				}
+			}
+			return true;
+		case SHARP_TYPE_PARAMETER:
+			return true;
+		case SHARP_TYPE_NAMED:
+			break;
+		default:
+			return false;
+	}
+	switch (type->built_in) {
+		case SHARP_BUILT_IN_INT:
+		case SHARP_BUILT_IN_STRING:
+		case SHARP_BUILT_IN_ANY:
+			return true;
+		case SHARP_BUILT_IN_NONE:
+			break;
+		default:
+			return false;
+	}
+	const zend_class_entry *ce = zend_lookup_class(type->class_name);
+	if (!ce) {
+		return !EG(exception);
+	}
+
+	return (ce->ce_flags & ZEND_ACC_ENUM) ? ce->enum_backing_type != IS_UNDEF : sharp_to_string_method(ce) != NULL;
+}
+
+/* The key type of a Map in `type`, at any depth of its collections and unions, whose key has no stored text, as
+ * sharp_type_keys_text decides, or NULL. */
+static const sharp_type *sharp_type_unstored_key(const sharp_type *type)
+{
+	if (type->kind == SHARP_TYPE_NAMED && type->built_in == SHARP_BUILT_IN_MAP
+			&& !sharp_type_keys_text(type->members[0])) {
+		return type->members[0];
+	}
+	if (type->kind == SHARP_TYPE_NAMED && type->built_in == SHARP_BUILT_IN_NONE) {
+		return NULL;
+	}
+	for (uint32_t i = 0; i < type->count; i++) {
+		const sharp_type *key = sharp_type_unstored_key(type->members[i]);
+		if (key) {
+			return key;
+		}
+	}
+
+	return NULL;
+}
+
+/* Whether the struct or class `ce`, whose `#fields` gives `rows`, of the type arguments `arguments` or none, has a
+ * stored form: each main constructor parameter its `parse` reads holds a property, and each field's Map keys have
+ * text. Throws the Error serialize gives otherwise. */
+static bool sharp_fields_store(zend_class_entry *ce, const sharp_type *arguments, zval *rows)
+{
+	zval *row;
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(rows), row) {
+		HashTable *parts = Z_ARRVAL_P(row);
+		zend_string *name = Z_STR_P(zend_hash_index_find(parts, 0));
+		zend_string *written = Z_STR_P(zend_hash_index_find(parts, 2));
+		if (Z_TYPE_P(zend_hash_index_find(parts, 3)) == IS_TRUE && !zend_hash_exists(&ce->properties_info, name)) {
+			sharp_refuse_storage(ce, "the main constructor parameter `%s` holds no property", ZSTR_VAL(name));
+			return false;
+		}
+		const sharp_type *types = sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), ce, ce, arguments);
+		ZEND_ASSERT(types != NULL && "the compile writes each field's type as one PHP# type");
+		const sharp_type *key = sharp_type_unstored_key(types->members[0]);
+		if (key) {
+			sharp_refuse_storage(ce, "its field `%s` is a Map keyed by %s, which has no stored text",
+				ZSTR_VAL(name), ZSTR_VAL(key->text));
+			return false;
+		}
+		if (EG(exception)) {
+			return false;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return true;
+}
+
+zend_result sharp_stored_form(zend_object *object, zval *stored)
+{
+	zend_class_entry *ce = object->ce;
+	zend_function *json = zend_hash_str_find_ptr(&ce->function_table, "#json", sizeof("#json") - 1);
+	zend_function *fields = zend_hash_str_find_ptr(&ce->function_table, "#fields", sizeof("#fields") - 1);
+	bool own_parse = zend_hash_str_exists(&ce->function_table, "parse", sizeof("parse") - 1);
+	bool instance = zend_hash_str_exists(&ce->function_table, "instance", sizeof("instance") - 1);
+
+	ZVAL_UNDEF(stored);
+	if (instance) {
+		/* A case of an enum that carries no data is the case's one object, so its stored form holds nothing. */
+		array_init(stored);
+		return SUCCESS;
+	}
+	if (!json) {
+		sharp_refuse_storage(ce, "its own `parse` reads no stored form");
+		return FAILURE;
+	}
+	if (fields) {
+		zval rows;
+		zend_call_known_function(fields, NULL, ce, &rows, 0, NULL, NULL);
+		bool stores = !EG(exception) && sharp_fields_store(ce, sharp_type_arguments(object), &rows);
+		zval_ptr_dtor(&rows);
+		if (!stores) {
+			return FAILURE;
+		}
+	} else if (!own_parse) {
+		sharp_refuse_storage(ce, "a field of it holds a function, which no stored form holds");
+		return FAILURE;
+	}
+
+	zval written;
+	zend_call_known_function(json, object, ce, &written, 0, NULL, NULL);
+	if (EG(exception)) {
+		return FAILURE;
+	}
+	if (Z_TYPE(written) == IS_STRING) {
+		/* A value as text, spec section 10, stores its text, which its own `parse` reads. */
+		array_init_size(stored, 1);
+		add_assoc_zval_ex(stored, "value", sizeof("value") - 1, &written);
+		return SUCCESS;
+	}
+	ZEND_ASSERT(Z_TYPE(written) == IS_OBJECT && "`#json` gives a value as text's text or an object of the fields");
+	ZVAL_ARR(stored, zend_array_dup(Z_OBJPROP(written)));
+	zval_ptr_dtor(&written);
+
+	return SUCCESS;
+}
+
+zend_result sharp_read_stored_form(zend_class_entry *ce, zval *stored, const zval *type_arguments,
+	sharp_type_class_resolver resolve, void *context, zval *built)
+{
+	const sharp_type *arguments = NULL;
+	ZVAL_UNDEF(built);
+	if (Z_TYPE_P(type_arguments) != IS_UNDEF) {
+		arguments = sharp_type_arguments_read(ce, type_arguments, resolve, context);
+		if (!arguments) {
+			return FAILURE;
+		}
+	}
+
+	zval problems;
+	array_init(&problems);
+	sharp_read read;
+	sharp_read_start(&read, &problems, false, NULL);
+	zend_function *instance = zend_hash_str_find_ptr(&ce->function_table, "instance", sizeof("instance") - 1);
+	zend_function *parse = zend_hash_str_find_ptr(&ce->function_table, "parse", sizeof("parse") - 1);
+	if (zend_hash_str_exists(&ce->function_table, "#fields", sizeof("#fields") - 1)) {
+		sharp_read_struct(ce, arguments, stored, &read, built);
+	} else if (instance) {
+		/* A case of an enum that carries no data is the case's one object. */
+		zend_call_known_function(instance, NULL, ce, built, 0, NULL, NULL);
+	} else if (parse) {
+		/* A value as text builds through its own `parse` of its text. */
+		zval *text = zend_hash_str_find(Z_ARRVAL_P(stored), "value", sizeof("value") - 1);
+		if (text) {
+			zend_call_known_function(parse, NULL, ce, built, 1, text, NULL);
+		} else {
+			zval missing;
+			ZVAL_STRINGL(&missing, "missing", sizeof("missing") - 1);
+			zend_hash_str_update(Z_ARRVAL(problems), "value", sizeof("value") - 1, &missing);
+		}
+	} else {
+		/* A type with a function field has no stored form, so data that holds one was written by hand. */
+		sharp_refuse_creation(ce);
+	}
+	sharp_read_end(&read);
+	if (!EG(exception) && zend_hash_num_elements(Z_ARRVAL(problems)) > 0) {
+		sharp_throw_invalid_fields(&problems);
+	}
+	zval_ptr_dtor(&problems);
+	if (EG(exception) || Z_ISUNDEF_P(built)) {
+		zval_ptr_dtor(built);
+		ZVAL_UNDEF(built);
+		return FAILURE;
+	}
+
+	return SUCCESS;
 }
 
 /* Spec section 10: a family's `parse`, `\Sharp\Internal\parseVariant($family, $value)`, which an abstract class's or an
@@ -14316,13 +14532,7 @@ static zend_string *sharp_table_json_key(zval *key)
 		return zval_get_string(key);
 	}
 	if (Z_TYPE_P(key) == IS_OBJECT) {
-		zend_class_entry *ce = Z_OBJCE_P(key);
-		zend_function *to_string = (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES)
-			? zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("toString"))
-			: zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("tostring"));
-		if (!to_string) {
-			to_string = ce->__tostring;
-		}
+		zend_function *to_string = sharp_to_string_method(Z_OBJCE_P(key));
 		if (to_string) {
 			zval text;
 			zend_call_known_instance_method_with_0_params(to_string, Z_OBJ_P(key), &text);
