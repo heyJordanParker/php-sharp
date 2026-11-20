@@ -94,8 +94,15 @@ jobs:
         run: |
           rm -rf "$CARGO_TARGET_DIR/pgo-profiles"
           cargo pgo build -- --locked --target=aarch64-apple-darwin
-          # mago exits 1 when the analysis finds issues, which the corpus has, and the profile is written either way.
-          cargo pgo run -- --locked --target=aarch64-apple-darwin -- --workspace corpus/ analyze --reporting-format count || true
+          # mago exits 1 when the analysis finds issues, which the corpus holds: 279,508 errors on 17f52a54a32's tree.
+          # Any other exit, a crash, a kill or a tool error, fails the job, so its profile is never published.
+          status=0
+          LLVM_PROFILE_FILE="$CARGO_TARGET_DIR/pgo-profiles/mago_%m_%p.profraw" \
+            "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/mago" --workspace corpus/ analyze --reporting-format count || status=$?
+          if ((status != 1)); then
+            echo "::error::The instrumented mago analyzed corpus/ with exit code $status, where an analysis that finds the corpus's issues exits 1, so no profile is published."
+            exit 1
+          fi
 
       - name: Publish the merged profile as a prerelease, and pin it on next
         run: |
