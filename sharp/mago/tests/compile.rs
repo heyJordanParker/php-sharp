@@ -3480,11 +3480,20 @@ fn counting_cache(folder: &Path) -> PathBuf {
     cache_with_runner(folder, &format!("tee '{}/'$$ | \"$real\" \"$@\"", started.display()))
 }
 
-/// The generated Lean module of `name` in the request of the one runner `counting_cache` started in `folder`: the
-/// request's header and the threads and heartbeats it answers with, the modules an earlier runner stopped in, then each
-/// generated module's name and source.
+/// What a runner's request holds.
 #[cfg(unix)]
-fn generated_module(folder: &Path, name: &str) -> String {
+struct RunnerRequest {
+    /// Each generated module's name and source.
+    modules: Vec<(String, String)>,
+    /// Each theorem's statement, text and fixed steps, the empty string when it has none.
+    theorems: Vec<(String, String, String)>,
+}
+
+/// The request of the one runner `counting_cache` started in `folder`: its header and the threads and heartbeats it
+/// answers with, the modules an earlier runner stopped in, the generated modules, then each check's modules and
+/// theorems.
+#[cfg(unix)]
+fn runner_request(folder: &Path) -> RunnerRequest {
     let mut started = std::fs::read_dir(folder.join("started")).unwrap();
     let request = std::fs::read(started.next().unwrap().unwrap().path()).unwrap();
     assert!(started.next().is_none(), "one runner started");
@@ -3502,14 +3511,52 @@ fn generated_module(folder: &Path, name: &str) -> String {
     for _ in 0..length(&mut at) {
         string(&mut at);
     }
+    let modules = (0..length(&mut at)).map(|_| (string(&mut at), string(&mut at))).collect();
+    let mut theorems = Vec::new();
     for _ in 0..length(&mut at) {
-        let (module, text) = (string(&mut at), string(&mut at));
-        if module == name {
-            return text;
+        for _ in 0..length(&mut at) {
+            string(&mut at);
+        }
+        for _ in 0..length(&mut at) {
+            theorems.push((string(&mut at), string(&mut at), string(&mut at)));
+            at += 1;
         }
     }
+    assert_eq!(at, request.len(), "the request ends after its checks");
 
-    panic!("the request holds no module {name}")
+    RunnerRequest { modules, theorems }
+}
+
+/// The generated Lean module of `name` in the request of the one runner `counting_cache` started in `folder`.
+#[cfg(unix)]
+fn generated_module(folder: &Path, name: &str) -> String {
+    runner_request(folder)
+        .modules
+        .into_iter()
+        .find(|(module, _)| module == name)
+        .map(|(_, text)| text)
+        .expect("the request holds the module")
+}
+
+/// Spec section 28: a law with a body has fixed steps too, which close each of its cases as the fixed steps close a law
+/// without one, and the law checker tries them before Lean's search. Each of Money's laws with a body, a recursion on an
+/// `int` and one on a list, gets them, and Money proves.
+#[cfg(unix)]
+#[test]
+fn a_law_with_a_body_has_fixed_steps_for_each_of_its_cases() {
+    let directory = library_project(&[("app/Shared/Money.sharp", SPECIMEN_MONEY)]);
+    let root = directory.path();
+    let lake = tempfile::tempdir().unwrap();
+
+    let output = process::output(command(root, "never").env("XDG_CACHE_HOME", counting_cache(lake.path()))).unwrap();
+
+    assert!(output.status.success(), "{}", printed(&output));
+    let theorems = runner_request(lake.path()).theorems;
+    for statement in ["App.Shared.Money.timesKeepsCurrency", "App.Shared.Money.sumKeepsCurrency"] {
+        let (_, text, steps) = theorems.iter().find(|(written, ..)| written == statement).expect("the law's theorem");
+        assert_eq!(text.matches("sharp_close").count(), 2, "{text}");
+        assert!(!steps.is_empty() && !steps.contains("sharp_close"), "{statement}: {steps}");
+    }
 }
 
 /// One runner proves the laws of every stale file of a compile, so the compile imports Lean once.
@@ -4253,6 +4300,51 @@ fn compile_proves_a_law_over_a_state_beside_one_that_holds_an_instant() {
 
     assert!(output.status.success(), "{}", printed(&output));
     assert!(compiled(root, "app/Delivery/Pending.sharp").exists());
+}
+
+/// Spec section 28: a state of a sealed family passes where an open interface it implements is expected, so a law
+/// proves that passes one there, and two states that implement the same open interface both pass as it.
+#[test]
+fn compile_proves_a_law_that_passes_a_sealed_state_as_an_open_interface_it_implements() {
+    let directory = lawful_project(&[
+        ("app/Shop/Printable.sharp", "namespace App.Shop;\n\npublic interface Printable\n{\n}\n"),
+        ("app/Shop/OrderStatus.sharp", "namespace App.Shop;\n\npublic sealed interface OrderStatus\n{\n}\n"),
+        (
+            "app/Shop/Paid.sharp",
+            "namespace App.Shop;\n\npublic class Paid : OrderStatus, Printable\n{\n    public Paid(public int at { get; }) { }\n}\n",
+        ),
+        (
+            "app/Shop/Pending.sharp",
+            "namespace App.Shop;\n\npublic class Pending : OrderStatus, Printable\n{\n    public static bool keep(Printable value) => true;\n\n    law keepsPending(Pending pending) => Pending.keep(pending);\n    law keepsPaid(int at) => Pending.keep(new Paid(at));\n}\n",
+        ),
+    ]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Shop/Pending.sharp").exists());
+}
+
+/// Spec section 28: a law refuses a class that is a state of two sealed interfaces, as whichever one it passes the
+/// value as, since a state belongs to one sealed family in a law.
+#[test]
+fn a_law_reaching_a_state_of_two_sealed_interfaces_is_refused() {
+    let source = "namespace App.Shared;\n\npublic class Shape : Drawn, Colored\n{\n    public Shape(public int size { get; }) { }\n\n    public static bool keepColored(Colored colored) => true;\n    public static bool keepDrawn(Drawn drawn) => true;\n\n    law keepsColored(Shape shape) => Shape.keepColored(shape);\n    law keepsDrawn(Shape shape) => Shape.keepDrawn(shape);\n}\n";
+    let others = [
+        ("app/Shared/Colored.sharp", "namespace App.Shared;\n\npublic sealed interface Colored\n{\n}\n"),
+        ("app/Shared/Drawn.sharp", "namespace App.Shared;\n\npublic sealed interface Drawn\n{\n}\n"),
+    ];
+
+    for law in ["keepsColored", "keepsDrawn"] {
+        assert_unmodeled_beside(
+            source,
+            &others,
+            &format!(
+                "Law {law} reaches the class Shape in Shape.{law}. It is a state of both `Colored` and `Drawn`, and a state belongs to one sealed interface in a law."
+            ),
+        );
+    }
 }
 
 /// Spec section 28: `<` on two values of a class runs the class's own `<=>`, so a law that compares two `Instant`s
@@ -5895,11 +5987,20 @@ fn compile_proves_a_law_whose_body_tests_its_bound_with_a_comparison_arm() {
 }
 
 /// Spec section 28: a case the body leaves open is `law-unproven`, with the case's conditions and the goal still to
-/// show in PHP#, and the call of the law itself on a smaller value when the case makes none.
+/// show in PHP#, and the call of the law itself on a smaller value when the case makes none. `timesIsZero` holds where
+/// `n <= 0` and is false where `n > 0`, whatever its body calls.
 #[test]
 fn a_case_a_law_s_body_leaves_open_names_its_conditions_and_its_goal_in_php_sharp() {
-    let without_add = SPECIMEN_MONEY.replace("        Money.addKeepsCurrency(m, m.times(n - 1));\n", "");
-    let without_calls = without_add.replace("        Money.timesKeepsCurrency(m, n - 1);\n", "");
+    let times_is_zero = |call: &str| {
+        let law = format!(
+            "\n    law timesIsZero(Money m, int n) => m.times(n).amount == 0\n    {{\n        if (n <= 0) {{\n            return;\n        }}\n{call}    }}\n\n    public static Money sum("
+        );
+        let money = SPECIMEN_MONEY.replacen("\n    public static Money sum(", &law, 1);
+        assert_ne!(money, SPECIMEN_MONEY);
+        money
+    };
+    let with_call = times_is_zero("        Money.timesIsZero(m, n - 1);\n");
+    let without_calls = times_is_zero("");
     let without_sum_calls = SPECIMEN_MONEY.replace(
         "                Money.sumKeepsCurrency(total.add(first), rest);\n                Money.addKeepsCurrency(total, first);\n",
         "",
@@ -5910,12 +6011,12 @@ fn a_case_a_law_s_body_leaves_open_names_its_conditions_and_its_goal_in_php_shar
             "app/Shared/Money.sharp:24:5: error[law-unproven]: law sumKeepsCurrency is not proven\n = when items is [Money first, ...List<Money> rest], still to show: Money.sum(total.add(first), rest).currency == total.currency\n = Help: the law for a smaller items is the call Money.sumKeepsCurrency(total, rest)\n",
         ),
         (
-            without_add.as_str(),
-            "app/Shared/Money.sharp:10:5: error[law-unproven]: law timesKeepsCurrency is not proven\n = when n > 0, still to show: m.add(m.times(n - 1)).currency == m.currency\n",
+            with_call.as_str(),
+            "app/Shared/Money.sharp:19:5: error[law-unproven]: law timesIsZero is not proven\n = when n > 0, still to show: m.add(m.times(n - 1)).amount == 0\n",
         ),
         (
             without_calls.as_str(),
-            "app/Shared/Money.sharp:10:5: error[law-unproven]: law timesKeepsCurrency is not proven\n = when n > 0, still to show: m.add(m.times(n - 1)).currency == m.currency\n = Help: the law for a smaller n is the call Money.timesKeepsCurrency(m, n - 1)\n",
+            "app/Shared/Money.sharp:19:5: error[law-unproven]: law timesIsZero is not proven\n = when n > 0, still to show: m.add(m.times(n - 1)).amount == 0\n = Help: the law for a smaller n is the call Money.timesIsZero(m, n - 1)\n",
         ),
     ] {
         let directory = library_project(&[("app/Shared/Money.sharp", source)]);

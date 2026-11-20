@@ -1,0 +1,128 @@
+name: PGO profile
+
+# Trains the profile release.yml builds aarch64-apple-darwin's mago with, the way Chromium keeps its PGO profiles
+# outside git: a fat-LTO instrumented build of master, as the optimized build it guides, analyzes sharp/mago/corpus/,
+# and the merged profile becomes the one asset of a prerelease named for it, pgo-<date>-<commit>, which is never the
+# latest release, so install.sh and mago self-update never see it. .github/pgo-profile.sha256 pins it by name and
+# SHA-256, in sha256sum's format, and this workflow commits the new pin to next, so the next landing builds with it.
+# The instrumented build and the training held the Mac for about 15 minutes of every release build, so they run here
+# and never on a push.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: sharp/mago
+
+jobs:
+  TRAIN:
+    runs-on: macos-arm64-local
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # The self-hosted Mac runner keeps sharp/build between jobs, as release.yml's macOS build explains.
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+
+      - name: Remove what an earlier job left, except the builds
+        uses: ./.github/actions/clean-kept-build
+
+      # The instrumented build goes to release.yml's target, so it compiles only the crates that changed since the
+      # last one: cargo keeps a copy of a crate for each set of RUSTFLAGS, so the release builds' copies stay.
+      - name: Read the toolchain sharp/mago/Cargo.toml's rust-version names, and point CARGO_TARGET_DIR at the release target
+        run: |
+          version=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)
+          echo "RUST_VERSION=$version" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$GITHUB_WORKSPACE/sharp/build/darwin-arm64/mago-release" >> "$GITHUB_ENV"
+
+      - name: install Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: llvm-tools-preview
+
+      # cargo install puts cargo-pgo in the runner's CARGO_HOME, which the Mac's runner keeps, so it installs it once.
+      - name: install cargo-pgo
+        run: |
+          if ! command -v cargo-pgo &>/dev/null; then
+            cargo install cargo-pgo
+          fi
+
+      # The corpus's packages, as release.yml's macOS job kept them, under the lock's hash, with the job's token, so
+      # GitHub's rate limit for anonymous downloads never stops the training.
+      - name: The corpus's packages
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.GITHUB_TOKEN }}"}}'
+        run: |
+          kept="$GITHUB_WORKSPACE/sharp/build/corpus"
+          installed="$kept/$(shasum -a 256 corpus/composer.lock | cut -c1-16)"
+          if [[ ! -d $installed/vendor ]]; then
+            rm -rf "$kept"
+            (cd corpus && composer install --ignore-platform-reqs --no-interaction --no-progress)
+            mkdir -p "$installed"
+            cp -R corpus/vendor "$installed/vendor"
+          else
+            cp -R "$installed/vendor" corpus/vendor
+          fi
+
+      - name: Build the engine mago links
+        working-directory: ${{ github.workspace }}
+        run: sharp/bin/build-mago --engine
+
+      # The binary the profile guides embeds the law checker's build, as release.yml's does.
+      - name: Build the law checker mago embeds
+        run: |
+          cargo run --locked --release --target=aarch64-apple-darwin -p mago-sharp-lean --example checker -- "$RUNNER_TEMP/checker.tar.zst"
+          echo "MAGO_CHECKER_ARCHIVE=$RUNNER_TEMP/checker.tar.zst" >> "$GITHUB_ENV"
+
+      - name: Build mago instrumented, and analyze the corpus with it
+        run: |
+          rm -rf "$CARGO_TARGET_DIR/pgo-profiles"
+          cargo pgo build -- --locked --target=aarch64-apple-darwin
+          # mago exits 1 when the analysis finds issues, which the corpus holds: 279,508 errors on 17f52a54a32's tree.
+          # Any other exit, a crash, a kill or a tool error, fails the job, so its profile is never published.
+          status=0
+          LLVM_PROFILE_FILE="$CARGO_TARGET_DIR/pgo-profiles/mago_%m_%p.profraw" \
+            "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/mago" --workspace corpus/ analyze --reporting-format count || status=$?
+          if ((status != 1)); then
+            echo "::error::The instrumented mago analyzed corpus/ with exit code $status, where an analysis that finds the corpus's issues exits 1, so no profile is published."
+            exit 1
+          fi
+
+      - name: Publish the merged profile as a prerelease, and pin it on next
+        run: |
+          name="pgo-$(date -u +%Y%m%d)-$(git rev-parse --short=11 HEAD)"
+          profile="$RUNNER_TEMP/$name.profdata"
+          "$(rustc --print sysroot)/lib/rustlib/aarch64-apple-darwin/bin/llvm-profdata" merge -o "$profile" "$CARGO_TARGET_DIR/pgo-profiles"
+          gh release create "$name" "$profile" --prerelease --latest=false --target "$GITHUB_SHA" --title "$name" \
+            --notes "The PGO profile release.yml builds aarch64-apple-darwin's mago with, trained on sharp/mago/corpus/ at $GITHUB_SHA by run $GITHUB_RUN_ID."
+          pin="$(cd "$RUNNER_TEMP" && shasum -a 256 "$name.profdata")"
+          # The contents API replaces a file by the blob it replaces, and the first pin replaces none.
+          replaced=()
+          if blob=$(gh api "repos/$GITHUB_REPOSITORY/contents/.github/pgo-profile.sha256?ref=next" --jq .sha); then
+            replaced=(-f sha="$blob")
+          fi
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/.github/pgo-profile.sha256" -f branch=next "${replaced[@]}" \
+            -f message="ci: aarch64-apple-darwin's mago builds with PGO profile $name" -f content="$(printf '%s\n' "$pin" | base64)"
+          echo "::notice title=PGO profile::$pin"
+
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true

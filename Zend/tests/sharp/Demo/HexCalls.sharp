@@ -4,7 +4,7 @@ import Sharp.Encoding.Hex;
 
 class HexCalls
 {
-    public static string encode(string data) => Hex.encode(data);
+    public static string encode(Bytes data) => Hex.encode(data);
 
-    public static string decode(string text) => Hex.decode(text);
+    public static string decode(string text) => Hex.decode(text).toText();
 }

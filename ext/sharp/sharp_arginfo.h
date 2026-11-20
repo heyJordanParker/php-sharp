@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 1dc66e8ca00b73d7c841ca7caab9c071b075735c */
+ * Stub hash: b4f9d803e197b6a747f6125d5a2e57d04bdd40fb */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
@@ -120,6 +120,10 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_isNullable, 0, 1,
 ZEND_END_ARG_INFO()
 
 #define arginfo_Sharp_Internal_nonNullable arginfo_Sharp_Internal_typeKind
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_text, 0, 1, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, bytes, IS_STRING, 0)
+ZEND_END_ARG_INFO()
 
 #define arginfo_Sharp_Internal_typeParts arginfo_Sharp_Internal_properties
 
@@ -497,6 +501,7 @@ ZEND_FUNCTION(Sharp_Internal_typeArguments);
 ZEND_FUNCTION(Sharp_Internal_typeKind);
 ZEND_FUNCTION(Sharp_Internal_isNullable);
 ZEND_FUNCTION(Sharp_Internal_nonNullable);
+ZEND_FUNCTION(Sharp_Internal_text);
 ZEND_FUNCTION(Sharp_Internal_typeParts);
 ZEND_FUNCTION(Sharp_Internal_tupleNames);
 ZEND_FUNCTION(Sharp_Internal_genericDefinition);
@@ -608,6 +613,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "typeKind"), zif_Sharp_Internal_typeKind, arginfo_Sharp_Internal_typeKind, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "isNullable"), zif_Sharp_Internal_isNullable, arginfo_Sharp_Internal_isNullable, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "nonNullable"), zif_Sharp_Internal_nonNullable, arginfo_Sharp_Internal_nonNullable, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "text"), zif_Sharp_Internal_text, arginfo_Sharp_Internal_text, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "typeParts"), zif_Sharp_Internal_typeParts, arginfo_Sharp_Internal_typeParts, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "tupleNames"), zif_Sharp_Internal_tupleNames, arginfo_Sharp_Internal_tupleNames, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "genericDefinition"), zif_Sharp_Internal_genericDefinition, arginfo_Sharp_Internal_genericDefinition, 0, NULL, NULL)

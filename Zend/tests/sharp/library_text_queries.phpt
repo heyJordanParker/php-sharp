@@ -34,10 +34,11 @@ refused(fn () => TextQueries::bytes([104, 256]));
 foreach (['abc', 'ABC', '123', " \t\n", '', 'é1', 'Ωmega'] as $text) {
     echo json_encode($text, JSON_UNESCAPED_UNICODE), ' ', json_encode(TextQueries::classes($text)), "\n";
 }
-refused(fn () => TextQueries::classes("\xff"));
+// Text that is not UTF-8 crosses in with each bad byte sequence as U+FFFD, a symbol.
+echo json_encode(TextQueries::classes("\xff")), "\n";
 echo bin2hex(TextQueries::composed("e\u{301}")), ' ', bin2hex(TextQueries::decomposed('é')), ' ';
 echo TextQueries::compatible('ﬁ'), ' ', bin2hex(TextQueries::compatibleDecomposed('ﬁé')), "\n";
-refused(fn () => TextQueries::composed("\xff"));
+echo bin2hex(TextQueries::composed("\xff")), "\n";
 ?>
 --EXPECT--
 [1,0] [-1,1]
@@ -55,7 +56,7 @@ ValueError: `toCharacter` needs a Unicode scalar value, from 0 to 0x10FFFF and n
 ValueError: `toCharacter` needs a Unicode scalar value, from 0 to 0x10FFFF and no surrogate, and the value is not one.
 string(2) "hi"
 string(0) ""
-ValueError: `toByteString` needs a byte from 0 to 255, and the value is outside it.
+ValueError: `toBytes` needs bytes from 0 to 255, and a value is outside them.
 "abc" [true,false,true,false,false,true]
 "ABC" [true,false,true,false,true,false]
 "123" [false,true,true,false,false,false]
@@ -63,6 +64,6 @@ ValueError: `toByteString` needs a byte from 0 to 255, and the value is outside 
 "" [false,false,false,false,false,false]
 "é1" [false,false,true,false,false,false]
 "Ωmega" [true,false,true,false,false,false]
-ValueError: `isLetter` reads UTF-8 text, and the text is not.
+[false,false,false,false,false,false]
 c3a9 65cc81 fi 666965cc81
-ValueError: `normalized` reads UTF-8 text, and the text is not.
+efbfbd

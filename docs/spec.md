@@ -3690,7 +3690,7 @@ email.toString();                      // "ada@example.com"
 str_contains("hello", "ell");             // compile error: no function str_contains exists
 ```
 
-**Ignoring case:** `compareTo`, `equals`, `indexOf`, `lastIndexOf`, `contains`, `startsWith` and `endsWith` take `ignoreCase`, `false` by default. It compares each character folded by Unicode's simple case folding, so an index stays an index into the text. `titlecase()` capitalizes each word, `replace` takes a `limit` of how many matches it replaces, a code point's `toCharacter()` gives its character, a `List<int>`'s `toByteString()` gives the text of its bytes, and `normalized()` gives the text in a Unicode normalization form, `NormalizationForm.C` by default. `isLetter()`, `isDigit()`, `isLetterOrDigit()`, `isWhitespace()`, `isUppercase()` and `isLowercase()` are true when the text holds a character and each one is in the class. A code point that is no Unicode scalar value, a byte outside 0 to 255, and text that is not UTF-8 throw `ValueError`:
+**Ignoring case:** `compareTo`, `equals`, `indexOf`, `lastIndexOf`, `contains`, `startsWith` and `endsWith` take `ignoreCase`, `false` by default. It compares each character folded by Unicode's simple case folding, so an index stays an index into the text. `titlecase()` capitalizes each word, `replace` takes a `limit` of how many matches it replaces, a code point's `toCharacter()` gives its character, a `List<int>`'s `toBytes()` gives `Bytes` of its values, and `normalized()` gives the text in a Unicode normalization form, `NormalizationForm.C` by default. `isLetter()`, `isDigit()`, `isLetterOrDigit()`, `isWhitespace()`, `isUppercase()` and `isLowercase()` are true when the text holds a character and each one is in the class. A code point that is no Unicode scalar value and a byte outside 0 to 255 throw `ValueError`, and a plain PHP value that becomes a `string` has each sequence that is not UTF-8 replaced by U+FFFD:
 
 <!-- example text-case-and-classes: statements
 import Sharp.Text.NormalizationForm;
@@ -3702,26 +3702,28 @@ import Sharp.Text.NormalizationForm;
 "hello world".titlecase();                        // "Hello World"
 "banana".replace("a", "o", 1);                    // "bonana"
 0x1F600.toCharacter();                            // "😀"
-[104, 105].toByteString();                        // "hi"
+[104, 105].toBytes().toText();                   // "hi"
 "Ωmega".isLetter();                               // true
 "".isLetter();                                    // false
 "é".normalized(NormalizationForm.D).length();     // 2: "e" and a combining accent
 0xD800.toCharacter();                             // throws ValueError
 ```
 
-**Bytes:** `byteLength()`, `byteSubstring(start, end)` and `bytes()` read a `string` as its bytes, as `length()`, `substring()` and `codePoints()` read it as characters, so binary data, as `Ip.toBinary` gives, and the bytes another system counts or signs are read in PHP#. `byteSubstring` counts in bytes and throws `OutOfRangeException` for a range outside the bytes, and `bytes()` gives each byte as an `int` from 0 to 255:
+**Text and bytes:** a `string` is text and always valid UTF-8. Binary data, as `Ip.toBinary` gives, and the bytes another system counts or signs are `Bytes`, a separate type. A plain PHP value that becomes a `string` has each byte sequence that is not UTF-8 replaced by U+FFFD, and one that becomes `Bytes` keeps every byte. `text.toBytes()` gives a string's UTF-8 bytes, and `bytes.toText()` reads bytes as UTF-8, replacing each sequence that is not UTF-8 by U+FFFD. `Bytes` has `length()`, `slice(start, end)`, which throws `OutOfRangeException` for a range outside the bytes, and `toList()`, which gives each byte as an `int` from 0 to 255. A string literal is text too: one whose escapes write bytes that are no UTF-8 is a compile error that writes those bytes as `Bytes`, and `\u{E9}` writes a character's UTF-8 bytes:
 
 <!-- example text-bytes: statements
 import Sharp.Net.Ip;
 -->
 ```csharp
 "école".length();                          // 5
-"école".byteLength();                      // 6
-"école".bytes();                           // [195, 169, 99, 111, 108, 101]
-"école".byteSubstring(0, 2);               // "é"
-"école".byteSubstring(0, 9);               // throws: "`byteSubstring` takes a range inside the bytes, and the range is outside it."
-Ip.toBinary("192.168.0.1").bytes();        // [192, 168, 0, 1]
-Ip.toBinary("::1").byteLength();           // 16
+"école".toBytes().length();                // 6
+"école".toBytes().toList();                // [195, 169, 99, 111, 108, 101]
+"école".toBytes().slice(0, 2).toText();    // "é"
+"école".toBytes().slice(0, 9);             // throws: "`slice` takes a range inside the bytes, and the range is outside it."
+Ip.toBinary("192.168.0.1").toList();       // [192, 168, 0, 1]
+Ip.toBinary("::1").length();               // 16
+"\xB1\x31";                                // compile error: this literal's escapes are no UTF-8 text; bytes are [0xB1, 0x31].toBytes()
+"caf\u{E9}".length();                      // 4
 "--sku--".trim("-");                       // "sku"
 "/path/".trimEnd("/");                     // "/path"
 "xyx-a-xyx".trim("xy");                    // "-a-": each character of "xy", not the text "xy"
@@ -5470,7 +5472,7 @@ public class Layout
 - `Sharp.Security` holds `Hash`, `Hmac` and `Password`.
 - `Sharp.Interop` holds `PhpGlobals` and `Superglobal`.
 
-**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`. A bare `Int` is `Sharp.Int`, a bare `Math` is `Sharp.Math`, a bare `Decimal` is `Sharp.Decimal`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. `Sharp` holds the number types and their enums: `Int`, `Float`, `Math`, `Decimal`, `BigInteger`, `RoundingMode` and `ByteOrder`. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, `Error` included (section 31):
+**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`. A bare `Int` is `Sharp.Int`, a bare `Math` is `Sharp.Math`, a bare `Decimal` is `Sharp.Decimal`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. `Sharp` holds the number types and their enums, and `Bytes` (section 18): `Int`, `Float`, `Math`, `Decimal`, `BigInteger`, `RoundingMode`, `ByteOrder` and `Bytes`. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, `Error` included (section 31):
 
 <!-- example own-namespace-shadows -->
 ```csharp
@@ -5839,7 +5841,7 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 - PHP# has no user-defined conversion operators, which would convert a value with no call written. A type converts only through a property or method it declares, such as `username.value`.
 - `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`. `(array)` and `(object)` are parse errors, as any form outside PHP# is (section 1), and the code below replaces them.
 - PHP's cast aliases `(integer)`, `(double)`, `(boolean)` and `(binary)` do not exist.
-- An `int` writes its 8 bytes with `toBytes(order)`, in the `ByteOrder` `Big` by default or `Little`, and `Int.fromBytes(bytes, order)` reads them back. The bytes are a `string`, as `Ip.toBinary` gives, and a negative `int` writes its two's complement. `Int.fromBytes` of any length but 8 throws `ValueError`.
+- An `int` writes its 8 bytes with `toBytes(order)`, in the `ByteOrder` `Big` by default or `Little`, and `Int.fromBytes(bytes, order)` reads them back. The bytes are `Bytes`, as `Ip.toBinary` gives, and a negative `int` writes its two's complement. `Int.fromBytes` of any length but 8 throws `ValueError`.
 - `Base64.encode(data, urlSafe: true)` writes the URL-safe alphabet of RFC 4648, with `-` and `_` for `+` and `/`, and no padding. `Base64.decode(text, urlSafe: true)` reads it with or without padding, and throws `ValueError` on a `+` or a `/`.
 
 <!-- example int-bytes: statements
@@ -5851,8 +5853,8 @@ Hex.encode(258.toBytes());                          // "0000000000000102"
 Hex.encode(258.toBytes(ByteOrder.Little));          // "0201000000000000"
 Int.fromBytes((-1).toBytes());                      // -1
 Base64.encode(Hex.decode("fbff"), urlSafe: true);   // "-_8"
-Base64.decode("-_8", urlSafe: true).bytes();        // [251, 255]
-Int.fromBytes("short");                             // throws ValueError
+Base64.decode("-_8", urlSafe: true).toList();       // [251, 255]
+Int.fromBytes("short".toBytes());                   // throws ValueError
 ```
 
 **`Decimal` is an exact decimal number, and `BigInteger` an integer of any size.** Both are structs in `Sharp`, so they need no import, and run on PHP's bcmath, which every engine builds:
@@ -6030,7 +6032,7 @@ Json.parse("{\"a\":[1,2]}") != Json.parse("{\"a\":[2,1]}");       // true
 Json.parse("{\"a\":1,\"b\":2}") == Json.parse("{\"b\":2,\"a\":1}"); // true: an object's keys in any order
 ```
 
-**`Json.encode` takes `escapeSlashes`, `escapeUnicode`, `keepZeroFraction`, `indent` and `escapeHtml`,** which default to `false`, `false`, `true`, `0` and `true`, its output without them. `escapeSlashes` writes `/` as `\/`, `escapeUnicode` writes each character outside ASCII as `\u` and its code, and `keepZeroFraction: false` writes `1.0` as `1`, so a payload can match the bytes another system signs. `escapeHtml` writes `<`, `>`, `&`, `'` and `"` inside a string as `\u003C`, `\u003E`, `\u0026`, `\u0027` and `\u0022`, so JSON put inside a `<script>` can't close it, and `escapeHtml: false` writes them as themselves, `"` as `\"`. `indent` writes each nested value on its own line, `indent` spaces deeper than its parent, with `": "` after a key and `[]` and `{}` for an empty value, so `indent: 4` writes the bytes of PHP's `JSON_PRETTY_PRINT`. A negative `indent` throws a `ValueError`:
+**`Json.encode` takes `escapeSlashes`, `escapeUnicode`, `keepZeroFraction`, `indent` and `escapeHtml`,** which default to `false`, `false`, `true`, `0` and `true`, its output without them. `escapeSlashes` writes `/` as `\/`, `escapeUnicode` writes each character outside ASCII as `\u` and its code, and `keepZeroFraction: false` writes `1.0` as `1`, so a payload can match the bytes another system signs. `escapeHtml` writes `<`, `>`, `&`, `'` and `"` inside a string as `\u003C`, `\u003E`, `\u0026`, `\u0027` and `\u0022`, so JSON put inside a `<script>` can't close it, and `escapeHtml: false` writes them as themselves, `"` as `\"`. `indent` writes each nested value on its own line, `indent` spaces deeper than its parent, with `": "` after a key and `[]` and `{}` for an empty value, so `indent: 4` writes the bytes of PHP's `JSON_PRETTY_PRINT`. A NaN or infinite `float` is written as `null`, since JSON has no number for it. A negative `indent` throws a `ValueError`:
 
 <!-- example json-switches: statements
 import Sharp.Encoding.Json;
@@ -6044,6 +6046,8 @@ Json.encode(["tags": ["a"], "none": [:]], indent: 2);                           
 Json.encode(payload, indent: -1);                                                  // throws: "Json.encode: indent is -1, and it must be 0 or more"
 Json.encode(["tag": "<b>"]);                                                       // "{\"tag\":\"\\u003Cb\\u003E\"}"
 Json.encode(["tag": "<b>"], escapeHtml: false);                                    // "{\"tag\":\"<b>\"}"
+Json.encode(Math.asin(2.0));                                                       // "null": NaN
+Json.encode([1.5, Math.log(0.0)]);                                                 // "[1.5,null]": negative infinity
 ```
 
 **A string-backed enum case's `value` is a `literal-string`,** wherever the case comes from, a parameter, a variable or a collection's element included, since every case's backing value is a literal. So the columns or tables a query may name are an enum, and the one chosen while the code runs reaches a plain PHP `literal-string` parameter, as Laravel's `orderByRaw` declares one, as one of the application's own names. Values still go through a query's bindings:
@@ -6314,7 +6318,7 @@ typeof(List).makeGenericType([typeof(int)]) == typeof(List<int>);  // true
 typeof(int?).nonNullable() == typeof(int);                         // true
 ```
 
-**A class value reads every fact its class's declaration states:** `baseType()`, the class it extends with the type arguments it gives it, or null; `interfaces()`, each with its type arguments; `isAbstract()`, `isInterface()`, `isStruct()` and `isEnum()`; and an enum's `enumBackingType()`, null for a pure enum, and `enumCases()`, each an `EnumCase` with its `name`, its `value`, the case itself, its `backingValue`, null for a pure enum's, and `attributes<TAttribute : Object>()`:
+**A class value reads every fact its class's declaration states:** `baseType()`, the class it extends with the type arguments it gives it, or null; `interfaces()`, each with its type arguments; `traits()`, the plain PHP traits it, the classes it extends and those traits use, each once (section 22); `isAbstract()`, `isInterface()`, `isStruct()` and `isEnum()`; and an enum's `enumBackingType()`, null for a pure enum, and `enumCases()`, each an `EnumCase` with its `name`, its `value`, the case itself, its `backingValue`, null for a pure enum's, and `attributes<TAttribute : Object>()`:
 
 <!-- example declared-facts -->
 ```csharp
@@ -7248,7 +7252,7 @@ public class Money
     public Money add(Money other) => new Money(this.amount + other.amount, this.currency);
     public Money times(int n) => n <= 0 ? new Money(0, this.currency) : this.add(this.times(n - 1));
 
-    law timesKeepsCurrency(Money m, int n) => m.times(n).currency == m.currency   // compile error: law timesKeepsCurrency is not proven
+    law timesIsZero(Money m, int n) => m.times(n).amount == 0   // compile error: law timesIsZero is not proven
     {
         if (n <= 0) {
             return;
@@ -7258,9 +7262,9 @@ public class Money
 ```
 
 ```text
-error[law-unproven]: law timesKeepsCurrency is not proven
-  when n > 0, still to show: m.add(m.times(n - 1)).currency == m.currency
-  help: the law for a smaller n is the call Money.timesKeepsCurrency(m, n - 1)
+error[law-unproven]: law timesIsZero is not proven
+  when n > 0, still to show: m.add(m.times(n - 1)).amount == 0
+  help: the law for a smaller n is the call Money.timesIsZero(m, n - 1)
 ```
 
 **A module states laws that span its classes** in `Module.sharp` (section 32), with bodies as a class's laws have.

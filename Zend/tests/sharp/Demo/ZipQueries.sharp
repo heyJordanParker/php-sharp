@@ -25,6 +25,19 @@ public static class ZipQueries
         return seen;
     }
 
+    // Writes `data` as the entry data.bin of a new archive at `path`, then reopens it and reads the entry back as
+    // bytes, as text, and a missing entry as bytes.
+    public static List<Any?> bytesRoundTrip(string path, Bytes data)
+    {
+        const created = ZipArchive.create(path);
+        created.writeBytes("data.bin", data);
+        created.close();
+
+        const opened = ZipArchive.open(path);
+
+        return [opened.readBytes("data.bin")?.toList(), opened.read("data.bin"), opened.readBytes("missing.bin")];
+    }
+
     // How many entries an archive created and closed with none holds once reopened.
     public static int emptyCount(string path)
     {

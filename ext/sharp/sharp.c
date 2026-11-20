@@ -26,6 +26,7 @@
 #include "ext/json/php_json_parser.h"
 #include "ext/spl/spl_exceptions.h"
 #include "ext/standard/basic_functions.h"
+#include "ext/standard/html.h"
 #include "ext/standard/info.h"
 #include "zend_attributes.h"
 #include "zend_bitset.h"
@@ -2135,6 +2136,8 @@ static bool sharp_sequence_iterator_read(sharp_sequence_iterator *iterator, bool
 }
 
 static ZEND_COLD void sharp_sequence_refuse(const sharp_sequence *sequence, const zval *element, zend_long index);
+static void sharp_type_renumber(const sharp_type *type, zval *value);
+static void sharp_closure_check(const sharp_type *type, zval *value);
 
 /* Reads the stage's next value into value, which stays undefined at the end. take stops before it reads its source
  * again. A check stage converts each int its type takes as a float, as every crossing does. */
@@ -2173,7 +2176,8 @@ static void sharp_sequence_iterator_fetch(sharp_sequence_iterator *iterator, boo
 				return;
 			}
 			case SHARP_SEQUENCE_CHECK:
-				if (sharp_type_accepts(sequence->checked, &element, NULL)) {
+				sharp_type_renumber(sequence->checked, &element);
+				if (!EG(exception) && sharp_type_accepts(sequence->checked, &element, NULL)) {
 					/* Spec section 12: a PHP array a plain PHP source gives enters as the Map or the Set it is. */
 					if (Z_TYPE(sequence->crossing) == IS_ARRAY && Z_TYPE(element) == IS_ARRAY) {
 						zval crossed;
@@ -7987,6 +7991,292 @@ static const sharp_type *sharp_type_renumbered_element(const sharp_type *type, u
 	return element && sharp_type_holds_list(element) ? element : NULL;
 }
 
+/* Whether `type` takes a string as text, spec section 18: `string`, and a nullable type or a union that holds it. */
+static bool sharp_type_takes_text(const sharp_type *type)
+{
+	if (type->kind == SHARP_TYPE_NULLABLE) {
+		return sharp_type_takes_text(type->members[0]);
+	}
+	if (type->kind == SHARP_TYPE_UNION) {
+		for (uint32_t i = 0; i < type->count; i++) {
+			if (sharp_type_takes_text(type->members[i])) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	return type->kind == SHARP_TYPE_NAMED && type->built_in == SHARP_BUILT_IN_STRING;
+}
+
+/* The type `type` gives the element at `position` of an array it holds, as sharp_type_element_at reads it through a
+ * nullable type, or NULL for a type that holds no collection or tuple, or a tuple shorter than `position`. */
+static const sharp_type *sharp_type_text_element(const sharp_type *type, uint32_t position)
+{
+	if (type->kind == SHARP_TYPE_NULLABLE) {
+		type = type->members[0];
+	}
+	if (type->kind == SHARP_TYPE_TUPLE) {
+		return position < type->count ? type->members[position] : NULL;
+	}
+
+	return type->kind == SHARP_TYPE_NAMED ? sharp_type_elements(type) : NULL;
+}
+
+/* The key type of a `Map` `type` holds, through a nullable type, or NULL for any other type. */
+static const sharp_type *sharp_type_text_keys(const sharp_type *type)
+{
+	if (type->kind == SHARP_TYPE_NULLABLE) {
+		type = type->members[0];
+	}
+
+	return type->kind == SHARP_TYPE_NAMED && type->built_in == SHARP_BUILT_IN_MAP ? type->members[0] : NULL;
+}
+
+/* Whether `text` is valid UTF-8. A string read as valid keeps IS_STR_VALID_UTF8, as PCRE keeps it, so it is read once. */
+static bool sharp_text_is_valid(zend_string *text)
+{
+	if (GC_FLAGS(text) & IS_STR_VALID_UTF8) {
+		return true;
+	}
+	const unsigned char *bytes = (const unsigned char *) ZSTR_VAL(text);
+	size_t length = ZSTR_LEN(text), cursor = 0;
+	while (cursor < length) {
+		if (bytes[cursor] < 0x80) {
+			cursor++;
+			continue;
+		}
+		zend_result status;
+		php_next_utf8_char(bytes, length, &cursor, &status);
+		if (status == FAILURE) {
+			return false;
+		}
+	}
+	if (!ZSTR_IS_INTERNED(text)) {
+		GC_ADD_FLAGS(text, IS_STR_VALID_UTF8);
+	}
+
+	return true;
+}
+
+/* Appends `text` to `out`, each byte sequence that is not UTF-8 written by `invalid`: U+FFFD once for each maximal
+ * subpart, as Unicode recommends and PHP's own decoder reads them, or each of its bytes as `\xHH`. */
+static void sharp_text_append(smart_str *out, const zend_string *text, bool escape)
+{
+	const unsigned char *bytes = (const unsigned char *) ZSTR_VAL(text);
+	size_t length = ZSTR_LEN(text), cursor = 0;
+	while (cursor < length) {
+		size_t start = cursor;
+		if (bytes[cursor] < 0x80) {
+			cursor++;
+			smart_str_appendc(out, (char) bytes[start]);
+			continue;
+		}
+		zend_result status;
+		php_next_utf8_char(bytes, length, &cursor, &status);
+		if (status == SUCCESS) {
+			smart_str_appendl(out, (const char *) bytes + start, cursor - start);
+		} else if (escape) {
+			for (size_t i = start; i < cursor; i++) {
+				smart_str_append_printf(out, "\\x%02X", bytes[i]);
+			}
+		} else {
+			smart_str_appendl(out, "\xEF\xBF\xBD", 3);
+		}
+	}
+}
+
+/* `text` as valid UTF-8, each byte sequence that is not UTF-8 replaced by U+FFFD, spec section 18. */
+static zend_string *sharp_text_of(zend_string *text)
+{
+	if (sharp_text_is_valid(text)) {
+		return zend_string_copy(text);
+	}
+	smart_str replaced = {0};
+	sharp_text_append(&replaced, text, false);
+	zend_string *result = smart_str_extract(&replaced);
+	if (!ZSTR_IS_INTERNED(result)) {
+		GC_ADD_FLAGS(result, IS_STR_VALID_UTF8);
+	}
+
+	return result;
+}
+
+/* Whether `type` takes the standard library's `Bytes`, alone, nullable or in a union, and no text beside it. */
+static bool sharp_type_takes_bytes(const sharp_type *type)
+{
+	if (type->kind == SHARP_TYPE_NULLABLE) {
+		return sharp_type_takes_bytes(type->members[0]);
+	}
+	if (type->kind == SHARP_TYPE_UNION) {
+		bool bytes = false;
+		for (uint32_t i = 0; i < type->count; i++) {
+			bytes = bytes || sharp_type_takes_bytes(type->members[i]);
+		}
+
+		return bytes && !sharp_type_takes_text(type);
+	}
+
+	return type->kind == SHARP_TYPE_NAMED && type->class_name
+		&& zend_string_equals_literal_ci(type->class_name, "Sharp\\Bytes");
+}
+
+/* Spec section 18: puts in `value` the `Bytes` that holds the string `value` holds, every byte kept. It is built as its
+ * engine-only creation, with no constructor: a plain PHP string becomes `Bytes` only where it crosses. */
+static void sharp_bytes_wrap(zval *value)
+{
+	zend_string *name = zend_string_init(ZEND_STRL("Sharp\\Bytes"), false);
+	zend_class_entry *ce = zend_lookup_class(name);
+	zend_string_release(name);
+	if (!ce) {
+		if (!EG(exception)) {
+			zend_throw_error(NULL, "Sharp.Bytes is not loaded, and a plain PHP string crosses into a Bytes place");
+		}
+		return;
+	}
+	zend_property_info *data = zend_hash_str_find_ptr(&ce->properties_info, ZEND_STRL("data"));
+	ZEND_ASSERT(data && !(data->flags & ZEND_ACC_STATIC));
+	zval bytes;
+	if (object_init_to_build(&bytes, ce) == FAILURE) {
+		return;
+	}
+	zval *slot = OBJ_PROP(Z_OBJ(bytes), data->offset);
+	ZVAL_COPY_VALUE(slot, value);
+	Z_PROP_FLAG_P(slot) = 0;
+	ZVAL_COPY_VALUE(value, &bytes);
+}
+
+/* Whether sharp_type_take_strings changes `value`: a string in a place that takes text that is not valid UTF-8, a string
+ * in a `Bytes` place, or such a string among the elements, the tuple slots or the `Map` keys `type` gives an array. */
+static bool sharp_type_takes_strings(const sharp_type *type, const zval *value)
+{
+	ZVAL_DEREF(value);
+	if (Z_TYPE_P(value) == IS_STRING) {
+		return sharp_type_takes_text(type) ? !sharp_text_is_valid(Z_STR_P(value)) : sharp_type_takes_bytes(type);
+	}
+	if (Z_TYPE_P(value) != IS_ARRAY) {
+		return false;
+	}
+	const sharp_type *keys = sharp_type_text_keys(type);
+	bool text_keys = keys && sharp_type_takes_text(keys);
+	uint32_t position = 0;
+	zend_string *key;
+	zval *element;
+	ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(value), key, element) {
+		const sharp_type *at = sharp_type_text_element(type, position++);
+		if ((text_keys && key && !sharp_text_is_valid(key)) || (at && sharp_type_takes_strings(at, element))) {
+			return true;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return false;
+}
+
+/* Throws the ValueError for two keys of a `Map` that are one once each byte sequence that is not UTF-8 becomes U+FFFD,
+ * each bad byte written as `\xHH`, so the message itself is text. */
+static ZEND_COLD void sharp_keys_refuse_collision(const zend_string *first, const zend_string *second)
+{
+	smart_str message = {0};
+	smart_str_appends(&message, "This `Map` holds both `\"");
+	sharp_text_append(&message, first, true);
+	smart_str_appends(&message, "\"` and `\"");
+	sharp_text_append(&message, second, true);
+	smart_str_appends(&message, "\"`, which are one key once each byte sequence that is not UTF-8 becomes U+FFFD");
+	smart_str_0(&message);
+	zend_value_error("%s", ZSTR_VAL(message.s));
+	smart_str_free(&message);
+}
+
+/* Spec section 18: a string that crosses into a place that takes text, alone or as an element, a tuple slot or a `Map`
+ * key, has each byte sequence that is not UTF-8 replaced by U+FFFD, and one that crosses into a `Bytes` place becomes
+ * the `Bytes` that holds it. An array is copied only when a string in it changes, and the keys are rebuilt only when
+ * one changes. */
+static void sharp_type_take_strings(const sharp_type *type, zval *value)
+{
+	if (!sharp_type_takes_strings(type, value)) {
+		return;
+	}
+	ZVAL_DEREF(value);
+	if (Z_TYPE_P(value) == IS_STRING && !sharp_type_takes_text(type)) {
+		sharp_bytes_wrap(value);
+		return;
+	}
+	if (Z_TYPE_P(value) == IS_STRING) {
+		zend_string *text = sharp_text_of(Z_STR_P(value));
+		zval_ptr_dtor_str(value);
+		ZVAL_STR(value, text);
+		return;
+	}
+
+	SEPARATE_ARRAY(value);
+	uint32_t position = 0;
+	zval *element;
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(value), element) {
+		const sharp_type *at = sharp_type_text_element(type, position++);
+		if (at) {
+			sharp_type_take_strings(at, element);
+			if (UNEXPECTED(EG(exception))) {
+				return;
+			}
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	const sharp_type *keys = sharp_type_text_keys(type);
+	if (!keys || !sharp_type_takes_text(keys)) {
+		return;
+	}
+	bool changes = false;
+	zend_string *key;
+	ZEND_HASH_FOREACH_STR_KEY(Z_ARRVAL_P(value), key) {
+		changes = changes || (key && !sharp_text_is_valid(key));
+	} ZEND_HASH_FOREACH_END();
+	if (!changes) {
+		return;
+	}
+
+	HashTable *rekeyed = zend_new_array(zend_hash_num_elements(Z_ARRVAL_P(value)));
+	HashTable *sources = zend_new_array(0);
+	zend_ulong index;
+	ZEND_HASH_FOREACH_KEY_VAL(Z_ARRVAL_P(value), index, key, element) {
+		Z_TRY_ADDREF_P(element);
+		if (!key) {
+			zend_hash_index_update(rekeyed, index, element);
+			continue;
+		}
+		zend_string *text = sharp_text_of(key);
+		zval *earlier = zend_symtable_find(sources, text);
+		if (earlier) {
+			sharp_keys_refuse_collision(Z_STR_P(earlier), key);
+			zval_ptr_dtor(element);
+			zend_string_release(text);
+			zend_array_destroy(rekeyed);
+			zend_array_destroy(sources);
+			return;
+		}
+		zval source;
+		ZVAL_STR_COPY(&source, key);
+		zend_symtable_update(sources, text, &source);
+		zend_symtable_update(rekeyed, text, element);
+		zend_string_release(text);
+	} ZEND_HASH_FOREACH_END();
+	zend_array_destroy(sources);
+	zval_ptr_dtor(value);
+	ZVAL_ARR(value, rekeyed);
+}
+
+/* Spec section 18: `Bytes.toText()`, `bytes` read as UTF-8 as a string that crosses into PHP# is. */
+ZEND_FUNCTION(Sharp_Internal_text)
+{
+	zend_string *bytes;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(bytes)
+	ZEND_PARSE_PARAMETERS_END();
+
+	RETURN_STR(sharp_text_of(bytes));
+}
+
 /* Whether sharp_type_renumber changes `value`. */
 static bool sharp_type_renumbers(const sharp_type *type, const zval *value)
 {
@@ -8016,10 +8306,14 @@ static bool sharp_type_renumbers(const sharp_type *type, const zval *value)
  * as PHP# renumbers it where it reads one, and so does each such array in it that `type` places in a `List`: a `Map`'s
  * value, a `List`'s element and a tuple's element. The three crossings take it so: an argument from plain PHP, the
  * result of a plain PHP call PHP# checks, and a property plain PHP writes. A list is taken as it is, and an array with
- * a string key is no list. An array is separated only when it changes. */
+ * a string key is no list. An array is separated only when it changes. Each crossing makes its strings text first, as
+ * sharp_type_take_strings does, and wraps a plain PHP closure that crosses into a function type, as sharp_closure_check
+ * does. */
 static void sharp_type_renumber(const sharp_type *type, zval *value)
 {
-	if (!sharp_type_renumbers(type, value)) {
+	sharp_type_take_strings(type, value);
+	sharp_closure_check(type, value);
+	if (UNEXPECTED(EG(exception)) || !sharp_type_renumbers(type, value)) {
 		return;
 	}
 	ZVAL_DEREF(value);
@@ -8310,8 +8604,8 @@ ZEND_FUNCTION(Sharp_Internal_equals)
 }
 
 /* Spec section 24: the JSON text Sharp.Encoding.Json.encode writes, json_encode's with `$flags`, or with
- * JSON_PRETTY_PRINT's layout at `$indent` spaces a level when `$indent` is above 0. It throws JsonException as
- * json_encode does with JSON_THROW_ON_ERROR. */
+ * JSON_PRETTY_PRINT's layout at `$indent` spaces a level when `$indent` is above 0. A NaN or infinite float is null,
+ * which JSON has no number for. It throws JsonException as json_encode does with JSON_THROW_ON_ERROR. */
 ZEND_FUNCTION(Sharp_Internal_jsonEncode)
 {
 	zval *value;
@@ -8331,6 +8625,7 @@ ZEND_FUNCTION(Sharp_Internal_jsonEncode)
 	php_json_encode_init(&encoder);
 	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
 	encoder.indent = (int) indent;
+	encoder.nonfinite_as_null = true;
 	smart_str text = {0};
 	php_json_encode_zval(&text, value, (int) (indent ? flags | PHP_JSON_PRETTY_PRINT : flags & ~PHP_JSON_PRETTY_PRINT),
 		&encoder);
@@ -8951,6 +9246,19 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
 			sharp_sequence_check(value, iterable, head);
 		}
 	}
+
+	/* Spec section 18: the list a variadic parameter holds, which PHP builds of the arguments, holds text too. */
+	zval *rest = expected->count > count ? EX_VAR_NUM(count) : NULL;
+	if (rest && Z_TYPE_P(rest) == IS_ARRAY && zend_hash_num_elements(Z_ARRVAL_P(rest))) {
+		SEPARATE_ARRAY(rest);
+		zval *element;
+		ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(rest), element) {
+			sharp_type_take_strings(expected->members[count], element);
+			if (UNEXPECTED(EG(exception))) {
+				return;
+			}
+		} ZEND_HASH_FOREACH_END();
+	}
 }
 
 /* Throws for the names plain PHP passed a PHP# `...` parameter, which is a List and has no names, so no name or value
@@ -9414,6 +9722,8 @@ typedef struct {
 	/* ZEND_PROPERTY_HOOK_GET or ZEND_PROPERTY_HOOK_SET for an accessor, -1 for a method. */
 	int accessor;
 	bool spreads;
+	/* The plain PHP closure a delegate made at a crossing calls, see sharp_closure_check, and UNDEF for a method's. */
+	zval closure;
 	zend_object std;
 } sharp_delegate;
 
@@ -9446,7 +9756,18 @@ static void sharp_delegate_free(zend_object *object)
 	if (delegate->file) {
 		zend_string_release(delegate->file);
 	}
+	zval_ptr_dtor(&delegate->closure);
 	zend_object_std_dtor(object);
+}
+
+/* The plain PHP closure a delegate holds, which the cycle collector walks into. */
+static HashTable *sharp_delegate_gc(zend_object *object, zval **table, int *count)
+{
+	sharp_delegate *delegate = sharp_delegate_from(object);
+	*table = Z_ISUNDEF(delegate->closure) ? NULL : &delegate->closure;
+	*count = Z_ISUNDEF(delegate->closure) ? 0 : 1;
+
+	return NULL;
 }
 
 /* Appends the name a message gives the method `func`, its class's dotted name and its own, `App.Order.customer`, or
@@ -9902,8 +10223,25 @@ static void sharp_delegate_run(const sharp_delegate *delegate, zval *arguments, 
 	}
 }
 
-/* Runs the delegate on the `count` arguments its closure was called with, see sharp_delegate_run. An invoker takes its
- * method's arguments as the one list after its receiver, which it spreads: each value of the list is an argument. */
+/* Calls the plain PHP closure `delegate` holds with the `count` `arguments` PHP# passes, which PHP checks against the
+ * closure's declared parameters, and checks its result as any crossing's, spec section 14: a result of another type than
+ * the delegate's function type returns throws the TypeError of a function's return value naming that type. */
+static void sharp_closure_checked_call(const sharp_delegate *delegate, zval *arguments, uint32_t count, zval *return_value)
+{
+	if (call_user_function(NULL, NULL, (zval *) &delegate->closure, return_value, count, arguments) == FAILURE
+		|| EG(exception)) {
+		return;
+	}
+	const sharp_type *result = delegate->type->members[0];
+	if (!sharp_type_verified(result, result, return_value, ZSTR_VAL(delegate->type->text))) {
+		zval_ptr_dtor(return_value);
+		ZVAL_NULL(return_value);
+	}
+}
+
+/* Runs the delegate on the `count` arguments its closure was called with, see sharp_delegate_run, or the plain PHP
+ * closure it holds, see sharp_closure_checked_call. An invoker takes its method's arguments as the one list after its
+ * receiver, which it spreads: each value of the list is an argument. */
 ZEND_METHOD(Sharp_Internal_Delegate, call)
 {
 	zval *arguments = NULL;
@@ -9914,6 +10252,10 @@ ZEND_METHOD(Sharp_Internal_Delegate, call)
 	ZEND_PARSE_PARAMETERS_END();
 
 	sharp_delegate *delegate = sharp_delegate_from(Z_OBJ_P(ZEND_THIS));
+	if (!Z_ISUNDEF(delegate->closure)) {
+		sharp_closure_checked_call(delegate, arguments, count, return_value);
+		return;
+	}
 	if (!delegate->spreads) {
 		sharp_delegate_run(delegate, arguments, count, return_value);
 		return;
@@ -9950,6 +10292,55 @@ ZEND_METHOD(Sharp_Internal_Delegate, call)
 ZEND_METHOD(Sharp_Internal_Delegate, __construct)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
+}
+
+/* The function type `type` is, or holds as `T?`, whose result a crossing checks: NULL for any other type, and for a
+ * function type returning `void` or `Any?`, which every result fits. */
+static const sharp_type *sharp_type_checked_function(const sharp_type *type)
+{
+	if (type->kind == SHARP_TYPE_NULLABLE) {
+		type = type->members[0];
+	}
+	if (type->kind != SHARP_TYPE_FUNCTION) {
+		return NULL;
+	}
+	const sharp_type *result = type->members[0];
+	const sharp_type *named = result->kind == SHARP_TYPE_NULLABLE ? result->members[0] : result;
+	bool open = named->kind == SHARP_TYPE_NAMED
+		&& (named->built_in == SHARP_BUILT_IN_VOID || (named->built_in == SHARP_BUILT_IN_ANY && named != result));
+
+	return open ? NULL : type;
+}
+
+/* Spec section 14: puts in `value`, a plain PHP closure that crosses into the function type `type`, the delegate that
+ * calls it and checks each result, see sharp_closure_checked_call, as a gradual type system wraps a function from
+ * untyped code. One that crosses in again keeps its delegate for the same type, and has its plain PHP closure wrapped
+ * for another. A PHP# closure and a method's delegate carry their own type, which the crossing's check compares. */
+static void sharp_closure_check(const sharp_type *type, zval *value)
+{
+	const sharp_type *function = sharp_type_checked_function(type);
+	if (!function || Z_TYPE_P(value) != IS_OBJECT || Z_OBJCE_P(value) != zend_ce_closure) {
+		return;
+	}
+	const zend_function *func = zend_get_closure_method_def(Z_OBJ_P(value));
+	zval *closure = value;
+	if (func->common.scope == sharp_ce_delegate) {
+		sharp_delegate *held = sharp_delegate_from(Z_OBJ_P(zend_get_closure_this_ptr(value)));
+		if (Z_ISUNDEF(held->closure) || sharp_type_equals(held->type, function)) {
+			return;
+		}
+		closure = &held->closure;
+	} else if (sharp_function_is_sharp(func)) {
+		return;
+	}
+	zval object;
+	object_init_ex(&object, sharp_ce_delegate);
+	sharp_delegate *delegate = sharp_delegate_from(Z_OBJ(object));
+	delegate->type = function;
+	ZVAL_COPY(&delegate->closure, closure);
+	zval_ptr_dtor(value);
+	zend_create_fake_closure(value, sharp_delegate_call, sharp_ce_delegate, sharp_ce_delegate, &object);
+	zval_ptr_dtor(&object);
 }
 
 /* The type the closure `value` carries: a PHP# closure's as sharp_function_carried spells it for the object the closure
@@ -12143,6 +12534,9 @@ static void sharp_read_whole(const sharp_type *type, zval *value, sharp_read *re
 	array_init(&read->texts);
 
 	sharp_read_value(type, value, read);
+	if (!EG(exception)) {
+		sharp_type_renumber(type, value);
+	}
 	if (!EG(exception)) {
 		sharp_type_accepts(type, value, &read->found);
 	}
@@ -15060,6 +15454,7 @@ static PHP_MINIT_FUNCTION(sharp)
 	memcpy(&sharp_delegate_handlers, &std_object_handlers, sizeof(zend_object_handlers));
 	sharp_delegate_handlers.offset = XtOffsetOf(sharp_delegate, std);
 	sharp_delegate_handlers.free_obj = sharp_delegate_free;
+	sharp_delegate_handlers.get_gc = sharp_delegate_gc;
 	sharp_delegate_handlers.clone_obj = NULL;
 	sharp_ce_delegate->default_object_handlers = &sharp_delegate_handlers;
 	sharp_delegate_call = zend_hash_str_find_ptr(&sharp_ce_delegate->function_table, "call", sizeof("call") - 1);

@@ -5,14 +5,14 @@ A result PHP# did not check, from a function value, a PHP# interface a plain PHP
 require __DIR__ . '/unverified_results.inc';
 ?>
 --EXPECT--
-Function<Any()> giving null: f(): Return value must be of type Any, null returned
+Function<Any()> giving null: Function<Any()>: Return value must be of type Any, null returned
 Function<Any()> giving 1: 1
-Function<Object()> giving 5: f(): Return value must be of type Object, int returned
+Function<Object()> giving 5: Function<Object()>: Return value must be of type Object, int returned
 Source.read() giving null: Crossed.Source.read(): Return value must be of type Any, null returned
 map: array (   0 => 2.0,   1 => 4.0, )
 sumOf: 6.0
-groupBy giving text: groupBy(): Return value must be of type Map<float, List<int>>, Sharp.Map returned: ["key"] key expected float, got string 'key'
-associateBy giving text: associateBy(): Return value must be of type Map<float, int>, Sharp.Map returned: ["key"] key expected float, got string 'key'
+groupBy giving text: Function<float(int)>: Return value must be of type float, string returned
+associateBy giving text: Function<float(int)>: Return value must be of type float, string returned
 lazy map: array (   0 => 2.0,   1 => 4.0, )
 null-safe map: array (   0 => 2.0,   1 => 4.0, )
-map to Any giving null: map(): Return value must be of type List<Any>, array returned: [0] expected Any, got null
+map to Any giving null: Function<Any(int)>: Return value must be of type Any, null returned

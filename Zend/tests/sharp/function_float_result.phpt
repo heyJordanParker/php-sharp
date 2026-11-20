@@ -32,4 +32,4 @@ array(2) {
   float(2.5)
 }
 int(4)
-f(): Return value must be of type float, string returned
+Function<float(int)>: Return value must be of type float, string returned

@@ -122,27 +122,38 @@ build_engine() {
     (cd "$engine" && "$root/configure" "${options[@]}")
   fi
 
+  # make builds only what the libphp link names, each .lo with its .o, and ext/sharp's libsharp.a among them, never the
+  # link itself or a binary: libtool's static libphp.a holds no object, since it takes ext/sharp's libsharp.a for one
+  # and drops the rest, and nothing of mago runs the engine's CLI, phpdbg, CGI or phar.phar. Making that archive took 16
+  # of the 24 minutes of this step on run 44770028227, on a commit whose only changed object was the build id's.
   # The cargo build of ext/sharp's Rust library, which make runs, reads CARGO_BUILD_JOBS as its jobs.
-  CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")" make -C "$engine" -j"$("$root/sharp/bin/jobs")" >/dev/null
+  read -r -a linked <<< "$(make -s -C "$engine" -f Makefile -f - print-objects <<< 'print-objects: ; @echo $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS)')"
+  CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")" make -C "$engine" -j"$("$root/sharp/bin/jobs")" "${linked[@]}" >/dev/null
   make -C "$engine" install-headers install-programs >/dev/null
 
-  # libtool's static libphp.a holds no object: it takes ext/sharp's libsharp.a for one and drops the rest. So the archive
-  # mago links holds the objects the libphp link names, each .lo's .o, and the static archive of each library the link
-  # names, so the linker finds every symbol in one archive whatever order they need each other in. libsharp.a stays out:
-  # it bundles a Rust standard library of its own, so mago links ext/sharp's crate as a Rust library instead, beside its
-  # own code. system-libs names the libraries left to the system, one rustc link-lib per line, which the engine crate
-  # links.
+  # So the archive mago links holds those objects, and the static archive of each library the link names, so the linker
+  # finds every symbol in one archive whatever order they need each other in. libsharp.a stays out: it bundles a Rust
+  # standard library of its own, so mago links ext/sharp's crate as a Rust library instead, beside its own code.
+  # system-libs names the libraries left to the system, one rustc link-lib per line, which the engine crate links. The
+  # archive is current while no object is newer than it, so a build of an unchanged tree packs nothing.
   library="$engine/install/lib"
-  if [[ ! -f "$library/libphp.a" || "$engine/libs/libphp.a" -nt "$library/libphp.a" ]]; then
+  objects=()
+  for object in "${linked[@]}"; do
+    case "$object" in
+      *.lo) objects+=("$engine/${object%.lo}.o") ;;
+      */libsharp.a) ;;
+      *) echo "the libphp link names $object, which is neither an object nor ext/sharp's library" >&2; exit 1 ;;
+    esac
+  done
+  stale=false
+  for object in "${objects[@]}"; do
+    if [[ $object -nt "$library/libphp.a" ]]; then
+      stale=true
+      break
+    fi
+  done
+  if $stale; then
     mkdir -p "$library"
-    objects=()
-    for object in $(make -s -C "$engine" -f Makefile -f - print-objects <<< 'print-objects: ; @echo $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS)'); do
-      case "$object" in
-        *.lo) objects+=("$engine/${object%.lo}.o") ;;
-        */libsharp.a) ;;
-        *) echo "the libphp link names $object, which is neither an object nor ext/sharp's library" >&2; exit 1 ;;
-      esac
-    done
 
     # The C library, the C++ runtime and the rest of what every machine of the platform has stay the system's. A
     # library outside that list links from its archive, found where the engine's link looks, then in the system's own

@@ -4,7 +4,9 @@ import Sharp.Encoding.Compression;
 
 class CompressionCalls
 {
-    public static string compress(string data) => Compression.compress(data);
+    public static Bytes compress(Bytes data) => Compression.compress(data);
 
-    public static string uncompress(string data) => Compression.uncompress(data);
+    public static string uncompress(Bytes data) => Compression.uncompress(data).toText();
+
+    public static List<int> header(Bytes data) => data.slice(0, 2).toList();
 }

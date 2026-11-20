@@ -1577,7 +1577,9 @@ fn a_field_without_an_access_modifier_is_a_private_property() {
                             ZVAL null
                             null
               PROP_GROUP [32772]
-                ZVAL "Closure"
+                SHARP_TYPE_ARGS
+                  ZVAL "Closure"
+                  ZVAL "Function<App.Shop.Money(App.Shop.Offer) uses Sharp.Net.Http>"
                 PROP_DECL
                   PROP_ELEM
                     ZVAL "priceOf"
@@ -1586,7 +1588,9 @@ fn a_field_without_an_access_modifier_is_a_private_property() {
                     null
                 null
               PROP_GROUP [32772]
-                ZVAL "Closure"
+                SHARP_TYPE_ARGS
+                  ZVAL "Closure"
+                  ZVAL "Function<App.Shop.Charge(App.Shop.Cart) uses Sharp.Net.Http>"
                 PROP_DECL
                   PROP_ELEM
                     ZVAL "charge"
@@ -1610,6 +1614,9 @@ fn a_field_without_an_access_modifier_is_a_private_property() {
                     null
                     null
                     null
+                  SHARP_TYPE_ARGS
+                    null
+                    ZVAL "Function<App.Shop.Money(App.Shop.Offer) uses Sharp.Net.Http>, Function<App.Shop.Charge(App.Shop.Cart) uses Sharp.Net.Http>"
                 null
                 STMT_LIST
                   ASSIGN
@@ -1796,7 +1803,9 @@ fn a_computed_property_is_a_property_with_a_short_get_hook() {
         lowered.render(lowered.child(lowered.child(class, 2), 1)),
         indoc! {r#"
             PROP_GROUP [1]
-              ZVAL [1] "string"
+              SHARP_TYPE_ARGS
+                ZVAL [1] "string"
+                ZVAL "string"
               PROP_DECL
                 PROP_ELEM
                   ZVAL "slug"
@@ -1866,7 +1875,9 @@ fn accessor_bodies_are_property_hooks() {
         [
             indoc! {r#"
                 PROP_GROUP [1]
-                  ZVAL [1] "string"
+                  SHARP_TYPE_ARGS
+                    ZVAL [1] "string"
+                    ZVAL "string"
                   PROP_DECL
                     PROP_ELEM
                       ZVAL "name"
@@ -2083,7 +2094,9 @@ fn a_field_getter_is_plain_storage_unless_a_parent_has_a_get_hook() {
         [
             indoc! {r#"
                 PROP_GROUP [1]
-                  ZVAL [1] "string"
+                  SHARP_TYPE_ARGS
+                    ZVAL [1] "string"
+                    ZVAL "string"
                   PROP_DECL
                     PROP_ELEM
                       ZVAL "word"
@@ -2321,7 +2334,9 @@ fn a_static_property_runs_each_accessor_form_and_each_write_through_its_hidden_m
                       ZVAL "Function<void(int)>"
                     null
                   PROP_GROUP [20]
-                    ZVAL [1] "string"
+                    SHARP_TYPE_ARGS
+                      ZVAL [1] "string"
+                      ZVAL "string"
                     PROP_DECL
                       PROP_ELEM
                         ZVAL "label"
@@ -2372,7 +2387,9 @@ fn a_static_property_runs_each_accessor_form_and_each_write_through_its_hidden_m
                       ZVAL "Function<void(string)>"
                     null
                   PROP_GROUP [20]
-                    ZVAL [257] "string"
+                    SHARP_TYPE_ARGS
+                      ZVAL [257] "string"
+                      ZVAL "string?"
                     PROP_DECL
                       PROP_ELEM
                         ZVAL "note"
@@ -2431,6 +2448,9 @@ fn a_static_property_runs_each_accessor_form_and_each_write_through_its_hidden_m
                         null
                         null
                         null
+                      SHARP_TYPE_ARGS
+                        null
+                        ZVAL "string?"
                     null
                     STMT_LIST
                     SHARP_TYPE_ARGS
@@ -2533,11 +2553,14 @@ fn a_static_property_runs_each_accessor_form_and_each_write_through_its_hidden_m
                         STATIC_PROP
                           ZVAL [1] "self"
                           ZVAL "label"
-                        STATIC_CALL
-                          ZVAL "Words"
-                          ZVAL "of"
-                          ARG_LIST
-                            ZVAL 1
+                        VERIFY_TYPE_ARGS
+                          STATIC_CALL
+                            ZVAL "Words"
+                            ZVAL "of"
+                            ARG_LIST
+                              ZVAL 1
+                          ZVAL "string"
+                          ZVAL "Words::of()"
                     ZVAL [1] "void"
                     null
                   METHOD [20] "label#initial" @6-6
@@ -2545,11 +2568,14 @@ fn a_static_property_runs_each_accessor_form_and_each_write_through_its_hidden_m
                     null
                     STMT_LIST
                       RETURN
-                        STATIC_CALL
-                          ZVAL "Words"
-                          ZVAL "of"
-                          ARG_LIST
-                            ZVAL 1
+                        VERIFY_TYPE_ARGS
+                          STATIC_CALL
+                            ZVAL "Words"
+                            ZVAL "of"
+                            ARG_LIST
+                              ZVAL 1
+                          ZVAL "string"
+                          ZVAL "Words::of()"
                     null
                     null
                   SHARP_CLASS_METADATA
@@ -2807,7 +2833,9 @@ fn a_static_initial_value_that_is_not_constant_runs_once_when_its_class_s_static
                         null
                     null
                   PROP_GROUP [32788]
-                    ZVAL [1] "string"
+                    SHARP_TYPE_ARGS
+                      ZVAL [1] "string"
+                      ZVAL "string"
                     PROP_DECL
                       PROP_ELEM
                         ZVAL "name"
@@ -2861,11 +2889,14 @@ fn a_static_initial_value_that_is_not_constant_runs_once_when_its_class_s_static
                         STATIC_PROP
                           ZVAL [1] "self"
                           ZVAL "name"
-                        STATIC_CALL
-                          ZVAL "Lib\\Calc"
-                          ZVAL "label"
-                          ARG_LIST
-                            ZVAL " a "
+                        VERIFY_TYPE_ARGS
+                          STATIC_CALL
+                            ZVAL "Lib\\Calc"
+                            ZVAL "label"
+                            ARG_LIST
+                              ZVAL " a "
+                          ZVAL "string"
+                          ZVAL "Lib\\Calc::label()"
                       ASSIGN
                         STATIC_PROP
                           ZVAL [1] "self"
@@ -2893,11 +2924,14 @@ fn a_static_initial_value_that_is_not_constant_runs_once_when_its_class_s_static
                     null
                     STMT_LIST
                       RETURN
-                        STATIC_CALL
-                          ZVAL "Lib\\Calc"
-                          ZVAL "label"
-                          ARG_LIST
-                            ZVAL " a "
+                        VERIFY_TYPE_ARGS
+                          STATIC_CALL
+                            ZVAL "Lib\\Calc"
+                            ZVAL "label"
+                            ARG_LIST
+                              ZVAL " a "
+                          ZVAL "string"
+                          ZVAL "Lib\\Calc::label()"
                     null
                     null
                   METHOD [20] "next#initial" @10-10
@@ -3007,7 +3041,9 @@ fn a_static_constructor_runs_as_the_statics_method_after_the_initial_values() {
                                 ZVAL null
                                 null
                   PROP_GROUP [32788]
-                    ZVAL [1] "string"
+                    SHARP_TYPE_ARGS
+                      ZVAL [1] "string"
+                      ZVAL "string"
                     PROP_DECL
                       PROP_ELEM
                         ZVAL "name"
@@ -3032,11 +3068,14 @@ fn a_static_constructor_runs_as_the_statics_method_after_the_initial_values() {
                         STATIC_PROP
                           ZVAL [1] "self"
                           ZVAL "name"
-                        STATIC_CALL
-                          ZVAL "Lib\\Calc"
-                          ZVAL "label"
-                          ARG_LIST
-                            ZVAL " a "
+                        VERIFY_TYPE_ARGS
+                          STATIC_CALL
+                            ZVAL "Lib\\Calc"
+                            ZVAL "label"
+                            ARG_LIST
+                              ZVAL " a "
+                          ZVAL "string"
+                          ZVAL "Lib\\Calc::label()"
                       CALL
                         ZVAL "Sharp\\Internal\\put"
                         ARG_LIST
@@ -3052,11 +3091,14 @@ fn a_static_constructor_runs_as_the_statics_method_after_the_initial_values() {
                     null
                     STMT_LIST
                       RETURN
-                        STATIC_CALL
-                          ZVAL "Lib\\Calc"
-                          ZVAL "label"
-                          ARG_LIST
-                            ZVAL " a "
+                        VERIFY_TYPE_ARGS
+                          STATIC_CALL
+                            ZVAL "Lib\\Calc"
+                            ZVAL "label"
+                            ARG_LIST
+                              ZVAL " a "
+                          ZVAL "string"
+                          ZVAL "Lib\\Calc::label()"
                     null
                     null
                   SHARP_CLASS_METADATA
@@ -3247,7 +3289,9 @@ fn behaviors_are_hidden_slots_the_hooks_call_in_order() {
             "#},
             indoc! {r#"
                 PROP_GROUP [1]
-                  ZVAL [1] "string"
+                  SHARP_TYPE_ARGS
+                    ZVAL [1] "string"
+                    ZVAL "string"
                   PROP_DECL
                     PROP_ELEM
                       ZVAL "name"
@@ -3352,6 +3396,9 @@ fn behaviors_are_hidden_slots_the_hooks_call_in_order() {
                 null
                 null
                 null
+              SHARP_TYPE_ARGS
+                null
+                ZVAL "string"
         "#}
     );
 }
@@ -3477,7 +3524,9 @@ fn a_promoted_parameter_s_behaviors_are_filled_before_its_argument_is_set() {
         [
             indoc! {r#"
                 PROP_GROUP [1]
-                  ZVAL [1] "string"
+                  SHARP_TYPE_ARGS
+                    ZVAL [1] "string"
+                    ZVAL "string"
                   PROP_DECL
                     PROP_ELEM
                       ZVAL "name"
@@ -3680,7 +3729,9 @@ fn observers_run_inside_the_set_hook_once_the_object_is_built() {
         [
             indoc! {r#"
                 PROP_GROUP [1]
-                  ZVAL [1] "string"
+                  SHARP_TYPE_ARGS
+                    ZVAL [1] "string"
+                    ZVAL "string"
                   PROP_DECL
                     PROP_ELEM
                       ZVAL "name"
@@ -3796,7 +3847,9 @@ fn observers_run_inside_the_set_hook_once_the_object_is_built() {
             "#},
             indoc! {r#"
                 PROP_GROUP [1]
-                  ZVAL [1] "string"
+                  SHARP_TYPE_ARGS
+                    ZVAL [1] "string"
+                    ZVAL "string"
                   PROP_DECL
                     PROP_ELEM
                       ZVAL "title"
@@ -3812,12 +3865,15 @@ fn observers_run_inside_the_set_hook_once_the_object_is_built() {
                                 VAR
                                   ZVAL "this"
                                 ZVAL "title"
-                              STATIC_CALL
-                                ZVAL "Words"
-                                ZVAL "trim"
-                                ARG_LIST
-                                  VAR
-                                    ZVAL "value"
+                              VERIFY_TYPE_ARGS
+                                STATIC_CALL
+                                  ZVAL "Words"
+                                  ZVAL "trim"
+                                  ARG_LIST
+                                    VAR
+                                      ZVAL "value"
+                                ZVAL "string"
+                                ZVAL "Words::trim()"
                           SHARP_TYPE_ARGS
                             null
                             ZVAL "Function<void(string)>"
@@ -3841,11 +3897,14 @@ fn observers_run_inside_the_set_hook_once_the_object_is_built() {
                 ARG_LIST
                   VAR
                     ZVAL "this"
-                  STATIC_CALL
-                    ZVAL "Words"
-                    ZVAL "of"
-                    ARG_LIST
-                      ZVAL 1
+                  VERIFY_TYPE_ARGS
+                    STATIC_CALL
+                      ZVAL "Words"
+                      ZVAL "of"
+                      ARG_LIST
+                        ZVAL 1
+                    ZVAL "string"
+                    ZVAL "Words::of()"
         "#}
     );
 }
@@ -4222,7 +4281,9 @@ fn nullable_properties_with_accessor_bodies_are_their_php_hooks() {
             "#},
             indoc! {r#"
                 PROP_GROUP [1]
-                  ZVAL [257] "string"
+                  SHARP_TYPE_ARGS
+                    ZVAL [257] "string"
+                    ZVAL "string?"
                   PROP_DECL
                     PROP_ELEM
                       ZVAL "note"
@@ -4260,7 +4321,9 @@ fn nullable_properties_with_accessor_bodies_are_their_php_hooks() {
             "#},
             indoc! {r#"
                 PROP_GROUP [1]
-                  ZVAL [257] "string"
+                  SHARP_TYPE_ARGS
+                    ZVAL [257] "string"
+                    ZVAL "string?"
                   PROP_DECL
                     PROP_ELEM
                       ZVAL "summary"
@@ -4585,7 +4648,7 @@ fn the_base_class_constructor_can_be_inherited() {
         ),
         (
             "namespace App.Tenant;\n\nimport Lib.Record;\n\nclass Report : Record\n{\n    private string label = Record.upper(\"x\");\n}\n",
-            "STMT_LIST\n  ASSIGN\n    PROP\n      VAR\n        ZVAL \"this\"\n      ZVAL \"label\"\n    STATIC_CALL\n      ZVAL \"Lib\\\\Record\"\n      ZVAL \"upper\"\n      ARG_LIST\n        ZVAL \"x\"\n  STATIC_CALL\n    ZVAL [1] \"parent\"\n    ZVAL \"__construct\"\n    ARG_LIST\n",
+            "STMT_LIST\n  ASSIGN\n    PROP\n      VAR\n        ZVAL \"this\"\n      ZVAL \"label\"\n    VERIFY_TYPE_ARGS\n      STATIC_CALL\n        ZVAL \"Lib\\\\Record\"\n        ZVAL \"upper\"\n        ARG_LIST\n          ZVAL \"x\"\n      ZVAL \"string\"\n      ZVAL \"Lib\\\\Plain::upper()\"\n  STATIC_CALL\n    ZVAL [1] \"parent\"\n    ZVAL \"__construct\"\n    ARG_LIST\n",
         ),
     ] {
         let lowered = Lowered::with(code, &[("src/Lib/Model.php", model)]);
@@ -4709,6 +4772,9 @@ fn a_named_constructor_is_a_static_method_that_returns_the_object_this_creates()
                   null
                   null
                   null
+                SHARP_TYPE_ARGS
+                  null
+                  ZVAL "Any?, string"
               null
               STMT_LIST
                 ASSIGN
@@ -5605,7 +5671,9 @@ fn a_get_only_property_gets_its_initial_value_in_the_constructor() {
         indoc! {r#"
             STMT_LIST
               PROP_GROUP [129]
-                ZVAL [1] "string"
+                SHARP_TYPE_ARGS
+                  ZVAL [1] "string"
+                  ZVAL "string"
                 PROP_DECL
                   PROP_ELEM
                     ZVAL "code"
@@ -5690,10 +5758,12 @@ fn a_nullable_member_s_initial_null_is_its_default() {
                     null
                 null
               PROP_GROUP [32772]
-                TYPE_UNION
-                  ZVAL [1] "int"
-                  ZVAL [1] "string"
-                  ZVAL [1] "null"
+                SHARP_TYPE_ARGS
+                  TYPE_UNION
+                    ZVAL [1] "int"
+                    ZVAL [1] "string"
+                    ZVAL [1] "null"
+                  ZVAL "(int|string)?"
                 PROP_DECL
                   PROP_ELEM
                     ZVAL "key"
@@ -6517,12 +6587,15 @@ fn a_set_literal_is_a_new_set_of_its_elements() {
                     ARG_LIST
                       ARRAY [3]
                         ARRAY_ELEM
-                          STATIC_CALL
-                            ZVAL "Lib\\Calc"
-                            ZVAL "upper"
-                            ARG_LIST
-                              VAR
-                                ZVAL "name"
+                          VERIFY_TYPE_ARGS
+                            STATIC_CALL
+                              ZVAL "Lib\\Calc"
+                              ZVAL "upper"
+                              ARG_LIST
+                                VAR
+                                  ZVAL "name"
+                            ZVAL "string"
+                            ZVAL "Lib\\Calc::upper()"
                           null
                   ZVAL "string"
         "#}
@@ -7453,12 +7526,15 @@ fn set_methods_run_on_the_set() {
                 ASSIGN
                   VAR
                     ZVAL "argument#1"
-                  STATIC_CALL
-                    ZVAL "Lib\\Calc"
-                    ZVAL "upper"
-                    ARG_LIST
-                      VAR
-                        ZVAL "name"
+                  VERIFY_TYPE_ARGS
+                    STATIC_CALL
+                      ZVAL "Lib\\Calc"
+                      ZVAL "upper"
+                      ARG_LIST
+                        VAR
+                          ZVAL "name"
+                    ZVAL "string"
+                    ZVAL "Lib\\Calc::upper()"
                 CALL
                   ZVAL "Sharp\\Internal\\removeKey"
                   ARG_LIST
@@ -8557,41 +8633,47 @@ fn an_extension_member_runs_beside_the_own_member_of_every_union_shape() {
             plain:
             STMT_LIST
               RETURN
-                CONDITIONAL [1]
-                  INSTANCEOF
-                    VAR
-                      ZVAL "value"
-                    ZVAL "App\\Billing\\PlainOrder"
-                  METHOD_CALL
-                    VAR
-                      ZVAL "value"
-                    ZVAL "label"
-                    ARG_LIST
-                  STATIC_CALL
-                    ZVAL "App\\Billing\\Labels"
-                    ZVAL "label"
-                    ARG_LIST
+                VERIFY_TYPE_ARGS
+                  CONDITIONAL [1]
+                    INSTANCEOF
                       VAR
                         ZVAL "value"
+                      ZVAL "App\\Billing\\PlainOrder"
+                    METHOD_CALL
+                      VAR
+                        ZVAL "value"
+                      ZVAL "label"
+                      ARG_LIST
+                    STATIC_CALL
+                      ZVAL "App\\Billing\\Labels"
+                      ZVAL "label"
+                      ARG_LIST
+                        VAR
+                          ZVAL "value"
+                  ZVAL "string"
+                  ZVAL "App\\Billing\\PlainOrder::label()"
             traited:
             STMT_LIST
               RETURN
-                CONDITIONAL [1]
-                  INSTANCEOF
-                    VAR
-                      ZVAL "value"
-                    ZVAL "App\\Billing\\PhpOrder"
-                  METHOD_CALL
-                    VAR
-                      ZVAL "value"
-                    ZVAL "label"
-                    ARG_LIST
-                  STATIC_CALL
-                    ZVAL "App\\Billing\\Labels"
-                    ZVAL "label"
-                    ARG_LIST
+                VERIFY_TYPE_ARGS
+                  CONDITIONAL [1]
+                    INSTANCEOF
                       VAR
                         ZVAL "value"
+                      ZVAL "App\\Billing\\PhpOrder"
+                    METHOD_CALL
+                      VAR
+                        ZVAL "value"
+                      ZVAL "label"
+                      ARG_LIST
+                    STATIC_CALL
+                      ZVAL "App\\Billing\\Labels"
+                      ZVAL "label"
+                      ARG_LIST
+                        VAR
+                          ZVAL "value"
+                  ZVAL "string"
+                  ZVAL "App\\Billing\\HasLabel::label()"
             bounded:
             STMT_LIST
               RETURN
@@ -8730,22 +8812,25 @@ fn a_member_a_part_takes_from_a_trait_runs_on_an_instance_of_the_parts_class() {
         indoc! {r#"
             STMT_LIST
               RETURN
-                CONDITIONAL [1]
-                  INSTANCEOF
-                    VAR
-                      ZVAL "value"
-                    ZVAL "App\\Billing\\PhpOrder"
-                  METHOD_CALL
-                    VAR
-                      ZVAL "value"
-                    ZVAL "label"
-                    ARG_LIST
-                  STATIC_CALL
-                    ZVAL "App\\Billing\\Labels"
-                    ZVAL "label"
-                    ARG_LIST
+                VERIFY_TYPE_ARGS
+                  CONDITIONAL [1]
+                    INSTANCEOF
                       VAR
                         ZVAL "value"
+                      ZVAL "App\\Billing\\PhpOrder"
+                    METHOD_CALL
+                      VAR
+                        ZVAL "value"
+                      ZVAL "label"
+                      ARG_LIST
+                    STATIC_CALL
+                      ZVAL "App\\Billing\\Labels"
+                      ZVAL "label"
+                      ARG_LIST
+                        VAR
+                          ZVAL "value"
+                  ZVAL "string"
+                  ZVAL "App\\Billing\\HasLabel::label()"
         "#}
     );
     assert_eq!(
@@ -13072,6 +13157,9 @@ fn a_function_type_is_the_closure_class() {
                 null
                 null
                 null
+              SHARP_TYPE_ARGS
+                null
+                ZVAL "Function<int(string, int) uses Sharp.Net.Http>, Any?"
         "#}
     );
     assert_eq!(
@@ -13101,14 +13189,22 @@ fn lowered_field(code: &str) -> (String, String) {
 /// private \Closure $charge;
 /// ```
 ///
-/// A function type's effects are the checker's alone, so a function type with effects runs as PHP's `\Closure`.
+/// A function type's effects are the checker's alone, so a function type with effects runs as PHP's `\Closure`, under
+/// the type text a write from plain PHP is checked against, whose result the engine checks at each call.
 #[test]
 fn a_function_type_with_effects_is_the_closure_class() {
     let (hint, declaration) = lowered_field(
         "namespace App.Shop;\n\nclass Checkout\n{\n    Function<Charge(Cart) uses Http> charge;\n\n    public Checkout(Function<Charge(Cart) uses Http> charge)\n    {\n        this.charge = charge;\n    }\n}\n",
     );
 
-    assert_eq!(hint, "ZVAL \"Closure\"\n");
+    assert_eq!(
+        hint,
+        indoc! {r#"
+            SHARP_TYPE_ARGS
+              ZVAL "Closure"
+              ZVAL "Function<App.Shop.Charge(App.Shop.Cart) uses Sharp.Net.Http>"
+        "#}
+    );
     assert_eq!(declaration, "PROP_DECL\n  PROP_ELEM\n    ZVAL \"charge\"\n    null\n    null\n    null\n");
 }
 
@@ -13123,7 +13219,14 @@ fn a_nullable_function_type_with_effects_is_the_nullable_closure_class() {
         "namespace App.Shop;\n\nclass Checkout\n{\n    Function<Charge(Cart) uses Http>? fallback = null;\n\n    public Function<Charge(Cart) uses Http>? current() => this.fallback;\n}\n",
     );
 
-    assert_eq!(hint, "ZVAL [256] \"Closure\"\n");
+    assert_eq!(
+        hint,
+        indoc! {r#"
+            SHARP_TYPE_ARGS
+              ZVAL [256] "Closure"
+              ZVAL "Function<App.Shop.Charge(App.Shop.Cart) uses Sharp.Net.Http>?"
+        "#}
+    );
     assert_eq!(declaration, "PROP_DECL\n  PROP_ELEM\n    ZVAL \"fallback\"\n    ZVAL null\n    null\n    null\n");
 }
 
@@ -13159,7 +13262,14 @@ fn a_function_type_taking_a_function_type_with_effects_is_the_closure_class() {
         "namespace App.Shop;\n\nclass Checkout\n{\n    Function<int(Function<int(int) uses Http>) uses Mail> apply;\n\n    public Checkout(Function<int(Function<int(int) uses Http>) uses Mail> apply)\n    {\n        this.apply = apply;\n    }\n}\n",
     );
 
-    assert_eq!(hint, "ZVAL \"Closure\"\n");
+    assert_eq!(
+        hint,
+        indoc! {r#"
+            SHARP_TYPE_ARGS
+              ZVAL "Closure"
+              ZVAL "Function<int(Function<int(int) uses Sharp.Net.Http>) uses Sharp.Net.Mail>"
+        "#}
+    );
     assert_eq!(declaration, "PROP_DECL\n  PROP_ELEM\n    ZVAL \"apply\"\n    null\n    null\n    null\n");
 }
 
@@ -13858,6 +13968,9 @@ fn an_override_writes_a_variadic_parameter_as_its_list() {
                 null
                 null
                 null
+              SHARP_TYPE_ARGS
+                null
+                ZVAL "string"
         "#}
     );
 }
@@ -14220,9 +14333,11 @@ fn a_union_type_is_one_type_union_list_of_its_types_in_written_order() {
     assert_eq!(
         lowered.render(field),
         indoc! {r#"
-            TYPE_UNION
-              ZVAL [1] "int"
-              ZVAL [1] "string"
+            SHARP_TYPE_ARGS
+              TYPE_UNION
+                ZVAL [1] "int"
+                ZVAL [1] "string"
+              ZVAL "int|string"
         "#}
     );
     assert_eq!(
@@ -14278,6 +14393,9 @@ fn a_nullable_union_is_its_type_union_list_with_null_last() {
                 null
                 null
                 null
+              SHARP_TYPE_ARGS
+                null
+                ZVAL "(int|string)?"
         "#}
     );
     assert_eq!(
@@ -14326,6 +14444,9 @@ fn a_variadic_parameter_carries_the_variadic_flag() {
                 null
                 null
                 null
+              SHARP_TYPE_ARGS
+                null
+                ZVAL "string, Any?"
         "#}
     );
 }
@@ -14378,6 +14499,9 @@ fn a_lambda_takes_union_and_variadic_parameters_and_a_spread_call() {
                       null
                       null
                       null
+                    SHARP_TYPE_ARGS
+                      null
+                      ZVAL "int|string, Any?, Any?"
                   null
                   CALL
                     ZVAL "count"
@@ -15433,18 +15557,20 @@ fn a_type_argument_a_plain_php_refinement_fixes_carries_its_php_sharp_text() {
 
     let body = lowered.body();
     assert_eq!(body.matches("SHARP_TYPE_ARGS").count(), 12, "{body}");
-    assert_eq!(body.matches("VERIFY_TYPE_ARGS").count(), 11, "{body}");
+    assert_eq!(body.matches("VERIFY_TYPE_ARGS").count(), 13, "{body}");
     for (text, calls) in [
         // Two type arguments, and the check of the list `Pager.list()` returns.
         ("List<int>", 3),
         // A type argument, and the check of the result of the call that gives it, spec section 22, which reads a
-        // collection alone and names the type argument. The `Set` the parameter `tags` makes takes `string` too.
-        ("string", 3),
+        // collection alone and names the type argument. The `Set` the parameter `tags` makes takes `string` too, and
+        // the `string` `Pager.text()` returns is checked as text, spec section 18.
+        ("string", 4),
         ("int", 2),
         ("Class<Object>", 2),
         ("Map<string, int>", 2),
         ("Map<Any?, Any?>, Map<string, int>", 2),
-        ("int|string", 2),
+        // The check of the `int|string` `Pager.key()` returns is one, since it may be text, spec section 18.
+        ("int|string", 3),
         // The `Map` the literal makes, with its own type, since its place names the method's type parameter.
         ("string, List<int>", 1),
         ("Map<string, List<int>>", 1),
@@ -16009,6 +16135,9 @@ fn a_static_class_is_a_final_class_whose_extern_method_calls_its_native_function
                         null
                         null
                         null
+                      SHARP_TYPE_ARGS
+                        null
+                        ZVAL "string"
                     null
                     STMT_LIST
                       RETURN
@@ -16285,11 +16414,14 @@ fn a_trait_type_is_object_and_its_test_reads_the_trait() {
               null
               STMT_LIST
                 RETURN
-                  METHOD_CALL
-                    VAR
-                      ZVAL "owner"
-                    ZVAL "label"
-                    ARG_LIST
+                  VERIFY_TYPE_ARGS
+                    METHOD_CALL
+                      VAR
+                        ZVAL "owner"
+                      ZVAL "label"
+                      ARG_LIST
+                    ZVAL "string"
+                    ZVAL "Lib\\HasLabel::label()"
               SHARP_TYPE_ARGS
                 ZVAL [1] "string"
                 ZVAL "Function<string(#0)>"
@@ -16323,11 +16455,14 @@ fn a_trait_type_is_object_and_its_test_reads_the_trait() {
                         ZVAL "hi"
                         ZVAL "string"
                         ZVAL "App.Greeter.hi()"
-                    METHOD_CALL
-                      VAR
-                        ZVAL "owner"
-                      ZVAL "label"
-                      ARG_LIST
+                    VERIFY_TYPE_ARGS
+                      METHOD_CALL
+                        VAR
+                          ZVAL "owner"
+                        ZVAL "label"
+                        ARG_LIST
+                      ZVAL "string"
+                      ZVAL "Lib\\HasLabel::label()"
               SHARP_TYPE_ARGS
                 ZVAL [1] "string"
                 ZVAL "Function<string(#0)>"
@@ -16938,7 +17073,9 @@ fn an_interface_computed_property_runs_its_default_body_through_a_protected_meth
         indoc! {r#"
             STMT_LIST
               PROP_GROUP [1]
-                ZVAL [1] "mixed"
+                SHARP_TYPE_ARGS
+                  ZVAL [1] "mixed"
+                  ZVAL "string"
                 PROP_DECL
                   PROP_ELEM
                     ZVAL "tag"
@@ -16972,7 +17109,9 @@ fn an_interface_computed_property_runs_its_default_body_through_a_protected_meth
                   ZVAL "App\\Tagged\\Defaults"
                 null
               PROP_GROUP [1]
-                ZVAL [1] "mixed"
+                SHARP_TYPE_ARGS
+                  ZVAL [1] "mixed"
+                  ZVAL "string"
                 PROP_DECL
                   PROP_ELEM
                     ZVAL "tag"
@@ -16999,7 +17138,9 @@ fn an_interface_computed_property_runs_its_default_body_through_a_protected_meth
                 null
                 ZVAL "\nparse: Function<App.Note(Map<string, Any?>|Object)>\ntryParse: Function<App.Note?(Map<string, Any?>|Object)>"
             PROP_GROUP [1]
-              ZVAL [1] "string"
+              SHARP_TYPE_ARGS
+                ZVAL [1] "string"
+                ZVAL "string"
               PROP_DECL
                 PROP_ELEM
                   ZVAL "tag"
@@ -17021,7 +17162,9 @@ fn an_interface_computed_property_runs_its_default_body_through_a_protected_meth
                     ZVAL "Override"
                     null
             PROP_GROUP [1]
-              ZVAL [1] "string"
+              SHARP_TYPE_ARGS
+                ZVAL [1] "string"
+                ZVAL "string"
               PROP_DECL
                 PROP_ELEM
                   ZVAL "tag"
@@ -17353,6 +17496,9 @@ fn an_enum_with_data_is_an_abstract_class_and_each_case_a_final_subclass() {
                         null
                         null
                         null
+                      SHARP_TYPE_ARGS
+                        null
+                        ZVAL "string"
                     null
                     STMT_LIST
                     null
@@ -18130,12 +18276,15 @@ fn an_override_with_accessor_bodies_and_an_abstract_property_are_their_php_hooks
                               VAR
                                 ZVAL "this"
                               ZVAL "table"
-                            STATIC_CALL
-                              ZVAL "Model"
-                              ZVAL "clean"
-                              ARG_LIST
-                                VAR
-                                  ZVAL "value"
+                            VERIFY_TYPE_ARGS
+                              STATIC_CALL
+                                ZVAL "Model"
+                                ZVAL "clean"
+                                ARG_LIST
+                                  VAR
+                                    ZVAL "value"
+                              ZVAL "string"
+                              ZVAL "Model::clean()"
                         SHARP_TYPE_ARGS
                           null
                           ZVAL "Function<void(string)>"
@@ -18146,7 +18295,9 @@ fn an_override_with_accessor_bodies_and_an_abstract_property_are_their_php_hooks
                       ZVAL "Override"
                       null
               PROP_GROUP [65]
-                ZVAL [1] "string"
+                SHARP_TYPE_ARGS
+                  ZVAL [1] "string"
+                  ZVAL "string"
                 PROP_DECL
                   PROP_ELEM
                     ZVAL "kind"
@@ -18480,7 +18631,9 @@ fn an_override_of_an_override_of_a_typed_property_keeps_its_type() {
         indoc! {r#"
             STMT_LIST
               PROP_GROUP [2]
-                ZVAL [257] "string"
+                SHARP_TYPE_ARGS
+                  ZVAL [257] "string"
+                  ZVAL "string?"
                 PROP_DECL
                   PROP_ELEM
                     ZVAL "table"
@@ -18564,6 +18717,9 @@ fn a_subclass_method_with_a_union_variadic_spreads_it_into_the_parent_method() {
                         null
                         null
                         null
+                      SHARP_TYPE_ARGS
+                        null
+                        ZVAL "string, Any?"
                     null
                     STMT_LIST
                       RETURN
@@ -20417,11 +20573,14 @@ fn a_declared_member_wins_over_a_magic_one() {
               ASSIGN
                 VAR
                   ZVAL "save"
-                METHOD_CALL
-                  VAR
-                    ZVAL "order"
-                  ZVAL "save"
-                  CALLABLE_CONVERT
+                VERIFY_TYPE_ARGS
+                  METHOD_CALL
+                    VAR
+                      ZVAL "order"
+                    ZVAL "save"
+                    CALLABLE_CONVERT
+                  ZVAL "Function<int()>"
+                  ZVAL "Lib\\Order::save()"
               RETURN
                 CALL
                   PROP
@@ -21243,11 +21402,13 @@ fn a_list_member_value_a_plain_php_closure_parameter_takes_keeps_its_parameter_t
     );
 
     assert!(
-        lowered.contains("PARAM\n                      ZVAL [1] \"int\"\n                      ZVAL \"value\""),
+        lowered.contains("PARAM\n                        ZVAL [1] \"int\"\n                        ZVAL \"value\""),
         "{lowered}"
     );
     assert!(
-        lowered.contains("SHARP_TYPE_ARGS\n                            null\n                            ZVAL \"int\""),
+        lowered.contains(
+            "SHARP_TYPE_ARGS\n                              null\n                              ZVAL \"int\""
+        ),
         "{lowered}"
     );
 }
@@ -21557,9 +21718,12 @@ fn an_extension_method_or_plain_php_function_value_calls_what_it_names() {
         indoc! {r#"
             STMT_LIST
               RETURN
-                CALL
-                  ZVAL "capitalize"
-                  CALLABLE_CONVERT
+                VERIFY_TYPE_ARGS
+                  CALL
+                    ZVAL "capitalize"
+                    CALLABLE_CONVERT
+                  ZVAL "Function<string(string)>"
+                  ZVAL "capitalize()"
         "#}
     );
     assert_eq!(
@@ -21567,9 +21731,12 @@ fn an_extension_method_or_plain_php_function_value_calls_what_it_names() {
         indoc! {r#"
             STMT_LIST
               RETURN
-                CALL
-                  ZVAL "Vendor\\Pdf\\render"
-                  CALLABLE_CONVERT
+                VERIFY_TYPE_ARGS
+                  CALL
+                    ZVAL "Vendor\\Pdf\\render"
+                    CALLABLE_CONVERT
+                  ZVAL "Function<string(string)>"
+                  ZVAL "Vendor\\Pdf\\render()"
         "#}
     );
 }
@@ -23922,11 +24089,14 @@ fn a_string_comparison_pattern_compares_strictly_and_orders_by_strcmp() {
                           ASSIGN
                             VAR
                               ZVAL "match#1"
-                            METHOD_CALL
-                              VAR
-                                ZVAL "this"
-                              ZVAL "label"
-                              ARG_LIST
+                            VERIFY_TYPE_ARGS
+                              METHOD_CALL
+                                VAR
+                                  ZVAL "this"
+                                ZVAL "label"
+                                ARG_LIST
+                              ZVAL "string"
+                              ZVAL "App\\Tenant\\Base::label()"
                           ZVAL "01"
                       ZVAL 1
                     MATCH_ARM
@@ -25902,17 +26072,23 @@ fn a_call_through_a_namespace_is_a_call_of_its_plain_php_function() {
                 CALL
                   ZVAL "measure"
                   ARG_LIST
-                    CALL
-                      ZVAL "Vendor\\Pdf\\render"
-                      ARG_LIST
-                        CALL
-                          ZVAL "pad"
-                          ARG_LIST
-                            ZVAL "x"
-                            NAMED_ARG
-                              ZVAL "length"
-                              VAR
-                                ZVAL "extra"
+                    VERIFY_TYPE_ARGS
+                      CALL
+                        ZVAL "Vendor\\Pdf\\render"
+                        ARG_LIST
+                          VERIFY_TYPE_ARGS
+                            CALL
+                              ZVAL "pad"
+                              ARG_LIST
+                                ZVAL "x"
+                                NAMED_ARG
+                                  ZVAL "length"
+                                  VAR
+                                    ZVAL "extra"
+                            ZVAL "string"
+                            ZVAL "pad()"
+                      ZVAL "string"
+                      ZVAL "Vendor\\Pdf\\render()"
         "#}
     );
 }
@@ -25961,11 +26137,14 @@ fn a_call_of_a_built_in_that_returns_its_failure_runs_without_its_warning() {
                     ASSIGN
                       VAR
                         ZVAL "match#1"
-                      CALL
-                        ZVAL "Vendor\\Pdf\\decode"
-                        ARG_LIST
-                          VAR
-                            ZVAL "text"
+                      VERIFY_TYPE_ARGS
+                        CALL
+                          ZVAL "Vendor\\Pdf\\decode"
+                          ARG_LIST
+                            VAR
+                              ZVAL "text"
+                        ZVAL "bool|string"
+                        ZVAL "Vendor\\Pdf\\decode()"
               ASSIGN
                 VAR
                   ZVAL "called"
@@ -26397,9 +26576,12 @@ fn a_plain_php_object_shows_its_to_string_through_a_string_conversion() {
         indoc! {r#"
             STMT_LIST
               RETURN
-                CAST [6]
-                  VAR
-                    ZVAL "email"
+                VERIFY_TYPE_ARGS
+                  CAST [6]
+                    VAR
+                      ZVAL "email"
+                  ZVAL "string"
+                  ZVAL "Lib\\Email::__toString()"
         "#}
     );
 }
@@ -28022,13 +28204,16 @@ fn a_backed_case_goes_into_a_scalar_plain_php_parameter_as_its_value() {
                 ASSIGN
                   VAR
                     ZVAL "url"
-                  CALL
-                    ZVAL "Lib\\Routing\\route"
-                    ARG_LIST
-                      PROP
-                        VAR
-                          ZVAL "name"
-                        ZVAL "value"
+                  VERIFY_TYPE_ARGS
+                    CALL
+                      ZVAL "Lib\\Routing\\route"
+                      ARG_LIST
+                        PROP
+                          VAR
+                            ZVAL "name"
+                          ZVAL "value"
+                    ZVAL "string"
+                    ZVAL "Lib\\Routing\\route()"
             "#},
             indoc! {r#"
                 RETURN
@@ -28036,18 +28221,24 @@ fn a_backed_case_goes_into_a_scalar_plain_php_parameter_as_its_value() {
                     BINARY_OP [8]
                       VAR
                         ZVAL "url"
+                      VERIFY_TYPE_ARGS
+                        CALL
+                          ZVAL "Lib\\Routing\\label"
+                          ARG_LIST
+                            NULLSAFE_PROP
+                              VAR
+                                ZVAL "maybe"
+                              ZVAL "value"
+                        ZVAL "string"
+                        ZVAL "Lib\\Routing\\label()"
+                    VERIFY_TYPE_ARGS
                       CALL
-                        ZVAL "Lib\\Routing\\label"
+                        ZVAL "Lib\\Routing\\keep"
                         ARG_LIST
-                          NULLSAFE_PROP
-                            VAR
-                              ZVAL "maybe"
-                            ZVAL "value"
-                    CALL
-                      ZVAL "Lib\\Routing\\keep"
-                      ARG_LIST
-                        VAR
-                          ZVAL "name"
+                          VAR
+                            ZVAL "name"
+                      ZVAL "string"
+                      ZVAL "Lib\\Routing\\keep()"
             "#},
         ]
     );
@@ -28110,11 +28301,14 @@ fn a_plain_php_method_of_a_property_s_name_read_as_a_function_is_a_first_class_c
                 ASSIGN
                   VAR
                     ZVAL "typed"
-                  METHOD_CALL
-                    VAR
-                      ZVAL "gadget"
-                    ZVAL "label"
-                    CALLABLE_CONVERT
+                  VERIFY_TYPE_ARGS
+                    METHOD_CALL
+                      VAR
+                        ZVAL "gadget"
+                      ZVAL "label"
+                      CALLABLE_CONVERT
+                    ZVAL "Function<string(string)>"
+                    ZVAL "Lib\\Gadget::label()"
             "#},
             indoc! {r#"
                 ASSIGN
@@ -28289,11 +28483,14 @@ fn a_read_of_a_plain_php_class_with_get_reads_the_property_and_takes_the_method_
                 ASSIGN
                   VAR
                     ZVAL "relation"
-                  METHOD_CALL
-                    VAR
-                      ZVAL "row"
-                    ZVAL "owner"
-                    CALLABLE_CONVERT
+                  VERIFY_TYPE_ARGS
+                    METHOD_CALL
+                      VAR
+                        ZVAL "row"
+                      ZVAL "owner"
+                      CALLABLE_CONVERT
+                    ZVAL "Function<Lib.Contact()>"
+                    ZVAL "Lib\\Row::owner()"
             "#},
             indoc! {r#"
                 ASSIGN
@@ -28428,15 +28625,18 @@ fn a_map_or_set_goes_into_a_plain_php_array_parameter_as_its_php_array() {
                             ZVAL "shelves"
             "#},
             indoc! {r#"
-                CALL
-                  ZVAL "Vendor\\Csv\\join"
-                  ARG_LIST
-                    ZVAL ","
-                    CALL
-                      ZVAL "Sharp\\Internal\\arrayOf"
-                      ARG_LIST
-                        VAR
-                          ZVAL "tags"
+                VERIFY_TYPE_ARGS
+                  CALL
+                    ZVAL "Vendor\\Csv\\join"
+                    ARG_LIST
+                      ZVAL ","
+                      CALL
+                        ZVAL "Sharp\\Internal\\arrayOf"
+                        ARG_LIST
+                          VAR
+                            ZVAL "tags"
+                  ZVAL "string"
+                  ZVAL "Vendor\\Csv\\join()"
             "#},
             indoc! {r#"
                 RETURN
@@ -29148,10 +29348,13 @@ fn a_call_of_a_closure_an_expression_gives_holds_it_for_each_map_it_crosses() {
               ASSIGN
                 VAR
                   ZVAL "function#1"
-                STATIC_CALL
-                  ZVAL "Lib\\Calc"
-                  ZVAL "counter"
-                  ARG_LIST
+                VERIFY_TYPE_ARGS
+                  STATIC_CALL
+                    ZVAL "Lib\\Calc"
+                    ZVAL "counter"
+                    ARG_LIST
+                  ZVAL "Function<int(Map<int, string>)>"
+                  ZVAL "Lib\\Calc::counter()"
               ARG_LIST
                 CALL
                   ZVAL "Sharp\\Internal\\arrayOf"
@@ -30716,6 +30919,9 @@ fn a_backed_enum_is_a_final_enum_class_with_its_backing_type_cases_and_methods()
                         null
                         null
                         null
+                      SHARP_TYPE_ARGS
+                        null
+                        ZVAL "string"
                     null
                     STMT_LIST
                       ASSIGN
@@ -32024,6 +32230,9 @@ fn a_checker_mark_stays_out_of_the_lowered_attributes() {
                   null
                   null
                   null
+                SHARP_TYPE_ARGS
+                  null
+                  ZVAL "string"
               null
               STMT_LIST
                 RETURN
@@ -32047,6 +32256,9 @@ fn a_checker_mark_stays_out_of_the_lowered_attributes() {
                   null
                   null
                   null
+                SHARP_TYPE_ARGS
+                  null
+                  ZVAL "string"
               null
               STMT_LIST
                 RETURN
@@ -33491,6 +33703,9 @@ fn an_extension_member_is_the_static_method_that_takes_the_receiver_first() {
                       null
                       null
                       null
+                    SHARP_TYPE_ARGS
+                      null
+                      ZVAL "string, string"
                   null
                   STMT_LIST
                     RETURN
@@ -33515,6 +33730,9 @@ fn an_extension_member_is_the_static_method_that_takes_the_receiver_first() {
                       null
                       null
                       null
+                    SHARP_TYPE_ARGS
+                      null
+                      ZVAL "string"
                   null
                   STMT_LIST
                     RETURN

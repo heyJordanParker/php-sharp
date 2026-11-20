@@ -49,8 +49,12 @@ use crate::translate::Translation;
 enum Form {
     /// Lean's search, which `Sharp/Lean/Proof.lean` writes, as the text of each law's theorem holds it.
     Search,
-    /// The fixed steps of [`steps`], for a law without a body, which need only the runtime library.
+    /// The fixed steps of [`steps`], for laws without a body, which need only the runtime library.
     Steps,
+    /// The fixed steps where a law has them, and Lean's search for each law without them and each law they leave
+    /// unproven, in the same runner, which imports `Sharp/Lean/Proof.lean`: the fixed steps of a law with a body use
+    /// its `sharp_call%` and its rewrites.
+    StepsThenSearch,
 }
 
 /// The module of the steps a law's theorem in the [`Form::Search`] form is written in.
@@ -79,6 +83,20 @@ const STEP_LEMMAS: &[&str] = &[
     "Int64.lt_iff_toInt_lt",
     "Int64.toInt_zero",
     "Int64.reduceToInt",
+];
+
+/// The lemmas the fixed steps of a case of a body rewrite with too: a fact `sharp_call%` states about the values a
+/// step binds, which `Sharp/Lean/Proof.lean` reads one by one, as its search does, and a goal over a value one of
+/// several branches gives, which holds when it holds for each.
+const CASE_LEMMAS: &[&str] = &[
+    "bind_eq_pure",
+    "map_eq_pure",
+    "ite_eq_pure",
+    "throw_eq_pure",
+    "or_imp",
+    "forall_and",
+    "forall_exists_index",
+    "and_imp",
 ];
 
 /// The record in the `.sharp` folder of how each law's proof ended, by the proof's key.
@@ -226,20 +244,26 @@ impl Lean {
 
     /// Proves the laws of `translations` and returns the issues that refuse each file whose law is not proven.
     /// `translations` hold each file whose laws a compile checks, and each file those laws reach, as `reach` gives
-    /// them, but the files whose errors refuse them.
+    /// them, but the files whose errors refuse them. `errored` holds each file the analysis reported an error in: a law
+    /// that reaches a declaration no translation holds is refused for the errors of its file when that file is in it,
+    /// and else as the checker's bug, as a lowering that panicked leaves its file untranslated.
     ///
     /// A law's proof ends once per key, [`proof_key`]: [`PROOFS`] keeps how it ended, passed or failed, and a law whose
-    /// key it holds gets that outcome again without Lean. The rest are proved on the compile's threads: each law
-    /// without a body by one runner with fixed steps, then each law with a body, and each one those steps leave
-    /// unproven, by one runner with Lean's search, each runner sent only the generated modules its checks reach. No
-    /// Lean process starts when every law's key is kept. When no
-    /// file states a law, `.sharp/.lean/` and [`PROOFS`] are deleted.
+    /// key it holds gets that outcome again without Lean. The rest are proved by one runner on the compile's threads,
+    /// sent only the generated modules its checks reach: each law without a body with fixed steps, and each law with a
+    /// body, and each one those steps leave unproven, with Lean's search. No Lean process starts when every law's key
+    /// is kept. When no file states a law, `.sharp/.lean/` and [`PROOFS`] are deleted.
     ///
     /// # Errors
     ///
     /// Returns an error when a file cannot be read or written, when the runtime library does not build, or when a
     /// runner fails.
-    pub fn check(&self, translations: Vec<Translation>, reach: &Reach) -> io::Result<HashMap<FileId, IssueCollection>> {
+    pub fn check(
+        &self,
+        translations: Vec<Translation>,
+        reach: &Reach,
+        errored: &HashSet<FileId>,
+    ) -> io::Result<HashMap<FileId, IssueCollection>> {
         let package = Package::new(&self.root);
         let record_path = package.directory.with_file_name(PROOFS);
         let mut issues: HashMap<FileId, IssueCollection> = HashMap::default();
@@ -263,13 +287,6 @@ impl Lean {
         let mut record = Record::read(&record_path);
         let program = Program::new(&translations);
         let laws = Laws::new(&translations);
-        let translated: HashSet<FileId> = translations.iter().map(|translation| translation.file).collect();
-        let errored: HashSet<FileId> = law_files
-            .iter()
-            .flat_map(|law_file| reach.files(*law_file))
-            .filter(|file| !translated.contains(*file))
-            .copied()
-            .collect();
         let receivers: HashMap<String, bool> =
             translations.iter().flat_map(|translation| translation.receivers.iter().cloned()).collect();
         let declared: HashSet<String> = translations
@@ -282,7 +299,7 @@ impl Lean {
         for translation in translations.iter().filter(|translation| !translation.laws.is_empty()) {
             let mut proving = Vec::new();
             for law in &translation.laws {
-                let refusals = refused(law, &program, &laws, &errored);
+                let refusals = refused(law, &program, &laws, errored);
                 if !refusals.is_empty() {
                     for issue in refusals {
                         report(&mut issues, translation, issue);
@@ -419,22 +436,37 @@ fn proof_key(law: &Law, program: &Program<'_>, laws: &Laws<'_>) -> String {
     })
 }
 
-/// The theorem of `law`, a law without a body, in the [`Form::Steps`] form: closed by [`steps`] with the definitions its
-/// statement uses. A law with a body has none.
+/// The theorem of `law` with its fixed steps, which close it with the definitions its statement uses: a law without a
+/// body closed by [`steps`] with [`STEP_LEMMAS`], and a law with one with each case closed by them with
+/// [`CASE_LEMMAS`] and the statement of each law whose fact a case can hold too. An invariant of a machine has none.
 fn scripted(law: &Law, program: &Program<'_>) -> Option<String> {
-    let opening = law.proof.opening.as_ref()?;
     let (plain, recursive) = program.definitions(&law.statement);
+    if let Some(opening) = &law.proof.opening {
+        return Some(format!("{opening}{}", steps(STEP_LEMMAS, &plain, &recursive)));
+    }
+    if law.proof.closes.is_empty() {
+        return None;
+    }
+    let lemmas: Vec<&str> = STEP_LEMMAS
+        .iter()
+        .chain(CASE_LEMMAS)
+        .copied()
+        .chain(std::iter::once(law.statement.as_str()))
+        .chain(law.proof.laws.iter().map(|(statement, ..)| statement.as_str()))
+        .collect();
 
-    Some(format!("{opening}{}", steps(&plain, &recursive)))
+    let closed = format!("({})", steps(&lemmas, &plain, &recursive));
+
+    Some(law.proof.closes.iter().fold(law.proof.text.clone(), |text, close| text.replace(close.as_str(), &closed)))
 }
 
-/// The fixed steps that close a case: `simp_all` with [`STEP_LEMMAS`] and the definitions `plain` as rewrites, then
-/// `omega` or `decide` on each goal it leaves. With `recursive` definitions, the steps first unfold each of them once,
-/// as a recursion on a value the case does not know needs, and else rewrite with them too, until each recursion ends,
-/// as one on values the law writes out needs.
-fn steps(plain: &[&str], recursive: &[&str]) -> String {
+/// The fixed steps that close a case: `simp_all` with `lemmas` and the definitions `plain` as rewrites, then `omega`
+/// or `decide` on each goal it leaves. With `recursive` definitions, the steps first unfold each of them once, as a
+/// recursion on a value the case does not know needs, and else rewrite with them too, until each recursion ends, as
+/// one on values the law writes out needs.
+fn steps(lemmas: &[&str], plain: &[&str], recursive: &[&str]) -> String {
     let simp = |definitions: &[&[&str]]| {
-        let lemmas: Vec<&str> = STEP_LEMMAS.iter().chain(definitions.iter().copied().flatten()).copied().collect();
+        let lemmas: Vec<&str> = lemmas.iter().chain(definitions.iter().copied().flatten()).copied().collect();
         format!("simp_all (config := {{ decide := true }}) only [{}]", lemmas.join(", "))
     };
     let close = "all_goals (intros; subst_vars; first | rfl | omega | decide)";
@@ -482,11 +514,12 @@ impl Proofs<'_> {
         self.modules.get(name.as_str()).map_or(name, |module| module.host.clone())
     }
 
-    /// Proves the laws of `work`, and gives how each law's proof ended, in the order of `work`. Each law without a body
-    /// proves with the fixed steps, in runners that import only the runtime library, while each law with a body proves
-    /// with Lean's search in runners of their own. Each law the fixed steps leave unproven, apart from one a generated
-    /// module refuses or one that calls a law that cannot be proven, which ends the same either way, then proves with
-    /// Lean's search too, so its proof ends as that search ends it.
+    /// Proves the laws of `work`, and gives how each law's proof ended, in the order of `work`. When a law or one it
+    /// calls has a body, one runner proves them all, each with its fixed steps, and with Lean's search when they leave
+    /// it unproven or it has none, as an invariant of a machine. Otherwise the runner imports only
+    /// the runtime library and proves them with the fixed steps, and each law they leave unproven, apart from one a
+    /// generated module refuses or one that calls a law that cannot be proven, which ends the same either way, then
+    /// proves with Lean's search in a runner after it, so its proof ends as that search ends it.
     fn prove<'work>(&self, work: Vec<(&'work Translation, Vec<&'work Law>)>) -> io::Result<Vec<Proven<'work>>> {
         let order: HashMap<&str, usize> = work
             .iter()
@@ -494,37 +527,35 @@ impl Proofs<'_> {
             .enumerate()
             .map(|(position, law)| (law.statement.as_str(), position))
             .collect();
-        let (fixed, bodies): (Vec<_>, Vec<_>) = work
-            .into_iter()
-            .flat_map(|(translation, laws)| laws.into_iter().map(move |law| (translation, law)))
-            .partition(|(_, law)| self.scripts.contains_key(law.statement.as_str()));
-        let with_bodies = bodies.len();
+        let searched = work
+            .iter()
+            .flat_map(|(_, laws)| laws)
+            .flat_map(|law| self.laws.closure(law))
+            .any(|position| self.laws.ordered[position].1.proof.opening.is_none());
         let mut stopped: Vec<(String, Stop)> = Vec::new();
-        let mut stopped_by_search: Vec<(String, Stop)> = Vec::new();
-        let (by_steps, ended) = std::thread::scope(|scope| {
-            let search = scope.spawn(|| self.run(by_file(bodies), Form::Search, &mut stopped_by_search));
-            let by_steps = self.run(by_file(fixed), Form::Steps, &mut stopped);
-            (by_steps, search.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
-        });
-        stopped.extend(stopped_by_search);
-        let mut ended = ended?;
-        let mut unproven = Vec::new();
-        for (translation, law, outcome) in by_steps? {
-            let settled = matches!(outcome, Ok(Outcome::Judged(Judgment::Proved) | Outcome::Rejected { .. }) | Err(_))
-                || self.unproven_call(law).is_some();
-            if settled {
-                ended.push((translation, law, outcome));
-            } else {
-                tracing::debug!("The fixed steps did not prove law {}: {outcome:?}", law.name);
-                unproven.push((translation, law));
+        let mut ended = Vec::new();
+        if searched {
+            ended.extend(self.run(work, Form::StepsThenSearch, &mut stopped)?);
+        } else {
+            let mut unproven = Vec::new();
+            for (translation, law, outcome) in self.run(work, Form::Steps, &mut stopped)? {
+                let settled =
+                    matches!(outcome, Ok(Outcome::Judged(Judgment::Proved) | Outcome::Rejected { .. }) | Err(_))
+                        || self.unproven_call(law).is_some();
+                if settled {
+                    ended.push((translation, law, outcome));
+                } else {
+                    tracing::debug!("The fixed steps did not prove law {}: {outcome:?}", law.name);
+                    unproven.push((translation, law));
+                }
             }
+            tracing::debug!(
+                "{} laws end with the fixed steps, and {} go on to Lean's search.",
+                ended.len(),
+                unproven.len()
+            );
+            ended.extend(self.run(by_file(unproven), Form::Search, &mut stopped)?);
         }
-        tracing::debug!(
-            "{} laws end with the fixed steps, {with_bodies} with a body end with Lean's search, and {} go on to it.",
-            ended.len() - with_bodies,
-            unproven.len()
-        );
-        ended.extend(self.run(by_file(unproven), Form::Search, &mut stopped)?);
         ended.sort_by_key(|(_, law, _)| order[law.statement.as_str()]);
 
         Ok(ended)
@@ -662,7 +693,7 @@ impl Proofs<'_> {
         modules.dedup();
         modules.push(
             match form {
-                Form::Search => PROOF_STEPS,
+                Form::Search | Form::StepsThenSearch => PROOF_STEPS,
                 Form::Steps => LAW_STATEMENT,
             }
             .to_owned(),
@@ -673,9 +704,12 @@ impl Proofs<'_> {
                 let law = ordered.ordered[*position].1;
                 Theorem {
                     statement: &law.statement,
-                    text: match form {
-                        Form::Search => &law.proof.text,
-                        Form::Steps => &self.scripts[law.statement.as_str()],
+                    text: &law.proof.text,
+                    steps: match form {
+                        Form::Search => None,
+                        Form::Steps | Form::StepsThenSearch => {
+                            self.scripts.get(law.statement.as_str()).map(String::as_str)
+                        }
                     },
                     judged: judged.contains(law.statement.as_str()),
                 }

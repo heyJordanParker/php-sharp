@@ -5,17 +5,17 @@ import Sharp.Security.Hmac;
 
 class HashCalls
 {
-    public static string of(string algorithm, string data) => Hash.of(algorithm, data);
+    public static string of(string algorithm, Bytes data) => Hash.of(algorithm, data);
 
-    public static string hmac(string algorithm, string data, string key) => Hmac.of(algorithm, data, key);
+    public static string hmac(string algorithm, Bytes data, Bytes key) => Hmac.of(algorithm, data, key);
 
-    public static bool verified(string algorithm, string data, string key, string signature) => Hmac.verify(algorithm, data, key, signature);
+    public static bool verified(string algorithm, Bytes data, Bytes key, string signature) => Hmac.verify(algorithm, data, key, signature);
 
-    public static string md5(string data) => Hash.md5(data);
+    public static string md5(Bytes data) => Hash.md5(data);
 
-    public static string sha1(string data) => Hash.sha1(data);
+    public static string sha1(Bytes data) => Hash.sha1(data);
 
-    public static int crc32(string data) => Hash.crc32(data);
+    public static int crc32(Bytes data) => Hash.crc32(data);
 
     public static bool equals(string known, string given) => Hash.equals(known, given);
 }

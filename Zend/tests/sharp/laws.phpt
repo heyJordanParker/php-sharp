@@ -1,5 +1,5 @@
 --TEST--
-A class whose laws the checker proves runs, and once an edit leaves a case of a law's proof open, the engine refuses it with the case and the goal still to show, as mago compile does
+A class whose laws the checker proves runs, and once an edit makes a law false in one case, the engine refuses it with the case and the goal still to show, as mago compile does
 --FILE--
 <?php
 require __DIR__ . '/project.inc';
@@ -49,8 +49,11 @@ refusal("$root/app/Shared/Money.sharp", $settings);
 file_put_contents(
     "$root/app/Shared/Money.sharp",
     str_replace(
-        "        Money.timesKeepsCurrency(m, n - 1);\n        Money.addKeepsCurrency(m, m.times(n - 1));\n",
-        '',
+        [
+            'law timesKeepsCurrency(Money m, int n) => m.times(n).currency == m.currency',
+            "        Money.timesKeepsCurrency(m, n - 1);\n        Money.addKeepsCurrency(m, m.times(n - 1));\n",
+        ],
+        ['law timesIsZero(Money m, int n) => m.times(n).amount == 0', ''],
         file_get_contents("$root/app/Shared/Money.sharp"),
     ),
 );
@@ -61,6 +64,6 @@ remove_project($root);
 ran
 ran
 CompileError: app/Shared/Money.sharp has 1 error:
-line 10: law timesKeepsCurrency is not proven
-  when n > 0, still to show: m.add(m.times(n - 1)).currency == m.currency
-  help: the law for a smaller n is the call Money.timesKeepsCurrency(m, n - 1)
+line 10: law timesIsZero is not proven
+  when n > 0, still to show: m.add(m.times(n - 1)).amount == 0
+  help: the law for a smaller n is the call Money.timesIsZero(m, n - 1)

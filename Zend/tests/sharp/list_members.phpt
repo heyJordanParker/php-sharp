@@ -30,7 +30,7 @@ echo json_encode(Shelf::copied([4, 5])), "\n";
 []
 ["a","b","c"]
 [1,1,2,2,3,3]
-TypeError: flatMap() takes a function that gives an Iterable, and it gave int
+TypeError: Function<Iterable<int>(int)>: Return value must be of type Iterable<int>, int returned
 [["a",1],["b",2],["c",3]]
 ["b","a","c"]
 [3,7]

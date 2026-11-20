@@ -1,12 +1,12 @@
 --TEST--
-A PHP# class calls every member of string in Sharp.Text and int.toByteString, toByteString throws ValueError for a value that is not a byte, parseCsv reads one CSV line, where a quoted field keeps its comma and a blank line is one empty field, case changes and split work on characters, replace replaces every match and puts empty text to replace before each character and after the last, as Kotlin's does, split keeps the empty text after a trailing delimiter, gives at most a positive limit's parts, the last holding the rest, and every part for a limit of 0, splits an empty delimiter before each character and after the last, as Kotlin's does, and throws ValueError for a negative limit, and join puts the separator between a List<string>'s parts, length, substring, indexOf, lastIndexOf, padding, trimming whitespace at either end, removing a prefix or a suffix, capitalizing, repeat, lines and characters work on characters, compareTo gives -1, 0 or 1 in byte order, as < orders strings, a range or a start outside the text throws OutOfRangeException, and empty padding or a negative count throws ValueError
+A PHP# class calls every member of string in Sharp.Text and a List<int>'s toBytes, toBytes throws ValueError for a value that is not a byte, parseCsv reads one CSV line, where a quoted field keeps its comma and a blank line is one empty field, case changes and split work on characters, replace replaces every match and puts empty text to replace before each character and after the last, as Kotlin's does, split keeps the empty text after a trailing delimiter, gives at most a positive limit's parts, the last holding the rest, and every part for a limit of 0, splits an empty delimiter before each character and after the last, as Kotlin's does, and throws ValueError for a negative limit, and join puts the separator between a List<string>'s parts, length, substring, indexOf, lastIndexOf, padding, trimming whitespace at either end, removing a prefix or a suffix, capitalizing, repeat, lines and characters work on characters, compareTo gives -1, 0 or 1 in byte order, as < orders strings, a range or a start outside the text throws OutOfRangeException, and empty padding or a negative count throws ValueError
 --FILE--
 <?php
 require __DIR__ . '/library_text.inc';
 
 var_dump(Demo\TextCalls::slug('Hello, World'));
 var_dump(Demo\TextCalls::fromByte(65));
-var_dump(Demo\TextCalls::fromByte(0) === "\0", Demo\TextCalls::fromByte(255) === "\xFF");
+var_dump(Demo\TextCalls::fromByte(0) === "00", Demo\TextCalls::fromByte(255) === "ff");
 
 foreach ([321, 256, -1] as $byte) {
     try {
@@ -66,12 +66,12 @@ var_dump(Demo\TextCalls::compareTo('10', '9'), Demo\TextCalls::compareTo('a', 'a
 ?>
 --EXPECT--
 string(11) "hello-world"
-string(1) "A"
+string(2) "41"
 bool(true)
 bool(true)
-ValueError: `toByteString` needs a byte from 0 to 255, and the value is outside it.
-ValueError: `toByteString` needs a byte from 0 to 255, and the value is outside it.
-ValueError: `toByteString` needs a byte from 0 to 255, and the value is outside it.
+ValueError: `toBytes` needs bytes from 0 to 255, and a value is outside them.
+ValueError: `toBytes` needs bytes from 0 to 255, and a value is outside them.
+ValueError: `toBytes` needs bytes from 0 to 255, and a value is outside them.
 ["A1","tea, hot","3"]
 ["a","","b"]
 [""]

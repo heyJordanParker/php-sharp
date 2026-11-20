@@ -8,8 +8,8 @@ The standard library covers what modern standard libraries cover (decision 96). 
 
 | Operation | PHP# | Runs on |
 | --- | --- | --- |
-| Length in characters, in bytes | `text.length()`, `text.byteLength()` | `mb_strlen`, `strlen` |
-| Substring | `substring(start, end)`, `byteSubstring(start, end)` | `mb_substr`, `substr` |
+| Length in characters, in bytes | `text.length()`, `text.toBytes().length()` | `mb_strlen`, `strlen` |
+| Substring | `substring(start, end)`, of bytes `bytes.slice(start, end)` | `mb_substr`, `substr` |
 | Find | `indexOf(other, from)`, `lastIndexOf(other)` | `mb_strpos`, `mb_strrpos` |
 | Contains, starts with, ends with | `contains`, `startsWith`, `endsWith` | `str_contains`, `str_starts_with`, `str_ends_with` |
 | Compare, compare ignoring case | `a < b`, `a.compareTo(b)` (section 19), `a.equals(b)`; ignoring case: `ignoreCase: true` on each, and on `indexOf`, `lastIndexOf`, `contains`, `startsWith` and `endsWith` | `strcmp`, `mb_convert_case` |
@@ -21,7 +21,7 @@ The standard library covers what modern standard libraries cover (decision 96). 
 | Split, split into lines, split on whitespace | `split(delimiter, limit)`, `lines()`; on whitespace: `Regex.parse("/\s+/").split(text)` | `explode` |
 | Join | `parts.join(separator)` | `implode` |
 | Characters, code points, code point to text | `characters()`, `codePoints()`, `n.toCharacter()` | `mb_str_split`, `mb_ord`, `mb_chr` |
-| Bytes, bytes to text | `bytes()`, `n.toByteString()` for one byte, `bytes.toByteString()` for a `List<int>` | `ord`, `chr` |
+| Bytes, bytes to text | `text.toBytes()`, `bytes.toList()`, `numbers.toBytes()` for a `List<int>`, `bytes.toText()` | `unpack`, `pack` |
 | Build text | a template `` `${n}` ``, `+` (section 18) | |
 | Format numbers | `n.format()`, `x.format(decimals, decimalSeparator, thousandsSeparator)` | `number_format` |
 | Parse numbers and booleans | `Int.parse`, `Int.tryParse`, `Float.parse`, `Float.tryParse`, `Bool.tryParse` | `filter_var`, `floatval` |

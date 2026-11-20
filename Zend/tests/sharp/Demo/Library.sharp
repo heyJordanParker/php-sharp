@@ -1,5 +1,6 @@
 namespace Demo;
 
+import Lib.Witness;
 import Sharp.Encoding.Base64;
 import Sharp.Encoding.Compression;
 import Sharp.Encoding.Hex;
@@ -17,7 +18,7 @@ import Sharp.Time.TimeZone;
 
 class Library
 {
-    public static string initial(int code) => code.toByteString();
+    public static Bytes initial(int code) => [code].toBytes();
 
     public static bool isNumber(string text) => Regex.parse("/^[0-9]+$/").matches(text);
 
@@ -27,15 +28,15 @@ class Library
 
     public static Any? decode(string json) => Json.parse(json).value;
 
-    public static string digest(string data) => Hash.sha1(data);
+    public static string digest(Bytes data) => Hash.sha1(data);
 
-    public static string base64(string data) => Base64.encode(data);
+    public static string base64(Bytes data) => Base64.encode(data);
 
-    public static string hexadecimal(string data) => Hex.encode(data);
+    public static string hexadecimal(Bytes data) => Hex.encode(data);
 
     public static bool checks(string password, string hash) => Password.verify(password, hash);
 
-    public static string compress(string data) => Compression.compress(data);
+    public static Bytes compress(Bytes data) => Compression.compress(data);
 
     public static string extension(string path) => Path.extension(path);
 
@@ -48,4 +49,30 @@ class Library
     public static bool isEmail(string address) => MailAddress.isValid(address);
 
     public static bool isIp(string address) => Ip.isValid(address);
+
+    public static int textLength(string text) => text.length();
+
+    public static string textJson(string text) => Json.encode(text, escapeHtml: true);
+
+    public static List<int> textLengths(List<string> texts) => texts.map(text => text.length());
+
+    public static List<int> eachLength(string ...texts) => texts.map(text => text.length());
+
+    public static List<int> keyLengths(Map<string, int> counts) => counts.keys().map(key => key.length());
+
+    public static List<int> byteValues(Bytes data) => data.toList();
+
+    public static List<int> byteCounts(List<Bytes> parts) => parts.map(part => part.length());
+
+    public static void sayBytes(Bytes data) => Witness.say(data);
+
+    public static string stored(Bytes data) => data.toString();
+
+    public static List<int> restored(string text) => Bytes.parse(text).toList();
+
+    public static string encoded(Bytes data) => Json.encode(["data": data]);
+
+    public static string made(Function<string()> make) => make();
+
+    public static Function<string() uses none> kept(Function<string() uses none> make) => make;
 }
