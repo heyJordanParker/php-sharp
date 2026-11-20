@@ -7248,7 +7248,7 @@ public class Money
     public Money add(Money other) => new Money(this.amount + other.amount, this.currency);
     public Money times(int n) => n <= 0 ? new Money(0, this.currency) : this.add(this.times(n - 1));
 
-    law timesKeepsCurrency(Money m, int n) => m.times(n).currency == m.currency   // compile error: law timesKeepsCurrency is not proven
+    law timesIsZero(Money m, int n) => m.times(n).amount == 0   // compile error: law timesIsZero is not proven
     {
         if (n <= 0) {
             return;
@@ -7258,9 +7258,9 @@ public class Money
 ```
 
 ```text
-error[law-unproven]: law timesKeepsCurrency is not proven
-  when n > 0, still to show: m.add(m.times(n - 1)).currency == m.currency
-  help: the law for a smaller n is the call Money.timesKeepsCurrency(m, n - 1)
+error[law-unproven]: law timesIsZero is not proven
+  when n > 0, still to show: m.add(m.times(n - 1)).amount == 0
+  help: the law for a smaller n is the call Money.timesIsZero(m, n - 1)
 ```
 
 **A module states laws that span its classes** in `Module.sharp` (section 32), with bodies as a class's laws have.
