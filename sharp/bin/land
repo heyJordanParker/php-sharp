@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Lands next on master. next's own pull request merges only on the runs of its newest push, and next takes pushes faster
 # than a run ends, so it waits: #536 held 43 commits of next on 2026-11-20. So this takes the newest commit of next whose
-# PHP# and Mago runs both passed and that master lacks, and opens a pull request from branch land/<sha> at it, with
-# auto-merge and --match-head-commit. That commit holds every older one. The pull request's own runs skip every check,
+# PHP# and Mago runs both passed and that master lacks, and opens a pull request from branch land/<sha> at it, which
+# the next tick merges with auto-merge and --match-head-commit. That commit holds every older one. The pull request's own runs skip every check,
 # the Mac's among them, because next's run passed the same tree, as .github/actions/passed-tree explains, so it merges
 # in about a minute, and the repository deletes its branch. The maintainer's tick runs it with the language owner's gh
 # login, whose pull request starts the required runs, where one GITHUB_TOKEN opened would start none.
@@ -37,6 +37,9 @@ for sha in $shas; do
     continue
   fi
   open=$(api "pulls?base=master&state=open&per_page=100" ".[] | select(.head.sha == \"$sha\") | .html_url")
+  # The ruleset turns auto-merge off when it goes on before the pull request's Spec guard run reports: #551's went off a
+  # second after it went on, "Repository rule violations found", and stayed on once Spec guard had passed. So a
+  # pull request opens without it, and the next tick, which finds it open, turns it on.
   if [[ -n $open ]]; then
     if [[ $(gh pr view "$open" --repo "$repo" --json autoMergeRequest --jq '.autoMergeRequest != null') != true ]]; then
       gh pr merge "$open" --repo "$repo" --auto --merge --match-head-commit "$sha"
@@ -53,23 +56,7 @@ for sha in $shas; do
   fi
   url=$(gh pr create --repo "$repo" --base master --head "$branch" --title "Land next at ${sha:0:11}" \
     --body "Lands $sha of next, whose PHP# run $php_sharp and Mago run $mago passed.")
-  # The ruleset turns auto-merge off when it is enabled before the pull request's Spec guard run reports: #551's went
-  # off a second after it went on, "Repository rule violations found", and stayed on once Spec guard had passed.
-  run=
-  for _ in {1..30}; do
-    run=$(gh run list --repo "$repo" --branch "$branch" --workflow completes.yml --json databaseId --jq '.[0].databaseId // empty')
-    if [[ -n $run ]]; then
-      break
-    fi
-    sleep 2
-  done
-  if [[ -z $run ]]; then
-    echo "$url has no Spec guard run after a minute, so auto-merge stays off. Run sharp/bin/land again." >&2
-    exit 1
-  fi
-  gh run watch "$run" --repo "$repo" --exit-status > /dev/null
-  gh pr merge "$url" --auto --merge --match-head-commit "$sha"
-  echo "$url lands $sha once its runs pass."
+  echo "$url lands $sha. The next tick turns its auto-merge on, once its Spec guard run has reported."
   exit 0
 done
 echo "No commit of next that master lacks has passed both PHP# and Mago yet."
