@@ -4050,6 +4050,8 @@ public enum CheckoutState
 
 A case with a value and a case with data in one enum is a compile error.
 
+A machine (section 20.2) is the one enum whose cases may carry data and a value at once.
+
 - **Each case is its own type,** so a method can take `PaymentResult.Paid` alone.
 - **Two cases are `==`** when they are the same case and each field is `==`, as two structs are (section 19). A case with a field that has no `==` gives its enum no `==`. An enum that declares its own `==` compares its cases by it instead, as a struct does.
 - **A not-backed enum may declare type parameters,** with bounds and without `in` or `out`, as `enum Lookup<T> { case Found(T value); case Missing; }`. A backed enum declares none.
@@ -4137,6 +4139,71 @@ public class PopupInteraction : Interaction { … }      // same namespace: allo
 
 Use an enum when the cases are small data. Use a sealed interface when each case is a full class with its own methods.
 
+### 20.2 Machines
+
+**A `machine` is a value that moves between cases, and it changes by its moves alone.** It declares its cases as an enum does, each with an optional value, and a case may hold a block of members. A move is a method that gives a case of the same machine: one in a case's block moves from that case, and one in the machine's body moves from each case that isn't `final`. An entry point is a static method of the machine that gives a case. Every other method is an ordinary member.
+
+<!-- example machine -->
+```csharp
+// app/Shop/OrderStatus.sharp
+namespace App.Shop;
+
+public machine OrderStatus : string
+{
+    case Draft = "draft"
+    {
+        public OrderStatus.Paid pay(int cents)
+        {
+            if (cents <= 0) {
+                throw new ValueError("A payment is positive.");
+            }
+            return OrderStatus.Paid(cents);
+        }
+
+        public OrderStatus.Cancelled cancel() => OrderStatus.Cancelled;
+    }
+
+    case Paid(int cents) = "paid"
+    {
+        public OrderStatus.Shipped ship() => OrderStatus.Shipped;
+    }
+
+    final case Shipped = "shipped";
+    final case Cancelled = "cancelled";
+
+    public static OrderStatus.Draft open() => OrderStatus.Draft;
+
+    law paidIsPositive(OrderStatus.Paid paid) => paid.cents > 0;
+}
+```
+
+<!-- example machine -->
+```csharp
+// app/Shop/Order.sharp
+namespace App.Shop;
+
+public class Order
+{
+    public Order(public int id { get; }) { }
+
+    public OrderStatus status { get; private set; } = OrderStatus.open();
+    public OrderStatus copied { get; set; } = OrderStatus.open();          // compile error: a machine property has a private set
+
+    public void pay(int cents) { this.status = this.status.pay(cents); }
+    public void copy(Order o) { this.status = o.status; }                   // compile error: it changes only by a move of its own
+    public void force() { this.status = OrderStatus.Paid(5); }              // compile error: only entry points and moves build a case
+}
+```
+
+- **Only entry points, moves, `parse` and `Json.decode` build a case.** A case with no fields is one object.
+- **A property of a machine type has a `private set`,** starts at an entry point, and changes only as `x = x.move(…)`. A promoted constructor parameter of a machine type is a compile error, since a caller could pass any case.
+- **A move called on a case it doesn't move from throws `Sharp\StateError`,** which names the machine, the case and the cases the move moves from: "OrderStatus is Paid, and pay moves from Draft."
+- **The checker checks the graph.** Every case is reachable from an entry point. A case with no move out is `final`, and a `final` case has no move out. When a machine has `final` cases, every case reaches one. Each is a compile error that names the case: "The case `OrderStatus.Paid` has no move out, so it is `final`."
+- **A law whose one parameter is a case of the machine is an invariant** (section 28): the checker proves it after every entry point and every move.
+- **A machine marked `[Tag]` stores as a family does** (section 10): `Json.encode` writes a case under its value under the tag's key and its fields, and `parse` and `Json.decode` read it back, refusing a name the machine has no case of and a field of the wrong type. A backed machine's values name its cases, so `[Key]` on a case of one is a compile error that names the value: "`OrderStatus.Paid` is named `paid` by its value, so it takes no `[Key]`." A machine with no backing names each case with `[Key]`, as a family names each variant. Each invariant of the case it reads runs as code, and one that fails throws a `ValueError` that names it: "OrderStatus.Paid breaks paidIsPositive."
+- **A `match` over a machine lists every case and takes no `default`** (section 21).
+- **Independent states are two machines on the holder,** and nested states are one machine of the flattened cases.
+
 ## 21. Pattern matching
 
 `match` is the only branching construct on a value. `switch` is removed. `match` works both as an expression and, with block arms, as a statement. It compares strictly and never falls through.
@@ -4170,6 +4237,7 @@ match (result) {
 
 - **On an enum,** arms that handle every case need no `default`. A missed case is a compile error that names it.
 - **On a sealed interface,** the same holds for its implementers (section 20.1).
+- **A machine's cases** (section 20.2), as an enum's are: adding a case makes every `match` that misses it a compile error.
 - **On a List,** arms that handle every list need no `default`. A list pattern without a rest handles lists of its number of items, and one with a rest every longer list too. Each element is covered by the same rules as a `match` on one value of the element type, so `[Circle c, ...]` and `[Square s, ...]` together handle every list of a sealed `Shape` with a first item. A typed rest must take any `List` of the element type, as `...List<Shape> rest` does. A missed list is a compile error that names it in plain words.
 - **On a nullable enum, sealed interface or List,** such as a `Status?` or a `List<Money>?`, the arms handle `null` too.
 - **On any other value,** `match` must have a `default` arm.
@@ -7267,22 +7335,22 @@ public class Steps
 }
 ```
 
-**A state machine gets its laws through a pure transition method on its status enum,** so a law covers every state and event:
+**A state machine is a `machine`** (section 20.2), and its invariants are its laws: the checker proves each one after every entry point and every move that gives its case, and a failed proof prints the moves that break it:
 
-<!-- example state-machine-law -->
+<!-- example machine-invariant -->
 ```csharp
-public enum Status : string
+// app/Refund.sharp
+public machine Refund
 {
-    case Open = "open";
-    case Paid = "paid";
-    case Refunded = "refunded";
+    case Open
+    {
+        public Refund.Paid pay(int cents) => Refund.Paid(cents);
+    }
+    final case Paid(int cents);
 
-    public Status after(Payment e) => match (this) {                               // pure: the next status for every status and event
-        Status.Open => Status.Paid,
-        Status.Paid => Status.Refunded,
-        Status.Refunded => Status.Refunded,
-    };
-    law refundedIsFinal(Payment e) => Status.Refunded.after(e) == Status.Refunded;
+    public static Refund.Open open() => Refund.Open;
+
+    law paidIsPositive(Refund.Paid paid) => paid.cents > 0;        // compile error: paidIsPositive breaks after open() → Open, pay(cents: 0) → Paid(cents: 0)
 }
 ```
 

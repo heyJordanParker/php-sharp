@@ -4,6 +4,13 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Added
+
+- `machine`, a value that moves between cases and changes by its moves alone, spec section 20.2 and decision 99. It declares its cases as an enum does, each with an optional value, and a case's block holds the moves out of it, as `case Draft = "draft" { public OrderStatus.Paid pay(int cents) => OrderStatus.Paid(cents); }`. Only its entry points, its moves, `parse` and `Json.decode` build a case, and a property of a machine type has a `private set`, starts at an entry point and changes only as `this.status = this.status.pay(cents)`. The checker refuses a case no entry point or move reaches, a case with no move out that isn't `final`, a `final` case with one, and a case that reaches no `final` case when the machine has one. A move called on a case it doesn't move from throws `Sharp\StateError`, as "OrderStatus is Paid, and pay moves from Draft.", and a `match` over a machine lists every case and takes no `default`.
+- A law whose one parameter is a case of a machine is an invariant, spec section 28: the checker proves it after every entry point and every move that can give the case, and a failed proof prints the moves that break it, as "`paidIsPositive` breaks after `open() → Draft`, `pay(cents: 0) → Paid(cents: 0)`". A `throw` in the code a law reaches proves nothing on its path, so a move that throws on a bad argument keeps its invariant.
+- A machine marked `[Tag]` stores as a family does, spec sections 10 and 20.2: `Json.encode` writes a case's name under the tag's key with its fields, and `parse` and `Json.decode` read it back, refuse a name the machine has no case of and a field of the wrong type, and run each invariant of the case, throwing a `ValueError` that names the one it breaks, as "OrderStatus.Paid breaks paidIsPositive.". A backed machine's values name its cases, so `[Tag("status")]` alone stores `{"status":"paid","cents":7}`, and a `[Key]` on a case of a backed machine is refused, as "`OrderStatus.Paid` is named `paid` by its value, so it takes no `[Key]`.". A machine with no backing names each case with `[Key]`.
+- `mago machine App.Shop.OrderStatus` prints a machine's cases and moves as a Mermaid state diagram: an arrow from the start to each case an entry point gives, one for each move, named by the move and its parameters, and one from each `final` case to the end.
+
 ## [0.6.40] - 2026-11-20
 
 ### Upgrading from 0.6.39
