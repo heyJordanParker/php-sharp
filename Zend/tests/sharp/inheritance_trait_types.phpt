@@ -1,5 +1,5 @@
 --TEST--
-A plain PHP trait is a PHP# type: is, as, a match arm, a parameter from plain PHP and a List element hold any object whose class, a class it extends or a trait it uses uses the trait, a value of an open class's included
+A plain PHP trait is a PHP# type: is, is not, as, a match arm, a parameter from plain PHP and a List element hold any object whose class, a class it extends or a trait it uses uses the trait, a value of an open class's and of a PHP# class whose header names the trait included
 --FILE--
 <?php
 
@@ -51,6 +51,15 @@ final class CopyingGreeting extends Greeting
     use Lib\Copies;
 }
 
+final class ShelvedCopy extends Demo\Shelved
+{
+}
+
+final class Reprint extends Book
+{
+    use Wraps;
+}
+
 use Demo\Seeder;
 
 foreach ([new Demo\Draft(), Demo\Shade::Light, new LegacyCopy(), new SubCopy(), new Wrapped(), new stdClass(), 'Lib\Copies'] as $value) {
@@ -63,6 +72,15 @@ echo Seeder::count([new LegacyCopy(), new Wrapped()]), "\n";
 // `is`, `as` and a `match` arm test a value of an open class by the traits of its class and its parents.
 foreach ([new Book(), new Novel(), new Memo()] as $document) {
     echo get_class($document), ': ', var_export(Seeder::held($document), true), ' ', var_export(Seeder::cast($document), true), ' ', Seeder::kind($document), "\n";
+}
+// `is` and `is not` with no name test the trait too: on a PHP# class whose header names it, on a plain PHP class that
+// extends that class, and on a plain PHP class whose parent uses it.
+foreach ([new Demo\Shelved(), new ShelvedCopy(), new Book(), new Novel(), new Memo()] as $document) {
+    echo get_class($document), ': ', var_export(Seeder::trashable($document), true), ' ', var_export(Seeder::kept($document), true), "\n";
+}
+// Reflection lists the traits a class uses, those the classes it extends use and those its traits use, each once.
+foreach ([Novel::class, Wrapped::class, Reprint::class, Demo\Shelved::class, ShelvedCopy::class, Memo::class] as $class) {
+    echo $class, ': ', json_encode(Seeder::traits($class)), "\n";
 }
 // A struct's and an event's headers name the trait, as a class's does.
 echo (new Demo\Seal(3))->copy(), "\n", (new Demo\Copied(4))->copy(), "\n";
@@ -96,6 +114,17 @@ copied SubCopy
 Book: true 'copied Book' copies
 Novel: true 'copied Novel' copies
 Memo: false NULL plain
+Demo\Shelved: true false
+ShelvedCopy: true false
+Book: true false
+Novel: true false
+Memo: false true
+Novel: ["Lib.Copies"]
+Wrapped: ["Wraps","Lib.Copies"]
+Reprint: ["Wraps","Lib.Copies"]
+Demo\Shelved: ["Lib.Copies"]
+ShelvedCopy: ["Lib.Copies"]
+Memo: []
 copied Demo\Seal
 copied Demo\Copied
 bool(true)
