@@ -15,6 +15,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - `redundant-type-comparison` reports an `==` or `!=` of a class value and a `typeof` only when the class value is that one class, spec section 25, since two class values are equal when they name the same class and a `Class<T>` also holds each class that extends `T`. 0.6.37 to 0.6.40 reported each later comparison of `type == typeof(Order) || type == typeof(Invoice) || type == typeof(Refund)` on a `Class<Any>` as "Redundant condition: variable `type` (type `Class<Any>`) is already known to be `Class<Invoice>`.", and `early || type == typeof(Order)` on a `Class<Order>` too. Both report nothing now, and after `const type = typeof(Order);` the same `type == typeof(Order)` is still reported.
+- A class's type parameter that only its members' code reads, through `typeof`, `is`, `as`, a type argument or a pattern, is used, spec section 11, since generics are reified. 0.6.37 to 0.6.40 reported `RecordReference<TRecord>`, whose one method reads `typeof(TRecord)`, as "Type parameter `TRecord` is never used in class `RecordReference`.". A PHP# interface's type parameter is never reported, since each implementer gives it a type argument that reflection and `is` read, where 0.6.38 to 0.6.40 reported `T` of `I<T>` though `A : I<int>` gave it one. A class's type parameter that no signature and no member's code names is still reported.
 
 ## [0.6.40] - 2026-11-20
 
