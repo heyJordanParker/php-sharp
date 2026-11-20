@@ -7,7 +7,7 @@ require __DIR__ . '/vendor/autoload.php';
 use Demo\IpCalls;
 
 var_dump(IpCalls::isValid('192.168.0.1'), IpCalls::isValid('::1'), IpCalls::isValid('300.1.1.1'));
-var_dump(bin2hex(IpCalls::toBinary('127.0.0.1')), bin2hex(IpCalls::toBinary('::1')));
+var_dump(IpCalls::toBinary('127.0.0.1'), IpCalls::toBinary('::1'));
 
 try {
     IpCalls::toBinary('nope');

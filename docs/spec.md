@@ -3690,7 +3690,7 @@ email.toString();                      // "ada@example.com"
 str_contains("hello", "ell");             // compile error: no function str_contains exists
 ```
 
-**Ignoring case:** `compareTo`, `equals`, `indexOf`, `lastIndexOf`, `contains`, `startsWith` and `endsWith` take `ignoreCase`, `false` by default. It compares each character folded by Unicode's simple case folding, so an index stays an index into the text. `titlecase()` capitalizes each word, `replace` takes a `limit` of how many matches it replaces, a code point's `toCharacter()` gives its character, a `List<int>`'s `toByteString()` gives the text of its bytes, and `normalized()` gives the text in a Unicode normalization form, `NormalizationForm.C` by default. `isLetter()`, `isDigit()`, `isLetterOrDigit()`, `isWhitespace()`, `isUppercase()` and `isLowercase()` are true when the text holds a character and each one is in the class. A code point that is no Unicode scalar value, a byte outside 0 to 255, and text that is not UTF-8 throw `ValueError`:
+**Ignoring case:** `compareTo`, `equals`, `indexOf`, `lastIndexOf`, `contains`, `startsWith` and `endsWith` take `ignoreCase`, `false` by default. It compares each character folded by Unicode's simple case folding, so an index stays an index into the text. `titlecase()` capitalizes each word, `replace` takes a `limit` of how many matches it replaces, a code point's `toCharacter()` gives its character, a `List<int>`'s `toBytes()` gives `Bytes` of its values, and `normalized()` gives the text in a Unicode normalization form, `NormalizationForm.C` by default. `isLetter()`, `isDigit()`, `isLetterOrDigit()`, `isWhitespace()`, `isUppercase()` and `isLowercase()` are true when the text holds a character and each one is in the class. A code point that is no Unicode scalar value, a byte outside 0 to 255, and text that is not UTF-8 throw `ValueError`:
 
 <!-- example text-case-and-classes: statements
 import Sharp.Text.NormalizationForm;
@@ -3702,26 +3702,26 @@ import Sharp.Text.NormalizationForm;
 "hello world".titlecase();                        // "Hello World"
 "banana".replace("a", "o", 1);                    // "bonana"
 0x1F600.toCharacter();                            // "😀"
-[104, 105].toByteString();                        // "hi"
+[104, 105].toBytes().toText();                   // "hi"
 "Ωmega".isLetter();                               // true
 "".isLetter();                                    // false
 "é".normalized(NormalizationForm.D).length();     // 2: "e" and a combining accent
 0xD800.toCharacter();                             // throws ValueError
 ```
 
-**Bytes:** `byteLength()`, `byteSubstring(start, end)` and `bytes()` read a `string` as its bytes, as `length()`, `substring()` and `codePoints()` read it as characters, so binary data, as `Ip.toBinary` gives, and the bytes another system counts or signs are read in PHP#. `byteSubstring` counts in bytes and throws `OutOfRangeException` for a range outside the bytes, and `bytes()` gives each byte as an `int` from 0 to 255:
+**Text and bytes:** a `string` is text and always valid UTF-8. Binary data, as `Ip.toBinary` gives, and the bytes another system counts or signs are `Bytes`, a separate type. A plain PHP value that becomes a `string` has each byte sequence that is not UTF-8 replaced by U+FFFD, and one that becomes `Bytes` keeps every byte. `text.toBytes()` gives a string's UTF-8 bytes, and `bytes.toText()` reads bytes as UTF-8, replacing each sequence that is not UTF-8 by U+FFFD. `Bytes` has `length()`, `slice(start, end)`, which throws `OutOfRangeException` for a range outside the bytes, and `toList()`, which gives each byte as an `int` from 0 to 255:
 
 <!-- example text-bytes: statements
 import Sharp.Net.Ip;
 -->
 ```csharp
 "école".length();                          // 5
-"école".byteLength();                      // 6
-"école".bytes();                           // [195, 169, 99, 111, 108, 101]
-"école".byteSubstring(0, 2);               // "é"
-"école".byteSubstring(0, 9);               // throws: "`byteSubstring` takes a range inside the bytes, and the range is outside it."
-Ip.toBinary("192.168.0.1").bytes();        // [192, 168, 0, 1]
-Ip.toBinary("::1").byteLength();           // 16
+"école".toBytes().length();                // 6
+"école".toBytes().toList();                // [195, 169, 99, 111, 108, 101]
+"école".toBytes().slice(0, 2).toText();    // "é"
+"école".toBytes().slice(0, 9);             // throws: "`slice` takes a range inside the bytes, and the range is outside it."
+Ip.toBinary("192.168.0.1").toList();       // [192, 168, 0, 1]
+Ip.toBinary("::1").length();               // 16
 "--sku--".trim("-");                       // "sku"
 "/path/".trimEnd("/");                     // "/path"
 "xyx-a-xyx".trim("xy");                    // "-a-": each character of "xy", not the text "xy"
@@ -5470,7 +5470,7 @@ public class Layout
 - `Sharp.Security` holds `Hash`, `Hmac` and `Password`.
 - `Sharp.Interop` holds `PhpGlobals` and `Superglobal`.
 
-**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`. A bare `Int` is `Sharp.Int`, a bare `Math` is `Sharp.Math`, a bare `Decimal` is `Sharp.Decimal`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. `Sharp` holds the number types and their enums: `Int`, `Float`, `Math`, `Decimal`, `BigInteger`, `RoundingMode` and `ByteOrder`. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, `Error` included (section 31):
+**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`. A bare `Int` is `Sharp.Int`, a bare `Math` is `Sharp.Math`, a bare `Decimal` is `Sharp.Decimal`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. `Sharp` holds the number types and their enums, and `Bytes` (section 18): `Int`, `Float`, `Math`, `Decimal`, `BigInteger`, `RoundingMode`, `ByteOrder` and `Bytes`. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, `Error` included (section 31):
 
 <!-- example own-namespace-shadows -->
 ```csharp
@@ -5839,7 +5839,7 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 - PHP# has no user-defined conversion operators, which would convert a value with no call written. A type converts only through a property or method it declares, such as `username.value`.
 - `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`. `(array)` and `(object)` are parse errors, as any form outside PHP# is (section 1), and the code below replaces them.
 - PHP's cast aliases `(integer)`, `(double)`, `(boolean)` and `(binary)` do not exist.
-- An `int` writes its 8 bytes with `toBytes(order)`, in the `ByteOrder` `Big` by default or `Little`, and `Int.fromBytes(bytes, order)` reads them back. The bytes are a `string`, as `Ip.toBinary` gives, and a negative `int` writes its two's complement. `Int.fromBytes` of any length but 8 throws `ValueError`.
+- An `int` writes its 8 bytes with `toBytes(order)`, in the `ByteOrder` `Big` by default or `Little`, and `Int.fromBytes(bytes, order)` reads them back. The bytes are `Bytes`, as `Ip.toBinary` gives, and a negative `int` writes its two's complement. `Int.fromBytes` of any length but 8 throws `ValueError`.
 - `Base64.encode(data, urlSafe: true)` writes the URL-safe alphabet of RFC 4648, with `-` and `_` for `+` and `/`, and no padding. `Base64.decode(text, urlSafe: true)` reads it with or without padding, and throws `ValueError` on a `+` or a `/`.
 
 <!-- example int-bytes: statements
@@ -5851,8 +5851,8 @@ Hex.encode(258.toBytes());                          // "0000000000000102"
 Hex.encode(258.toBytes(ByteOrder.Little));          // "0201000000000000"
 Int.fromBytes((-1).toBytes());                      // -1
 Base64.encode(Hex.decode("fbff"), urlSafe: true);   // "-_8"
-Base64.decode("-_8", urlSafe: true).bytes();        // [251, 255]
-Int.fromBytes("short");                             // throws ValueError
+Base64.decode("-_8", urlSafe: true).toList();       // [251, 255]
+Int.fromBytes("short".toBytes());                   // throws ValueError
 ```
 
 **`Decimal` is an exact decimal number, and `BigInteger` an integer of any size.** Both are structs in `Sharp`, so they need no import, and run on PHP's bcmath, which every engine builds:

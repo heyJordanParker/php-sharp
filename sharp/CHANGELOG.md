@@ -4,6 +4,21 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.40
+
+- A `string` is text and always valid UTF-8, spec section 18, and binary data is `Bytes`, a struct in `Sharp` that every file names with no import. `text.toBytes()` gives a string's UTF-8 bytes, and `bytes.toText()` reads bytes back as text, each byte sequence that is not UTF-8 becoming U+FFFD. Each byte member moves to `Bytes`:
+  - `text.byteLength()` is `text.toBytes().length()`.
+  - `text.byteSubstring(start, end)` is `text.toBytes().slice(start, end)`, with `.toText()` for its text. Its range error reads "`slice` takes a range inside the bytes, and the range is outside it."
+  - `text.bytes()` is `text.toBytes().toList()`.
+  - A `List<int>`'s `toByteString()` is `toBytes()`, which gives `Bytes`, so `[104, 105].toByteString()` is `[104, 105].toBytes().toText()`.
+  - An `int`'s `toByteString()` is gone: one byte is `[n].toBytes()`.
+  - `n.toBytes(order)` gives `Bytes`, and `Int.fromBytes(bytes, order)` takes it, so `Int.fromBytes("short")` is `Int.fromBytes("short".toBytes())`.
+  - `Base64.encode`, `Hex.encode`, `Compression.compress` and `Compression.uncompress` take `Bytes`, and `Base64.decode`, `Hex.decode`, `Compression.compress`, `Compression.uncompress`, `Ip.toBinary` and `Random.nextBytes` give it.
+  - `Hash.of`, `Hash.md5`, `Hash.sha1`, `Hash.crc32`, `Hmac.of` and `Hmac.verify` take their data and key as `Bytes`, so text is hashed as `Hash.sha1(text.toBytes())`. Each still gives its lowercase hexadecimal text.
+  - `Files.read(path)` of a file that is not text, as an image, is the new `Files.readBytes(path)`, and its `Files.write(path, contents)` is the new `Files.writeBytes(path, bytes)`. `read`, `readLines` and `readLinesLazily` give text.
+
+  A call of a removed member is refused with the member to use, as `text.byteLength()`'s "A `string` is text, and `text.toBytes()` gives its UTF-8 bytes: count them with `text.toBytes().length()`." Plain PHP that calls one of these members gets the `Bytes` struct, where 0.6.40 gave a PHP string, and passes a PHP string where PHP# takes `Bytes`. PHP# passes `Bytes` to a plain PHP parameter that takes a `string` as the string it holds, so a plain PHP method that takes `string $data` gets every byte.
+
 ### Changed
 
 - The law checker proves that a recursion stepping an `int` one down or one up towards a bound ends with the step's own lemma and `omega`, and tries `grind` only when that fails, and it elaborates each generated module with Lean's linters off, since no answer reads their warnings. A cold compile of a 2,128-file project with 1,330 laws has its law checker retire 1,029 G instructions where it retired 1,183 G. Every law proves or fails as before.
@@ -13,6 +28,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Fixed
 
+- A plain PHP string that crosses into a PHP# `string` is valid UTF-8, spec section 18: each byte sequence that is not UTF-8 becomes U+FFFD, as a request value such as `?q=%E9` gives one. It does in a parameter plain PHP passes, a variadic's values, and the elements of a `List` and the keys and values of a `Map` it holds. A plain PHP string that crosses into `Bytes` keeps every byte. 0.6.40 let `"caf\xE9"` in, counted it as 4 characters, and threw `JsonException` "Malformed UTF-8 characters" from `Json.encode` of it, so one bad byte in a request failed a page. Two keys of a `Map` that become one throw `ValueError`, as "This `Map` holds both `"a\xE9"` and `"a\xFF"`, which are one key once each byte sequence that is not UTF-8 becomes U+FFFD".
 - Reflection lists the plain PHP traits a class uses, spec section 22: `Class<T>.traits()` gives the class's own, each followed by the traits it uses, then those of the classes it extends, each once, as `interfaces()` gives its interfaces. So `typeof(Novel).traits()` gives `[typeof(Copies)]` when `Novel` extends a `Book` that uses `Copies`, the traits `is` tests. 0.6.40 had no such member, and refused `type.traits()` as "Attempting to access a method on a non-object type (`Class<Object>`).". `x is SoftDeletes` and `x is not SoftDeletes` already test the class, its parents and their traits on 0.6.40, and report no redundant condition on a value of an open class.
 
 ## [0.6.40] - 2026-11-20

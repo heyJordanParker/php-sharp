@@ -1,10 +1,12 @@
 namespace Demo;
 
+import Sharp.Encoding.Hex;
+
 class TextCalls
 {
     public static string slug(string title) => title.slug();
 
-    public static string fromByte(int byte) => byte.toByteString();
+    public static string fromByte(int byte) => Hex.encode([byte].toBytes());
 
     public static List<string> fields(string line) => line.parseCsv();
 

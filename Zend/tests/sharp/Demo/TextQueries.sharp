@@ -32,7 +32,7 @@ class TextQueries
 
     public static string character(int codePoint) => codePoint.toCharacter();
 
-    public static string bytes(List<int> values) => values.toByteString();
+    public static string bytes(List<int> values) => values.toBytes().toText();
 
     public static List<bool> classes(string text)
         => [text.isLetter(), text.isDigit(), text.isLetterOrDigit(), text.isWhitespace(), text.isUppercase(), text.isLowercase()];

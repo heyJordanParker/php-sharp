@@ -8,8 +8,9 @@ require __DIR__ . '/vendor/autoload.php';
 
 use Demo\CompressionCalls;
 
+// Plain PHP passes a string where PHP# takes Bytes, and passes back the Bytes it was given.
 $compressed = CompressionCalls::compress('hello hello hello');
-var_dump(bin2hex(substr($compressed, 0, 2)), CompressionCalls::uncompress($compressed));
+var_dump(CompressionCalls::header($compressed) === [0x78, 0x9c], CompressionCalls::uncompress($compressed));
 
 try {
     CompressionCalls::uncompress('nope');
@@ -18,6 +19,6 @@ try {
 }
 ?>
 --EXPECT--
-string(4) "789c"
+bool(true)
 string(17) "hello hello hello"
 ValueError: Compression.uncompress: the data is not zlib-compressed

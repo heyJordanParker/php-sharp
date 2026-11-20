@@ -8,16 +8,17 @@ public static class Report
     public static List<Any?> bytes()
         => [
             "école".length(),
-            "école".byteLength(),
-            "école".bytes(),
-            "école".byteSubstring(0, 2),
-            "école".byteSubstring(2),
-            Ip.toBinary("192.168.0.1").bytes(),
-            Ip.toBinary("::1").byteLength(),
-            "".bytes(),
+            "école".toBytes().length(),
+            "école".toBytes().toList(),
+            "école".toBytes().slice(0, 2).toText(),
+            "école".toBytes().slice(2).toText(),
+            Ip.toBinary("192.168.0.1").toList(),
+            Ip.toBinary("::1").length(),
+            "".toBytes().toList(),
+            "école".toBytes().slice(1, 2).toText(),
         ];
 
-    public static string byteRange(int start, int end) => "école".byteSubstring(start, end);
+    public static Bytes byteRange(int start, int end) => "école".toBytes().slice(start, end);
 
     public static List<string> trims()
         => [
