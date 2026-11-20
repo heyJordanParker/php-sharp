@@ -225,6 +225,9 @@ typedef enum {
 	SHARP_BUILT_IN_CLASS,
 	/* The result of a function that never returns, spec section 8, which no value is of and which fits every type. */
 	SHARP_BUILT_IN_NEVER,
+	/* A function value of any shape, spec section 7, as a plain PHP `callable` parameter takes, which holds what PHP's
+	 * `is_callable` holds. */
+	SHARP_BUILT_IN_CALLABLE,
 } sharp_built_in;
 
 typedef struct _sharp_type sharp_type;

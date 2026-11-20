@@ -3580,7 +3580,7 @@ static const struct {
 	{"string", 0, SHARP_BUILT_IN_STRING}, {"void", 0, SHARP_BUILT_IN_VOID}, {"null", 0, SHARP_BUILT_IN_NULL},
 	{"Any", 0, SHARP_BUILT_IN_ANY}, {"Object", 0, SHARP_BUILT_IN_OBJECT}, {"List", 1, SHARP_BUILT_IN_LIST},
 	{"Map", 2, SHARP_BUILT_IN_MAP}, {"Set", 1, SHARP_BUILT_IN_SET}, {"Iterable", 1, SHARP_BUILT_IN_ITERABLE},
-	{"Class", 1, SHARP_BUILT_IN_CLASS}, {"never", 0, SHARP_BUILT_IN_NEVER},
+	{"Class", 1, SHARP_BUILT_IN_CLASS}, {"never", 0, SHARP_BUILT_IN_NEVER}, {"callable", 0, SHARP_BUILT_IN_CALLABLE},
 };
 
 /* A type as its text spells it, before it is interned. */
@@ -5110,7 +5110,8 @@ static void sharp_php_type_join(smart_str *text, zend_string **parts, uint32_t c
 }
 
 /* The PHP# text of the member of a PHP union that is `length` bytes at `at`: `App\Order` as `App.Order`, `object` as
- * `Object`, `array` as the `Map<int|string, Any?>` a plain PHP array arrives as, spec section 12, an intersection
+ * `Object`, `false` and `true` as the `bool` the checker reads them as, since PHP# writes no type of one value, spec
+ * section 24, `array` as the `Map<int|string, Any?>` a plain PHP array arrives as, spec section 12, an intersection
  * `(A&B)` as `A & B`, without the parentheses a union holds it in, and `self`, `parent` and `static` as the class each
  * names: `self` the class `self`, `parent` its parent, and `static` the class `called` the code runs on. PHP writes the
  * class itself for `self` and `parent` outside a trait, so they reach here from a trait, naming the class that uses it. */
@@ -5132,6 +5133,8 @@ static zend_string *sharp_php_type_member(
 	smart_str text = {0};
 	if (length == 6 && memcmp(at, "object", 6) == 0) {
 		smart_str_appends(&text, "Object");
+	} else if ((length == 5 && memcmp(at, "false", 5) == 0) || (length == 4 && memcmp(at, "true", 4) == 0)) {
+		smart_str_appends(&text, "bool");
 	} else if (length == 5 && memcmp(at, "array", 5) == 0) {
 		smart_str_appends(&text, "Map<int|string, Any?>");
 	} else if (memchr(at, '&', length)) {
@@ -6719,7 +6722,7 @@ ZEND_FUNCTION(Sharp_Internal_typeArguments)
 }
 
 /* Spec section 25: `Class<T>.kind()`, the kind of the type `type` holds without its `?`, as TypeKind names it: a union, an
- * intersection, a tuple, a function type, a type parameter, or else a class or a built-in type. */
+ * intersection, a tuple, a function type, `callable` among them, a type parameter, or else a class or a built-in type. */
 ZEND_FUNCTION(Sharp_Internal_typeKind)
 {
 	SHARP_CLASS_VALUE_FUNCTION_START();
@@ -6736,7 +6739,7 @@ ZEND_FUNCTION(Sharp_Internal_typeKind)
 		case SHARP_TYPE_PARAMETER:
 			RETURN_STRING("TypeParameter");
 		default:
-			RETURN_STRING("Named");
+			RETURN_STRING(type->built_in == SHARP_BUILT_IN_CALLABLE ? "Function" : "Named");
 	}
 }
 
@@ -6782,13 +6785,16 @@ ZEND_FUNCTION(Sharp_Internal_nonNullable)
 
 /* Spec section 25: the class values the type `type` holds without its `?` is made of, by its kind: a union's and an
  * intersection's members, a tuple's element types, a function type's result type then its parameter types, and a type
- * parameter's bound. A class gives none: its type arguments are typeArguments'. */
+ * parameter's bound. `callable` takes a function of any shape, so its result is `Any?` and it lists no parameter. A class
+ * gives none: its type arguments are typeArguments'. */
 ZEND_FUNCTION(Sharp_Internal_typeParts)
 {
 	SHARP_CLASS_VALUE_FUNCTION_START();
 
 	array_init(return_value);
-	if (type->kind == SHARP_TYPE_FUNCTION) {
+	if (type->built_in == SHARP_BUILT_IN_CALLABLE) {
+		add_next_index_string(return_value, "Any?");
+	} else if (type->kind == SHARP_TYPE_FUNCTION) {
 		/* A function type's last members are the effects its `uses` lists, which its text counts. */
 		sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
 		uint32_t effects = sharp_type_reread(type, &reader)->effects;
@@ -7836,6 +7842,11 @@ static bool sharp_type_holds(
 			return sharp_class_value_is(value, type->members[0]);
 		case SHARP_BUILT_IN_NEVER:
 			return false;
+		case SHARP_BUILT_IN_CALLABLE: {
+			zval tested;
+			ZVAL_COPY_VALUE(&tested, value);
+			return zend_is_callable(&tested, 0, NULL);
+		}
 		default:
 			return true;
 	}

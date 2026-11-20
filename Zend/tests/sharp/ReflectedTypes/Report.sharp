@@ -15,7 +15,9 @@ public static class Report
             TypeKind.Union => whole.unionMembers().map(member => Report.spell(member)).join("|"),
             TypeKind.Intersection => whole.intersectionMembers().map(member => Report.spell(member)).join(" & "),
             TypeKind.Tuple => `[${whole.tupleElements().map(element => Report.element(element)).join(", ")}]`,
-            TypeKind.Function => `Function<${Report.spell(whole.returnType())}(${whole.parameterTypes().map(parameter => Report.spell(parameter)).join(", ")})>`,
+            TypeKind.Function => whole.name() == "callable"
+                ? "callable"
+                : `Function<${Report.spell(whole.returnType())}(${whole.parameterTypes().map(parameter => Report.spell(parameter)).join(", ")})>`,
             TypeKind.TypeParameter => `${whole.name()} : ${Report.spell(whole.bound())}`,
         };
         return type.isNullable() ? `(${text})?` : text;
@@ -76,6 +78,29 @@ public static class Report
             typeof(Mark & Labeled).unionMembers() == [],
             typeof(Mark).intersectionMembers() == [],
         ];
+    }
+
+    // The `callable` parameter a PHP# class inherits from a plain PHP method: a function type of any shape, which takes
+    // what PHP's `is_callable` takes.
+    public static List<Any?> callables()
+    {
+        const tap = typeof(Row).methods().first(method => method.name == "tap");
+        const callback = tap.parameters()[0].type;
+        const invoke = tap.createInvoker<Function<Any?(Object, List<Any?>)>>();
+        List<Any?> facts = [
+            callback.name(),
+            callback.kind() == TypeKind.Function,
+            callback.parameterTypes(),
+            callback.returnType() == typeof(Any?),
+            callback.isNullable(),
+            invoke(new Row(), [(Object row) => null]) is Row,
+        ];
+        try {
+            invoke(new Row(), ["no function"]);
+        } catch (TypeError failure) {
+            facts.add(failure.getMessage());
+        }
+        return facts;
     }
 
     // Story line 7: a class value of a built-in generic answers `is` as a user generic's does.
