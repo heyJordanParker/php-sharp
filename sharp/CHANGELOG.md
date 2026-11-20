@@ -7,6 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - A law reasons about a machine's value as the closed set of its cases, spec sections 20.2 and 28, as it does about an enum's. `is` and `match` on it test which case it is, `this` in the machine's own methods included, and `==` between two of its values compares the case and its fields, as the machine's `==` does when it runs. So `law turningOnLights() => Lamp.off().turnOn().lit();` proves where `lit()` is `this is Lamp.On`, and so does `law turningOnLightsTheLamp() => Lamp.off().turnOn() == Lamp.On;`. 0.6.41 refused the first as "a match on this subject" and then as "the checker left out On", and the second as "the checker left out Lamp.operator ==", each of those last two called a bug in the PHP# checker.
+- A law reasons about a type test inside `or`, `and` and `not`, spec sections 21 and 28, as it does about one standing alone: of a sealed interface's implementer, a machine's case, and a list pattern. So a move whose arm is `Stop or Wait => this`, or whose value is `signal is not Go ? this : Light.Red(now)`, proves its law, and so does `xs is [] or [int]`. 0.6.41 refused it as "Law stopKeeps reaches a type test in Light.Red.answer. It reads types while the code runs."
 
 ## [0.6.41] - 2026-11-21
 
