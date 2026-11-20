@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- `redundant-type-comparison` reports an `==` or `!=` of a class value and a `typeof` only when the class value is that one class, spec section 25, since two class values are equal when they name the same class and a `Class<T>` also holds each class that extends `T`. 0.6.37 to 0.6.40 reported each later comparison of `type == typeof(Order) || type == typeof(Invoice) || type == typeof(Refund)` on a `Class<Any>` as "Redundant condition: variable `type` (type `Class<Any>`) is already known to be `Class<Invoice>`.", and `early || type == typeof(Order)` on a `Class<Order>` too. Both report nothing now, and after `const type = typeof(Order);` the same `type == typeof(Order)` is still reported.
+
 ## [0.6.40] - 2026-11-20
 
 ### Upgrading from 0.6.39
