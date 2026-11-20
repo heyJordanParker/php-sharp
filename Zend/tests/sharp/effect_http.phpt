@@ -1,5 +1,5 @@
 --TEST--
-PHP# Http sends a request through curl and returns the server's response, a 404 included, and throws when the connection fails
+PHP# Http sends a request through curl and returns the server's response, a 404 included, its body sent and received as Bytes with every byte kept, and throws when the connection fails
 --EXTENSIONS--
 curl
 --FILE--
@@ -29,16 +29,19 @@ $base = 'http://' . PHP_CLI_SERVER_ADDRESS;
 
 $http = new Sharp\Net\Http();
 $got = $http->get("$base/");
-var_dump($got->status, $got->body, $got->headers['x-seen'], $got->successful);
+var_dump($got->status, $got->body->toText(), $got->headers['x-seen'], $got->successful);
 
 $posted = $http->send(new HttpRequest(HttpMethod::Post, "$base/orders", ['X-Token' => 'abc'], '{"sku":"tea"}'));
-var_dump($posted->status, $posted->body);
+var_dump($posted->status, $posted->body->toText());
+// A body is Bytes both ways, so a byte that is not UTF-8 goes and comes back as it is.
+$binary = $http->send(new HttpRequest(HttpMethod::Post, "$base/", [], "\xFF\x00"));
+echo json_encode(array_slice($binary->body->toList(), -2)), "\n";
 
 $headed = $http->send(new HttpRequest(HttpMethod::Head, "$base/"));
-var_dump($headed->status, $headed->body);
+var_dump($headed->status, $headed->body->length());
 
 $missing = $http->get("$base/missing");
-var_dump($missing->status, $missing->body, $missing->successful);
+var_dump($missing->status, $missing->body->toText(), $missing->successful);
 
 try {
     $http->get('not a url');
@@ -73,8 +76,9 @@ array(2) {
 bool(true)
 int(200)
 string(22) "POST abc {"sku":"tea"}"
+[255,0]
 int(200)
-string(0) ""
+int(0)
 int(404)
 string(4) "gone"
 bool(false)

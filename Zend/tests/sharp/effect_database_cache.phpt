@@ -1,5 +1,5 @@
 --TEST--
-PHP# Database runs SQL through PDO with parameters and transactions, and Cache keeps strings in a SQLite file until they expire
+PHP# Database runs SQL through PDO with parameters and transactions, and Cache keeps Bytes in a SQLite file until they expire
 --EXTENSIONS--
 pdo_sqlite
 --FILE--
@@ -44,17 +44,18 @@ $path = sys_get_temp_dir() . '/sharp-effect-cache-' . getmypid() . '.sqlite';
 $cache = new Sharp\Data\Cache($path);
 var_dump($cache->get('rate'));
 $cache->set('rate', '1.25');
-var_dump($cache->get('rate'));
+var_dump($cache->get('rate')?->toText());
 $cache->set('rate', '1.30', Duration::ofSeconds(60));
-var_dump((new Sharp\Data\Cache($path))->get('rate'));
+var_dump((new Sharp\Data\Cache($path))->get('rate')?->toText());
 $cache->set('stale', 'old', new Duration(-1_000_000_000));
 var_dump($cache->get('stale'));
 $cache->remove('rate');
 $cache->remove('never-set');
 var_dump($cache->get('rate'));
 $made = 0;
-$make = function () use (&$made) { $made++; return "made $made"; };
-var_dump($cache->getOrCreate('lazy', $make), $cache->getOrCreate('lazy', $make), $made);
+// The function returns Bytes, which plain PHP builds from base64 through Bytes::parse.
+$make = function () use (&$made) { $made++; return Sharp\Bytes::parse(base64_encode("made $made")); };
+var_dump($cache->getOrCreate('lazy', $make)->toText(), $cache->getOrCreate('lazy', $make)->toText(), $made);
 try {
     $cache->get('');
 } catch (ValueError $e) {
