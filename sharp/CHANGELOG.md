@@ -11,6 +11,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - A machine marked `[Tag]` stores as a family does, spec sections 10 and 20.2: `Json.encode` writes a case's name under the tag's key with its fields, and `parse` and `Json.decode` read it back, refuse a name the machine has no case of and a field of the wrong type, and run each invariant of the case, throwing a `ValueError` that names the one it breaks, as "OrderStatus.Paid breaks paidIsPositive.". A backed machine's values name its cases, so `[Tag("status")]` alone stores `{"status":"paid","cents":7}`, and a `[Key]` on a case of a backed machine is refused, as "`OrderStatus.Paid` is named `paid` by its value, so it takes no `[Key]`.". A machine with no backing names each case with `[Key]`.
 - `mago machine App.Shop.OrderStatus` prints a machine's cases and moves as a Mermaid state diagram: an arrow from the start to each case an entry point gives, one for each move, named by the move and its parameters, and one from each `final` case to the end.
 
+### Changed
+
+- A compile stamps each input the analysis loaded from the bytes it loaded, with the modification time the loader took before reading it, so it reads each source file once where it read it twice. A whole `mago analyze` of a 2,128-file project from nothing retires 71.4 G instructions where it retired 74.0 G.
+
 ## [0.6.40] - 2026-11-20
 
 ### Upgrading from 0.6.39
