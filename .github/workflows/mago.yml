@@ -21,14 +21,13 @@ defaults:
     working-directory: sharp/mago
 
 jobs:
-  # ci-passed is this workflow's one required check. Every push runs every job, whatever it changed, the macOS ones
-  # among them, so a defect only macOS finds, such as one in the watch mode's FSEvents code, fails before the merge. A
-  # push to master runs none of the tests when a pull request's run passed ci-passed on its
-  # tree. It runs checks again, which saves the target every pull request's run restores, but for a release's push,
-  # which builds nothing. A push whose tree no pull request's run passed runs every job, the macOS ones among them, and
-  # its red push opens an issue, as ci-passed does, for a pull request that fixes it forward. The workspace's tests on
-  # Linux run in sharp.yml's MAGO, on BUILD_LINUX's build, so Linux builds Mago's dev target once, and CI_PASSED
-  # covers them.
+  # ci-passed is this workflow's one required check. Every push runs every job, whatever it changed. A push to master
+  # runs none of the tests when a pull request's run passed ci-passed on its tree. It runs checks again, which saves the
+  # target every pull request's run restores, but for a release's push, which builds nothing. A push whose tree no pull
+  # request's run passed runs every job, and its red push opens an issue, as ci-passed does, for a pull request that
+  # fixes it forward. The workspace's tests run in sharp.yml, which CI_PASSED covers: on Linux in MAGO, on
+  # BUILD_LINUX's build, so Linux builds Mago's dev target once, and on macOS in release.yml's macOS build, the run's one
+  # Mac job, so a defect only macOS finds, such as one in the watch mode's FSEvents code, fails before the merge.
   CHANGES:
     runs-on: ubuntu-latest
     permissions:
@@ -217,158 +216,27 @@ jobs:
         with:
           end: true
 
-  # The workspace's tests on macOS arm64, which covers the few lines of Mago that differ there, such as the watch mode's
-  # FSEvents, on the self-hosted Mac runner, for every pull request's push and a push to master whose tree no pull
-  # request's run passed. cargo builds in the folder sharp/.cargo's config names, which the runner keeps and sharp.yml's MACOS builds
-  # mago in, so it rebuilds only what changed: in sharp/mago/target, which clean-kept-build removes, it built every
-  # crate and took 23 minutes on the pushes of pull requests #351 and #352.
-  tests-macos:
-    name: tests (macOS)
-    needs: CHANGES
-    if: ${{ !needs.CHANGES.outputs.passed }}
-    runs-on: macos-arm64-local
-    timeout-minutes: 90
-
-    permissions:
-      contents: read
-
-    steps:
-      # The self-hosted Mac runner keeps sharp/build between jobs, as sharp.yml's MACOS explains.
-      - name: checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          clean: false
-
-      - name: Measure the job's CPU-seconds and peak memory
-        uses: ./.github/actions/usage
-
-      - name: Remove what an earlier job left, except the builds
-        uses: ./.github/actions/clean-kept-build
-
-      - name: install rust toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
-        with:
-          toolchain: ${{ needs.CHANGES.outputs.rust }}
-
-      # The self-hosted runners use their Homebrew PHP and Composer.
-      - name: Install composer dependencies
-        run: composer install
-
-      # The workspace's tests run lake.
-      - name: Install elan and Lean
-        uses: ./.github/actions/setup-lean
-
-      # The PHP# engine mago links, which sharp/bin/build-mago --engine builds in the sharp/build folder the runner
-      # keeps, so it builds only what changed since the runner's last build.
-      - name: Build the engine mago links
-        working-directory: ${{ github.workspace }}
-        run: sharp/bin/build-mago --engine
-
-      - name: cargo test
-        run: cargo test --workspace --locked
-
-      - name: Write the job's CPU-seconds and peak memory
-        if: always()
-        uses: ./.github/actions/usage
-        with:
-          end: true
-
-  # The macOS binary plain-php runs, in the test-run profile sharp/mago/Cargo.toml explains, since plain-php needs a
-  # binary that behaves as release's, not release's fat LTO. It builds in the target folder the Mac's runner keeps,
-  # beside the dev build sharp/bin/test makes there, so it rebuilds only what changed since the runner's last build.
-  # It runs when tests (macOS) does.
-  release-build:
-    needs: CHANGES
-    if: ${{ !needs.CHANGES.outputs.passed }}
-    runs-on: macos-arm64-local
-    timeout-minutes: 60
-
-    permissions:
-      contents: read
-
-    # With incremental state, which the test-run profile builds with in the folder the runner keeps.
-    # dtolnay/rust-toolchain turns it off only when CARGO_INCREMENTAL is unset.
-    env:
-      CARGO_INCREMENTAL: 1
-
-    steps:
-      # The self-hosted Mac runner keeps sharp/build between jobs, as sharp.yml's MACOS explains.
-      - name: checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          clean: false
-
-      - name: Measure the job's CPU-seconds and peak memory
-        uses: ./.github/actions/usage
-
-      - name: Remove what an earlier job left, except the builds
-        uses: ./.github/actions/clean-kept-build
-
-      - name: install rust toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
-        with:
-          toolchain: ${{ needs.CHANGES.outputs.rust }}
-
-      # The PHP# engine mago links, which sharp/bin/build-mago --engine builds in the sharp/build folder the runner
-      # keeps, so it builds only what changed since the runner's last build.
-      - name: Build the engine mago links
-        working-directory: ${{ github.workspace }}
-        run: sharp/bin/build-mago --engine
-
-      - name: Build mago in the test-run profile
-        id: build
-        run: |
-          target="$GITHUB_WORKSPACE/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago"
-          cargo build --locked --profile test-run --target-dir "$target" --bin mago
-          echo "binary=$target/test-run/mago" >> "$GITHUB_OUTPUT"
-
-      - name: Upload the binary for plain-php
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: mago-${{ runner.os }}
-          path: ${{ steps.build.outputs.binary }}
-          if-no-files-found: error
-
-      - name: Write the job's CPU-seconds and peak memory
-        if: always()
-        uses: ./.github/actions/usage
-        with:
-          end: true
-
   # Installs heyjordanparker/mago-sharp from what git archive ships, the way Packagist ships it, and
   # heyjordanparker/php-sharp-composer from sharp/composer, on the runner's own PHP. A package that requires
   # upstream's carthage-software/mago at the release this checker left from, as an extension host does,
   # installs no second checker, and one that requires a later release installs nothing. Then runs mago on
-  # a one-class .sharp project with the binary the job before built, and sharp/phpunit's tests, which stop.
-  # Its macOS leg runs on the self-hosted Mac runner, with the binary release-build made there. A push to master whose
-  # tree a pull request's run passed runs neither leg.
+  # a one-class .sharp project with the binary checks built, and sharp/phpunit's tests, which stop. On macOS,
+  # release.yml's macOS build runs the same check on the release binary, in the run's one Mac job. A push to master
+  # whose tree a pull request's run passed runs none of them.
   plain-php:
-    needs: [CHANGES, checks, release-build]
-    if: >-
-      ${{ !cancelled() && !needs.CHANGES.outputs.passed && needs.checks.result == 'success'
-      && needs.release-build.result == 'success' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-arm64-local]
-    runs-on: ${{ matrix.os }}
+    needs: [CHANGES, checks]
+    if: ${{ !needs.CHANGES.outputs.passed }}
+    runs-on: ubuntu-latest
 
     permissions:
       contents: read
 
     steps:
-      # The self-hosted Mac runner keeps sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          clean: false
 
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-
-      - name: Remove what an earlier job left, except the builds
-        if: runner.environment == 'self-hosted'
-        uses: ./.github/actions/clean-kept-build
 
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
@@ -401,7 +269,7 @@ jobs:
   # rules. It runs always, so it reports on every run, even one whose every other job skipped.
   ci-passed:
     if: always()
-    needs: [CHANGES, checks, tests-macos, release-build, plain-php]
+    needs: [CHANGES, checks, plain-php]
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -424,7 +292,7 @@ jobs:
       - name: Every job passed, or skipped a tree that a pull request's run passed
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: checks, tests-macos, release-build, plain-php
+          allowed-skips: checks, plain-php
           jobs: ${{ toJSON(needs) }}
 
       # As .github/actions/red-master-issue explains.

@@ -30,7 +30,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      # The self-hosted Mac runner keeps sharp/build between jobs, as sharp.yml's MACOS explains.
+      # The self-hosted Mac runner keeps sharp/build between jobs, as release.yml's macOS build explains.
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -513,64 +513,6 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
-  # The checks only macOS can fail, on the run's one macOS build of the engine and mago: mago compile and the suite on a
-  # disk that ignores case, without opcache and in shared memory, since Apple silicon has no thread-safe JIT, the census
-  # and the differential. Every pull request's push runs it, and a push to master whose tree no pull request's run
-  # passed. A job never installs on the self-hosted Mac runner, so it checks that Homebrew already has the build's
-  # formulae, ccache among them. The engine builds through ccache, as BUILD_LINUX's does, so a file that changes back,
-  # as a run of another branch makes it, compiles from the cache, and sharp/bin/build configures again only when what
-  # configure reads changed.
-  #
-  # The Mac has one runner, so its jobs run one at a time, each on every core, and a job builds where the job before it
-  # built: sharp/bin/build and sharp/bin/build-mago rebuild only what changed since. Three runners each kept a build of
-  # their own, 9 GiB each, and a job's build was as old as its runner's last one: the engine's build took 11.6 minutes
-  # at p50 and 48.1 at p95 over the last 150 runs, while three jobs at once held the Mac.
-  MACOS:
-    needs: CHANGES
-    if: ${{ !needs.CHANGES.outputs.passed }}
-    runs-on: macos-arm64-local
-    timeout-minutes: 120
-    env:
-      FORMULAE: autoconf bison ccache curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
-    steps:
-      # actions/checkout's clean deletes sharp/build. The build keeps it instead, as .github/actions/clean-kept-build
-      # explains, so the engine and mago rebuild only what changed since the runner's last build, where a build from
-      # nothing took 19 minutes.
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          clean: false
-      - name: Measure the job's CPU-seconds and peak memory
-        uses: ./.github/actions/usage
-      - name: Remove what an earlier job left, except the builds
-        uses: ./.github/actions/clean-kept-build
-      - name: Homebrew has the build's formulae
-        run: |
-          # shellcheck disable=SC2086 # FORMULAE is a list of formulae.
-          brew list --versions $FORMULAE
-      # ext/sharp/rust-toolchain.toml pins the toolchain the extension and mago build with.
-      - name: show the Rust toolchain on PATH
-        working-directory: ext/sharp
-        run: |
-          type -a rustup rustc cargo
-          rustc --version
-          cargo --version
-      # Only this step's CC and CXX, so mago's crates that compile C build as the Mac's other jobs build them in the
-      # same target, where another CC rebuilds them and every crate above them.
-      - name: Build the engine
-        env:
-          CC: ccache cc
-          CXX: ccache c++
-        run: sharp/bin/build
-      - name: Build mago and its test binaries
-        run: sharp/bin/build-mago --quiet
-      - name: Test PHP#
-        run: sharp/bin/test --no-build --census --differential
-      - name: Write the job's CPU-seconds and peak memory
-        if: always()
-        uses: ./.github/actions/usage
-        with:
-          end: true
   # The checks that keep the release pipeline on pinned code, which sharp/bin/check workflows runs: an action that is not
   # ours runs only at a full commit SHA, so a moved tag can't change what runs, no Dockerfile under sharp/docker names a
   # `# syntax=` frontend, which BuildKit pulls from Docker Hub with no login (#86), and actionlint, at the version this
@@ -603,8 +545,9 @@ jobs:
   # The release's Mago binaries, their attestations, Mago's source archives, their SHA-256s and its notes, which
   # release.yml builds beside the suites in every pull request's run, and in a push to master whose tree no pull
   # request's run passed, so a build that fails fails before the merge. A release's bump builds them with publish, so
-  # its macOS binary builds with profile-guided optimization, and RELEASE publishes them as they are. A called
-  # workflow's jobs may ask only for permissions its caller grants.
+  # its macOS binary builds with profile-guided optimization, and RELEASE publishes them as they are. Its macOS build is
+  # the run's one Mac job: it also runs every check only macOS can fail, on the Mac's one build of the engine mago
+  # links, as release.yml's checks key explains. A called workflow's jobs may ask only for permissions its caller grants.
   RELEASE_ASSETS:
     needs: CHANGES
     if: ${{ !needs.CHANGES.outputs.passed }}
@@ -629,7 +572,6 @@ jobs:
       - UPSTREAM
       - SPEC
       - HOSTS
-      - MACOS
       - WORKFLOWS
       - RELEASE_ASSETS
       - IMAGE
@@ -653,7 +595,7 @@ jobs:
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
           allowed-skips: >-
-            BUILD_LINUX, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, MACOS, RELEASE_ASSETS, IMAGE, RELEASE, COMPOSER
+            BUILD_LINUX, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, RELEASE_ASSETS, IMAGE, RELEASE, COMPOSER
           jobs: ${{ toJSON(needs) }}
       # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed run on master
@@ -969,7 +911,7 @@ jobs:
   # nothing. A tag GITHUB_TOKEN makes starts no workflow, so this run publishes, and COMPOSER then publishes the
   # Composer packages. A rerun of a failed RELEASE finds what an earlier attempt published, and leaves it.
   RELEASE:
-    needs: [CHANGES, BUILD_LINUX, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, MACOS, WORKFLOWS, RELEASE_ASSETS, IMAGE]
+    needs: [CHANGES, BUILD_LINUX, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, WORKFLOWS, RELEASE_ASSETS, IMAGE]
     if: ${{ !failure() && !cancelled() && github.event_name == 'push' && needs.CHANGES.outputs.bump == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
