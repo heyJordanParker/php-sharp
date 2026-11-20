@@ -305,7 +305,8 @@ impl IncrementalAnalysisService {
 
     /// The effects of each plain PHP class and method an `extern` line of the last analysis declares, by what it
     /// declares: the first line's, as a call's effects take them, spec section 29. A function's are left out, since
-    /// reflection gives no function a `Method`.
+    /// reflection gives no function a `Method`, and so is a line's that says `uses any`, which the engine reads as
+    /// a method no line declares, one that may have every effect.
     #[must_use]
     pub fn extern_effects(&self) -> Vec<ExternEffects> {
         let mut declared: Vec<ExternEffects> = self
@@ -313,7 +314,7 @@ impl IncrementalAnalysisService {
             .externs
             .values()
             .filter_map(|lines| {
-                let line = lines.first()?;
+                let line = lines.first().filter(|line| !line.uses_any)?;
                 let target = self.codebase.extern_declaration(line).filter(|(class, _)| !class.is_empty())?;
                 let declaration = extern_key(target);
                 let effects = line
@@ -1197,10 +1198,10 @@ impl IncrementalAnalysisService {
 
     /// The issues that refuse the laws of the last analysis before any proof, as [`Self::compile`]'s `check` reports them.
     ///
-    /// They are the [`refusals`] of the translation of each file a law reaches, each in the file that states its law, and
-    /// no Lean process starts. Each file with an error the analysis reported is left untranslated, as `compile` leaves a
-    /// file its errors refuse, so a law that reaches one is refused for it. A scan analyzes no method body, so it refuses
-    /// no law.
+    /// They are the [`refusals`] of the laws of the workspace's own files, each in the file that states its law, and no
+    /// Lean process starts. Each PHP# file those laws reach is translated, a package's too, as `compile` translates it,
+    /// but a file with an error the analysis reported, as `compile` leaves a file its errors refuse, so a law that
+    /// reaches one is refused for it. A scan analyzes no method body, so it refuses no law.
     ///
     /// # Errors
     ///
@@ -1214,9 +1215,14 @@ impl IncrementalAnalysisService {
         }
 
         let reach = Reach::new(&self.codebase, &self.native_symbol_references);
-        let reached: HashSet<FileId> = reach.law_files().flat_map(|law_file| reach.files(law_file)).copied().collect();
-        let files = self.sharp_files();
-        let reached_files: Vec<&Arc<File>> = files.iter().filter(|file| reached.contains(&file.id)).collect();
+        let law_files: HashSet<FileId> = reach
+            .law_files()
+            .filter(|law_file| self.database.get_ref(law_file).is_ok_and(|file| file.file_type == FileType::Host))
+            .collect();
+        let reached: HashSet<FileId> = law_files.iter().flat_map(|law_file| reach.files(*law_file)).copied().collect();
+        let files: Vec<Arc<File>> =
+            self.database.files().filter(|file| reached.contains(&file.id) && Dialect::of(file).is_sharp()).collect();
+        let reached_files: Vec<&Arc<File>> = files.iter().collect();
         let (errors, unrefused) = self.errors(|issues| issues);
         let session = self.plugin_registry.create_external_analysis_session(self.database.files());
         let translations = self.checked_all(
@@ -1227,8 +1233,11 @@ impl IncrementalAnalysisService {
             session.as_ref(),
             |checked, _, _| translate(checked, &reach),
         )?;
+        let errored: HashSet<FileId> = errors.keys().copied().collect();
+        let mut refused = refusals(&translations.into_iter().filter_map(Result::ok).collect::<Vec<_>>(), &errored);
+        refused.retain(|file_id, _| law_files.contains(file_id));
 
-        Ok(refusals(&translations.into_iter().filter_map(Result::ok).collect::<Vec<_>>()))
+        Ok(refused)
     }
 
     /// The PHP# files [`Self::compile`] lowers, the workspace's own, in file name order.
@@ -1243,8 +1252,8 @@ impl IncrementalAnalysisService {
         files
     }
 
-    /// The last analysis's errors, by file: those that refuse their file, as `refusing` keeps them, and those of each
-    /// other file, which refuse nothing.
+    /// The last analysis's errors, a package's PHP# file's that it reports none of among them, by file: those that
+    /// refuse their file, as `refusing` keeps them, and those of each other file, which refuse nothing.
     fn errors(
         &self,
         refusing: impl FnOnce(IssueCollection) -> IssueCollection,
@@ -1259,8 +1268,12 @@ impl IncrementalAnalysisService {
 
             by_file
         };
-        let reported: IssueCollection =
-            self.collect_all_issues().into_iter().filter(|issue| issue.level == Level::Error).collect();
+        let reported: IssueCollection = self
+            .collect_all_issues()
+            .into_iter()
+            .chain(self.file_states.values().flat_map(|state| state.package_errors.iter().cloned()))
+            .filter(|issue| issue.level == Level::Error)
+            .collect();
         let errors = by_file(refusing(reported.clone()));
         let mut unrefused = by_file(reported);
         unrefused.retain(|file_id, _| !errors.contains_key(file_id));
@@ -2192,6 +2205,10 @@ mod tests {
             ("app/Rates.sharp", RATES.to_string()),
             ("app/Unrelated.sharp", UNRELATED.to_string()),
             ("lib/Rate.php", rate.to_string()),
+            (
+                "app/Stubs/Shop.sharp",
+                "namespace App.Stubs;\n\nimport Acme.Tax;\nimport Lib.Rate;\n\nextern Rate uses none;\nextern Tax uses none;\n".to_string(),
+            ),
             ("vendor/acme/tax/src/Tax.php", TAX.to_string()),
         ]
     }
@@ -2414,7 +2431,10 @@ mod tests {
                 "app/Prefix.sharp",
                 "namespace App;\n\nimport Lib;\n\npublic class Prefix\n{\n    public bool starts() => \"ab\".startsWith(\"a\");\n\n    public string label() => Lib.shop_label(\"a\");\n}\n",
             ),
-            ("app/Externs.sharp", "namespace App;\n\nextern namespace Lib for shop_label;\n"),
+            (
+                "app/Externs.sharp",
+                "namespace App;\n\nimport Lib;\n\nextern namespace Lib for shop_label;\n\nextern Lib.shop_label uses none;\n",
+            ),
             (
                 "lib/polyfills.php",
                 "<?php\n\nif (!function_exists('str_starts_with')) {\n    function str_starts_with($haystack, $needle) {\n        return true;\n    }\n}\n",
@@ -2592,7 +2612,7 @@ mod tests {
         );
     }
 
-    const TEXT: &str = "namespace Sharp;\n\npublic class Text\n{\n    public static string capitalized(string text) => global.ucfirst(text);\n}\n";
+    const TEXT: &str = "namespace Sharp;\n\nextern global.ucfirst uses none;\n\npublic class Text\n{\n    public static string capitalized(string text) => global.ucfirst(text);\n}\n";
     const TITLE: &str = "namespace App;\n\nimport Sharp.Text;\n\npublic class Title\n{\n    public string of(string name)\n    {\n        return Text.capitalized(name);\n    }\n}\n";
     const TEXT_PATH: &str = "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Text.sharp";
 
@@ -2957,8 +2977,15 @@ mod tests {
         assert_eq!(
             analyzed_to_lower(&warm),
             BTreeSet::from(
-                ["app/Cash.sharp", "app/Money.sharp", "app/Order.sharp", "app/Rates.sharp", "app/Unrelated.sharp"]
-                    .map(str::to_owned)
+                [
+                    "app/Cash.sharp",
+                    "app/Money.sharp",
+                    "app/Order.sharp",
+                    "app/Rates.sharp",
+                    "app/Stubs/Shop.sharp",
+                    "app/Unrelated.sharp",
+                ]
+                .map(str::to_owned)
             )
         );
         assert_eq!(whole(&warm_compiled), whole(&compile(&mut analyzed_for_lowering(&edited), empty_stamp)));
@@ -3780,7 +3807,7 @@ mod tests {
             ("app/Shop/Status.sharp", "namespace App.Shop;\n\npublic enum Status : Payable\n{\n    case Open;\n\n    public int amount() => 1;\n}\n".to_string()),
             ("app/Shop/Report.sharp", "namespace App.Shop;\n\npublic class Report\n{\n    public int pages(Invoice invoice)\n    {\n        return invoice.pages();\n    }\n\n    public int settle(Invoice invoice)\n    {\n        return this.pay(invoice);\n    }\n\n    public int tax(Taxable taxable)\n    {\n        return taxable.amount();\n    }\n\n    public int due()\n    {\n        return this.pay(Status.Open);\n    }\n\n    private int pay(Payable payable)\n    {\n        return payable.amount();\n    }\n}\n".to_string()),
             ("app/Lib/Mailer.php", "<?php\n\nnamespace Mail;\n\nfinal class Mailer\n{\n    public static function subject(string $text): string\n    {\n        return $text;\n    }\n}\n".to_string()),
-            ("app/Stubs/Mail.sharp", "namespace App.Stubs;\n\nimport Mail.Mailer;\n\nextern Mailer;\n".to_string()),
+            ("app/Stubs/Mail.sharp", "namespace App.Stubs;\n\nimport Mail.Mailer;\n\nextern Mailer uses none;\n".to_string()),
             ("app/Shop/Notice.sharp", "namespace App.Shop;\n\nimport Mail.Mailer;\n\npublic class Notice\n{\n    public Notice(private string name) { }\n\n    public string text => Mailer.subject(this.name);\n\n    law titled(Notice notice) => notice.text != \"\";\n}\n".to_string()),
             ("app/Shop/Rates.sharp", "namespace App.Shop;\n\npublic interface Rates\n{\n    int rate(int id);\n}\n".to_string()),
             ("app/Shop/Quote.sharp", "namespace App.Shop;\n\npublic class Quote\n{\n    public Quote(private Rates rates) { }\n\n    public int price => this.rates.rate(1);\n\n    law priced(Quote quote) => quote.price > 0;\n}\n".to_string()),
@@ -3816,7 +3843,7 @@ mod tests {
             ("app/Shop/Invoice.sharp", "Document, Payable", "Document"),
             ("app/Shop/Taxable.sharp", "Taxable : Payable", "Taxable"),
             ("app/Shop/Status.sharp", "Status : Payable", "Status"),
-            ("app/Stubs/Mail.sharp", "extern Mailer;", "extern Mailer uses Http;"),
+            ("app/Stubs/Mail.sharp", "extern Mailer uses none;", "extern Mailer uses Http;"),
             ("app/Shop/Rates.sharp", "int rate(int id);", "int rate(int id) uses Http;"),
             ("app/Shop/Payments.sharp", "public class Payments", "public foreign class Payments"),
             ("app/Shop/Base.sharp", "public abstract class Base", "public abstract foreign class Base"),
@@ -4191,6 +4218,10 @@ mod tests {
                 ),
                 ("app/Wallets/WalletExtensions.sharp", WALLET_EXTENSIONS.to_string()),
                 ("app/Report.sharp", WALLET_REPORT.to_string()),
+                (
+                    "app/Stubs/Lib.sharp",
+                    "namespace App.Stubs;\n\nimport Lib.Base;\nimport Lib.Purse;\nimport Lib.Wallet;\n\nextern Base uses none;\nextern Purse uses none;\nextern Wallet uses none;\n".to_string(),
+                ),
             ]
         };
         let total = "\n{\n    public function total(): int\n    {\n        return 9;\n    }\n}\n";

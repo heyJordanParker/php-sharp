@@ -15,6 +15,7 @@ $root = container_project('scope-fibers-building', [
     'app/Shop/Waits/Pause.php' => "<?php\n\nnamespace App\\Shop\\Waits;\n\nfinal class Pause\n{\n"
         . "    public static function here(): void\n    {\n        if (\\Fiber::getCurrent() !== null) {\n"
         . "            \\Fiber::suspend();\n        }\n    }\n}\n",
+    'app/Shop/Stubs/Pause.sharp' => "namespace App.Shop.Stubs;\n\nimport App.Shop.Waits.Pause;\n\nextern Pause uses none;\n",
     'app/Shop/Waits/Visit.sharp' => $waits('Visit'),
     'app/Shop/Waits/Brief.sharp' => $waits('Brief'),
     'app/Shop/Waits/Once.sharp' => $waits('Once'),

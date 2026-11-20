@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prints how many jobs a build or a test runs at once: CARGO_BUILD_JOBS when it is set, as the self-hosted runners set
-# it to 4, or else 6, or the machine's cores when it has fewer, as GitHub's 4-core runners do. A builder's Mac has 12
-# cores and 64 GiB, and runs other builders' work beside its own, so 6 keeps one run from taking the machine.
+# Prints how many jobs a build or a test runs at once: CARGO_BUILD_JOBS when it is set, as the Mac's self-hosted
+# runner sets it to the Mac's 12 cores, or else 6, or the machine's cores when it has fewer, as GitHub's 4-core runners
+# do. A builder's Mac has 12 cores and 64 GiB, and runs other builders' work beside its own, so 6 keeps one run from
+# taking the machine.
 # sharp/bin/build's make, sharp/bin/build-mago's cargo, sharp/bin/test's run-tests.php workers and test threads, and
 # sharp/bin/spec's compiles each run this many.
 cores="$(getconf _NPROCESSORS_ONLN)"

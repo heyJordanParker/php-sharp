@@ -232,7 +232,7 @@ gate_mago_checks() {
   step rustup run "$rust" cargo check --workspace --locked
   # Workspace builds merge features, so only a build of the bridge alone shows what php links.
   step rustup run "$rust" cargo check -p mago-sharp-bridge --locked
-  # The fuzz crate is a workspace of its own, which fuzz.yml builds only when it changes.
+  # The fuzz crate is a workspace of its own, which fuzz.yml builds only in its nightly run.
   step rustup run "$rust" cargo metadata --locked --format-version 1 --manifest-path crates/syntax/fuzz/Cargo.toml > /dev/null
   step no_notify
   step unchanged_by php scripts/regen-sdk-node-kinds.php

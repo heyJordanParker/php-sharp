@@ -35,8 +35,6 @@ pub(crate) const RECURSION: &str = "Write the method as recursion that calls its
 pub(crate) const NAMED_PATTERN: &str =
     "Write the test as the condition of an if or a ?:, and read the value it names in the branch it decides.";
 pub(crate) const LAMBDA: &str = "Pass a lambda only to a List's `map` or `filter`, with a body that cannot throw, and call a PHP# method in place of any other function value.";
-pub(crate) const INHERITANCE: &str =
-    "Declare the members the law reaches in the class itself, in place of inheriting them.";
 pub(crate) const INTERFACE_METHOD: &str = "Call the method on a value of a class that implements the interface, since a law cannot know which implementation runs.";
 pub(crate) const ACCESSOR: &str = "Compute the value in a method, and give the property no accessor body.";
 pub(crate) const CONSTRUCTOR_BODY: &str = "Write the constructor with promoted properties and no body, and compute the values in a static method that calls `new`.";
@@ -228,7 +226,7 @@ pub(crate) fn uninstalled_checker(span: Span) -> Issue {
     .with_annotation(Annotation::primary(span))
 }
 
-/// No `lake` is on the `PATH`, and the Mago build pins no Lean archive for its target, so it cannot install Lean. The
+/// No Lean is installed, and the Mago build pins no Lean archive for its target, so it cannot install Lean. The
 /// message describes the build, never the host, and gives only advice true on every host it runs on: a musl build also
 /// runs on glibc Linux, where Lean runs, and on Alpine, where neither Mago's glibc build nor Lean starts.
 pub(crate) fn uninstallable_lean(span: Span) -> Issue {

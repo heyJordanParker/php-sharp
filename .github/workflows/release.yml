@@ -28,6 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
       - name: extract crate information
         id: crate_metadata
         run: |
@@ -75,6 +77,11 @@ jobs:
           name: release-notes
           path: ${{ runner.temp }}/release-notes.md
           if-no-files-found: error
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
     outputs:
       name: "mago"
       bin-name: "mago"
@@ -95,6 +102,9 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
 
       - name: Create source archives
         id: source_package
@@ -139,6 +149,12 @@ jobs:
           path: ${{ steps.source_package.outputs.ZIP_PATH }}
           if-no-files-found: error
 
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+
   build:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
@@ -170,32 +186,25 @@ jobs:
               smoke: true,
               pgo: true,
             }
-          ## Linux: aarch64, x86_64
-          - { target: aarch64-unknown-linux-gnu, os: ubuntu-latest, smoke: false }
-          - {
-              target: x86_64-unknown-linux-gnu,
-              os: ubuntu-latest,
-              smoke: true,
-            }
+          ## Linux: aarch64, x86_64, each built on a runner of its own architecture, which builds the PHP# engine mago
+          ## links from Ubuntu 22.04's static archives, so the binary runs on glibc 2.35 and later.
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, smoke: true }
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, smoke: true }
 
-    # The self-hosted Macs cap each job's parallelism, as sharp.yml's MACOS explains. The build goes to sharp/mago/target,
-    # which clean-kept-build removes, so each release builds from nothing, and never into the folder sharp/.cargo's
-    # config names for the Mac's dev builds.
+    # The build goes to sharp/mago/target, which clean-kept-build removes, so each release builds from nothing, and
+    # never into the folder sharp/.cargo's config names for the Mac's dev builds.
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/sharp/mago/target
-      BUILD_CMD: cargo
-      CARGO_BUILD_JOBS: 4
-      RUST_TEST_THREADS: 4
-      RAYON_NUM_THREADS: 4
-      MAGO_THREADS: 4
-      LEAN_NUM_THREADS: 2
 
     steps:
-      # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
+      # The self-hosted Mac runner keeps sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           clean: false
+
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
 
       - name: Remove what an earlier job left, except the builds
         if: runner.environment == 'self-hosted'
@@ -206,15 +215,10 @@ jobs:
         shell: bash
         run: echo "VERSION=${{ needs.crate_metadata.outputs.version }}" >> "$GITHUB_OUTPUT"
 
-      - name: Install Prerequisites
+      - name: Install what the PHP# engine builds with
         if: contains(matrix.job.os, 'ubuntu')
         shell: bash
-        run: |
-          sudo apt-get -y update
-          sudo apt-get remove -y libssl-dev
-          case ${{ matrix.job.target }} in
-            aarch64-unknown-linux-gnu) sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-          esac
+        run: sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends autoconf bison cmake pkg-config re2c libedit-dev libicu-dev liblzma-dev libsodium-dev libsqlite3-dev libssl-dev libxml2-dev zlib1g-dev
 
       - name: install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
@@ -230,33 +234,6 @@ jobs:
           rustup component add llvm-tools-preview
           if ! command -v cargo-pgo &>/dev/null; then
             cargo install cargo-pgo
-          fi
-
-      - name: install cross
-        if: startsWith(matrix.job.os, 'ubuntu') && !matrix.job.pgo
-        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
-        with:
-          tool: cross
-
-      - name: overwrite build command env variable (for cross)
-        if: startsWith(matrix.job.os, 'ubuntu') && !matrix.job.pgo
-        shell: bash
-        run: echo "BUILD_CMD=cross" >> "$GITHUB_ENV"
-
-      - name: Configure cross-rs container image for glibc 2.17
-        if: contains(matrix.job.target, 'linux-gnu') && !matrix.job.pgo
-        shell: bash
-        run: |
-          IMAGE=""
-          case ${{ matrix.job.target }} in
-            x86_64-unknown-linux-gnu) IMAGE="quay.io/pypa/manylinux2014_x86_64" ;;
-            aarch64-unknown-linux-gnu) IMAGE="quay.io/pypa/manylinux2014_aarch64" ;;
-          esac
-          if [[ -n "$IMAGE" ]]; then
-            echo "Using custom image for glibc 2.17: $IMAGE"
-            echo "CROSS_IMAGE=$IMAGE" >> "$GITHUB_ENV"
-          else
-            echo "::warning:: No manylinux2014 image found for target ${{ matrix.job.target }}. Build will use default cross image, which may have a newer glibc."
           fi
 
       - name: show version information (Rust, cargo, GCC)
@@ -287,6 +264,13 @@ jobs:
           composer update --ignore-platform-reqs
           cd ..
 
+      # The PHP# engine mago links, which sharp/bin/build-mago --engine builds for the runner's own platform, each
+      # release from nothing but on the self-hosted Mac runner, which keeps sharp/build.
+      - name: Build the engine mago links
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: sharp/bin/build-mago --engine
+
       - name: build
         shell: bash
         run: |
@@ -295,7 +279,7 @@ jobs:
             cargo pgo run -- -- --workspace corpus/ analyze --reporting-format count || true
             cargo pgo optimize build -- --target=${{ matrix.job.target }}
           else
-            $BUILD_CMD build --locked --release --target=${{ matrix.job.target }}
+            cargo build --locked --release --target=${{ matrix.job.target }}
           fi
 
       - name: set binary name
@@ -393,6 +377,12 @@ jobs:
           name: ${{ steps.package.outputs.PKG_NAME }}
           path: ${{ steps.package.outputs.PKG_PATH }}
           if-no-files-found: error
+
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
 
   # install.sh checks a download against these SHA-256s when gh is missing, and sharp.yml's COMPOSER pins them in the
   # release's heyjordanparker/mago-sharp version. They are written where the assets were built, so the release

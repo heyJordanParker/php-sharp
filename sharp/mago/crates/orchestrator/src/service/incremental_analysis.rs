@@ -75,6 +75,7 @@ use mago_names::resolver::NamespaceClasses;
 use mago_php_version::PHPVersion;
 use mago_reporting::Issue;
 use mago_reporting::IssueCollection;
+use mago_reporting::Level;
 use mago_semantics::SemanticsChecker;
 use mago_semantics::drop_follow_on_issues;
 use mago_syntax::dialect::Dialect;
@@ -115,6 +116,9 @@ struct FileState {
     /// The issues in the file of the last run's project passes, which read every file: the effect rules' solve and the
     /// too-wide warning.
     project_issues: IssueCollection,
+    /// The errors the analysis found in a package's PHP# file, which it only summarizes: they stay out of the report,
+    /// and refuse a law that reaches the file, as a compile refuses the file for them.
+    package_errors: IssueCollection,
     /// What the last analysis gave the lowering of the file, a PHP# file, when the service keeps lowering inputs and
     /// that analysis ran from scratch. An incremental analysis skips the methods it keeps, so it gives none.
     lowering_input: Option<LoweringInput>,
@@ -148,6 +152,8 @@ struct SelectiveAnalysisOutput {
     per_file_effect_summaries: HashMap<FileId, Vec<EffectSummary>>,
     /// The project passes' issues of every file, analyzed or skipped.
     per_file_project_issues: HashMap<FileId, IssueCollection>,
+    /// The errors of each package's PHP# file the analysis summarized.
+    per_file_package_errors: HashMap<FileId, IssueCollection>,
     /// What the analysis gave the lowering of each PHP# file it analyzed, with whether the file's code reaches a PHP#
     /// extension member, when it kept lowering inputs.
     lowering_inputs: HashMap<FileId, (LoweringInput, bool)>,
@@ -399,7 +405,7 @@ impl IncrementalAnalysisService {
     }
 
     /// Takes in that the compiled files of `classes`, each a lowercase class name, changed: starts again each extension
-    /// worker that loaded one or failed to, since PHP declares a class once, and gives up what the last analysis found
+    /// interpreter that loaded one or failed to, since PHP declares a class once, and gives up what the last analysis found
     /// in each file whose extension callbacks read one, so the next
     /// [`analyze_incremental()`](Self::analyze_incremental) given the returned files analyzes them again. A callback
     /// reads every class its worker loaded before it ran. Returns `None` when the before-analysis hooks read one, which
@@ -407,22 +413,16 @@ impl IncrementalAnalysisService {
     ///
     /// # Errors
     ///
-    /// Returns an error when a worker cannot answer whether it loaded one, or cannot start again.
+    /// Returns an error when the external analyzer failed to start.
     pub fn reload_classes(&mut self, classes: &HashSet<Word>) -> Result<Option<Vec<FileId>>, OrchestratorError> {
         if classes.is_empty() {
             return Ok(Some(Vec::new()));
         }
 
         let names: Vec<&[u8]> = classes.iter().map(Word::as_bytes).collect();
-        let reloaded = self
-            .plugin_registry
+        self.plugin_registry
             .reload_external_workers_holding(&names)
             .map_err(mago_analyzer::error::AnalysisError::from)?;
-        tracing::debug!(
-            reloaded,
-            classes = classes.len(),
-            "Extension workers that loaded a changed class started again."
-        );
         if self.class_logs.read_any(&self.before_analysis_reads, classes) {
             return Ok(None);
         }
@@ -642,6 +642,15 @@ impl IncrementalAnalysisService {
         }
     }
 
+    /// Caches the errors of each package's PHP# file this run summarized.
+    fn store_package_errors(&mut self, mut errors: HashMap<FileId, IssueCollection>) {
+        for (file_id, state) in &mut self.file_states {
+            if let Some(file_errors) = errors.remove(file_id) {
+                state.package_errors = file_errors;
+            }
+        }
+    }
+
     fn refresh_late_reference_issues(&mut self) {
         if self.late_symbol_references.is_empty() {
             for state in self.file_states.values_mut() {
@@ -831,6 +840,7 @@ impl IncrementalAnalysisService {
                     reads: AnalysisReads::default(),
                     effect_summaries: Vec::new(),
                     project_issues: IssueCollection::default(),
+                    package_errors: IssueCollection::default(),
                     lowering_input: None,
                     reaches_extension: false,
                 },
@@ -852,6 +862,7 @@ impl IncrementalAnalysisService {
             codebase_issues: all_codebase_issues,
             per_file_effect_summaries,
             per_file_project_issues,
+            per_file_package_errors,
             lowering_inputs,
         } = self.run_analyzer_selective(
             &mut merged_codebase,
@@ -893,6 +904,7 @@ impl IncrementalAnalysisService {
             }
         }
         self.store_project_passes(per_file_effect_summaries, per_file_project_issues);
+        self.store_package_errors(per_file_package_errors);
 
         self.codebase = merged_codebase;
         self.symbol_references = std::mem::take(&mut analysis_result.symbol_references);
@@ -1415,6 +1427,7 @@ impl IncrementalAnalysisService {
                 codebase_issues: new_codebase_issues,
                 per_file_effect_summaries,
                 per_file_project_issues,
+                per_file_package_errors,
                 ..
             } = self.run_analyzer_selective(
                 &mut merged_codebase,
@@ -1490,12 +1503,14 @@ impl IncrementalAnalysisService {
                         reads: reads_by_file.remove(&file_id).unwrap_or_default(),
                         effect_summaries: Vec::new(),
                         project_issues: IssueCollection::default(),
+                        package_errors: IssueCollection::default(),
                         lowering_input: None,
                         reaches_extension: false,
                     },
                 );
             }
             self.store_project_passes(per_file_effect_summaries, per_file_project_issues);
+            self.store_package_errors(per_file_package_errors);
 
             self.codebase = merged_codebase;
             if self.dropped_a_read(&extension_reads) {
@@ -1704,6 +1719,7 @@ impl IncrementalAnalysisService {
             codebase_issues: new_codebase_issues,
             per_file_effect_summaries,
             per_file_project_issues,
+            per_file_package_errors,
             ..
         } = self.run_analyzer_selective(
             &mut merged_codebase,
@@ -1779,12 +1795,14 @@ impl IncrementalAnalysisService {
                     reads: reads_by_file.remove(&file_id).unwrap_or_default(),
                     effect_summaries: Vec::new(),
                     project_issues: IssueCollection::default(),
+                    package_errors: IssueCollection::default(),
                     lowering_input: None,
                     reaches_extension: false,
                 },
             );
         }
         self.store_project_passes(per_file_effect_summaries, per_file_project_issues);
+        self.store_package_errors(per_file_package_errors);
 
         self.codebase = merged_codebase;
         if self.dropped_a_read(&extension_reads) {
@@ -2124,6 +2142,14 @@ impl IncrementalAnalysisService {
                 }
                 if summarized_files.contains(&file_id) {
                     let mut artifacts = analyzer.analyze_with_artifacts(program, &mut analysis_result)?;
+                    let mut errors = AnalysisResult::new(SymbolReferences::new());
+                    errors.issues = program
+                        .errors
+                        .iter()
+                        .map(Issue::from)
+                        .chain(analysis_result.issues)
+                        .filter(|issue| issue.level == Level::Error)
+                        .collect();
                     arena.reset();
                     if let Some(analyzing_bar) = &analyzing_bar {
                         analyzing_bar.inc(1);
@@ -2131,7 +2157,7 @@ impl IncrementalAnalysisService {
 
                     return Ok((
                         file_id,
-                        AnalysisResult::new(SymbolReferences::new()),
+                        errors,
                         None,
                         std::mem::take(&mut artifacts.effect_summaries),
                         HashSet::default(),
@@ -2239,10 +2265,12 @@ impl IncrementalAnalysisService {
         // The sets each file's analysis read whole, which join what its extensions read from the codebase.
         let mut reads_by_file: HashMap<FileId, AnalysisReads> = HashMap::default();
         let mut lowering_inputs: HashMap<FileId, (LoweringInput, bool)> = HashMap::default();
+        let mut per_file_package_errors: HashMap<FileId, IssueCollection> = HashMap::default();
 
         for (file_id, result, snapshot, effect_summaries, listings, lowering_input) in results {
             per_file_effect_summaries.insert(file_id, effect_summaries);
             if summarized_files.contains(&file_id) {
+                per_file_package_errors.insert(file_id, result.issues);
                 continue;
             }
             if let Some(lowering_input) = lowering_input {
@@ -2438,6 +2466,7 @@ impl IncrementalAnalysisService {
             codebase_issues,
             per_file_effect_summaries,
             per_file_project_issues,
+            per_file_package_errors,
             lowering_inputs,
         })
     }
@@ -4445,7 +4474,7 @@ mod tests {
         let helpers = "<?php\n\nfunction abort(int $code): int\n{\n    return $code;\n}\n";
         let application = "<?php\n\nnamespace Vendor\\Foundation;\n\nclass Application\n{\n}\n";
         let page = "namespace App;\n\nimport Vendor.Foundation;\n\npublic class Page\n{\n    public int missing() => Foundation.abort(404);\n}\n";
-        let externs = "namespace App;\n\nimport Vendor.Foundation;\n\nextern namespace Foundation for abort;\n";
+        let externs = "namespace App;\n\nimport Vendor.Foundation;\n\nextern namespace Foundation for abort;\n\nextern Foundation.abort uses none;\n";
         let externs_id = FileId::new(b"src/Externs.sharp");
         let mut db = make_database(vec![
             ("src/Page.sharp", page),
@@ -4605,7 +4634,7 @@ mod tests {
         let helpers = "<?php\n\nfunction abort(int $code): int\n{\n    return $code;\n}\n";
         let other = "<?php\n\nfunction report(int $code): int\n{\n    return $code;\n}\n";
         let page = "namespace App;\n\nimport Vendor.Foundation;\n\npublic class Page\n{\n    public int missing() => Foundation.abort(404);\n}\n";
-        let externs = "namespace App;\n\nimport Vendor.Foundation;\n\nextern namespace Foundation for abort;\n";
+        let externs = "namespace App;\n\nimport Vendor.Foundation;\n\nextern namespace Foundation for abort;\n\nextern Foundation.abort uses none;\n";
         let helpers_id = FileId::new(b"vendor/laravel/Foundation/helpers.php");
         let mut db = make_database(vec![
             ("src/Page.sharp", page),

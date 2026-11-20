@@ -1,8 +1,8 @@
 #!/usr/bin/env php
 <?php
 // Writes sharp/composer/library/Sharp/Internal/Builtins.sharp: one `extern global.name` line for each function PHP 8.5 builds in
-// that Mago's prelude declares, with the effect RULES give it, then one pure `extern Name` line for each exception class
-// PHP 8.5 builds in that the prelude declares, spec section 29, and for each other standard root class, decision 83.
+// that Mago's prelude declares, with the effect RULES give it, then one `extern Name uses none;` line for each exception
+// class PHP 8.5 builds in that the prelude declares, spec section 29, and for each other standard root class, decision 83.
 // PHPStan's php-8-stubs list the functions and classes,
 // and each stub's folder names its extension. `--self-test` checks that every rule gives its row's effect, and that
 // removing the rule changes that row.
@@ -14,7 +14,7 @@ const STUBS_SHA256 = '609c8dc1f27596f29c723700d9dff379602adb31c6b6dc16ca8027ad77
 const PHP_VERSION_ID_TARGET = 80500;
 
 // Each function's effects are the ones of the first rule whose extension and name pattern match it, written as they
-// follow `uses`, and null is pure. A function that reads the clock, the environment or a file, or prints, only when an
+// follow `uses`, and null is pure, written `uses none`. A function that reads the clock, the environment or a file, or prints, only when an
 // argument is left out has that effect, as `date` has Clock and `imagepng` has Console. A handle can be a terminal or a
 // file, so the functions that read or write through one, such as `fwrite` and `fgets`, have both Console and Files, and
 // every other function on a handle, such as `fflush`, has Files. A function that prints a file, such as `readfile`, has
@@ -521,7 +521,7 @@ foreach ($map->functions as $lowercase => $path) {
         $unclassified[] = "$extension $function";
         continue;
     }
-    $lines[$function] = "extern global.$function" . ($effect === null ? '' : " uses $effect") . ';';
+    $lines[$function] = "extern global.$function uses " . ($effect ?? 'none') . ';';
 }
 if ($unclassified !== []) {
     fail("no rule classifies these functions. Add a rule and its row:\n" . implode("\n", $unclassified));
@@ -535,8 +535,11 @@ $exceptions = exceptionClasses($map, $stubs, $checkerClasses);
 $shortNames = array_count_values(array_map(static fn (string $class): string => basename(str_replace('\\', '/', $class)), $exceptions));
 [$imports, $externs] = [[], []];
 foreach ($exceptions as $class) {
-    // A bare `Error` names the standard library's `Sharp.Error` (spec section 31), so PHP# code never names PHP's.
+    // A bare `Error` names the standard library's `Sharp.Error` (spec section 31), so PHP's takes an alias, which only
+    // the standard library may import.
     if ($class === 'Error') {
+        $imports[] = 'import Error as PhpError;';
+        $externs[] = 'extern PhpError uses none;';
         continue;
     }
     $short = basename(str_replace('\\', '/', $class));
@@ -544,26 +547,26 @@ foreach ($exceptions as $class) {
     if (str_contains($class, '\\')) {
         $imports[] = 'import ' . str_replace('\\', '.', $class) . ($alias === null ? '' : " as $alias") . ';';
     }
-    $externs[] = 'extern ' . ($alias ?? $short) . ';';
+    $externs[] = 'extern ' . ($alias ?? $short) . ' uses none;';
 }
 // The root of every exception, the class that makes a class an attribute, and the interfaces a PHP# class implements
 // for a plain PHP library are standard root classes too, which a .sharp file names with no import (decision 83).
 foreach (['Attribute', 'Countable', 'JsonSerializable', 'Throwable'] as $class) {
-    $externs[] = "extern $class;";
+    $externs[] = "extern $class uses none;";
 }
 // The classes of PHP 8.4's DOM that read and write markup, an HTML page or an XML document, are named by the standard
-// library, so a .sharp file names each through its import, as `import Dom.HTMLDocument;` (decision 83). They take no
-// extern line, so each keeps the effects PHP's declarations give it, as `XMLDocument::createFromFile` reads a file.
+// library, so a .sharp file names each through its import, as `import Dom.HTMLDocument;` (decision 83). Each may have
+// any effect, as `XMLDocument::createFromFile` reads a file.
 foreach (['AdjacentPosition', 'Attr', 'CharacterData', 'ChildNode', 'Comment', 'Document', 'DocumentFragment', 'DocumentType', 'Element', 'HTMLCollection', 'HTMLDocument', 'HTMLElement', 'NamedNodeMap', 'Node', 'NodeList', 'ParentNode', 'Text', 'TokenList', 'XMLDocument'] as $class) {
     $imports[] = "import Dom.$class;";
+    $externs[] = "extern $class uses any;";
 }
 // A date or a time zone is a value once created, and the members that create one from the clock list `Clock` below,
 // so holding and reading one is pure, as is reading any plain PHP date, such as a Carbon, through the interface every
-// one implements. Without the line, each would carry the effects of every declared call that returns one, as
-// `date_create_immutable`'s `Clock`.
+// one implements.
 foreach (['DateTimeImmutable', 'DateTimeInterface', 'DateTimeZone'] as $class) {
     $imports[] = "import $class;";
-    $externs[] = "extern $class;";
+    $externs[] = "extern $class uses none;";
 }
 // A date's text may say "now", so each member that reads one reads the clock.
 foreach (['__construct', 'createFromFormat', 'modify'] as $member) {
@@ -572,32 +575,51 @@ foreach (['__construct', 'createFromFormat', 'modify'] as $member) {
 // A BcMath\Number is an exact number once created, and its members read nothing outside it, so the standard library's
 // Decimal and BigInteger, which are structs and so pure, run on it.
 $imports[] = 'import BcMath.Number;';
-$externs[] = 'extern Number;';
+$externs[] = 'extern Number uses none;';
+// The interfaces every enum implements give a case's name and its value, and a read of either runs no code, so the
+// standard library's reflection of enum cases reads them purely.
+foreach (['BackedEnum', 'UnitEnum'] as $class) {
+    $imports[] = "import $class;";
+    $externs[] = "extern $class uses none;";
+}
 // A ZIP archive reads and writes the file it opened, so each member has `Files`, and so does each member of the
 // standard library's Sharp.IO.ZipArchive, which runs on it.
 $imports[] = 'import ZipArchive;';
 $externs[] = 'extern ZipArchive uses Files;';
+// The standard library's foreign classes run on PHP's own: Sharp.Data.Database and Sharp.Data.Cache on PDO, which has
+// `Database`, Sharp.Random on a Randomizer, which has `Random`, and Sharp.IO.Console on an SplFileObject over a
+// handle, which has `Console` and `Files`, as the functions on a handle have. A WeakMap holds entries in memory, so
+// Sharp.WeakMap, which runs on it, is pure, and `WeakMap` names Sharp.WeakMap, so PHP's takes an alias.
+foreach (['PDO' => 'Database', 'PDOStatement' => 'Database', 'Random\\Engine\\Mt19937' => 'Random', 'Random\\Randomizer' => 'Random', 'SplFileObject' => 'Console, Files'] as $class => $effects) {
+    $imports[] = 'import ' . str_replace('\\', '.', $class) . ';';
+    $externs[] = 'extern ' . basename(str_replace('\\', '/', $class)) . " uses $effects;";
+}
+$imports[] = 'import WeakMap as PhpWeakMap;';
+$externs[] = 'extern PhpWeakMap uses none;';
+// A case's reflection, which `new` creates through the constructor it inherits, reads only the enum.
+$imports[] = 'import ReflectionEnumUnitCase;';
+$externs[] = 'extern ReflectionEnumUnitCase uses none;';
 // The reflection members the standard library calls that only read a declaration or an object's state run no code a
-// project wrote, so `Property.isInitialized` and `Property.hasDefaultValue`, which call only these, are pure. A line
-// names the class that declares the member, and covers each subclass that inherits it, as `ReflectionMethod` inherits
-// `getAttributes`. `ReflectionProperty::isInitialized` and `ReflectionClass::hasProperty` load a lazy object they are
-// given, and the standard library asks them only of a loaded object or of a class. The members that run a project's
-// code, `ReflectionAttribute::newInstance`, `ReflectionMethod::invoke` and `ReflectionParameter::getDefaultValue`,
-// take no line, so each keeps every effect. So does `ReflectionProperty::getHook`: an object a declared call returns
-// carries that call's effects, so a pure line on it would make `ReflectionMethod::invoke` pure.
+// project wrote, so `Property.isInitialized` and `Property.hasDefaultValue`, which call only these, are pure. A call
+// takes the line of the class that declares its member, as `ReflectionMethod` takes `getAttributes` from
+// `ReflectionFunctionAbstract`. `ReflectionProperty::isInitialized` and `ReflectionClass::hasProperty` load a lazy
+// object they are given, and the standard library asks them only of a loaded object or of a class. The member that
+// runs a project's code, `ReflectionAttribute::newInstance` and `ReflectionFunction::invoke`, may have any effect.
 $reflection = [
+    'ReflectionAttribute' => ['newInstance' => 'any'],
     'ReflectionClass' => ['__construct', 'getAttributes', 'hasMethod', 'hasProperty', 'isUninitializedLazyObject'],
     'ReflectionClassConstant' => ['__construct', 'getAttributes'],
     'ReflectionFunctionAbstract' => ['getAttributes', 'getParameters'],
-    'ReflectionFunction' => ['__construct'],
+    'ReflectionFunction' => ['__construct', 'invoke' => 'any'],
     'ReflectionMethod' => ['__construct'],
     'ReflectionParameter' => ['__construct', 'getAttributes'],
-    'ReflectionProperty' => ['__construct', 'getAttributes', 'getDefaultValue', 'hasDefaultValue', 'isInitialized', 'isLazy'],
+    'ReflectionProperty' => ['__construct', 'getAttributes', 'getDefaultValue', 'getHook', 'hasDefaultValue', 'isInitialized', 'isLazy'],
 ];
 foreach ($reflection as $class => $members) {
     $imports[] = "import $class;";
-    foreach ($members as $member) {
-        $externs[] = "extern $class.$member;";
+    foreach ($members as $member => $effect) {
+        [$member, $effect] = is_int($member) ? [$effect, 'none'] : [$member, $effect];
+        $externs[] = "extern $class.$member uses $effect;";
     }
 }
 

@@ -5,6 +5,8 @@ import Acme.Clock.SystemClock as Clock;
 import Acme.Pdf;
 import Imports.Return as Back;
 
+extern Pdf.render uses any;
+
 public class Printer
 {
     public static string print(string html) => Pdf.render(html);

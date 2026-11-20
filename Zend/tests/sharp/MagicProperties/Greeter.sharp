@@ -2,7 +2,7 @@ namespace MagicProperties;
 
 import Lib.Booking;
 import Lib.Guest;
-extern Booking.host;
+extern Booking.host uses none;
 
 // A plain PHP class that defines `__get` has the properties it reads, typed by its `@property-read` lines and `Any?`
 // otherwise, and its method of a property's name is the value where the code takes a function.

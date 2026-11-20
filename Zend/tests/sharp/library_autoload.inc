@@ -101,6 +101,8 @@ namespace {
     @mkdir("$package/library/Sharp/IO", 0777, true);
     @mkdir("$package/library/Sharp/System", 0777, true);
     @mkdir("$package/library/Sharp/Interop", 0777, true);
+    @mkdir("$package/library/Sharp/Internal", 0777, true);
+    @mkdir("$package/library/Sharp/Data", 0777, true);
     copy("$root/sharp/composer/autoload.php", "$package/autoload.php");
     copy("$root/sharp/composer/require-engine.php", "$package/require-engine.php");
     file_put_contents("$package/composer.json", '{"name": "heyjordanparker/php-sharp-composer"}');
@@ -121,7 +123,7 @@ namespace {
     // An extern declaration file, which declares no type, named like the class its line declares. The class map reads
     // it, and mago compiles only src and library.
     @mkdir("$package/stubs/App", 0777, true);
-    file_put_contents("$package/stubs/App/Failed.sharp", "namespace App;\n\nimport Lib.Failed;\n\nextern event Failed;\n");
+    file_put_contents("$package/stubs/App/Failed.sharp", "namespace App;\n\nimport Lib.Failed;\n\nextern event Failed uses none;\n");
     file_put_contents("$package/mago.toml", "[source]\npaths = [\"src\", \"library\"]\nextensions = [\"sharp\"]\n");
     $uncompiled = ($argv[5] ?? null) === 'uncompiled';
     if ($uncompiled) {

@@ -13,14 +13,13 @@ use mago_codex::graph::strongly_connected_parts;
 use mago_database::error::DatabaseError;
 use mago_database::error::IOAction;
 use mago_database::file::FileId;
-use mago_database::process;
 use mago_sharp_bridge::unit::COMPILED_FOLDER;
 
 use crate::issues;
 use crate::library;
-use crate::library::Lake;
 use crate::library::Stop;
 use crate::translate::Declaration;
+use crate::translate::Role;
 use crate::translate::Translation;
 use crate::translate::Unmodeled;
 use crate::translate::Use;
@@ -98,7 +97,7 @@ impl<'program> Program<'program> {
                 terminating.extend(part);
                 continue;
             }
-            let methods = part.iter().all(|key| declarations[key].1.unfolds);
+            let methods = part.iter().all(|key| declarations[key].1.role == Role::Definition);
             for key in part {
                 recursive.insert(
                     key,
@@ -164,6 +163,16 @@ impl<'program> Program<'program> {
         }
 
         reached
+    }
+
+    /// The definitions and constructors `key` uses, transitively, `key`'s own included: those that recurse on no value,
+    /// then the methods that recurse on a value that gets smaller, which the fixed steps of a proof unfold differently.
+    pub(crate) fn definitions(&self, key: &str) -> (Vec<&'program str>, Vec<&'program str>) {
+        self.closure(key)
+            .0
+            .into_iter()
+            .filter(|reached| self.declarations[reached].1.role != Role::Type)
+            .partition(|reached| !self.terminating.contains(reached))
     }
 
     /// Why the declaration `key`, or one it uses, cannot be written to Lean.
@@ -364,59 +373,25 @@ pub(crate) enum Refusal {
     Rejected(u32),
 }
 
-/// What `lake` answered when asked its version.
-pub(crate) enum Toolchain {
-    Ready,
-    /// No `lake` is on the `PATH`, and the Mago build pins no Lean archive for its target.
-    Unsupported,
-    /// Mago could not install Lean where no `lake` is on the `PATH`, or `lake` could not install the pinned Lean
-    /// version, with what failed.
-    Failed(String),
-}
-
-/// The package in `.sharp/.lean/` under a workspace root, and the `lake` that runs the runner in it.
+/// The package in `.sharp/.lean/` under a workspace root.
 pub(crate) struct Package {
     pub(crate) directory: PathBuf,
-    pub(crate) lake: Lake,
 }
 
 impl Package {
-    /// The package of the workspace at `root`, in `.sharp/.lean/` apart from the `.sharpc` mirror of the sources, with
-    /// the `lake` on the `PATH`. The folder is joined one name at a time, since `cmd` reads a `/` in a Windows path as
-    /// a switch.
+    /// The package of the workspace at `root`, in `.sharp/.lean/` apart from the `.sharpc` mirror of the sources. The
+    /// folder is joined one name at a time, since `cmd` reads a `/` in a Windows path as a switch.
     pub(crate) fn new(root: &Path) -> Self {
-        Self { directory: plain(root).join(COMPILED_FOLDER).join(PACKAGE_FOLDER), lake: Lake::on_path() }
+        Self { directory: plain(root).join(COMPILED_FOLDER).join(PACKAGE_FOLDER) }
     }
 
-    /// Writes the package's Lean version, so an elan on the `PATH` installs it on first use, and asks `lake` for its
-    /// version there, under `library::first_call`'s lock. With no `lake` on the `PATH`, the package uses the `lake` of
-    /// the Lean Mago installs in its cache folder.
-    pub(crate) fn toolchain(&mut self) -> io::Result<Toolchain> {
+    /// Writes the package's Lean version, `lean-toolchain`.
+    pub(crate) fn write_toolchain(&self) -> io::Result<()> {
         fs::create_dir_all(&self.directory)
             .map_err(|error| DatabaseError::io(IOAction::CreateFolder, &self.directory, error))?;
         write_if_changed(&self.directory.join("lean-toolchain"), library::TOOLCHAIN.as_bytes())?;
 
-        let output = match library::first_call(self.lake.command().arg("--version").current_dir(&self.directory)) {
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                self.lake = match library::install() {
-                    Ok(Some(lake)) => lake,
-                    Ok(None) => return Ok(Toolchain::Unsupported),
-                    Err(error) => return Ok(Toolchain::Failed(error.to_string())),
-                };
-                process::output(self.lake.command().arg("--version").current_dir(&self.directory))?
-            }
-            output => output?,
-        };
-
-        Ok(if output.status.success() {
-            Toolchain::Ready
-        } else {
-            Toolchain::Failed(
-                format!("{}{}", String::from_utf8_lossy(&output.stderr), String::from_utf8_lossy(&output.stdout))
-                    .trim()
-                    .to_owned(),
-            )
-        })
+        Ok(())
     }
 
     /// Deletes what an older Mago left in the package: the generated sources and their build, and the `lakefile.toml`

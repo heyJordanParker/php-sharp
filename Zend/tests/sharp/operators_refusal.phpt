@@ -10,7 +10,7 @@ $files = [
     // int's, and an int's take a ByteOrder.
     'vendor/heyjordanparker/php-sharp-composer/composer.json' => '{"name": "heyjordanparker/php-sharp-composer"}',
 ];
-foreach (['ListMembers', 'MapMembers', 'Int', 'ByteOrder'] as $members) {
+foreach (LIBRARY_MODULE as $members) {
     $files["vendor/heyjordanparker/php-sharp-composer/library/Sharp/$members.sharp"] = file_get_contents(__DIR__ . "/../../../sharp/composer/library/Sharp/$members.sharp");
 }
 foreach (glob(__DIR__ . '/Operators/*.sharp') as $file) {

@@ -1,7 +1,7 @@
 namespace SharedNames;
 
 import Lib.Gadget;
-extern Gadget.label;
+extern Gadget.label uses none;
 
 // A plain PHP class's method of the same name as its property is its value where the code takes a function the
 // property's type does not fit.

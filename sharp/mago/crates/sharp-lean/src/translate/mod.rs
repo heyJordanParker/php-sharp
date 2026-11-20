@@ -96,11 +96,20 @@ pub(crate) struct Declaration {
     pub(crate) text: String,
     pub(crate) uses: Vec<Use>,
     pub(crate) unmodeled: Vec<Unmodeled>,
-    /// Whether it is a definition that computes, a method or a law, rather than a type: a cycle of definitions is a
-    /// recursion, and a cycle of types a type that holds itself.
-    pub(crate) unfolds: bool,
+    pub(crate) role: Role,
     /// What a method makes smaller on each call it makes of itself or of a method that calls it back.
     pub(crate) measure: Option<Measure>,
+}
+
+/// What a declaration is in Lean.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Role {
+    /// A structure or an inductive: a cycle of them is a type that holds itself.
+    Type,
+    /// A class's `__construct`, which builds its structure: a cycle of them builds a type that holds itself.
+    Constructor,
+    /// A method, a law's statement or a parameter's default, which computes: a cycle of them is a recursion.
+    Definition,
 }
 
 /// A declaration another one uses.
@@ -194,6 +203,10 @@ pub fn translate(checked: &CheckedProgram<'_>, reach: &Reach) -> Translation {
     translator.translation
 }
 
+/// The instances each translated class, enum and sealed interface derives for the translated code and the library's
+/// lemmas. No `Repr`, which only prints a value, and no proof prints one.
+const DERIVED: &str = "  deriving DecidableEq, Inhabited";
+
 struct Translator<'translator, 'program> {
     checked: &'translator CheckedProgram<'program>,
     reach: &'translator Reach,
@@ -266,16 +279,14 @@ impl Translator<'_, '_> {
         let lean = names::full_name(full);
         let short = names::short_name(full);
         let mut body = Body::new(self.checked, self.reach, full, short.clone());
-        for parent in inheritance.iter().flat_map(|inheritance| inheritance.names()) {
-            let parent = self.checked.names().get(&parent);
-            if self.checked.types().class_declaration(word(parent)).kind == DeclarationKind::Class {
-                body.unmodeled(
-                    name.span,
-                    format!("the class {short}, which extends {}", names::short_name(parent)),
-                    issues::INHERITANCE,
-                );
-            }
-        }
+        // Spec section 28: the structure holds the fields of the PHP# class the class extends, which holds those of its
+        // own PHP# parent. A plain PHP parent's state is no field: a law carries the value and reads none of it.
+        let parent = inheritance
+            .iter()
+            .flat_map(|inheritance| inheritance.names())
+            .map(|parent| self.checked.names().get(&parent))
+            .find(|parent| self.checked.types().class_declaration(word(parent)).kind == DeclarationKind::Class)
+            .filter(|parent| self.reach.class(parent).is_some_and(|reached| reached.sharp));
 
         let constructor = members.iter().find_map(|member| match member {
             ClassLikeMember::Method(method) if php_method_name(method) == b"__construct" => Some(method),
@@ -307,7 +318,9 @@ impl Translator<'_, '_> {
             }
         }
 
-        let mut lines = vec![format!("structure {lean} where")];
+        let parent_field = parent.map(|parent| (body.parent_field(parent), body.own_type(name.span, parent)));
+        let extends = parent_field.as_ref().map(|(_, r#type)| format!(" extends {type}")).unwrap_or_default();
+        let mut lines = vec![format!("structure {lean}{extends} where")];
         if fields.iter().any(|field| field.name == b"mk") {
             lines.push("  make ::".to_owned());
         }
@@ -324,30 +337,32 @@ impl Translator<'_, '_> {
             lines.push(format!("  {} : {type}", names::identifier(field.name)));
             types.push(r#type);
         }
-        lines.push("  deriving Repr, DecidableEq, Inhabited".to_owned());
+        lines.push(DERIVED.to_owned());
         lines.extend(self.coercions(&mut body, &lean, inheritance));
-        self.declare(body, lean.clone(), name.span, lines.join("\n"), false);
+        self.declare(body, lean.clone(), name.span, lines.join("\n"), Role::Type);
 
         // Spec section 20.1: an implementer of a sealed interface is a value of the interface, which reads each of its
-        // properties through the interface's accessor. Any other implementer gives the property's default, which no
-        // read sees, since the checker allows the read only where the value is the implementer.
-        for (field, r#type) in fields.iter().zip(&types) {
-            let mut body =
-                Body::new(self.checked, self.reach, full, format!("{short}.{}", String::from_utf8_lossy(field.name)));
+        // properties through the interface's accessor, and each property a PHP# parent declares through the accessor of
+        // the parent's value. Any other implementer gives the property's default, which no read sees, since the
+        // checker allows the read only where the value is the implementer.
+        let own =
+            fields.iter().zip(&types).map(|(field, r#type)| (String::from_utf8_lossy(field.name), r#type.clone()));
+        for (field, r#type) in parent_field.map(|(field, r#type)| (field.into(), r#type)).into_iter().chain(own) {
+            let mut body = Body::new(self.checked, self.reach, full, format!("{short}.{field}"));
             let Some((interface, constructor)) = body.sealed(full) else {
                 break;
             };
-            let key = names::member(&constructor, field.name);
+            let key = names::member(&constructor, field.as_bytes());
             let lines = [
                 format!("def {key} : {interface} → {type}"),
-                format!("  | {constructor} held => held.{}", names::identifier(field.name)),
+                format!("  | {constructor} held => held.{}", names::identifier(field.as_bytes())),
                 "  | _ => default".to_owned(),
             ];
             self.translation.receivers.push((key.clone(), true));
-            self.declare(body, key, name.span, lines.join("\n"), true);
+            self.declare(body, key, name.span, lines.join("\n"), Role::Definition);
         }
 
-        self.constructor(full, &lean, &short, name.span, constructor, &fields, &types);
+        self.constructor(full, &lean, &short, (name.span, parent), constructor, &fields, &types);
         self.members(full, &lean, &short, members);
         if r#struct {
             self.value_equality(full, &lean, &short, name.span, members, &fields);
@@ -405,15 +420,16 @@ impl Translator<'_, '_> {
         );
     }
 
-    /// `Class.__construct`, a `@[simp]` definition that builds the structure: from each promoted parameter, and from each
-    /// other property's initial value. A constructor with a body of its own is not modeled.
+    /// `Class.__construct`, a `@[simp]` definition that builds the structure: the PHP# `parent`'s value from the
+    /// constructor `: super(…)` calls, each promoted parameter, and each other property's initial value. A constructor
+    /// with a body of its own is not modeled.
     #[allow(clippy::too_many_arguments)]
     fn constructor(
         &mut self,
         full: &[u8],
         lean: &str,
         short: &str,
-        span: Span,
+        (span, parent): (Span, Option<&[u8]>),
         constructor: Option<&Method>,
         fields: &[Field],
         types: &[String],
@@ -440,6 +456,15 @@ impl Translator<'_, '_> {
         }
 
         let mut values = Vec::new();
+        if let Some(parent) = parent {
+            let initializer = constructor.and_then(|constructor| constructor.initializer.as_ref());
+            let built = body.construct(
+                initializer.map_or(span, HasSpan::span),
+                parent,
+                initializer.map(|initializer| &initializer.argument_list),
+            );
+            values.push(format!("{} := {built}", body.parent_field(parent)));
+        }
         for (field, r#type) in fields.iter().zip(types) {
             let value = match field.value {
                 FieldValue::Parameter => names::identifier(field.name),
@@ -463,7 +488,7 @@ impl Translator<'_, '_> {
             text,
             uses,
             unmodeled,
-            unfolds: false,
+            role: Role::Constructor,
             measure: None,
         });
     }
@@ -514,9 +539,9 @@ impl Translator<'_, '_> {
                 EnumCaseItem::Unit(_) => lines.push(format!("  | {}", names::identifier(name.value))),
             }
         }
-        lines.push("  deriving Repr, DecidableEq, Inhabited".to_owned());
+        lines.push(DERIVED.to_owned());
         lines.extend(self.coercions(&mut body, &lean, r#enum.inheritance.as_ref()));
-        self.declare(body, lean.clone(), r#enum.name.span, lines.join("\n"), false);
+        self.declare(body, lean.clone(), r#enum.name.span, lines.join("\n"), Role::Type);
 
         // Spec section 20: a field of a case that carries data reads as the constructor's field, where a test named the
         // case. Any other case gives the field's default, which no such read sees. The value of an enum that implements
@@ -535,7 +560,7 @@ impl Translator<'_, '_> {
                 "  | _ => default".to_owned(),
             ];
             self.translation.receivers.push((key.clone(), true));
-            self.declare(body, key, r#enum.name.span, lines.join("\n"), true);
+            self.declare(body, key, r#enum.name.span, lines.join("\n"), Role::Definition);
         }
 
         if let Some(backing) = &r#enum.backing_type_hint {
@@ -550,7 +575,7 @@ impl Translator<'_, '_> {
                 lines.push("  | _ => default".to_owned());
             }
             self.translation.receivers.push((names::member(&lean, b"value"), true));
-            self.declare(body, names::member(&lean, b"value"), r#enum.name.span, lines.join("\n"), true);
+            self.declare(body, names::member(&lean, b"value"), r#enum.name.span, lines.join("\n"), Role::Definition);
 
             // `from` and `tryFrom` give the case whose value matches. For any other value `from` throws `ValueError`, as
             // the engine does, and `tryFrom` gives null.
@@ -626,12 +651,12 @@ impl Translator<'_, '_> {
                     let constructor = names::identifier(names::short_name(implementer.as_bytes()).as_bytes());
                     constructors.push(format!("  | {constructor} (value : {held})"));
                 }
-                constructors.push("  deriving Repr, DecidableEq, Inhabited".to_owned());
+                constructors.push(DERIVED.to_owned());
                 constructors
             }
         };
         lines.extend(self.coercions(&mut body, &lean, interface.inheritance.as_ref()));
-        self.declare(body, lean.clone(), interface.name.span, lines.join("\n"), false);
+        self.declare(body, lean.clone(), interface.name.span, lines.join("\n"), Role::Type);
         self.members(full, &lean, &short, &interface.members);
     }
 
@@ -691,7 +716,7 @@ impl Translator<'_, '_> {
                             Some(r#type) => format!("def {key} : {type} := {value}"),
                             None => format!("def {key} := {value}"),
                         };
-                        self.declare(body, key, item.name.span, text, true);
+                        self.declare(body, key, item.name.span, text, Role::Definition);
                     }
                 }
                 ClassLikeMember::Law(law) => self.law(full, lean, short, law),
@@ -771,7 +796,13 @@ impl Translator<'_, '_> {
             let r#type = body.declared_type(parameter.hint.as_ref(), parameter.span());
             let value = body.pure_value(default.value);
             let key = names::default(key, position);
-            self.declare(body, key.clone(), parameter.span(), format!("def {key} : {type} := {value}"), true);
+            self.declare(
+                body,
+                key.clone(),
+                parameter.span(),
+                format!("def {key} : {type} := {value}"),
+                Role::Definition,
+            );
         }
     }
 
@@ -855,7 +886,15 @@ impl Translator<'_, '_> {
             parameters.join(" "),
             indented(&lines, 2).collect::<Vec<_>>().join("\n")
         );
-        self.translation.declarations.push(Declaration { key, span, text, uses, unmodeled, unfolds: true, measure });
+        self.translation.declarations.push(Declaration {
+            key,
+            span,
+            text,
+            uses,
+            unmodeled,
+            role: Role::Definition,
+            measure,
+        });
     }
 
     /// `@[law] def Class.law (a : A) : Prop := [condition = pure true →] holds do …`: the law holds for every value of
@@ -906,7 +945,7 @@ impl Translator<'_, '_> {
             text,
             uses,
             unmodeled,
-            unfolds: true,
+            role: Role::Definition,
             measure: None,
         });
     }
@@ -915,9 +954,9 @@ impl Translator<'_, '_> {
         members.iter().any(|member| matches!(member, ClassLikeMember::Law(_)))
     }
 
-    fn declare(&mut self, body: Body<'_, '_>, key: String, span: Span, text: String, unfolds: bool) {
+    fn declare(&mut self, body: Body<'_, '_>, key: String, span: Span, text: String, role: Role) {
         let (_, uses, unmodeled) = body.finish();
-        self.translation.declarations.push(Declaration { key, span, text, uses, unmodeled, unfolds, measure: None });
+        self.translation.declarations.push(Declaration { key, span, text, uses, unmodeled, role, measure: None });
     }
 }
 

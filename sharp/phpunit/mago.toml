@@ -4,5 +4,4 @@ includes = ["vendor"]
 extensions = ["php", "sharp"]
 
 [extension-hosts.local]
-workers = 1
-command = ["php", "extension-host.php"]
+file = "extension-host.php"

@@ -683,7 +683,8 @@ impl<'body, 'program> Body<'body, 'program> {
 
     /// `==`, or `!=` when `negated`, of the values `lhs` and `rhs` of the types `types`, as spec section 19 compares
     /// them, the way the bridge's [`Equality`] tells: Lean's `==` on values that hold no object, and the `==` a class
-    /// declares, or a struct gets with no code, as its `op_Equality` gives it. `span` is where a refusal stands.
+    /// declares, or a struct gets with no code, as its `op_Equality` gives it. A nullable side is lifted: null equals
+    /// only null, and two values run that `==`. `span` is where a refusal stands.
     pub(crate) fn equal(
         &mut self,
         span: Span,
@@ -694,14 +695,15 @@ impl<'body, 'program> Body<'body, 'program> {
         let (what, reason) = match self.checked.types().equality(types.0, types.1) {
             Equality::Identical if negated => return format!("({lhs} != {rhs})"),
             Equality::Identical => return format!("({lhs} == {rhs})"),
-            Equality::Declared(owner, name) if !types.0.is_nullable() && !types.1.is_nullable() => {
+            Equality::Declared(owner, name) => {
                 if !self.is_translated_class(span, owner.as_bytes()) {
                     return "default".to_owned();
                 }
-                let equal = self.operator(owner.as_bytes(), name, "==", (lhs, rhs));
+                let equal =
+                    self.lifted(owner.as_bytes(), name, (types.0.is_nullable(), types.1.is_nullable()), (lhs, rhs));
                 return if negated { format!("(!{equal})") } else { equal };
             }
-            Equality::Declared(..) | Equality::Elements => {
+            Equality::Elements => {
                 (format!("the class operator `{}`", if negated { "!=" } else { "==" }), issues::CLASS_OPERATOR)
             }
             Equality::Numbers => ("a float".to_owned(), issues::FLOAT),
@@ -713,6 +715,23 @@ impl<'body, 'program> Body<'body, 'program> {
         };
 
         self.unmodeled(span, what, reason)
+    }
+
+    /// `==` of `lhs` and `rhs` by the `==` `class` declares as the static method `name`, where `nullable` tells which
+    /// side may be null, as spec section 19 lifts it: null equals only null, and two values run the method.
+    fn lifted(&mut self, class: &[u8], name: &[u8], nullable: (bool, bool), (lhs, rhs): (&str, &str)) -> String {
+        let (held, absent) = match nullable {
+            (false, false) => return self.operator(class, name, "==", (lhs, rhs)),
+            (true, true) => (format!("({lhs}.isSome && {rhs}.isSome)"), format!("pure ({lhs}.isNone && {rhs}.isNone)")),
+            (true, false) => (format!("{lhs}.isSome"), "pure false".to_owned()),
+            (false, true) => (format!("{rhs}.isSome"), "pure false".to_owned()),
+        };
+        let value =
+            |side: &str, nullable: bool| if nullable { format!("({side}.getD default)") } else { side.to_owned() };
+        let values = (value(lhs, nullable.0), value(rhs, nullable.1));
+        let present = self.nested_lines(|body| body.operator(class, name, "==", (&values.0, &values.1)));
+
+        self.choose(&Choice::If(held, Box::new(Choice::Branch(present)), Box::new(Choice::Branch(vec![absent]))))
     }
 
     /// Whether the field `field`, of the declared type `r#type`, holds equal values in `a` and `b`, two values of the
@@ -1196,12 +1215,25 @@ impl<'body, 'program> Body<'body, 'program> {
                     Some(&call.argument_list),
                 );
             }
-            Expression::Parent(_) | Expression::Static(_) => {
-                return self.unmodeled(
-                    expression.span(),
-                    "a call to a parent's method".to_owned(),
-                    issues::INHERITANCE,
+            // Spec section 22: `super.m(…)` runs the method the parent declares or inherits.
+            Expression::Parent(_) => {
+                let Some(method) = self.method_name(&call.method) else {
+                    return "default".to_owned();
+                };
+                let target = self.checked.types().call_target(expression);
+                let receiver = (target.kind != DeclarationKind::StaticMethod).then(|| "this".to_owned());
+
+                return self.call(
+                    expression,
+                    target.class.as_bytes(),
+                    self.class,
+                    method,
+                    receiver,
+                    Some(&call.argument_list),
                 );
+            }
+            Expression::Static(_) => {
+                return self.unmodeled(expression.span(), "a call through `static`".to_owned(), issues::OVERRIDABLE);
             }
             _ => {}
         }
@@ -1403,8 +1435,8 @@ impl<'body, 'program> Body<'body, 'program> {
         None
     }
 
-    /// A call of `class`'s method `method`, which `declaring` declares, on `receiver`, or of the static method when
-    /// `receiver` is `None`. A computed property's read passes no `arguments`.
+    /// A call of `class`'s method `method`, which `declaring` declares, `class` itself or a class above it, on
+    /// `receiver`, or of the static method when `receiver` is `None`. A computed property's read passes no `arguments`.
     fn call(
         &mut self,
         expression: &Expression,
@@ -1414,38 +1446,80 @@ impl<'body, 'program> Body<'body, 'program> {
         receiver: Option<String>,
         arguments: Option<&ArgumentList>,
     ) -> String {
-        if !self.reach.same_class(declaring, class) {
-            return self.unmodeled(
-                expression.span(),
-                format!("the inherited method {}.{}", names::short_name(class), String::from_utf8_lossy(method)),
-                issues::INHERITANCE,
+        if !self.reach.class(declaring).is_some_and(|reached| reached.sharp) {
+            let plain = self.checked.types().class_declaration(word(declaring)).name;
+            let what = format!(
+                "the plain PHP method {}.{}",
+                names::short_name(plain.as_bytes()),
+                String::from_utf8_lossy(method)
             );
+            return self.unmodeled(expression.span(), what, issues::PLAIN_PHP);
         }
-        let Some(facts) = self.reach.method(class, method) else {
+        let Some(facts) = self.reach.method(declaring, method) else {
             return self.unmodeled(
                 expression.span(),
-                format!("the method {}.{}", names::short_name(class), String::from_utf8_lossy(method)),
+                format!("the method {}.{}", names::short_name(declaring), String::from_utf8_lossy(method)),
                 issues::BODYLESS,
             );
         };
 
-        let class_name = self.reached_name(class);
+        let class_name = self.reached_name(declaring);
         let key = names::member(&names::full_name(&class_name), facts.name.as_bytes());
         let mut parts = vec![key.clone()];
-        parts.extend(receiver);
+        parts.extend(receiver.map(|receiver| self.upcast(expression.span(), receiver, class, declaring)));
         let smaller =
-            arguments.filter(|_| self.reach.same_class(class, self.class)).and_then(|list| self.smaller(list));
+            arguments.filter(|_| self.reach.same_class(declaring, self.class)).and_then(|list| self.smaller(list));
         let stepped = smaller.as_ref().and_then(|(smaller, term)| Some((smaller.argument, term.clone()?)));
         let Some(arguments) = arguments.map_or_else(|| Some(Vec::new()), |list| self.arguments(list, stepped)) else {
             return "default".to_owned();
         };
         let place = format!("{}.{}", names::short_name(&class_name), facts.name);
-        let defaults = self.defaults(class, &key, &place, arguments.len()..facts.parameters);
+        let defaults = self.defaults(declaring, &key, &place, arguments.len()..facts.parameters);
         parts.extend(arguments);
         parts.extend(defaults);
-        self.use_of(class, &key, place, smaller.map(|(smaller, _)| smaller));
+        self.use_of(declaring, &key, place, smaller.map(|(smaller, _)| smaller));
 
         self.bind(parts.join(" "))
+    }
+
+    /// `value`, a value of `class`'s Lean type, as a value of the PHP# class `ancestor` above it, which its structure
+    /// holds: `value.toParent`, once for each class up to `ancestor`. A value of a sealed interface's implementer reads
+    /// its parent's value through the interface's accessor, spec section 20.1. A plain PHP class between them, whose
+    /// state the structure does not hold, is refused at `span`.
+    fn upcast(&mut self, span: Span, value: String, class: &[u8], ancestor: &[u8]) -> String {
+        if self.reach.same_class(class, ancestor) {
+            return value;
+        }
+        let mut upcast = value;
+        let mut below = class.to_vec();
+        let mut sealed = self.sealed(class);
+        while !self.reach.same_class(&below, ancestor) {
+            let Some(parent) = self.reach.class(&below).and_then(|reached| reached.parent) else {
+                unreachable!("{} is no class above {}", names::short_name(ancestor), names::short_name(class));
+            };
+            if !self.reach.class(parent.as_bytes()).is_some_and(|reached| reached.sharp) {
+                let what = format!("the plain PHP class {}", names::short_name(parent.as_bytes()));
+                return self.unmodeled(span, what, issues::PLAIN_PHP);
+            }
+            let field = self.parent_field(parent.as_bytes());
+            upcast = match sealed.take() {
+                Some((_, constructor)) => {
+                    let key = names::member(&constructor, field.as_bytes());
+                    self.uses(class, &key, format!("{}.{field}", names::short_name(&self.reached_name(class))));
+                    format!("({key} {upcast})")
+                }
+                None => format!("({upcast}).{field}"),
+            };
+            below = parent.as_bytes().to_vec();
+        }
+
+        upcast
+    }
+
+    /// The field of a class's structure that holds the value of its PHP# parent `parent`, as Lean names the field of
+    /// the structure a structure extends: `toParent`.
+    pub(crate) fn parent_field(&self, parent: &[u8]) -> String {
+        names::identifier(format!("to{}", names::short_name(&self.reached_name(parent))).as_bytes())
     }
 
     /// The smaller value a call of a method of the body's own class passes, by spec section 28's smaller value rule,
@@ -1485,12 +1559,23 @@ impl<'body, 'program> Body<'body, 'program> {
             );
         }
 
+        let made = self.construct(instantiation.span(), class, instantiation.argument_list.as_ref());
+
+        self.held(class, made)
+    }
+
+    /// A value of `class`'s own type, which its constructor builds from `arguments`, as `new` and `: super(…)` run it.
+    /// A constructor a plain PHP parent declares or inherits is plain PHP code, which a law cannot read.
+    pub(crate) fn construct(&mut self, span: Span, class: &[u8], arguments: Option<&ArgumentList>) -> String {
+        if let Some(plain) = self.reach.class(class).and_then(|reached| reached.plain_constructor) {
+            let what = format!("the constructor of the plain PHP class {}", names::short_name(plain.as_bytes()));
+            return self.unmodeled(span, what, issues::PLAIN_PHP);
+        }
+
         let class_name = self.reached_name(class);
         let key = names::member(&names::full_name(&class_name), b"__construct");
         let parameters = self.reach.method(class, b"__construct").map_or(0, |method| method.parameters);
-        let Some(arguments) =
-            instantiation.argument_list.as_ref().map_or_else(|| Some(Vec::new()), |list| self.arguments(list, None))
-        else {
+        let Some(arguments) = arguments.map_or_else(|| Some(Vec::new()), |list| self.arguments(list, None)) else {
             return "default".to_owned();
         };
         let place = format!("new {}", names::short_name(&class_name));
@@ -1499,9 +1584,8 @@ impl<'body, 'program> Body<'body, 'program> {
         parts.extend(arguments);
         parts.extend(defaults);
         self.uses(class, &key, place);
-        let made = self.bind(parts.join(" "));
 
-        self.held(class, made)
+        self.bind(parts.join(" "))
     }
 
     /// The terms of a call's arguments, or `None` when one cannot be translated. Each argument is passed by position.
@@ -1636,27 +1720,34 @@ impl<'body, 'program> Body<'body, 'program> {
         if !matches!(declaration.kind, DeclarationKind::Property { .. }) {
             return self.unmodeled(expression.span(), format!("the member {place}"), issues::MEMBER);
         }
-        if !self.reach.same_class(declaration.class.as_bytes(), class.as_bytes()) {
-            return self.unmodeled(expression.span(), format!("the inherited property {place}"), issues::INHERITANCE);
+        let declaring = declaration.class.as_bytes();
+        if !self.reach.class(declaring).is_some_and(|reached| reached.sharp) {
+            let what = format!(
+                "the plain PHP property {}.{}",
+                names::short_name(self.checked.types().class_declaration(declaration.class).name.as_bytes()),
+                String::from_utf8_lossy(property.as_bytes())
+            );
+            return self.unmodeled(expression.span(), what, issues::PLAIN_PHP);
         }
-        if !self.reach.is_stored_field(class.as_bytes(), property.as_bytes()) {
+        if !self.reach.is_stored_field(declaring, property.as_bytes()) {
             return self.unmodeled(expression.span(), format!("the accessor of {place}"), issues::ACCESSOR);
         }
 
         // Spec section 20.1: an implementer of a sealed interface is a value of the interface, and reads its property
-        // through the interface's accessor, as a data case reads its field.
-        let read = match self.sealed(class.as_bytes()) {
-            Some((_, constructor)) => {
-                let key = names::member(&constructor, property.as_bytes());
-                self.uses(class.as_bytes(), &key, place);
-                format!("({key} {object})")
-            }
-            None => {
-                self.uses(class.as_bytes(), &names::full_name(&class_name), short);
-                format!("{object}.{}", names::identifier(property.as_bytes()))
-            }
+        // through the interface's accessor, as a data case reads its field. A property a PHP# parent declares is a field
+        // of the parent's value.
+        let read = if !self.reach.same_class(declaring, class.as_bytes()) {
+            let parent = self.upcast(expression.span(), object, class.as_bytes(), declaring);
+            format!("{parent}.{}", names::identifier(property.as_bytes()))
+        } else if let Some((_, constructor)) = self.sealed(class.as_bytes()) {
+            let key = names::member(&constructor, property.as_bytes());
+            self.uses(class.as_bytes(), &key, place);
+            format!("({key} {object})")
+        } else {
+            self.uses(class.as_bytes(), &names::full_name(&class_name), short);
+            format!("{object}.{}", names::identifier(property.as_bytes()))
         };
-        if self.reach.is_nullable_field(class.as_bytes(), property.as_bytes())
+        if self.reach.is_nullable_field(declaring, property.as_bytes())
             && !self.checked.types().expression_type(expression).is_nullable()
         {
             format!("({read}.getD default)")

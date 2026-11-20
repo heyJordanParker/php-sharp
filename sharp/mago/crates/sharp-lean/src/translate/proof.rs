@@ -7,6 +7,7 @@
 
 use mago_analyzer::smaller::Path;
 use mago_analyzer::smaller::Step;
+use mago_database::file::FileId;
 use mago_names::binding::Binding;
 use mago_sharp_bridge::CheckedProgram;
 use mago_span::HasSpan;
@@ -45,14 +46,18 @@ use crate::translate::pattern::choice;
 pub(crate) struct Proof {
     /// The Lean theorem, `<statement>.proof`.
     pub(crate) text: String,
+    /// For a law without a body, its theorem up to the step that closes it, `sharp_prove`, which the law checker's fixed
+    /// steps can close it with in that step's place.
+    pub(crate) opening: Option<String>,
     /// The law's claim as PHP# writes it, which a case's goal prints as when it holds a part PHP# writes no other way.
     pub(crate) claim: String,
     /// Each case the proof closes, in the order of its index, from 1.
     pub(crate) cases: Vec<Case>,
     /// Each call of a law in the body, in the order of its index, from 1.
     pub(crate) calls: Vec<LawCall>,
-    /// The statement of each law the body calls, the law itself apart, with where it is first called.
-    pub(crate) laws: Vec<(String, Span)>,
+    /// The statement of each law the body calls, the law itself apart, with where it is first called and the file that
+    /// states it, when the analysis knows it.
+    pub(crate) laws: Vec<(String, Span, Option<FileId>)>,
     pub(crate) uses: Vec<Use>,
     pub(crate) unmodeled: Vec<Unmodeled>,
 }
@@ -163,13 +168,15 @@ impl<'prover, 'program, 'ast, 'arena> Prover<'prover, 'program, 'ast, 'arena> {
 
         self.proof.claim = self.source(self.law.claim.span());
         let applied = std::iter::once(self.statement.clone()).chain(parameters.iter().cloned()).collect::<Vec<_>>();
-        self.proof.text = format!(
-            "theorem {}.proof {} : {} := by\n{}",
-            self.statement,
-            binders.join(" "),
-            applied.join(" "),
-            lines.iter().map(|line| format!("  {line}")).collect::<Vec<_>>().join("\n")
-        );
+        let theorem = |lines: &[String]| {
+            let header =
+                format!("theorem {}.proof {} : {} := by", self.statement, binders.join(" "), applied.join(" "));
+            std::iter::once(header).chain(lines.iter().map(|line| format!("  {line}"))).collect::<Vec<_>>().join("\n")
+        };
+        self.proof.text = theorem(&lines);
+        if let (LawProof::Checker(_), Some((_, opening))) = (&self.law.proof, lines.split_last()) {
+            self.proof.opening = Some(format!("{}\n  ", theorem(opening)));
+        }
         if let Some((place, step)) = self.step {
             self.proof.text.push('\n');
             self.proof.text.push_str(&Measure::new(place, step, parameters).termination);
@@ -392,7 +399,7 @@ impl<'prover, 'program, 'ast, 'arena> Prover<'prover, 'program, 'ast, 'arena> {
         scope: &mut Scope<'prover, 'program, 'ast, 'arena>,
         lines: &mut Vec<String>,
     ) {
-        let Some((key, arguments)) = self.called(call) else {
+        let Some((key, file, arguments)) = self.called(call) else {
             return;
         };
         // A call of the law itself passes the smaller value the path shows as its pure term, which Lean's recursion on
@@ -407,8 +414,8 @@ impl<'prover, 'program, 'ast, 'arena> Prover<'prover, 'program, 'ast, 'arena> {
             if let Some((smaller, _)) = &stepped {
                 self.step.get_or_insert((smaller.parameter, smaller.step));
             }
-        } else if !self.proof.laws.iter().any(|(law, _)| *law == key) {
-            self.proof.laws.push((key.clone(), call.span()));
+        } else if !self.proof.laws.iter().any(|(law, ..)| *law == key) {
+            self.proof.laws.push((key.clone(), call.span(), file));
         }
 
         let values: Vec<&Expression> = arguments.iter().map(Argument::value).collect();
@@ -461,8 +468,9 @@ impl<'prover, 'program, 'ast, 'arena> Prover<'prover, 'program, 'ast, 'arena> {
         lines.push(format!("    sharp_call% {index} ({key}.proof {})", applied(true).join(" ")));
     }
 
-    /// The Lean name of the law `call` calls, `Class.law(…)` a law of `Class`, and its arguments.
-    fn called(&self, call: &'ast Call<'arena>) -> Option<(String, &'ast [Argument<'arena>])> {
+    /// The Lean name of the law `call` calls, `Class.law(…)` a law of `Class`, the file that declares `Class`, when the
+    /// analysis knows it, and the call's arguments.
+    fn called(&self, call: &'ast Call<'arena>) -> Option<(String, Option<FileId>, &'ast [Argument<'arena>])> {
         let Call::Method(call) = call else {
             return None;
         };
@@ -471,8 +479,9 @@ impl<'prover, 'program, 'ast, 'arena> Prover<'prover, 'program, 'ast, 'arena> {
             return None;
         };
         let full = self.checked.names().get(&class.name);
+        let file = self.reach.class(full).map(|reached| reached.file);
 
-        Some((names::member(&names::full_name(full), name.value), call.argument_list.arguments.as_slice()))
+        Some((names::member(&names::full_name(full), name.value), file, call.argument_list.arguments.as_slice()))
     }
 
     /// `(do … return (c)) = pure true`, the condition `expression` as a case hypothesis.

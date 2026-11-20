@@ -79,13 +79,15 @@ $files = [
         import Acme.Events.Plain;
 
         [Group("listeners"), Group(Plain.KIND)]
-        extern AsEventListener;
+        extern AsEventListener uses none;
 
         [Group("line send")]
-        extern Mailer.send;
+        extern Mailer.send uses none;
 
         [Group("line sentAt")]
-        extern Events.sentAt;
+        extern Events.sentAt uses none;
+
+        extern Group uses none;
 
         public static class Names
         {
@@ -113,7 +115,7 @@ $files = [
 ];
 // typeof(X).attributes<T>() is a member of a class value, which the library declares with the types it gives.
 $members = ['ClassMembers', 'Visibility', 'Property', 'Field', 'Method', 'Parameter', 'Constructor', 'Constant', 'EnumCase', 'TupleElement', 'TypeKind'];
-foreach ([...$members, 'ListMembers', 'Int', 'ByteOrder'] as $class) {
+foreach ([...$members, ...LIBRARY_MODULE] as $class) {
     $files["$library/library/Sharp/$class.sharp"] = file_get_contents(__DIR__ . "/../../../sharp/composer/library/Sharp/$class.sharp");
 }
 $root = compile_project('extern-attributes', $files);

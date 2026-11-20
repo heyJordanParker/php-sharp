@@ -1,10 +1,15 @@
 namespace App.Stubs;
 
+import PHPUnit.Framework.Assert;
 import PHPUnit.Framework.Attributes.Before;
 import PHPUnit.Framework.Attributes.Test;
+import Tests.Probe;
 
 [DynamicallyAccessed]
-extern Before;
+extern Before uses none;
 
 [DynamicallyAccessed]
-extern Test;
+extern Test uses none;
+
+extern Assert uses none;
+extern Probe uses any;

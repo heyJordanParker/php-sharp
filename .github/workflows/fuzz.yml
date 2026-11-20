@@ -4,24 +4,15 @@ name: Fuzz
 # fixtures the Justfile's fuzz recipes use, and sharp_parser also from the engine's PHP# tests, the .sharp files
 # under Zend/tests/sharp. Each target's corpus is kept between runs, so a run starts from every input the runs
 # before it found. A panic, an abort, a stack overflow, or an input that runs for more than 10 seconds fails the job,
-# and the input that caused it is uploaded as an artifact.
+# and the input that caused it is uploaded as an artifact. No pull request runs it: a finding is a defect no project
+# hit, which the nightly run reports, and on a pull request that changed the fuzz crate the three targets held 11.5
+# minutes each of every run.
 on:
   schedule:
     - cron: '43 3 * * *'
   workflow_dispatch:
-  # A release's bump rewrites the fuzz crate's Cargo.lock with the version alone, which mago.yml's checks job checks.
-  pull_request:
-    branches:
-      - master
-    paths:
-      - .github/workflows/fuzz.yml
-      - sharp/mago/crates/syntax/fuzz/**
-      - '!sharp/mago/crates/syntax/fuzz/Cargo.lock'
 permissions:
   contents: read
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
-  cancel-in-progress: true
 jobs:
   FUZZ:
     name: FUZZ (${{ matrix.target }})

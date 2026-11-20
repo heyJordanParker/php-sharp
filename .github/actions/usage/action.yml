@@ -1,0 +1,93 @@
+name: Measure the job's CPU-seconds and peak memory
+description: >-
+  A job runs it once right after its checkout, which starts the measure, and once as its last step with end, whatever
+  the job's result, which writes a notice titled usage: cpu_seconds, the CPU time the job's processes used since the
+  start, and peak_mib, the most memory they held at once, sampled each second. The run's notices give each job's cost,
+  so every run measures itself. A GitHub-hosted Linux job has its machine to itself, so its CPU is the machine's, from
+  /proc/stat, and its memory the machine's memory in use, MemTotal less MemAvailable, which counts its containers. The
+  self-hosted Mac runs other work beside the job, so there the job is the runner's Runner.Worker process and every
+  process under it: the CPU is each live one's time plus the time of every child it reaped, as proc_pid_rusage reports
+  it, and the memory the sum of their resident sets.
+
+inputs:
+  end:
+    description: true in the job's last step, which writes the notice.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Start measuring the job's CPU and memory
+      if: inputs.end != 'true'
+      shell: bash
+      run: |
+        state="$RUNNER_TEMP/usage"
+        mkdir -p "$state"
+        echo 0 > "$state/peak-kib"
+        if [[ $RUNNER_OS == Linux ]]; then
+          awk '/^cpu /{print $2 + $3 + $4 + $7 + $8}' /proc/stat > "$state/cpu-start"
+          sample='awk "/^MemTotal:/{total = \$2} /^MemAvailable:/{available = \$2} END{print total - available}" /proc/meminfo'
+        else
+          pid=$$
+          while [[ $(ps -o comm= -p "$pid") != *Runner.Worker ]]; do
+            pid=$(ps -o ppid= -p "$pid" | tr -d ' ')
+            if ((pid <= 1)); then
+              echo "::error::No Runner.Worker process runs this step, so the job's CPU and memory can't be measured."
+              exit 1
+            fi
+          done
+          echo "$pid" > "$state/worker"
+          # The resident sets of the worker and every process under it, in KiB.
+          sample="ps -axo pid=,ppid=,rss= | awk -v root=$pid '{parent[\$1] = \$2; rss[\$1] = \$3}
+            END{for (p in parent) {q = p; while (q in parent && q != root) q = parent[q]; if (q == root) sum += rss[p]} print sum}'"
+        fi
+        # shellcheck disable=SC2016 # The sampler's shell expands its own variables.
+        nohup bash -c 'peak=0; while :; do used=$(eval "$1"); if ((used > peak)); then peak=$used; echo "$peak" > "$2"; fi; sleep 1; done' \
+          usage "$sample" "$state/peak-kib" > /dev/null 2>&1 &
+        echo $! > "$state/sampler"
+    - name: Write the job's CPU-seconds and peak memory
+      if: inputs.end == 'true'
+      shell: bash
+      run: |
+        state="$RUNNER_TEMP/usage"
+        kill "$(< "$state/sampler")"
+        if [[ $RUNNER_OS == Linux ]]; then
+          end=$(awk '/^cpu /{print $2 + $3 + $4 + $7 + $8}' /proc/stat)
+          cpu=$(( (end - $(< "$state/cpu-start")) / $(getconf CLK_TCK) ))
+        else
+          cpu=$(/usr/bin/python3 - "$(< "$state/worker")" <<'PYTHON'
+        import ctypes, subprocess, sys
+
+        class Timebase(ctypes.Structure):
+            _fields_ = [("numer", ctypes.c_uint32), ("denom", ctypes.c_uint32)]
+
+        # Every field of the kernel's struct rusage_info_v2, 160 bytes, which proc_pid_rusage writes whole: a shorter
+        # struct let it write past the buffer, and python crashed with exit code 139 in run 44637248835.
+        class RusageInfoV2(ctypes.Structure):
+            _fields_ = [("uuid", ctypes.c_uint8 * 16)] + [(name, ctypes.c_uint64) for name in (
+                "user", "system", "pkg_idle_wkups", "interrupt_wkups", "pageins", "wired_size", "resident_size",
+                "phys_footprint", "start", "exit", "child_user", "child_system", "child_pkg_idle_wkups",
+                "child_interrupt_wkups", "child_pageins", "child_elapsed", "diskio_bytesread", "diskio_byteswritten")]
+
+        libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
+        timebase = Timebase()
+        ctypes.CDLL("/usr/lib/libc.dylib").mach_timebase_info(ctypes.byref(timebase))
+        worker = int(sys.argv[1])
+        parent = {}
+        for line in subprocess.run(["ps", "-axo", "pid=,ppid="], capture_output=True, text=True).stdout.splitlines():
+            pid, ppid = map(int, line.split())
+            parent[pid] = ppid
+        ticks = 0
+        for pid in parent:
+            node = pid
+            while node in parent and node != worker:
+                node = parent[node]
+            info = RusageInfoV2()
+            if node == worker and libproc.proc_pid_rusage(pid, 2, ctypes.byref(info)) == 0:
+                ticks += info.user + info.system + info.child_user + info.child_system
+        print(round(ticks * timebase.numer / timebase.denom / 1e9))
+        PYTHON
+          )
+        fi
+        echo "::notice title=usage::cpu_seconds=$cpu peak_mib=$(( $(< "$state/peak-kib") / 1024 ))"

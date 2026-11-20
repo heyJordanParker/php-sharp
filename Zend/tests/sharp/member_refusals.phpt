@@ -6,17 +6,13 @@ require __DIR__ . '/project.inc';
 
 const LIBRARY = 'vendor/heyjordanparker/php-sharp-composer';
 
-$root = compile_project('member-refusals', [
-    LIBRARY . '/composer.json' => '{"name": "heyjordanparker/php-sharp-composer"}',
-    LIBRARY . '/library/Sharp/Text/StringMembers.sharp' => file_get_contents(__DIR__ . '/../../../sharp/composer/library/Sharp/Text/StringMembers.sharp'),
-    LIBRARY . '/library/Sharp/Text/NormalizationForm.sharp' => file_get_contents(__DIR__ . '/../../../sharp/composer/library/Sharp/Text/NormalizationForm.sharp'),
-    // A string's members call a List's, a List's call an int's, an int's take a ByteOrder, and the code calls a Map's,
-    // which the library declares.
-    LIBRARY . '/library/Sharp/ListMembers.sharp' => file_get_contents(__DIR__ . '/../../../sharp/composer/library/Sharp/ListMembers.sharp'),
-    LIBRARY . '/library/Sharp/Int.sharp' => file_get_contents(__DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp'),
-    LIBRARY . '/library/Sharp/ByteOrder.sharp' => file_get_contents(__DIR__ . '/../../../sharp/composer/library/Sharp/ByteOrder.sharp'),
-    LIBRARY . '/library/Sharp/MapMembers.sharp' => file_get_contents(__DIR__ . '/../../../sharp/composer/library/Sharp/MapMembers.sharp'),
-]);
+// A string's members call a List's, a List's call an int's, an int's take a ByteOrder, and the code calls a Map's,
+// which the library declares with the `extern` lines of the PHP built-ins they call.
+$files = [LIBRARY . '/composer.json' => '{"name": "heyjordanparker/php-sharp-composer"}'];
+foreach (LIBRARY_MODULE as $member) {
+    $files[LIBRARY . "/library/Sharp/$member.sharp"] = file_get_contents(__DIR__ . "/../../../sharp/composer/library/Sharp/$member.sharp");
+}
+$root = compile_project('member-refusals', $files);
 file_put_contents("$root/Refusals.sharp", <<<'SHARP'
 namespace Demo;
 
