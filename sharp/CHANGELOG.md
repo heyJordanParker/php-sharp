@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.40] - 2026-11-20
+
 ### Upgrading from 0.6.39
 
 - A cached value or a queued job whose type changed since it was written now throws when read, spec section 10. `unserialize` builds a PHP# struct or class through its `parse`, so its constructor runs, and data its type no longer reads throws the `Sharp.InvalidFields` that `parse` throws or the constructor's own error, where 0.6.39 filled the properties with no constructor run. `serialize` writes the stored form, the fields `Json.encode` writes, so data 0.6.39 wrote under a renamed `[Key]` or a private property's name no longer reads. Clear such caches and drain such queues when deploying.
@@ -1480,7 +1482,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.39...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.40...HEAD
+[0.6.40]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.39...v0.6.40
 [0.6.39]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.38...v0.6.39
 [0.6.38]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.37...v0.6.38
 [0.6.37]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.36...v0.6.37
