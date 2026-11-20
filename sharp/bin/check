@@ -276,7 +276,7 @@ gate_generated() {
   step sharp_unit_header
 }
 
-# sharp/mago's workspace tests, in the sharp/docker image, as mago.yml's tests jobs run them in four slices.
+# sharp/mago's workspace tests, in the sharp/docker image, as sharp.yml's MAGO jobs and BUILD_LINUX run them in five slices.
 gate_mago_tests() {
   step sharp/bin/test --linux --mago
 }
