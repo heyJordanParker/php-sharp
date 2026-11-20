@@ -106,7 +106,7 @@ NOW     <what runs now>
 NEXT    <what runs next>
 ```
 
-Never: the box without its block, or a stale count. Hours count from 01:17 on 2026-11-06. `ALL` is issues closed since then over those plus every open one. Then a few plain sentences say what PHP# can do now, what is broken, and its fix, naming things by what they do, never by issue or PR number. Every decision he owes is shown whole in every reply until he rules, never as a link or a recap: he never reads the inbox.
+Never: the box without its block, or a stale count. Hours count from 01:17 on 2026-11-06. `ALL` is issues closed since then over those plus every open one. Then a few plain sentences say what PHP# can do now, what is broken, and its fix, naming things by what they do, never by issue or PR number. Every decision he owes is shown whole, in PROPOSE.md step 4's shape, in every reply until he rules, never as a link or a recap: he never reads the inbox.
 
 When the language owner asks a question, answer it and change nothing. His direction is triaged like any idea. Each correction from him changes, the same turn, the SOP file that let the mistake happen.
 
