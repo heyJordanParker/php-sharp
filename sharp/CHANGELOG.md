@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Changed
+
+- A compile walks the project's folders once. Its record of the source files takes each file's status from the walk the loader lists the files with, before any file is read, where 0.6.41 walked every folder a second time for the record. The record now names exactly the files the compile reads: a file an `excludes` pattern leaves out, or one under the folder a `paths` glob starts with that the glob doesn't match, no longer makes the next compile run again when it changes. A one-file edit of a 2,128-file project retires 58.1 G instructions in `mago analyze` where it retired 61.7 G, medians of 4 alternating rounds, with the same `.sharp` folder and issues.
+
 ### Fixed
 
 - A law reasons about a machine's value as the closed set of its cases, spec sections 20.2 and 28, as it does about an enum's. `is` and `match` on it test which case it is, `this` in the machine's own methods included, and `==` between two of its values compares the case and its fields, as the machine's `==` does when it runs. So `law turningOnLights() => Lamp.off().turnOn().lit();` proves where `lit()` is `this is Lamp.On`, and so does `law turningOnLightsTheLamp() => Lamp.off().turnOn() == Lamp.On;`. 0.6.41 refused the first as "a match on this subject" and then as "the checker left out On", and the second as "the checker left out Lamp.operator ==", each of those last two called a bug in the PHP# checker.
