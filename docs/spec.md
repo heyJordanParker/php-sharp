@@ -7107,6 +7107,7 @@ sharp.compile_command = "vendor/bin/mago --no-version-check --no-extensions comp
 
 - **A request runs the command at most once,** in the project root, waits for it, and loads what it wrote. The root is the nearest folder above the file that holds `.sharp/`, so a project's first compile is by hand.
 - **A project compiles once at a time.** A request holds the lock of `.sharp/compile.lock` while it runs the command. A request that finds a file stale while another compiles waits for it, checks its file again, and runs the command only when the file is still stale, so after a refused compile it gets the refusal from the record.
+- **Runs of `mago` that write `.sharp/` take turns.** Each holds the lock of `.sharp/write.lock` from before it reads the folder's record to after it deletes what it did not write, so a `mago compile` and a `mago analyze` started together on one tree each pass, and the second reads the record the first wrote. The command a request runs takes this lock while the request holds `.sharp/compile.lock`.
 - **The command ends with the request.** It runs in a process group of its own, and each process of the group still running once the command exits is killed, as is the whole group when the request ends first.
 - **`--no-extensions` leaves the extension hosts' rules out of the compile a request waits for.** They run in `mago analyze` and in CI.
 
