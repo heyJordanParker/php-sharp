@@ -1,0 +1,44 @@
+namespace TypeTests;
+
+import Sharp.Interop.Import;
+
+public static class Decoded
+{
+    private static T? read<T>(string json) => match (Decoded.decode(json, true)) {
+        null => null,
+        T value => value,
+        default => throw new UnexpectedValueException("another type"),
+    };
+
+    private static T present<T>(string json) => match (Decoded.decode(json, true)) {
+        T value => value,
+        default => throw new UnexpectedValueException("another type"),
+    };
+
+    public static string direct(string json) => Decoded.decode(json, true) is Map<string, int> typed ? typed.keys().join(",") : "not a map";
+
+    public static string generic(string json) => (Decoded.read<Map<string, int>>(json) ?? [:]).keys().join(",");
+
+    public static string cast(string json)
+    {
+        Any? value = Decoded.decode(json, true);
+        Map<string, int>? map = value as Map<string, int>;
+        List<Any?>? list = value as List<Any?>;
+        return (map == null ? "not a map" : map.keys().join(",")) + (list == null ? "" : " and a list");
+    }
+
+    public static bool directSet(string json) => Decoded.decode(json, true) is Set<int> ids ? ids.contains(2) : false;
+
+    public static bool genericSet(string json) => Decoded.present<Set<int>>(json).contains(2);
+
+    public static int genericSetCount(string json) => Decoded.present<Set<int>>(json).count();
+
+    public static int constantList()
+    {
+        Any? value = [1, 2];
+        return value is List<int> numbers ? numbers.count() : 0;
+    }
+
+    [Import("json_decode")]
+    private static Any? decode(string json, bool associative);
+}

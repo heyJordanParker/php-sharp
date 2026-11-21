@@ -1,0 +1,13 @@
+# The runtime image builds from the checkout, as sharp/README.md shows. Its source stage copies the whole context into
+# the image's source tarball, so this leaves out the checkout's own build output, which the image builds anew or never
+# reads: git's folder, the lanes' worktrees, what sharp/bin builds in sharp/build, and the packages and compiled files
+# the test fixtures install.
+.git
+worktrees
+sharp/build
+sharp/agents
+**/.sharp
+Zend/tests/sharp/vendor
+sharp/mago/vendor
+sharp/phpunit/vendor
+sharp/hosts/vendor

@@ -716,6 +716,12 @@ add_op1_def:
 				goto add_op1_def;
 			}
 			break;
+		/* PHP#: a type test that binds a local gives it the value as the type holds it, see zend_compile_sharp_is_type. */
+		case ZEND_SHARP_IS_TYPE:
+			if (opline->extended_value == ZEND_SHARP_IS_TYPE_BINDS && opline->op1_type == IS_CV) {
+				goto add_op1_def;
+			}
+			break;
 		case ZEND_ADD_ARRAY_UNPACK:
 			ssa_ops[k].result_use = var[EX_VAR_TO_NUM(opline->result.var)];
 			break;

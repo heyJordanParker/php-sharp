@@ -330,14 +330,6 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: MAGO_ENGINE="$GITHUB_WORKSPACE/sharp/build/darwin-arm64-engine/install" sharp/bin/build-mago --quiet
 
-      # mago compile and the suite on a disk that ignores case, without opcache and in shared memory, since Apple
-      # silicon has no thread-safe JIT, with the census and the differential.
-      - name: Test PHP#
-        if: matrix.job.checks
-        shell: bash
-        working-directory: ${{ github.workspace }}
-        run: sharp/bin/test --no-build --census --differential
-
       # The workspace's tests on macOS arm64, which cover the few lines of Mago that differ there, such as the watch
       # mode's FSEvents. They run lake and the SDK's Composer packages.
       - name: Install composer dependencies
@@ -349,12 +341,6 @@ jobs:
         if: matrix.job.checks
         uses: ./.github/actions/setup-lean
 
-      - name: Test mago's workspace
-        if: matrix.job.checks
-        shell: bash
-        working-directory: ${{ github.workspace }}
-        run: sharp/bin/test --mago --no-build
-
       # The law checker's build for the job's platform, which mago embeds and unpacks on the first compile that
       # proves a law, so no machine builds the checker with lake and a binary runs only its own checker.
       - name: Build the law checker mago embeds
@@ -363,25 +349,62 @@ jobs:
           cargo run --locked --release --target=${{ matrix.job.target }} -p mago-sharp-lean --example checker -- "$RUNNER_TEMP/checker.tar.zst"
           echo "MAGO_CHECKER_ARCHIVE=$RUNNER_TEMP/checker.tar.zst" >> "$GITHUB_ENV"
 
+      # The release build compiles the crates on every core for about a minute, then links mago with fat LTO and one
+      # codegen unit on one core: 12 min 45 s of its 13 min 34 s on run 44866980687. So on the Mac it runs beside the
+      # checks, which take the other cores: mago compile and the PHP# suite on a disk that ignores case, without
+      # opcache and in shared memory, since Apple silicon has no thread-safe JIT, with the census and the
+      # differential, then the workspace's tests.
       - name: build
         shell: bash
         run: |
-          if [[ "${{ matrix.job.pgo }}" == "true" ]]; then
-            rm -rf "$CARGO_TARGET_DIR/pgo-profiles"
-            cargo pgo build -- --target=${{ matrix.job.target }}
-            # mago exits 1 when the analysis finds issues, which the corpus holds, and any other exit, a crash, a kill
-            # or a tool error, fails the build, so no binary ships built from a broken profile.
-            status=0
-            LLVM_PROFILE_FILE="$CARGO_TARGET_DIR/pgo-profiles/mago_%m_%p.profraw" \
-              "$CARGO_TARGET_DIR/${{ matrix.job.target }}/release/mago" --workspace corpus/ analyze --reporting-format count || status=$?
-            if ((status != 1)); then
-              echo "::error::The instrumented mago analyzed corpus/ with exit code $status, where an analysis that finds the corpus's issues exits 1."
-              exit 1
+          build() {
+            if [[ "${{ matrix.job.pgo }}" == "true" ]]; then
+              rm -rf "$CARGO_TARGET_DIR/pgo-profiles"
+              cargo pgo build -- --target=${{ matrix.job.target }}
+              # mago exits 1 when the analysis finds issues, which the corpus holds, and any other exit, a crash, a
+              # kill or a tool error, fails the build, so no binary ships built from a broken profile.
+              local status=0
+              LLVM_PROFILE_FILE="$CARGO_TARGET_DIR/pgo-profiles/mago_%m_%p.profraw" \
+                "$CARGO_TARGET_DIR/${{ matrix.job.target }}/release/mago" --workspace corpus/ analyze --reporting-format count || status=$?
+              if ((status != 1)); then
+                echo "::error::The instrumented mago analyzed corpus/ with exit code $status, where an analysis that finds the corpus's issues exits 1."
+                return 1
+              fi
+              cargo pgo optimize build -- --target=${{ matrix.job.target }}
+            else
+              cargo build --locked --release --target=${{ matrix.job.target }}
             fi
-            cargo pgo optimize build -- --target=${{ matrix.job.target }}
-          else
-            cargo build --locked --release --target=${{ matrix.job.target }}
+          }
+          if [[ "${{ matrix.job.checks }}" != "true" ]]; then
+            build
+            exit
           fi
+          log="$RUNNER_TEMP/release-build.log"
+          # A process group of its own, so a failed check stops cargo with it.
+          set -m
+          (set -e; build; echo "The release build took $SECONDS s.") > "$log" 2>&1 &
+          builder=$!
+          set +m
+          checked=0
+          (cd "$GITHUB_WORKSPACE" && sharp/bin/test --no-build --census --differential) || checked=$?
+          echo "The PHP# suite took $SECONDS s."
+          if ((checked == 0)); then
+            (cd "$GITHUB_WORKSPACE" && sharp/bin/test --mago --no-build) || checked=$?
+            echo "The PHP# suite and mago's workspace tests took $SECONDS s."
+          fi
+          # A failed check fails the job either way, so the build stops there. A process cargo starts as the signal
+          # reaches the group can miss it, and the runner ends it with the job's other orphan processes.
+          if ((checked != 0)); then
+            kill -- "-$builder"
+            echo "::error::A check failed, so the job stopped the release build."
+            exit "$checked"
+          fi
+          built=0
+          wait "$builder" || built=$?
+          echo "::group::The release build, which ran beside the checks"
+          cat "$log"
+          echo "::endgroup::"
+          exit "$built"
 
       - name: set binary name
         id: bin
