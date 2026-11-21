@@ -57,6 +57,7 @@ use mago_database::membership::WorkspaceMatcher;
 use mago_orchestrator::Autoloader;
 use mago_orchestrator::Orchestrator;
 use mago_orchestrator::OrchestratorError;
+use mago_orchestrator::service::incremental_analysis::Scans;
 use mago_orchestrator::service::incremental_analysis::compile::Compilation;
 use mago_orchestrator::service::incremental_analysis::compile::Compiled;
 use mago_orchestrator::service::incremental_analysis::compile::CompiledFiles;
@@ -738,6 +739,8 @@ fn write_hosts_folder(
         )
     };
     std::panic::set_hook(printing);
+    let compilations = compilations?.0;
+    let inputs = listener_inputs(server.database(), remembered)?;
     let (recompiled, next_outputs, compiled_files) = write_hosts(
         configuration,
         root,
@@ -745,10 +748,10 @@ fn write_hosts_folder(
         sources,
         server,
         autoloader.as_deref(),
-        compilations?.0,
+        compilations,
         outputs,
         in_path_order(stamped),
-        remembered,
+        &inputs,
         record,
     )?;
     *outputs = next_outputs;
@@ -764,7 +767,8 @@ fn write_hosts_folder(
 /// Writes into `folder`, for the extension hosts of the project at `root` with `configuration`, the compiled files of
 /// `compiled`, which a compile made from `server`'s analysis, and the folder's other files, and keeps the record of
 /// what the compile read and wrote in `folder`'s [`INPUTS`], which `record` starts, with `stamped`, the stamps the
-/// compile took, those of the files `autoloader` serves, and those `stamp` gives the listeners' inputs. A compiled file
+/// compile took, those of the files `autoloader` serves, and `inputs`, the listeners' inputs [`listener_inputs`] gave
+/// from `server`'s database. A compiled file
 /// the compile kept keeps the status and hash `outputs` holds for it. Returns, when a file in `folder` changed, the
 /// files whose compiled file changed, then the status and hash of each file the compile wrote or kept, and what the
 /// next compile keeps files by.
@@ -779,7 +783,7 @@ fn write_hosts(
     (compilations, compiled_files): Compiled,
     outputs: &Outputs,
     mut stamped: Vec<Stamp>,
-    stamp: impl Fn(&[u8]) -> Result<Option<unit::Input>, DatabaseError> + Sync,
+    inputs: &[unit::Input],
     mut record: Option<Record>,
 ) -> Result<(Option<Recompiled>, Outputs, CompiledFiles), Error> {
     let record_path = folder.join(INPUTS);
@@ -846,7 +850,6 @@ fn write_hosts(
         .map(|class| ascii_lowercase_word(class.original_name.as_bytes()))
         .collect();
 
-    let inputs = listener_inputs(database, stamp)?;
     if !inputs.is_empty() {
         let listeners = server.listeners();
         let externs = server.extern_attributes();
@@ -858,7 +861,7 @@ fn write_hosts(
         let effects = server.extern_effects();
         let table = folder.join(LISTENERS);
         let dispatcher = server.dispatcher_module();
-        let bytes = listener_table(&inputs, &accepted, dispatcher.as_ref(), &externs, &effects, &families);
+        let bytes = listener_table(inputs, &accepted, dispatcher.as_ref(), &externs, &effects, &families);
         keep(&table, &bytes, write_if_changed(&table, &bytes)?);
         written.insert(table);
     }
@@ -1091,8 +1094,9 @@ pub(crate) enum Loaded {
     /// Nothing, when the compile had nothing to do: the run loads the files itself.
     Nothing,
     /// Every file the compile loaded, as `mago analyze` loads them with no extension host started, which the analysis
-    /// with the hosts reads instead of loading them again.
-    Files(Database<'static>),
+    /// with the hosts reads instead of loading them again, and the first scan of each file the compile's analysis
+    /// scanned, which it takes for each file it holds as that analysis did instead of scanning it again.
+    Files(Box<Database<'static>>, Scans),
     /// The compile's own analysis, which a project with no extension host enabled reports instead of analyzing again,
     /// and its issues. Its database holds each package's `.sharp` file as a file of the project, which the compile
     /// checks too, and it reports in every file but those, whose refusals the compile's outcome holds.
@@ -1235,7 +1239,7 @@ fn compiled(
     }
 
     let database = orchestrator.load_listed(workspace, &listing)?.into_static();
-    let loaded = if keeping == Keeping::Files { Loaded::Files(database.clone()) } else { Loaded::Nothing };
+    let loaded_files = (keeping == Keeping::Files).then(|| database.clone());
     let (database, included) = with_packages(database);
 
     let mut errors = Vec::new();
@@ -1250,7 +1254,11 @@ fn compiled(
                 hosts.hold(lock, held, exclusive, None)?;
             }
 
-            return Ok((outcome, database, loaded));
+            return Ok((
+                outcome,
+                database,
+                loaded_files.map_or(Loaded::Nothing, |files| Loaded::Files(Box::new(files), Scans::default())),
+            ));
         }
     };
     let package_files: Vec<FileId> = database
@@ -1263,11 +1271,14 @@ fn compiled(
     let server = Server::new(database.into_static(), decode_prelude, server_settings(&orchestrator))
         .keeping_lowering_inputs()
         .with_package_files(package_files);
+    // The analysis with the hosts that reads the files this compile loaded takes this analysis's scan of each.
+    let server = if loaded_files.is_some() { server.keeping_scans() } else { server };
     // A run that reports this analysis reports in every file but the packages' `.sharp` files, as its own analysis of
     // the files it loads would. A compile alone needs the node-analysis hooks only in the files it lowers.
     let mut server =
         if reports { server.scoped_to(move |file| !included.contains(&file.id)) } else { server.scoped_to(is_lowered) };
     let issues = server.analyze()?.issues;
+    let scans = server.take_scans();
     // The compile hides what `mago analyze` hides: a host rule's error an `ignore` entry or the baseline targets.
     let ignored =
         CompiledIgnoreSet::compile(&configuration.analyzer.ignore, configuration.source.glob.to_database_settings());
@@ -1399,7 +1410,7 @@ fn compiled(
     }
 
     let listeners = server.listeners();
-    let inputs = listener_inputs(database, |path| unit::stamp(&root, path))?;
+    let inputs = listener_inputs(database, |path| stamp_of(&root, database, path))?;
     if !inputs.is_empty() {
         let externs = server.extern_attributes();
         let externs: Vec<&ExternAttributes> = externs.iter().filter(|line| accepted.contains(&line.file_id)).collect();
@@ -1485,7 +1496,6 @@ fn compiled(
     let record = record.filter(|_| logger::warnings() == warnings && !outcome.refused_by_law_checker());
     let listed = inputs.iter().map(|input| recorded(&input.path, Some(input)));
     if let (Some((hosts, outputs, _, record)), Some(compiled), Some(stamped)) = (hosts, hosts_compiled, hosts_stamped) {
-        let stamp = |path: &[u8]| unit::stamp(&root, path);
         let folder = &hosts.folder;
         write_hosts(
             configuration,
@@ -1497,7 +1507,7 @@ fn compiled(
             compiled,
             &outputs,
             stamped,
-            stamp,
+            &inputs,
             record,
         )?;
     }
@@ -1506,7 +1516,11 @@ fn compiled(
     if let Some((hosts, lock, held, exclusive)) = held {
         hosts.hold(lock, held, exclusive, None)?;
     }
-    let loaded = if reports { Loaded::Analysis(Box::new(server), issues) } else { loaded };
+    let loaded = match loaded_files {
+        _ if reports => Loaded::Analysis(Box::new(server), issues),
+        Some(files) => Loaded::Files(Box::new(files), scans),
+        None => Loaded::Nothing,
+    };
 
     Ok((outcome, database, loaded))
 }

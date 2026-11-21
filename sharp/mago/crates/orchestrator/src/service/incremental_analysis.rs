@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::PoisonError;
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::atomic::AtomicU64;
 #[cfg(not(target_arch = "wasm32"))]
@@ -206,6 +208,12 @@ pub struct IncrementalAnalysisService {
     /// Whether each analysis from scratch keeps what it gives the lowering of each PHP# file, which a compile lowers
     /// the file from without analyzing it again.
     keeps_lowering_inputs: bool,
+    /// Whether each analysis from scratch keeps the first scan of each file it scans, which the next analysis from
+    /// scratch in the run takes instead of scanning the file again.
+    keeps_scans: bool,
+    /// The first scans the next analysis from scratch takes in place of scanning a file again, and after one that keeps
+    /// them, the scans it made.
+    scans: Scans,
     node_analysis_files: Option<HashSet<FileId>>,
     /// The Composer packages' `.sharp` files a compile checks as files of the project, whose extension host issues each
     /// analysis leaves out.
@@ -255,6 +263,8 @@ impl std::fmt::Debug for IncrementalAnalysisService {
             .field("use_progress_bars", &self.use_progress_bars)
             .field("scan_only", &self.scan_only)
             .field("keeps_lowering_inputs", &self.keeps_lowering_inputs)
+            .field("keeps_scans", &self.keeps_scans)
+            .field("scans", &self.scans)
             .field("node_analysis_files", &self.node_analysis_files.as_ref().map(HashSet::len))
             .field("package_files", &self.package_files.len())
             .field("autoloader", &self.autoloader.is_some())
@@ -320,6 +330,8 @@ impl IncrementalAnalysisService {
             use_progress_bars: false,
             scan_only: false,
             keeps_lowering_inputs: false,
+            keeps_scans: false,
+            scans: Scans::default(),
             node_analysis_files: None,
             package_files: HashSet::default(),
             autoloader: None,
@@ -354,6 +366,27 @@ impl IncrementalAnalysisService {
     #[must_use]
     pub fn keeping_lowering_inputs(mut self) -> Self {
         self.keeps_lowering_inputs = true;
+        self
+    }
+
+    /// Keeps, from each analysis from scratch, the first scan of each file it scans, which [`Self::take_scans`] hands
+    /// to the next analysis of the same files in the run.
+    #[must_use]
+    pub fn keeping_scans(mut self) -> Self {
+        self.keeps_scans = true;
+        self
+    }
+
+    /// The scans the last analysis from scratch kept, which the service no longer holds.
+    pub fn take_scans(&mut self) -> Scans {
+        std::mem::take(&mut self.scans)
+    }
+
+    /// Gives the next analysis from scratch `scans`, another analysis's, which it takes for each file it holds unchanged
+    /// and scans with the same settings, instead of scanning the file again.
+    #[must_use]
+    pub fn with_scans(mut self, scans: Scans) -> Self {
+        self.scans = scans;
         self
     }
 
@@ -709,27 +742,64 @@ impl IncrementalAnalysisService {
         let autoloader = self.autoloader.clone();
         let compiling_bar =
             self.use_progress_bars.then(|| create_progress_bar(0, "📚 Compiling", ProgressBarTheme::Blue));
+        let settings = ScanSettings { parser: parser_settings, php_version, reach: autoloader.is_some() };
+        let reach = settings.reach;
+        // Another analysis's first scan of a file stands for this one's when it scanned the same file with the same
+        // settings, and the scans this analysis makes stay for the next when it keeps them.
+        let given = self.take_scans();
+        let given = Mutex::new(if given.settings == Some(settings) { given.files } else { HashMap::default() });
+        let keeping = self.keeps_scans;
+        let kept = Mutex::new(HashMap::default());
         let scan_files = |files: Vec<Arc<File>>| {
             if let Some(compiling_bar) = &compiling_bar {
                 compiling_bar.inc_length(files.len() as u64);
             }
+            let taken: Vec<Option<Scan>> = {
+                let mut given = given.lock().unwrap_or_else(PoisonError::into_inner);
+                files.iter().map(|file| given.remove(&file.id)).collect()
+            };
 
             files
                 .into_par_iter()
-                .map_init(LocalArena::new, |arena, file| {
+                .zip(taken)
+                .map_init(LocalArena::new, |arena, (file, taken)| {
                     let content_hash = xxhash_rust::xxh3::xxh3_64(file.contents.as_ref());
-                    let (metadata, codebase_scan, namespace_classes, reached) = scan_file(
-                        arena,
-                        &file,
-                        parser_settings,
-                        php_version,
-                        codebase_scan_plan.as_deref(),
-                        &NamespaceClasses::default(),
-                        &ExternNamespaces::default(),
-                        autoloader.is_some(),
-                    )?;
+                    let (metadata, codebase_scan, namespace_classes, reached) =
+                        match taken.filter(|scan| scan.file == file) {
+                            Some(Scan { metadata, namespace_classes, reached, .. }) => {
+                                let codebase_scan = codebase_scan_plan
+                                    .as_deref()
+                                    .map(|plan| plan.capture(&file, &metadata))
+                                    .transpose()?
+                                    .flatten();
 
-                    arena.reset();
+                                (metadata, codebase_scan, namespace_classes, reached)
+                            }
+                            None => {
+                                let scanned = scan_file(
+                                    arena,
+                                    &file,
+                                    parser_settings,
+                                    php_version,
+                                    codebase_scan_plan.as_deref(),
+                                    &NamespaceClasses::default(),
+                                    &ExternNamespaces::default(),
+                                    reach,
+                                )?;
+                                arena.reset();
+
+                                scanned
+                            }
+                        };
+                    if keeping {
+                        let scan = Scan {
+                            file: Arc::clone(&file),
+                            metadata: metadata.clone(),
+                            namespace_classes: namespace_classes.clone(),
+                            reached: reached.clone(),
+                        };
+                        kept.lock().unwrap_or_else(PoisonError::into_inner).insert(file.id, scan);
+                    }
                     if let Some(compiling_bar) = &compiling_bar {
                         compiling_bar.inc(1);
                     }
@@ -749,6 +819,12 @@ impl IncrementalAnalysisService {
         }
         if let Some(compiling_bar) = compiling_bar {
             remove_progress_bar(&compiling_bar);
+        }
+        // A scan another analysis gave for a file this one doesn't hold, or holds otherwise, stands for nothing.
+        drop(given);
+        if keeping {
+            self.scans =
+                Scans { settings: Some(settings), files: kept.into_inner().unwrap_or_else(PoisonError::into_inner) };
         }
 
         // A class-like's name never depends on how names resolve, so the first scan finds every class-like that wins
@@ -2526,6 +2602,43 @@ fn names_a_refused_bound_type(codebase: &CodebaseMetadata, declared: &WordSet) -
 /// A file's scan: the file, the hash of its contents, the metadata it declares, what the codebase scan plan captures of
 /// it, and each class-like of its namespace that would win over a default class-like it names.
 type FileScan = (Arc<File>, u64, CodebaseMetadata, Option<CodebaseScanFile>, Vec<Word>);
+
+/// The first scan of each file an analysis from scratch scanned, and the settings it scanned them with.
+///
+/// The next analysis from scratch takes a file's scan when it scans with the same settings and holds the same file: its
+/// name, path, type, flags and contents, everything a scan reads. A first scan resolves names against no class-like of
+/// another file, so each analysis still scans again, against its own files, each file that names a class-like of them
+/// that wins over a default class-like, as a host's stub may declare. A scan depends on no extension host: a host's
+/// codebase scan plan only captures what a scan found, and its refinements apply to the codebase after every file is
+/// scanned. So an analysis with hosts takes the scans of one without them, and captures its plan from each.
+#[derive(Default)]
+pub struct Scans {
+    settings: Option<ScanSettings>,
+    files: HashMap<FileId, Scan>,
+}
+
+impl std::fmt::Debug for Scans {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Scans").field(&self.files.len()).finish()
+    }
+}
+
+/// What a scan reads besides its file.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct ScanSettings {
+    parser: ParserSettings,
+    php_version: PHPVersion,
+    /// Whether the scan collects the class-likes the file reaches.
+    reach: bool,
+}
+
+/// A file's first scan, and the file it scanned.
+struct Scan {
+    file: Arc<File>,
+    metadata: CodebaseMetadata,
+    namespace_classes: Vec<Word>,
+    reached: WordSet,
+}
 
 /// Serves `scans`, round by round through `autoloader`, the files Composer loads up front and the plain PHP vendor file
 /// of each class-like a scan reaches, as `reached` holds the first round's, that neither `prelude` nor a scan declares,

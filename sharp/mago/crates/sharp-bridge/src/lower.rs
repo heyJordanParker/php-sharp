@@ -6,6 +6,7 @@ use mago_analyzer::CollectionKind;
 use mago_analyzer::artifacts::MemberCall;
 use mago_codex::defaults_trait_name;
 use mago_codex::identifier::function_like::FunctionLikeIdentifier;
+use mago_codex::is_sealed_class;
 use mago_codex::metadata::CodebaseMetadata;
 use mago_codex::metadata::function_like::FunctionLikeMetadata;
 use mago_codex::metadata::module::BindingValueMetadata;
@@ -995,6 +996,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
         }
         members.extend(self.parse_methods(&r#struct.members, r#struct.name.span));
         members.extend(self.json_encoding(r#struct.name.span));
+        members.extend(self.masked_dump(r#struct.name.span));
         members.extend(self.string_conversion(r#struct.members.as_slice(), r#struct.left_brace, r#struct.right_brace));
         members.extend(
             r#struct.inheritance.as_ref().and_then(|inheritance| self.iteration(inheritance, r#struct.right_brace)),
@@ -1164,7 +1166,11 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
         let line = self.line(span);
         let mut statements = Vec::new();
         let taken = self.temporaries;
-        if self.types.is_text_value(word(self.class)) {
+        if is_sealed_class(self.class) {
+            let this = self.variable(span, b"this");
+            let sealed = self.global_call(line, b"Sharp\\Internal\\seal", &[this]);
+            statements.push(self.node(SHARP_AST_RETURN, 0, line, &[sealed]));
+        } else if self.types.is_text_value(word(self.class)) {
             let this = self.variable(span, b"this");
             let method = self.string(0, line, b"toString");
             let arguments = self.node(SHARP_AST_ARG_LIST, 0, line, &[]);
@@ -1190,7 +1196,15 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                 if !self.types.has_property(word(self.class), field.name) {
                     continue;
                 }
-                let value = self.this_property(span, field.name);
+                let mut value = self.this_property(span, field.name);
+                if Types::holds_secret(field.r#type) {
+                    let mut path: Vec<u8> =
+                        self.class.iter().map(|&byte| if byte == b'\\' { b'.' } else { byte }).collect();
+                    path.push(b'.');
+                    path.extend_from_slice(field.name);
+                    let path = self.string(0, line, &path);
+                    value = self.global_call(line, b"Sharp\\Internal\\seal", &[value, path]);
+                }
                 let write = self.json_write(span, &json, field.key, value);
                 statements.push(if field.omits_null {
                     let held = self.this_property(span, field.name);
@@ -1216,6 +1230,31 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
             span,
             span,
             b"#json",
+            &[parameters, NULL, body, NULL, NULL],
+        ))
+    }
+
+    /// The `__debugInfo` of `Sharp.Security.Secret` and `Sharp.Security.Hashed`, spec section 24, so a plain PHP dump
+    /// of one, as `var_dump` or `print_r` writes it, shows `**********`, never the value or the hash it holds. None for
+    /// any other class.
+    fn masked_dump(&mut self, span: Span) -> Option<u32> {
+        if !is_sealed_class(self.class) {
+            return None;
+        }
+        let line = self.line(span);
+        let mask = self.string(0, line, b"**********");
+        let element = self.node(SHARP_AST_ARRAY_ELEM, 0, line, &[mask, NULL]);
+        let shown = self.node(SHARP_AST_ARRAY, ZEND_ARRAY_SYNTAX_SHORT, line, &[element]);
+        let returned = self.node(SHARP_AST_RETURN, 0, line, &[shown]);
+        let body = self.node(SHARP_AST_STMT_LIST, 0, line, &[returned]);
+        let parameters = self.node(SHARP_AST_PARAM_LIST, 0, line, &[]);
+
+        Some(self.declaration(
+            SHARP_AST_METHOD,
+            ZEND_ACC_PUBLIC,
+            span,
+            span,
+            b"__debugInfo",
             &[parameters, NULL, body, NULL, NULL],
         ))
     }
@@ -5759,9 +5798,9 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
         let read = match arrival {
             Arrival::Map(map) => Some(map),
             Arrival::Read => bound.as_ref(),
-            Arrival::Plain => None,
+            Arrival::Plain | Arrival::Written => None,
         };
-        if !(matches!(arrival, Arrival::Plain) && self.plain_value(expression))
+        if !(matches!(arrival, Arrival::Plain | Arrival::Written) && self.plain_value(expression))
             && let Some(returned) = self.returned_call(line, expression, read)
         {
             return returned;
@@ -5776,6 +5815,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
             }
             Arrival::Map(map) if arrives_as_list => (lowered, self.types.call_check_as(expression, map, in_static)),
             Arrival::Plain if arrives_as_list => (lowered, None),
+            Arrival::Written => (lowered, None),
             _ => (lowered, self.types.call_check(expression, in_static)),
         };
         match check {
@@ -6430,7 +6470,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                 None => {
                     let is_method = self.is_method_value(expression, access.object, &access.property);
                     let object = self.expression(access.object);
-                    let member = self.member(&access.property);
+                    let member = self.property_key(expression, &access.property);
 
                     if is_method {
                         self.method_value(expression, SHARP_AST_METHOD_CALL, object, member)
@@ -6493,7 +6533,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
 
                 let is_method = tested && self.is_method_value(expression, access.object, &access.property);
                 let object = if tested { self.expression(access.object) } else { self.null_safe_object(access.object) };
-                let member = self.member(&access.property);
+                let member = self.property_key(expression, &access.property);
 
                 if is_method {
                     self.method_value(expression, SHARP_AST_METHOD_CALL, object, member)
@@ -7340,13 +7380,13 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                 self.temporaries += 1;
                 let name = format!("receiver#{}", self.temporaries).into_bytes();
                 let variable = self.variable(access.object.span(), &name);
-                let member = self.member(&access.property);
+                let member = self.property_key(assignment.lhs, &access.property);
                 let target = self.node(SHARP_AST_PROP, 0, line, &[variable, member]);
 
                 let variable = self.variable(access.object.span(), &name);
                 let object = self.expression(access.object);
                 let object = self.node(SHARP_AST_ASSIGN, 0, line, &[variable, object]);
-                let member = self.member(&access.property);
+                let member = self.property_key(assignment.lhs, &access.property);
                 let read = self.node(SHARP_AST_PROP, 0, line, &[object, member]);
 
                 (target, read)
@@ -8598,10 +8638,10 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                     self.static_property(target, class, &classes, word(name.value), property, line, place_use)
                 }
                 // A plain PHP property the checker reads as a `List` is written as itself.
-                None => self.arriving(target, Arrival::Plain),
+                None => self.arriving(target, Arrival::Written),
             },
             // `object?.name`, whose conditional tests `object`, spec section 14.4, written as `object.name`.
-            Expression::Access(Access::NullSafeProperty(_)) => self.arriving(target, Arrival::Plain),
+            Expression::Access(Access::NullSafeProperty(_)) => self.arriving(target, Arrival::Written),
             Expression::ArrayAccess(access) => {
                 let value = self.target(access.array, place_use);
                 let key = self.expression(access.index);
@@ -9503,6 +9543,15 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
         self.function.extend(self.class.iter().map(|&byte| if byte == b'\\' { b'.' } else { byte }));
         self.function.push(b'.');
         self.function.extend_from_slice(name);
+    }
+
+    /// The name the read or write `access` of `object.member` reaches: the key an `extern` property's `[Key("…")]` gives,
+    /// which plain PHP's `__get` and `__set` receive, spec section 14.3, or the member's own name.
+    fn property_key(&mut self, access: &Expression, member: &ClassLikeMemberSelector) -> u32 {
+        match self.types.extern_property_key(access) {
+            Some(key) => self.string(0, self.line(member), key),
+            None => self.member(member),
+        }
     }
 
     fn member(&mut self, member: &ClassLikeMemberSelector) -> u32 {
@@ -10576,8 +10625,11 @@ enum Arrival<'place> {
     Read,
     /// It enters a place that declares this `Map`, which makes a `Map` of its keys, and is checked as that `Map`.
     Map(&'place TUnion),
-    /// It stays as plain PHP gave it: an argument of plain PHP, or the property a write sets.
+    /// It stays as plain PHP gave it: an argument of plain PHP.
     Plain,
+    /// It is the property a write sets, as plain PHP gave it, which gives no value to check, as a read of an `extern`
+    /// property through `__get` would, spec section 14.3.
+    Written,
 }
 
 /// Whether a value of `r#type` is a `Set`, true, or a `Map`, false, where it may be one.

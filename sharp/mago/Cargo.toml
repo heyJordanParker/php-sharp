@@ -241,6 +241,7 @@ dialoguer = "0.12.0"
 unicode-width = { version = "0.2.0", default-features = false }
 itertools = "0.14.0"
 indexmap = { version = "2.8.0", features = ["serde"] }
+base64 = "0.23.1"
 rand = "0.9.0"
 ariadne = "0.6.0"
 glob = "0.3.2"
@@ -294,6 +295,8 @@ mago-build-id = { workspace = true }
 serde = { workspace = true }
 clap = { workspace = true }
 clap_complete = { workspace = true }
+base64 = { workspace = true }
+rand = { workspace = true }
 termtree = { workspace = true }
 serde_json = { workspace = true }
 strum = { workspace = true }
@@ -393,15 +396,6 @@ inherits = 'release'
 lto = false
 incremental = true
 codegen-units = 256
-
-# test-run with the debug assertions and overflow checks the tests need, so mago prints what the dev build prints, which
-# the tests expect, and compiles and analyzes as optimized code. The Mac's one CI job builds mago and every test binary
-# in it, and runs the PHP# suite and mago's workspace tests on that build, beside Lean, rustc and the release build:
-# with the dev build at opt-level 0, its load reached 192 on 12 cores.
-[profile.test-run-checked]
-inherits = 'test-run'
-debug-assertions = true
-overflow-checks = true
 
 # The one profile a worktree builds: sharp/bin/build-mago builds mago and every test binary in it, as `cargo test
 # --workspace` does, and sharp/bin/test, sharp/bin/hosts and sharp/bin/bench run that mago. It keeps debug assertions

@@ -21,8 +21,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   # CI_PASSED is this workflow's one required check. Every push runs every check, whatever it changed: the Linux suites,
-  # each job on 4 cores, the Mac's, the runtime image and the release's build, so every check that guards a release runs
-  # before the merge, on the tree that merges. GitHub runs 20 of the account's hosted jobs at once, across all its
+  # each job on 4 cores, the Mac's and the runtime image, and a release's bump also builds the release, so every check
+  # that guards a release runs before the merge, on the tree that merges. GitHub runs 20 of the account's hosted jobs at once, across all its
   # repositories, and a job past them waits.
   #
   # A tree runs the checks once, as bors's "not rocket science" rule tests the exact tree that lands once. A run runs
@@ -53,8 +53,15 @@ jobs:
       # pull request merged into master, so the tree it tests is that merge's, not its head's.
       - name: Name the tree this run tests
         run: echo "::notice title=Tested tree::$(git rev-parse 'HEAD^{tree}')"
-      # A run passed when it built the release's files, which RELEASE publishes from it, so a run that skipped a tree
-      # an earlier run passed never counts.
+      # A change is a release's bump while origin has no tag for sharp/mago/Cargo.toml's version, as sharp/bin/check
+      # --release prints it. So a release whose push failed is still a bump in the next pull request, and its merge
+      # publishes it, with no second bump.
+      - name: Find the version, and whether it is a release's bump
+        id: version
+        run: sharp/bin/check --release | tee -a "$GITHUB_OUTPUT"
+      # A run passed when CI_PASSED passed, and for a bump's tree when it also built the release's files, which RELEASE
+      # publishes from it, so a run that skipped a bump's tree an earlier run passed never counts. Only a bump's run
+      # builds them, so a commit's run counts by CI_PASSED alone.
       - name: Find the pull request run that passed this tree
         id: passed
         uses: ./.github/actions/passed-tree
@@ -63,7 +70,8 @@ jobs:
           events: pull_request
           passed: >-
             any(.jobs[]; .name == "CI_PASSED" and .conclusion == "success")
-            and any(.jobs[]; .name == "RELEASE_ASSETS / Write the SHA-256 of every asset" and .conclusion == "success")
+            and (${{ steps.version.outputs.bump != 'true' }}
+              or any(.jobs[]; .name == "RELEASE_ASSETS / Write the SHA-256 of every asset" and .conclusion == "success"))
       - name: The checks don't run again
         if: steps.passed.outputs.run
         env:
@@ -95,12 +103,6 @@ jobs:
           done
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "This push's changes start at ${sha:-no commit, so every job runs}."
-      # A change is a release's bump while origin has no tag for sharp/mago/Cargo.toml's version, as sharp/bin/check
-      # --release prints it. So a release whose push failed is still a bump in the next pull request, and its merge
-      # publishes it, with no second bump.
-      - name: Find the version, and whether it is a release's bump
-        id: version
-        run: sharp/bin/check --release | tee -a "$GITHUB_OUTPUT"
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -170,14 +172,13 @@ jobs:
       - name: Build mago and its test binaries
         run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/build-mago --quiet
       # What the suites run: the CLI, phpdbg, which run-tests.php finds beside it for the tests that need it, the install
-      # sharp/bin/hosts builds FrankenPHP against, mago, and the build.json sharp/bin/test finds mago by. An artifact
-      # keeps no file's mode, so the files travel in a tar, compressed here, since Actions would compress them on one
-      # thread.
+      # sharp/bin/hosts builds FrankenPHP against, and mago. An artifact keeps no file's mode, so the files travel in a
+      # tar, compressed here, since Actions would compress them on one thread.
       - name: Pack the engine and mago for the suites
         run: |
           build="sharp/build/linux-$(uname -m)"
           tar --zstd -cf "$RUNNER_TEMP/build.tar.zst" "$build/sapi/cli/php" "$build/sapi/phpdbg/phpdbg" "$build/install" \
-            "$build/mago/debug/mago" "$build/mago/build.json"
+            "$build/mago/debug/mago"
       - name: Upload the engine and mago for the suites
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -455,12 +456,18 @@ jobs:
           end: true
   # The engine built with AddressSanitizer, so a memory error of the engine fails a test, nightly on master's tip.
   # sharp/bin/build has no flag for php-src's --enable-address-sanitizer, so it builds as php-src's own CI does: a debug
-  # build whose CFLAGS and LDFLAGS add -fsanitize=address and ZEND_TRACK_ARENA_ALLOC. sharp/docker/run passes no CFLAGS
-  # into the image, so it builds on the runner, with Ubuntu's gcc 13. The tests run with what run-tests.php's --asan
-  # sets, which sharp/bin/test doesn't take: the Zend allocator off, so ASan sees each allocation, and LeakSanitizer with
-  # php-src's suppressions. The PHP# tests run without opcache, in shared memory twice per process, and under the
-  # tracing JIT, the stores a PHP# mark passes through, and leave out the upstream tests, whose baseline lists a build
-  # without ASan. A failed run opens the red-master issue, as CI_PASSED does for a push.
+  # build whose CFLAGS and LDFLAGS add -fsanitize=address and ZEND_TRACK_ARENA_ALLOC. It builds and tests in the
+  # sharp/docker image, as every Linux suite does, with each variable passed through `env`, as BUILD_LINUX passes
+  # MAGO_ENGINE. On the runner it built on Ubuntu 24.04's packages instead, which failed it three ways in turn: without
+  # liblzma-dev every link check of the engine mago links failed, Composer's PHP 8.3 refused the tests' lock, and libzip
+  # 1.7.3 left ext/zip without ZipArchive::AFL_CREATE_OR_KEEP_FILE_FOR_EMPTY_ARCHIVE, which Sharp\IO\ZipArchive uses
+  # (runs 44891890723, 44951324811 and 44952997943). The tests run with what run-tests.php's --asan sets, which
+  # sharp/bin/test doesn't take: the Zend allocator off, so ASan sees each allocation, and LeakSanitizer with php-src's
+  # suppressions. The PHP# tests run without opcache, in shared memory twice per process, and under the tracing JIT,
+  # the stores a PHP# mark passes through, and leave out the upstream tests, whose baseline lists a build without ASan.
+  # It restores BUILD_LINUX's Rust and Mago caches and saves none, so the caches keep room for the ones every pull
+  # request restores.
+  # A failed run opens the red-master issue, as CI_PASSED does for a push.
   ASAN:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
@@ -468,42 +475,37 @@ jobs:
     permissions:
       contents: read
       issues: write
+      packages: read
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+      CC: ccache gcc
+      CXX: ccache g++
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-      # The engine mago links, which sharp/bin/test builds, and the libraries sharp/bin/build's engine links besides,
-      # as sharp/docker/Dockerfile installs them.
-      - name: Install what the PHP# engine builds with
-        uses: ./.github/actions/engine-packages
-        with:
-          extra: libcurl4-openssl-dev libonig-dev libpq-dev libzip-dev
-      # sharp/bin/test builds mago on the runner, with the crates mago.yml's jobs fetch there. A nightly run saves no
-      # target, so the caches keep room for the ones every pull request restores.
-      - name: Rust and Mago caches
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ github.token }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Rust and Mago caches, saved by BUILD_LINUX on master
         uses: ./.github/actions/mago-cache
         with:
-          name: SHARP_ASAN
-          rust: MAGO
+          name: SHARP_LINUX
+          rust: SHARP_LINUX
           rust-paths: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
+            sharp/build/cargo
+            sharp/build/rustup
       # Only this step's CFLAGS, so mago builds without ASan.
       - name: Build with AddressSanitizer
-        env:
-          CFLAGS: -fsanitize=address -DZEND_TRACK_ARENA_ALLOC
-          LDFLAGS: -fsanitize=address
-        run: sharp/bin/build
+        run: sharp/docker/run env CFLAGS="-fsanitize=address -DZEND_TRACK_ARENA_ALLOC" LDFLAGS=-fsanitize=address sharp/bin/build
+      # sharp/bin/test builds mago, and sharp/bin/build-mago the engine it links first.
       - name: Test PHP# with AddressSanitizer
-        env:
-          USE_ZEND_ALLOC: 0
-          USE_TRACKED_ALLOC: 1
-          SKIP_ASAN: 1
-          SKIP_PERF_SENSITIVE: 1
-          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan-suppressions.txt
-        run: sharp/bin/test
+        run: |
+          sharp/docker/run env USE_ZEND_ALLOC=0 USE_TRACKED_ALLOC=1 SKIP_ASAN=1 SKIP_PERF_SENSITIVE=1 \
+            LSAN_OPTIONS=suppressions=/src/.github/lsan-suppressions.txt sharp/bin/test
       # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed nightly run
         if: failure()
@@ -544,12 +546,13 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
-  # The release's Mago binaries, their attestations, Mago's source archives, their SHA-256s and its notes, which
-  # release.yml builds beside the suites in every pull request's run, and in a push to master whose tree no pull
-  # request's run passed, so a build that fails fails before the merge. A release's bump builds them with publish, so
-  # its macOS binary builds with profile-guided optimization, and RELEASE publishes them as they are. Its macOS build is
-  # the run's one Mac job: it also runs every check only macOS can fail, on the Mac's one build of the engine mago
-  # links, as release.yml's checks key explains. A called workflow's jobs may ask only for permissions its caller grants.
+  # release.yml, beside the suites in every pull request's run, and in a push to master whose tree no pull request's run
+  # passed. Its macOS row is the run's one Mac job, which runs every check only macOS can fail, on the Mac's one build of
+  # the engine mago links, as release.yml's checks key explains. A commit's run checks, and only a release's bump builds
+  # the release: with publish, release.yml builds Mago's binaries, the macOS one with profile-guided optimization, their
+  # attestations, Mago's source archives, their SHA-256s and its notes, beside the Mac's checks, so a build that fails
+  # fails before the merge, and RELEASE publishes them as they are. A called workflow's jobs may ask only for
+  # permissions its caller grants.
   RELEASE_ASSETS:
     needs: CHANGES
     if: ${{ !needs.CHANGES.outputs.passed }}

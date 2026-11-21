@@ -10,6 +10,7 @@ use mago_analyzer::collection_member;
 use mago_analyzer::collection_member_kind;
 use mago_analyzer::effects::Effects;
 use mago_analyzer::is_collection_member;
+use mago_codex::SECRET_CLASS;
 use mago_codex::defaults_trait_name;
 use mago_codex::identifier::function_like::FunctionLikeIdentifier;
 use mago_codex::identifier::method::MethodIdentifier;
@@ -1059,6 +1060,23 @@ impl<'analysis> Types<'analysis> {
         Some(format!("{}.{}", class_text(owner.name, self.codebase), String::from_utf8_lossy(&variable[1..])))
     }
 
+    /// The key plain PHP's `__get` and `__set` receive for the `extern` property the read or write `access` reaches,
+    /// spec section 14.3: the name its `[Key("…")]` gives. None for any other access, whose key is its name.
+    pub(crate) fn extern_property_key(&self, access: &Expression) -> Option<&'analysis [u8]> {
+        let (class, variable) = self.accessed_property(access)?;
+        let name = word(&variable);
+        let declaring = *self.codebase.get_class_like(word(class))?.magic_property_ids.get(&name)?;
+        let owner = self.codebase.get_class_like(declaring).filter(|owner| owner.flags.is_sharp())?;
+
+        owner
+            .magic_properties
+            .get(&name)?
+            .attributes
+            .iter()
+            .find(|attribute| attribute.name.as_bytes() == b"Sharp\\Key")?
+            .text_argument(0, b"name")
+    }
+
     /// The check a call into plain PHP takes where its result, an object of a plain PHP class that is a `Traversable`,
     /// as a generator, an `IteratorAggregate` or Laravel's `LazyCollection` is, enters a place of the type `declared`
     /// that holds an `Iterable<T>`: `declared`'s text, whose `Iterable<T>` checks each element as it is read, spec
@@ -1254,21 +1272,28 @@ impl<'analysis> Types<'analysis> {
         } else {
             r#type.clone()
         };
-        if r#type.is_void()
-            || r#type.is_never()
-            || (r#type.is_mixed() && r#type.can_be_null())
-            || (!self.scanned(class).checks_results_at_call(member) && php_checks_whole(&r#type))
-        {
+        if !self.scanned(class).checks_results_at_call(member) && php_checks_whole(&r#type) {
             return None;
         }
-        // The check reads each collection alone, so it takes a time that doesn't grow with the result.
-        let checked = if needs_result_check(&r#type) { r#type.clone() } else { collections_alone(&r#type) };
+
+        self.crossing_check(&r#type, format!("{}.{}()", class_text(class, self.codebase), member.original_name))
+    }
+
+    /// The type text and the name `\Sharp\Internal\returned` takes for a plain PHP result of the type `r#type` that
+    /// crosses into PHP#, named `name`: the whole type, whose each `Map` and `Set` the result crosses into and which its
+    /// error names, and the type it is checked against. The check reads each collection alone, so it takes a time that
+    /// doesn't grow with the result. None for a result of any value, `Any?`, `void` or `never`.
+    fn crossing_check(&self, r#type: &TUnion, name: String) -> Option<(String, String)> {
+        if r#type.is_void() || r#type.is_never() || (r#type.is_mixed() && r#type.can_be_null()) {
+            return None;
+        }
+        let checked = if needs_result_check(r#type) { r#type.clone() } else { collections_alone(r#type) };
         let types = returned_types(
-            text(&r#type, self.codebase, Parameter::Index),
+            text(r#type, self.codebase, Parameter::Index),
             text(&checked, self.codebase, Parameter::Index),
         );
 
-        Some((types, format!("{}.{}()", class_text(class, self.codebase), member.original_name)))
+        Some((types, name))
     }
 
     /// The check a PHP# call of `method`, a method of `class`, takes on its result of the type `r#type`, and the method
@@ -1291,9 +1316,10 @@ impl<'analysis> Types<'analysis> {
     }
 
     /// The PHP function the `[Import]` method `method` of `class` runs, spec section 23, and the check its result takes
-    /// as a plain PHP value crossing into the method's result type, as [`Self::returned_check`] builds one, the target
-    /// the function, as `levenshtein()`. None for a method without the attribute, and no check for a `void` result or
-    /// one of any value.
+    /// as a plain PHP value crossing into the method's result type, as [`Self::crossing_check`] builds one for
+    /// [`Self::returned_check`] too, the target the function, as `levenshtein()`. None for a method without the
+    /// attribute, and no check for a `void` result, one of any value, or a function type, alone or nullable, which takes
+    /// the native closure as it is, since PHP never declares a closure's types, as an `extern` result of a built-in does.
     #[must_use]
     pub(crate) fn import(&self, class: Word, method: Word) -> Option<(Word, Option<(String, String)>)> {
         let metadata = self.codebase.get_method(class, method)?;
@@ -1304,18 +1330,12 @@ impl<'analysis> Types<'analysis> {
         else {
             unreachable!("the checker refuses an `[Import]` whose argument is no literal string: {mark:?}");
         };
-        let check = metadata.return_type_metadata.as_ref().map(|declared| &declared.type_union).and_then(|r#type| {
-            if r#type.is_void() || r#type.is_never() || (r#type.is_mixed() && r#type.can_be_null()) {
-                return None;
-            }
-            let checked = if needs_result_check(r#type) { r#type.clone() } else { collections_alone(r#type) };
-            let types = returned_types(
-                text(r#type, self.codebase, Parameter::Index),
-                text(&checked, self.codebase, Parameter::Index),
-            );
-
-            Some((types, format!("{function}()")))
-        });
+        let check = metadata
+            .return_type_metadata
+            .as_ref()
+            .map(|declared| &declared.type_union)
+            .filter(|r#type| !is_function_type(r#type))
+            .and_then(|r#type| self.crossing_check(r#type, format!("{function}()")));
 
         Some((*function, check))
     }
@@ -2027,6 +2047,15 @@ impl<'analysis> Types<'analysis> {
     /// and `Json.encode` writes as its `toString()`, as the codex gives it.
     pub(crate) fn is_text_value(&self, class: Word) -> bool {
         self.codebase.is_text_value(class)
+    }
+
+    /// Whether a value of `type` may hold a `Secret` at any depth, as a `List<Secret<string>>` does, so the field that
+    /// holds it is written through `\Sharp\Internal\seal`, which encrypts each for that field.
+    pub(crate) fn holds_secret(r#type: &TUnion) -> bool {
+        r#type.get_all_child_nodes().into_iter().any(|node| {
+            matches!(node, TypeRef::Atomic(TAtomic::Object(TObject::Named(object)))
+                if object.name.as_bytes().eq_ignore_ascii_case(SECRET_CLASS))
+        })
     }
 
     /// Whether the class `class` declares or inherits the property `name`, written without `$`.
@@ -3110,6 +3139,12 @@ fn called_method(target: &CallTarget) -> Option<(Word, Word)> {
 /// type it is checked against, left out where it is the first.
 fn returned_types(crossing: String, checked: String) -> String {
     if checked == crossing { crossing } else { format!("{crossing}, {checked}") }
+}
+
+/// Whether `r#type` is a function type, alone or with `null`.
+fn is_function_type(r#type: &TUnion) -> bool {
+    r#type.types.iter().any(|atomic| matches!(atomic, TAtomic::Callable(_)))
+        && r#type.types.iter().all(|atomic| atomic.is_null() || matches!(atomic, TAtomic::Callable(_)))
 }
 
 /// Whether the PHP type a PHP# result of `r#type` declares says all `r#type` says, so PHP checks a plain PHP override's

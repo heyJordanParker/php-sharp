@@ -2857,10 +2857,11 @@ A read typed `Any?` this way compiles with no warning, and an `as`, an `is` or a
 
 A declared property the code can't read, such as an Eloquent model's protected `table` or `hidden`, is the property `__get` reads, as plain PHP reads it from outside the class.
 
-**A `.sharp` class whose plain PHP parent defines `__get` has those properties too,** as a PHP# Eloquent model has the relations it loaded, by the same rules.
+**A `.sharp` class whose plain PHP parent defines `__get` or `__set` reaches a property they serve only through an `extern` property,** or through a declaration of the library, as a real property or an `@property` line. A read or a write of any other name is a compile error that names the `extern` property to write, so a misspelled column never compiles: "`Booking` has no property `guest`. Declare it: `public extern … guest { get; }`." A write names the type of the value it writes, as in `public extern string emial { get; set; }`.
 
 <!-- example magic-property-models -->
 ```php
+/** @property-read Contact $host */
 abstract class Model
 {
     public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
@@ -2874,22 +2875,31 @@ namespace App;
 
 public class Booking : Model
 {
-    public Contact guest() => new Contact();
-
-    public string guestName() => (this.guest as Contact)?.name ?? "";   // compiles: the property __get reads
+    public string hostName() => this.host.name;                        // compiles: the @property-read line declares it
+    public string guestName() => (this.guest as Contact)?.name ?? "";   // compile error: `Booking` has no property `guest`. Declare it: `public extern … guest { get; }`.
 }
 ```
-<!-- run magic-property-models
-new Booking().guestName();    // "guest"
--->
 
-**A `.sharp` class states the type of a property its plain PHP parent's `__get` gives with an `extern` property,** as in `public extern Collection<int, Product> products { get; }` on an Eloquent model. It reads only, holds no value, and takes no modifier but its access. PHP declares no property for it, so a read reaches `__get`. The read has the declared type, and the value `__get` gives is checked against it where it enters PHP#, so a value of another class throws `TypeError` there. It may share its name with a method, as a model's relation `products()` and the relation `products` its `__get` loads do, the one exception to the rule that one name declares one member. A class that inherits no `__get` has no such property, so an `extern` property there is a compile error.
+**A `.sharp` class states the type of a property its plain PHP parent's `__get` gives and `__set` stores with an `extern` property,** as in `public extern Collection<int, Product> products { get; }` or `public extern string email { get; set; }` on an Eloquent model. It holds no value and takes no modifier but its access, and its `set` may narrow its own access, as in `{ get; private set; }`. PHP declares no property for it, so a read reaches `__get` and a write reaches `__set`. The read has the declared type, and the value `__get` gives is checked against it where it enters PHP#, so a value of another class throws `TypeError` there. A write is checked against the declared type and passed to `__set` as it is: converting a value for storage is the parent's own job, as an Eloquent cast is. `[Key("total_cents")]` names the key `__get` and `__set` receive when it differs from the property's name. It may share its name with a method, as a model's relation `products()` and the relation `products` its `__get` loads do, the one exception to the rule that one name declares one member. A class that inherits no `__get` has no such property, and one that inherits no `__set` has none with `set`, so either is a compile error.
 
 <!-- example extern-properties -->
 ```php
 abstract class Catalogue
 {
-    public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
+    private array $stored = [];
+
+    public function __get(string $name): mixed
+    {
+        if (array_key_exists($name, $this->stored)) {
+            return $this->stored[$name];
+        }
+        $loaded = new Contact();
+        $loaded->name = $name;
+
+        return $loaded;
+    }
+
+    public function __set(string $name, mixed $value): void { $this->stored[$name] = $value; }
 }
 ```
 
@@ -2902,14 +2912,24 @@ public class Listing : Catalogue
 {
     public extern Contact seller { get; }
 
+    [Key("price_cents")]
+    public extern int priceCents { get; set; }
+
     public Contact seller() => new Contact();
 
     public string sellerName() => this.seller.name;      // compiles: the extern property types the read __get gives
+
+    public int reprice(int cents)
+    {
+        this.priceCents = cents;                         // compiles: __set stores it under "price_cents"
+        return this.priceCents;
+    }
 }
 ```
 <!-- run extern-properties
 new Listing().sellerName();    // "seller"
 new Listing().seller().name;   // "Ada"
+new Listing().reprice(900);    // 900
 -->
 
 <!-- example extern-property-errors -->
@@ -2925,7 +2945,7 @@ public class Banner
 
 <!-- example extern-property-shapes -->
 ```php
-abstract class Catalogue
+abstract class Gallery
 {
     public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
 }
@@ -2936,9 +2956,35 @@ abstract class Catalogue
 // app/Auction.sharp
 namespace App;
 
-public class Auction : Catalogue
+public class Auction : Gallery
 {
-    public extern Contact buyer { get; set; }           // compile error: An `extern` property is the one plain PHP's `__get` gives, so it is get-only
+    public extern Contact buyer { get; set; }           // compile error: `Auction.buyer` has `set`, which a plain PHP `__set` stores, and `Auction` inherits no `__set`.
+}
+```
+
+**A property a class keeps in memory where its plain PHP parent stores every other one is a compile error,** unless it is private. On a class whose parent defines `__get` and `__set`, as an Eloquent model's does, a property that isn't `extern` holds its value in the object and never reaches the parent's storage, so it would never be saved. The error names both fixes: "`Invoice`'s parent `Ledger` stores properties through `__get` and `__set`, so a public `number` would never be saved." A property the parent declares itself, as Eloquent's `table`, stays the parent's.
+
+<!-- example stored-properties -->
+```php
+abstract class Ledger
+{
+    private array $stored = [];
+
+    public function __get(string $name): mixed { return $this->stored[$name] ?? null; }
+    public function __set(string $name, mixed $value): void { $this->stored[$name] = $value; }
+}
+```
+
+<!-- example stored-properties -->
+```csharp
+// app/Invoice.sharp
+namespace App;
+
+public class Invoice : Ledger
+{
+    public extern string reference { get; set; }        // compiles: __set stores it
+    private int printed = 0;                            // compiles: the class's own memory
+    public string number { get; set; } = "";            // compile error: `Invoice`'s parent `Ledger` stores properties through `__get` and `__set`, so a public `number` would never be saved.
 }
 ```
 
@@ -5443,7 +5489,7 @@ public class Links
 - **A `callable` parameter takes any function value** (section 7), and crosses to a native `callable`, `Closure` or untyped parameter as the closure the value is.
 - **A generic class writes its type parameters as it declares them,** as `Builder<TModel>` for Eloquent's `@template TModel`, and other names are a compile error.
 
-**PHP itself is reached only through the standard library** (section 8). A built-in the standard library has no member for is declared with `[Import]`: `import Sharp.Interop.Import;`, then the attribute on a static method without a body makes each call run the PHP function it names. The signature is written in PHP# types, so each argument and the result cross as any plain PHP value does and are checked there, a `Map` argument passing as a PHP array and an array result arriving as the declared `List` or `Map`. The declaration states its effects with `uses`, as any body-less declaration does. A function PHP doesn't declare throws PHP's `Error` that names it at the first call. `[Import]` on an instance method or a method with a body is a compile error, and so is a second `[Import]` of one function in the project, since PHP ignores the case of a function's name:
+**PHP itself is reached only through the standard library** (section 8). A built-in the standard library has no member for is declared with `[Import]`: `import Sharp.Interop.Import;`, then the attribute on a static method without a body makes each call run the PHP function it names. The signature is written in PHP# types, so each argument and the result cross as any plain PHP value does and are checked there, a `Map` argument passing as a PHP array and an array result arriving as the declared `List` or `Map`. The result crosses as an `extern` result of a built-in does, so a function type, alone or nullable, takes the native closure the function gives as it is, since PHP never declares a closure's types: `set_error_handler`'s previous handler arrives as the closure plain PHP installed. The declaration states its effects with `uses`, as any body-less declaration does. A function PHP doesn't declare throws PHP's `Error` that names it at the first call. `[Import]` on an instance method or a method with a body is a compile error, and so is a second `[Import]` of one function in the project, since PHP ignores the case of a function's name:
 
 <!-- example built-in-through-import -->
 ```csharp
@@ -5534,7 +5580,7 @@ public class Layout
 - `Sharp.Collections` holds `SortedMap`, `SortedSet` and `PriorityQueue`.
 - `Sharp.Data` holds `Database` and `Cache`.
 - `Sharp.Encoding` holds `Json`, `Serialized`, `PhpLiteral`, `Base64`, `Hex` and `Compression`.
-- `Sharp.Security` holds `Hash`, `Hmac` and `Password`.
+- `Sharp.Security` holds `Hash`, `Hmac`, `Secret` and `Hashed`.
 - `Sharp.Interop` holds `PhpGlobals` and `Superglobal`.
 
 **`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`. A bare `Int` is `Sharp.Int`, a bare `Math` is `Sharp.Math`, a bare `Decimal` is `Sharp.Decimal`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. `Sharp` holds the number types and their enums, and `Bytes` (section 18): `Int`, `Float`, `Math`, `Decimal`, `BigInteger`, `RoundingMode`, `ByteOrder` and `Bytes`. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, `Error` included (section 31):
@@ -6113,6 +6159,66 @@ Json.encode(["tag": "<b>"]);                                                    
 Json.encode(["tag": "<b>"], escapeHtml: false);                                    // "{\"tag\":\"<b>\"}"
 Json.encode(Math.asin(2.0));                                                       // "null": NaN
 Json.encode([1.5, Math.log(0.0)]);                                                 // "[1.5,null]": negative infinity
+```
+
+**`Secret<T>` and `Hashed<T>`, in `Sharp.Security`, keep a password, a token or a key out of plain sight.** A `Secret` holds its value in memory, and `value` gives it back. Its stored form, which `Json.encode` and `serialize` write and a field `parse` reads (section 10), is `{"encrypted": "…"}`: the value's own stored form encrypted with XChaCha20-Poly1305 under the newest key of the key ring `SHARP_KEYS`, bound to the type and field that hold it, as `App.SmtpAccount.password`, so it decrypts in no other field. `SHARP_KEYS` holds comma-separated `<id>:<base64 of 32 bytes>` keys, newest first, and `vendor/bin/mago generate-key` prints a new one. A new key put first encrypts each new `Secret`, and text under an older key still decrypts while the ring holds that key. A field reads an object whose one key is `encrypted` as the encrypted form and any other value as the plain value, read as `T`, so `T` is any type with a stored form. A missing `SHARP_KEYS` throws `RuntimeException` "a Secret is encrypted with the keys in SHARP_KEYS, which is not set. Generate a key with `vendor/bin/mago generate-key`.", and a `Secret` stored outside a field, as `Json.encode(new Secret<string>("x"))`, throws the `Error` a type with no stored form throws. A `Hashed` keeps only the Argon2id hash of its value's stored form, so it gives no value back, and `verify(value)` checks a value against it. Its stored form is `{"hashed": "<PHC string>"}`, and a field reads an object whose one key is `hashed` as the hash and any other value as the value to hash. Both show as `**********`, in a template and in a plain PHP dump such as `var_dump`:
+
+<!-- example secret-values: statements
+import Sharp.Encoding.Json;
+import Sharp.Security.Secret;
+import Sharp.System.Environment;
+public Example(Environment environment) { environment.setVariable("SHARP_KEYS", "spec:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="); }
+-->
+```csharp
+public class SmtpAccount
+{
+    public string host { get; }
+    public Secret<string> password { get; }
+
+    public SmtpAccount(string host, Secret<string> password)
+    {
+        this.host = host;
+        this.password = password;
+    }
+}
+
+const account = Json.decode<SmtpAccount>("{\"host\":\"smtp.example.com\",\"password\":\"hunter2\"}");
+account.password.value;                                  // "hunter2"
+`password: ${account.password}`;                         // "password: **********"
+const stored = Json.encode(account);                     // {"host":"smtp.example.com","password":{"encrypted":"…"}}
+Json.decode<SmtpAccount>(stored).password.value;         // "hunter2"
+new SmtpAccount("smtp.example.com", new Secret<string>("hunter2")).password.value;   // "hunter2"
+new SmtpAccount("smtp.example.com", "hunter2");          // compile error: password takes a Secret<string>, so write new Secret<string>("hunter2")
+```
+
+<!-- example hashed-values: statements
+import Sharp.Encoding.Json;
+import Sharp.Security.Hashed;
+User a = new User("ada@example.com", new Hashed<string>("hunter2"));
+User b = new User("ada@example.com", new Hashed<string>("hunter2"));
+-->
+```csharp
+public class User
+{
+    public string email { get; }
+    public Hashed<string> password { get; }
+
+    public User(string email, Hashed<string> password)
+    {
+        this.email = email;
+        this.password = password;
+    }
+}
+
+const user = Json.decode<User>("{\"email\":\"ada@example.com\",\"password\":\"hunter2\"}");
+user.password.verify("hunter2");          // true
+user.password.value;                      // compile error: a Hashed<string> gives no value back; check one with verify(value)
+a.password == b.password;                 // compile error: two Hashed<string> never compare, since each has its own salt; check one with verify(value)
+`password: ${user.password}`;             // "password: **********"
+const stored = Json.encode(user);         // {"email":"ada@example.com","password":{"hashed":"$argon2id$v=19$m=65536…"}}
+Json.decode<User>(stored).password.verify("hunter2");   // true
+new User("ada@example.com", new Hashed<string>("hunter2")).password.verify("hunter2");   // true
+new Hashed<int>(4821).verify(4821);       // true
 ```
 
 **A string-backed enum case's `value` is a `literal-string`,** wherever the case comes from, a parameter, a variable or a collection's element included, since every case's backing value is a literal. So the columns or tables a query may name are an enum, and the one chosen while the code runs reaches a plain PHP `literal-string` parameter, as Laravel's `orderByRaw` declares one, as one of the application's own names. Values still go through a query's bindings:
@@ -7402,9 +7508,9 @@ A law the checker cannot prove is a compile error that names it (section 27).
 **Laws hold only over pure code** (section 29). The checker translates pure PHP# code to Lean, and Lean's kernel checks the proofs. A law reaches the code it calls, and that code's own calls, and code no law reaches is never translated or refused:
 
 - **A method may call itself, or a method of its class that calls it back, only on a smaller value:** a list's rest from a list pattern, or `n - 1` or `n + 1` towards a bound an `if`, `?:`, `&&`, `||` or `match` comparison tested. The bound is an int literal, tested with `<`, `<=`, `>` or `>=`, or another int parameter the call passes on unchanged, tested with `<` or `>`.
-- **A `for (… of …)` loop over a List** reaches a law when its body only adds pure int values to int locals with `+=` or `++`, each under an `if` or not, and never reads a local it adds to.
+- **A `for (… of …)` loop over a List, or over a Map's entries,** reaches a law when its body only adds pure int values to int locals with `+=` or `++`, each under an `if` or not, and never reads a local it adds to.
 - **A list pattern takes one rest, anywhere in it,** and each element names a value or only a type. `[...a, x, ...b]` appends the lists.
-- **A law reaches the standard library from its PHP# source, as it reaches the project's code,** so a type such as `Instant` translates from its declaration and each member a law calls, and a member that calls plain PHP is refused where the law reaches it, as the project's would be. `Math.max` and `Math.min` on ints, and a List's `count()`, `map` and `filter`, keep the checker's own model of what they give.
+- **A law reaches the standard library from its PHP# source, as it reaches the project's code,** so a type such as `Instant` translates from its declaration and each member a law calls, and a member that calls plain PHP is refused where the law reaches it, as the project's would be. `Math.max` and `Math.min` on ints, a List's `count()`, `map` and `filter`, and a Map's literal, `count()`, `isEmpty()`, `get`, `has`, `keys()`, `values()`, index read and loop over its entries, keep the checker's own model of what they give. A law that reaches another member of a Map is refused, naming those it reads.
 - **`<`, `<=`, `>`, `>=` and `<=>` on two values of one class run the class's own `operator <=>`,** so a law that orders two `Instant`s proves through `Instant`'s.
 - **`==` and `!=` on two values of a struct that declares no `operator ==` compare each field with that field's own `==`, and on two values of a class that declares `operator ==` run it,** so a law that compares two `Instant`s proves. With a nullable side they compare as section 19 lifts them: null equals only null, and two values run the class's `==`, so `stamp.at == at` on an `Instant?` and an `Instant` proves, and so does `==` on two structs with an `Instant?` field.
 - **A value of a class holds the fields of every PHP# class above it,** so a law reads a field, calls a method and runs `new` through `: super(…)` with what a PHP# parent declares, at any depth. The first plain PHP class above it, and each class above that, is plain PHP: a law carries the value and takes it as a parameter, and a read of a member such a class declares, or a `new` that runs its constructor, is refused where the law reaches it.

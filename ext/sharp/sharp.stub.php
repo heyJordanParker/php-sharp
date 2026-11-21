@@ -109,6 +109,12 @@ function tag(string $variant): ?string {}
 
 function silencedWarning(): ?string {}
 
+function seal(mixed $value, ?string $path = null): mixed {}
+
+function hashValue(mixed $value): string {}
+
+function verifyHash(string $hash, mixed $value): bool {}
+
 function resolve(string $host): array {}
 
 function processorCount(): int {}
