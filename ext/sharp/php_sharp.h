@@ -6,7 +6,7 @@
 extern zend_module_entry sharp_module_entry;
 #define phpext_sharp_ptr &sharp_module_entry
 
-#define PHP_SHARP_VERSION "0.6.41"
+#define PHP_SHARP_VERSION "0.6.42"
 
 #define SHARP_FILE_EXTENSION ".sharp"
 
