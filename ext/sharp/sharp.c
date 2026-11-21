@@ -51,6 +51,7 @@ extern PHP_JSON_API zend_class_entry *php_json_exception_ce;
 #include "sharp_unit.h"
 #include "sharp_build_id.h"
 #include "sharp_native.h"
+#include "sharp_version.h"
 
 #define SHARP_COMPILED_FOLDER ".sharp"
 /* How the path of an input that stands for the .sharp files of its folder ends: the bridge's unit::SOURCE_LISTING. */
