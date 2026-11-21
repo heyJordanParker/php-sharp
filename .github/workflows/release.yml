@@ -172,9 +172,9 @@ jobs:
           # - `smoke: true`: Smoke-checks the built binary. Only targets the job's runner can execute set it.
           # - `checks: true`: Also runs every check only macOS can fail, so the one Mac runs one job per run, and the
           #   release asset and the checks share its one build of the engine mago links: the PHP# suite on the debug
-          #   engine, it and mago's workspace tests on the test-run-checked build, which keeps the debug assertions and
-          #   overflow checks the release profile turns off, and plain-php on the release binary. Only
-          #   aarch64-apple-darwin sets it. As four jobs, MACOS, tests (macOS), release-build and this build, they queued one after another on the Mac, and
+          #   engine, mago's workspace tests on the dev build, which keeps the debug assertions and overflow checks the
+          #   release profile turns off, and plain-php on the release binary. Only aarch64-apple-darwin sets it. As four
+          #   jobs, MACOS, tests (macOS), release-build and this build, they queued one after another on the Mac, and
           #   three of them ran the engine step: 700, 1,443 and 940 s on 0.6.40's green run 44740612180.
           # - `pgo: true`: Builds with profile-guided optimization, profiled on corpus/. Only aarch64-apple-darwin
           #   sets it, and only in a release's bump. On the M2 Max, fat LTO with one codegen unit and this profile
@@ -321,14 +321,13 @@ jobs:
           CXX: ccache c++
         run: sharp/bin/build
 
-      # mago and every test binary in the test-run-checked profile, optimized with the debug assertions and overflow
-      # checks the tests need, as sharp/mago/Cargo.toml explains, linked with the engine the step before last built.
-      # sharp/bin/test runs the mago this build's build.json names.
+      # mago and every test binary in the dev profile, which keeps the debug assertions and overflow checks the tests
+      # need, linked with the engine the step before last built.
       - name: Build mago and its test binaries
         if: matrix.job.checks
         shell: bash
         working-directory: ${{ github.workspace }}
-        run: MAGO_ENGINE="$GITHUB_WORKSPACE/sharp/build/darwin-arm64-engine/install" sharp/bin/build-mago --quiet --profile test-run-checked
+        run: MAGO_ENGINE="$GITHUB_WORKSPACE/sharp/build/darwin-arm64-engine/install" sharp/bin/build-mago --quiet
 
       # The workspace's tests on macOS arm64, which cover the few lines of Mago that differ there, such as the watch
       # mode's FSEvents. They run lake and the SDK's Composer packages.

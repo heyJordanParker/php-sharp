@@ -6,10 +6,8 @@ set -euo pipefail
 # Mago, and the binary is the mago the tests run, sharp/build/<os>-<arch>/mago/debug/mago. A build of mago alone would
 # resolve its dependencies' features without the tests' dev-dependencies and compile most crates a second time.
 # sharp/bin/test, sharp/bin/hosts and sharp/bin/bench build it here alone, with the jobs sharp/bin/jobs prints. Every
-# argument goes to cargo test, such as --quiet, or the Mac's CI job's --profile test-run-checked, whose mago
-# sharp/bin/test then runs, by the build.json the build writes. It builds the PHP# engine mago links first. `--engine`
-# builds the engine alone, which a CI job that links mago with cargo itself runs first, and a cargo check or clippy
-# never needs.
+# argument goes to cargo test, such as --quiet. It builds the PHP# engine mago links first. `--engine` builds the engine
+# alone, which a CI job that links mago with cargo itself runs first, and a cargo check or clippy never needs.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 engine_only=false
 if [[ ${1:-} == --engine ]]; then
