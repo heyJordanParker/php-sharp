@@ -8050,6 +8050,7 @@ const [money, items] = order.totals();                              // unpack an
 
 - **A tuple can have any number of elements.** The checker suggests a struct past four.
 - **Names are optional in a tuple type.** `[Money, int]` compiles.
+- **A named element that holds a function is called by its name,** as a property that holds one is (section 14): `entry.twice(2)` on a `[Function<int(int)> twice, string name]` runs the element's function, checked by its function type.
 - **A list literal becomes a tuple** when the declared type is a tuple, whatever its elements are: an element a lambda gives, as `[data, media.values().map((Media r) => Reference.copy(r))]`, and a literal a lambda returns through a generic method into a declared tuple. A tuple a `Map` holds stays one through `get(k) ?? throw`, so `const [tag, named, value] = tags.get(k) ?? throw …` unpacks it.
 - **Map entries are tuples:** `for (const [key, plan] of plans)`.
 
