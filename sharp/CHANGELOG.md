@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- An extension host's deadline times only the call it bounds, never the start of the interpreter that serves it. Each analysis thread starts its interpreter, with its PHP settings and the SDK's `preload.php`, before its first call, and the call's deadline starts after that. So a whole-tree analysis on a loaded machine, which starts one interpreter per thread at once, starts its hosts however long those starts take, where 0.6.44 could fail it with "the extension hosts could not start: the call ran past its deadline of 1000 ms" on the first call, a `chdir` that takes microseconds. A provider call that runs past its own deadline still fails with "extension host `…` made no progress for … ms".
+
 ## [0.6.44] - 2026-11-21
 
 ### Fixed
