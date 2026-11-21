@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A law follows a value typed as a union of one machine's cases, spec sections 20.2 and 28, as a value of the machine. A move called on it runs as the case it holds runs it, and one called on a case it doesn't move from throws, as its `Sharp\StateError` does. A type test on it tests which case it is. So with `go` typed `Step.B|Step.C`, `law twoMovesReachC() => Step.enter().go(false).go(true) is Step.C;` proves, and so does `law shutReopens() => Gate.enter().close(false) is Gate.Shut s ? s.open() is Gate.Open : false;`. 0.6.42 refused the first as "reaches a value of the type `App\Step\B|App\Step\C` … A law cannot know which implementation runs." and the second as "reaches a type test … It reads types while the code runs." A union across machines stays refused.
+
 ## [0.6.42] - 2026-11-21
 
 ### Changed
