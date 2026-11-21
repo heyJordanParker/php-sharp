@@ -1,0 +1,9 @@
+namespace DataInOut;
+
+public class Account
+{
+    public Account(public int id { get; }) { }
+
+    public Money balance { get; private set; } = Money.zero();
+    public AccountStatus status { get; private set; } = AccountStatus.open();   // a machine
+}

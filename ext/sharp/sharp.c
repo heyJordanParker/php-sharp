@@ -12652,14 +12652,24 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 			zend_call_known_function(ce->constructor, Z_OBJ_P(built), ce, &constructed, 0, NULL, Z_ARRVAL(parameters));
 			zval_ptr_dtor(&constructed);
 		}
+		/* Each stored field the constructor does not take is written by the class that declares it, as `clone with`
+		 * writes one, so a `private set` property and a get-only one, which runs as `readonly`, take their stored value. */
+		zend_object *object = Z_OBJ_P(built);
+		bool readonly = ZEND_CLASS_HAS_READONLY_PROPS(ce);
+		for (uint32_t i = 0; readonly && i < ce->default_properties_count; i++) {
+			Z_PROP_FLAG_P(OBJ_PROP_NUM(object, i)) |= IS_PROP_REINITABLE;
+		}
 		zend_string *property;
 		zval *property_value;
 		ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL(properties), property, property_value) {
 			if (EG(exception)) {
 				break;
 			}
-			zend_update_property_ex(ce, Z_OBJ_P(built), property, property_value);
+			zend_update_property_ex(sharp_field_scope(ce, property), object, property, property_value);
 		} ZEND_HASH_FOREACH_END();
+		for (uint32_t i = 0; readonly && i < ce->default_properties_count; i++) {
+			Z_PROP_FLAG_P(OBJ_PROP_NUM(object, i)) &= ~IS_PROP_REINITABLE;
+		}
 		/* Spec section 20.2: a machine's case holds each invariant of the machine, which its `#invariants` evaluates. */
 		zend_function *invariants = zend_hash_str_find_ptr(&ce->function_table, "#invariants", sizeof("#invariants") - 1);
 		if (!EG(exception) && invariants) {
@@ -12902,6 +12912,33 @@ static uint32_t sharp_read_rank(const sharp_type *member, uint32_t index, const 
 	return UINT16_MAX + index;
 }
 
+/* Spec section 20.2: builds in `built` the case of the machine `machine`, one that stores as its case's value, whose
+ * value `value` is, by the rows of its `#cases`, as a backed enum's case is read: from a query's text too when the
+ * machine is backed by ints. Any other value leaves `built` undefined, and the walk then gives its problem. */
+static void sharp_read_machine_case(zend_class_entry *machine, zval *value, sharp_read *read, zval *built)
+{
+	zend_function *cases = zend_hash_str_find_ptr(&machine->function_table, "#cases", sizeof("#cases") - 1);
+	zval rows;
+	zend_call_known_function(cases, NULL, machine, &rows, 0, NULL, NULL);
+	zval *row;
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL(rows), row) {
+		zval *case_value = zend_hash_index_find(Z_ARRVAL_P(row), 0);
+		if (read->text && Z_TYPE_P(case_value) == IS_LONG && Z_TYPE_P(value) == IS_STRING) {
+			sharp_read_scalar_text(SHARP_BUILT_IN_INT, value);
+		}
+		if (!zend_is_identical(case_value, value)) {
+			continue;
+		}
+		zend_class_entry *found = zend_lookup_class(Z_STR_P(zend_hash_index_find(Z_ARRVAL_P(row), 1)));
+		if (found) {
+			zend_function *instance = zend_hash_str_find_ptr(&found->function_table, "instance", sizeof("instance") - 1);
+			zend_call_known_function(instance, NULL, found, built, 0, NULL, NULL);
+		}
+		break;
+	} ZEND_HASH_FOREACH_END();
+	zval_ptr_dtor(&rows);
+}
+
 /* Spec section 10: builds, in `value`, each struct, class, family's variant, value as text and enum case `type` holds,
  * as a field `parse` reads builds them, each problem under its path in the read. With the read's `text`, a number or
  * a bool is read from its text, as `Query.decode` reads it. sharp_read_whole checks the whole value after. */
@@ -13019,6 +13056,8 @@ static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *re
 					Z_TYPE_P(value) == IS_STRING ? Z_STR_P(value) : NULL, true) == SUCCESS && found) {
 			ZVAL_OBJ_COPY(&built, found);
 		}
+	} else if (zend_hash_str_exists(&ce->function_table, "#cases", sizeof("#cases") - 1)) {
+		sharp_read_machine_case(ce, value, read, &built);
 	} else if (ce->attributes && zend_get_attribute_str(ce->attributes, "sharp\\tag", sizeof("sharp\\tag") - 1)) {
 		if (readable) {
 			sharp_read_variant(ce, value, read, &built);
