@@ -3709,7 +3709,7 @@ import Sharp.Text.NormalizationForm;
 0xD800.toCharacter();                             // throws ValueError
 ```
 
-**Text and bytes:** a `string` is text and always valid UTF-8. Binary data, as `Ip.toBinary` gives, and the bytes another system counts or signs are `Bytes`, a separate type. A plain PHP value that becomes a `string` has each byte sequence that is not UTF-8 replaced by U+FFFD, and one that becomes `Bytes` keeps every byte. `text.toBytes()` gives a string's UTF-8 bytes, and `bytes.toText()` reads bytes as UTF-8, replacing each sequence that is not UTF-8 by U+FFFD. `Bytes` has `length()`, `slice(start, end)`, which throws `OutOfRangeException` for a range outside the bytes, and `toList()`, which gives each byte as an `int` from 0 to 255. A string literal is text too: one whose escapes write bytes that are no UTF-8 is a compile error that writes those bytes as `Bytes`, and `\u{E9}` writes a character's UTF-8 bytes:
+**Text and bytes:** a `string` is text and always valid UTF-8. Binary data, as `Ip.toBinary` gives, and the bytes another system counts or signs are `Bytes`, a separate type. A plain PHP value that becomes a `string` has each byte sequence that is not UTF-8 replaced by U+FFFD, and one that becomes `Bytes` keeps every byte. `text.toBytes()` gives a string's UTF-8 bytes, and `bytes.toText()` reads bytes as UTF-8, replacing each sequence that is not UTF-8 by U+FFFD. `Bytes` has `length()`, `slice(start, end)`, which throws `OutOfRangeException` for a range outside the bytes, `toList()`, which gives each byte as an `int` from 0 to 255, and `a + b`, which gives the bytes of `a` followed by those of `b` and is the one way to join two `Bytes`. A string literal is text too: one whose escapes write bytes that are no UTF-8 is a compile error that writes those bytes as `Bytes`, and `\u{E9}` writes a character's UTF-8 bytes:
 
 <!-- example text-bytes: statements
 import Sharp.Net.Ip;
@@ -3720,6 +3720,7 @@ import Sharp.Net.Ip;
 "école".toBytes().toList();                // [195, 169, 99, 111, 108, 101]
 "école".toBytes().slice(0, 2).toText();    // "é"
 "école".toBytes().slice(0, 9);             // throws: "`slice` takes a range inside the bytes, and the range is outside it."
+([1, 2].toBytes() + [3].toBytes()).toList();   // [1, 2, 3]
 Ip.toBinary("192.168.0.1").toList();       // [192, 168, 0, 1]
 Ip.toBinary("::1").length();               // 16
 "\xB1\x31";                                // compile error: this literal's escapes are no UTF-8 text; bytes are [0xB1, 0x31].toBytes()
