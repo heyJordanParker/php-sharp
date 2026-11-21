@@ -128,6 +128,11 @@ const COMPILED_FILES: &str = "compiled.bin";
 /// compile keeps it, since a lock on a file it deleted would lock nothing.
 const COMPILE_LOCK: &str = "compile.lock";
 
+/// The file in the `.sharp` folder whose exclusive lock each run that writes the folder holds, from before it reads the
+/// folder's record to after it deletes what it did not write, so two runs of one tree take turns on it. It is not
+/// [`COMPILE_LOCK`], which the engine holds while the compile it runs takes this one. The compile keeps it.
+const WRITE_LOCK: &str = "write.lock";
+
 /// What this process holds of each hosts' folder it compiled into.
 static HOSTS_FOLDERS: Mutex<BTreeMap<PathBuf, HeldFolder>> = Mutex::new(BTreeMap::new());
 
@@ -685,7 +690,15 @@ fn write_hosts_folder(
     record: Option<Record>,
 ) -> Result<Option<Recompiled>, Error> {
     let LastCompile {
-        server, autoloader, filesystems, library, compiled_files: last_compiled, outputs, stamps, ..
+        server,
+        autoloader,
+        sources,
+        filesystems,
+        library,
+        compiled_files: last_compiled,
+        outputs,
+        stamps,
+        ..
     } = last;
     // A file whose errors the lowering does not survive is refused, whatever panic message its lowering printed.
     let printing = std::panic::take_hook();
@@ -708,7 +721,8 @@ fn write_hosts_folder(
         Ok(input)
     };
     let compilations = {
-        let (mut compiled, mut intact) = (host_compiled(root, folder), host_intact(root, folder, outputs, filesystems));
+        let (mut compiled, mut intact) =
+            (host_compiled(root, folder, sources), host_intact(root, folder, sources, outputs, filesystems));
         server.compile(
             Folder { last: last_compiled, compiled: &mut compiled, intact: &mut intact },
             None,
@@ -728,6 +742,7 @@ fn write_hosts_folder(
         configuration,
         root,
         folder,
+        sources,
         server,
         autoloader.as_deref(),
         compilations?.0,
@@ -758,6 +773,7 @@ fn write_hosts(
     configuration: &Configuration,
     root: &Path,
     folder: &Path,
+    sources: &BTreeMap<String, Found>,
     server: &Server,
     autoloader: Option<&Autoloader>,
     (compilations, compiled_files): Compiled,
@@ -790,7 +806,7 @@ fn write_hosts(
     let mut kept = Vec::new();
     for (file_id, compilation) in compilations {
         let file = database.get_ref(&file_id)?;
-        let Some(compiled) = host_compiled_path(root, folder, &source_path(root, file))? else {
+        let Some(compiled) = host_compiled_path(root, folder, sources, file)? else {
             continue;
         };
         match compilation {
@@ -889,38 +905,46 @@ fn write_hosts(
     Ok(((changed || deleted > 0).then_some(Recompiled { files: recompiled, classes }), next_outputs, compiled_files))
 }
 
-/// The compiled file of a file in `folder`, the hosts' folder of the project at `root`, or none when no file is there.
+/// The compiled file of a file in `folder`, the hosts' folder of the project at `root` whose source files are
+/// `sources`, or none when no file is there.
 fn host_compiled<'a>(
     root: &'a Path,
     folder: &'a Path,
+    sources: &'a BTreeMap<String, Found>,
 ) -> impl FnMut(&File) -> Result<Option<Vec<u8>>, DatabaseError> + 'a {
-    move |file: &File| match host_compiled_path(root, folder, &source_path(root, file))? {
+    move |file: &File| match host_compiled_path(root, folder, sources, file)? {
         Some(compiled) => read_listed(&compiled),
         None => Ok(None),
     }
 }
 
-/// Whether the compiled file of a file in `folder`, the hosts' folder of the project at `root`, is the file the last
-/// compile wrote, by the status `outputs` holds for it and `filesystems`.
+/// Whether the compiled file of a file in `folder`, the hosts' folder of the project at `root` whose source files are
+/// `sources`, is the file the last compile wrote, by the status `outputs` holds for it and `filesystems`.
 fn host_intact<'a>(
     root: &'a Path,
     folder: &'a Path,
+    sources: &'a BTreeMap<String, Found>,
     outputs: &'a Outputs,
     filesystems: &'a mut Filesystems,
 ) -> impl FnMut(&File) -> bool + 'a {
-    move |file: &File| match host_compiled_path(root, folder, &source_path(root, file)) {
+    move |file: &File| match host_compiled_path(root, folder, sources, file) {
         Ok(Some(compiled)) => is_unchanged(&compiled, outputs.get(&source_name(root, &compiled)), filesystems),
         _ => false,
     }
 }
 
-/// Where the hosts' compile of the project at `root` into `folder` puts the compiled file of `source`: where
-/// `unit::compiled_path` puts it in the `.sharp` folder, in `folder` instead, or none when `source` is a link outside
-/// `root`.
-fn host_compiled_path(root: &Path, folder: &Path, source: &Path) -> Result<Option<PathBuf>, DatabaseError> {
+/// Where the hosts' compile of the project at `root`, whose source files are `sources`, into `folder` puts the
+/// compiled file of `file`: where [`compiled_path_of`] puts it in the `.sharp` folder, in `folder` instead, or none
+/// when `file` is a link outside `root`.
+fn host_compiled_path(
+    root: &Path,
+    folder: &Path,
+    sources: &BTreeMap<String, Found>,
+    file: &File,
+) -> Result<Option<PathBuf>, DatabaseError> {
     let compiled_folder = root.join(unit::COMPILED_FOLDER);
 
-    Ok(unit::compiled_path(root, source)?
+    Ok(compiled_path_of(root, sources, file)?
         .and_then(|compiled| compiled.strip_prefix(&compiled_folder).ok().map(|relative| folder.join(relative))))
 }
 
@@ -1011,6 +1035,25 @@ fn served_stamps(
 /// The path of `file`, a file of the project at `root`: its own, or its name under `root`.
 fn source_path(root: &Path, file: &File) -> PathBuf {
     file.path.clone().unwrap_or_else(|| root.join(String::from_utf8_lossy(&file.name).as_ref()))
+}
+
+/// Where the compiled file of `file`, a file of the project at `root`, lives in its `.sharp` folder, as
+/// [`unit::compiled_path`] places it: at the real path the walk that found the file resolved, which `sources` holds,
+/// and at the real path the disk resolves for a file the walk did not list.
+///
+/// # Errors
+///
+/// Returns the error of resolving the real path of a file the walk did not list.
+fn compiled_path_of(
+    root: &Path,
+    sources: &BTreeMap<String, Found>,
+    file: &File,
+) -> Result<Option<PathBuf>, DatabaseError> {
+    let name = String::from_utf8_lossy(&file.name);
+    match sources.get(name.as_ref()) {
+        Some(Found(_, real)) => Ok(unit::compiled_path_of_real(root, &root.join(real.as_deref().unwrap_or(&name)))),
+        None => unit::compiled_path(root, &source_path(root, file)),
+    }
 }
 
 /// Writes `bytes` to the file at `path`, unless it holds them already, so a compile that changes nothing in it leaves
@@ -1125,6 +1168,14 @@ fn compiled(
         Some(hosts) => Some((hosts, hosts.lock(&mut listing, &mut sources, &mut filesystems, &orchestrator)?)),
         None => None,
     };
+    // A project with no PHP# file gets no `.sharp` folder to lock. The run takes the write lock once it holds the hosts'
+    // folder's, and lets it go before it gives that one back as shared, which may wait, so a run that holds the write
+    // lock waits on no other lock.
+    let writing = sources
+        .keys()
+        .any(|name| name.ends_with(".sharp"))
+        .then(|| mago_database::lock::exclusive(&compiled_folder.join(WRITE_LOCK)))
+        .transpose()?;
     let mut last = Record::read(&record_path);
     // A host names none of what it reads, so only a compile without hosts can know it has nothing to do.
     if !configuration.extension_hosts.values().any(|host| host.enabled)
@@ -1133,6 +1184,7 @@ fn compiled(
         && every_input_is_current(record, configuration, &root, &sources, &mut filesystems)
         && let Some(database) = record.outcome.report_database(&root)?
     {
+        drop(writing);
         if let Some((hosts, (lock, held, exclusive, _))) = hosts {
             hosts.hold(lock, held, exclusive, None)?;
         }
@@ -1192,10 +1244,11 @@ fn compiled(
         Err(refusal) => {
             let outcome = Outcome { errors, summary: refusal, failed: true, ..Outcome::default() };
             let record = record.filter(|_| logger::warnings() == warnings);
+            let (outcome, database) = finish(record, &record_path, outcome, &database, Vec::new())?;
+            drop(writing);
             if let Some((hosts, lock, held, exclusive)) = held {
                 hosts.hold(lock, held, exclusive, None)?;
             }
-            let (outcome, database) = finish(record, &record_path, outcome, &database, Vec::new())?;
 
             return Ok((outcome, database, loaded));
         }
@@ -1231,16 +1284,19 @@ fn compiled(
         configuration_hash(configuration),
     );
     let mut hosts_filesystems = filesystems.clone();
-    let mut compiled = |file: &File| match unit::compiled_path(&root, &source_path(&root, file))? {
+    let mut compiled = |file: &File| match compiled_path_of(&root, &sources, file)? {
         Some(compiled) => read_listed(&compiled),
         None => Ok(None),
     };
-    let mut intact = |file: &File| match unit::compiled_path(&root, &source_path(&root, file)) {
+    let mut intact = |file: &File| match compiled_path_of(&root, &sources, file) {
         Ok(Some(compiled)) => is_unchanged(&compiled, outputs.get(&source_name(&root, &compiled)), &mut filesystems),
         _ => false,
     };
     let mut hosts_files = hosts.as_ref().map(|(hosts, outputs, _, _)| {
-        (host_compiled(&root, &hosts.folder), host_intact(&root, &hosts.folder, outputs, &mut hosts_filesystems))
+        (
+            host_compiled(&root, &hosts.folder, &sources),
+            host_intact(&root, &hosts.folder, &sources, outputs, &mut hosts_filesystems),
+        )
     });
     let hosts_folder = hosts.as_ref().zip(hosts_files.as_mut()).map(|((_, _, last, _), (compiled, intact))| Folder {
         last,
@@ -1290,8 +1346,8 @@ fn compiled(
     for (file_id, compilation) in compilations {
         let file = database.get_ref(&file_id)?;
         let name = String::from_utf8_lossy(&file.name);
-        let source = source_path(&root, file);
-        let Some(compiled) = unit::compiled_path(&root, &source)? else {
+        let Some(compiled) = compiled_path_of(&root, &sources, file)? else {
+            let source = source_path(&root, file);
             errors.push(format!(
                 "{name} is a link to {}, outside the project, so it was not compiled. Install the package as a copy instead of a link.",
                 source
@@ -1393,7 +1449,7 @@ fn compiled(
             .iter()
             .cloned()
             .chain(record.as_ref().and_then(Record::marker_path))
-            .chain([compiled_folder.join(COMPILE_LOCK)])
+            .chain([compiled_folder.join(COMPILE_LOCK), compiled_folder.join(WRITE_LOCK)])
             .collect();
         delete_all_but(&compiled_folder, &kept, &compiled_folder.join(PACKAGE_FOLDER))?;
     }
@@ -1435,6 +1491,7 @@ fn compiled(
             configuration,
             &root,
             folder,
+            &sources,
             &server,
             autoloader.as_deref(),
             compiled,
@@ -1444,10 +1501,11 @@ fn compiled(
             record,
         )?;
     }
+    let (outcome, database) = finish(record, &record_path, outcome, database, stamped.into_iter().chain(listed))?;
+    drop(writing);
     if let Some((hosts, lock, held, exclusive)) = held {
         hosts.hold(lock, held, exclusive, None)?;
     }
-    let (outcome, database) = finish(record, &record_path, outcome, database, stamped.into_iter().chain(listed))?;
     let loaded = if reports { Loaded::Analysis(Box::new(server), issues) } else { loaded };
 
     Ok((outcome, database, loaded))

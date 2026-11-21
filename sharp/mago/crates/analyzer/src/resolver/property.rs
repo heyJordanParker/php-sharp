@@ -1053,7 +1053,7 @@ pub(crate) fn resolve_property_for_external_access<'ctx>(
 
 /// Whether `object_expr` is the object `new` with an object initializer or `with` creates, spec section 16, which
 /// they set properties of while it is created.
-fn is_created_object(object_expr: &Expression) -> bool {
+pub(crate) fn is_created_object(object_expr: &Expression) -> bool {
     matches!(object_expr, Expression::Variable(Variable::Direct(variable))
         if variable.name.starts_with(CREATED_OBJECT_PREFIX))
 }
@@ -2148,7 +2148,7 @@ fn report_access_on_non_object<A>(
 /// The type of the element of the tuple `tuple`, whose `elements` it has, that `name` names, spec section 30, which reads
 /// a named element as C# does. A name the tuple does not write, and a write, which a tuple never takes, are errors, and
 /// give `None`.
-fn resolve_tuple_element<'tuple, A>(
+pub(crate) fn resolve_tuple_element<'tuple, A>(
     context: &mut Context<'_, '_, A>,
     tuple: &TAtomic,
     elements: &[(&'tuple TUnion, Option<Word>)],

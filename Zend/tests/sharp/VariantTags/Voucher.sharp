@@ -1,0 +1,9 @@
+namespace VariantTags;
+
+import Sharp.Key;
+
+[Key("1")]
+public struct Voucher : Tender
+{
+    public Voucher(public string code { get; }) { }
+}

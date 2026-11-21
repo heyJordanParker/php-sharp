@@ -115,7 +115,8 @@ fn compile_writes_each_accepted_file_into_the_sharp_folder_at_its_source_path() 
             Path::new("inputs.json"),
             Path::new("listeners.php"),
             Path::new("preload.php"),
-            Path::new("vendor/acme/money/src/Money.sharpc")
+            Path::new("vendor/acme/money/src/Money.sharpc"),
+            Path::new("write.lock")
         ]
     );
     for (name, source) in [("app/Order.sharp", ORDER), (MONEY_PATH, MONEY)] {
@@ -2022,7 +2023,8 @@ fn compile_deletes_the_compiled_file_of_a_renamed_or_removed_source() {
             Path::new("inputs.json"),
             Path::new("listeners.php"),
             Path::new("preload.php"),
-            Path::new("vendor/acme/money/src/Money.sharpc")
+            Path::new("vendor/acme/money/src/Money.sharpc"),
+            Path::new("write.lock")
         ]
     );
 }
@@ -2102,7 +2104,8 @@ fn compile_reports_a_link_to_a_file_outside_the_project_and_writes_no_compiled_f
             Path::new("compiled.bin"),
             Path::new("inputs.json"),
             Path::new("listeners.php"),
-            Path::new("preload.php")
+            Path::new("preload.php"),
+            Path::new("write.lock")
         ]
     );
 }
@@ -2316,6 +2319,64 @@ fn compiles_with_different_threads_share_one_compile() {
 
     assert!(shared.status.success(), "{}", printed(&shared));
     assert_eq!(compiled_at(root, "app/Order.sharp"), written, "the compile on 2 threads wrote nothing");
+}
+
+/// Compiles of one tree that start together take turns on the `.sharp` folder's write lock, so none deletes a file
+/// another is writing, each passes, and the folder holds what one compile writes. Each round edits every source first,
+/// so every run finds the folder stale, and 60 more files keep each compile writing long enough for three runs to meet
+/// in the folder.
+#[test]
+fn compiles_that_start_together_take_turns_on_the_sharp_folder() {
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    let class = |class: &str, word: &str| {
+        format!(
+            "namespace App.Words;\n\npublic class {class}\n{{\n    public static string text() => \"{word}\";\n}}\n"
+        )
+    };
+
+    for round in 0..10 {
+        let word = if round % 2 == 0 { "first" } else { "second" };
+        for file in 0..60 {
+            write(root, &format!("app/Words/Word{file}.sharp"), &class(&format!("Word{file}"), word));
+        }
+
+        let outputs: Vec<Output> = std::thread::scope(|scope| {
+            let runs: Vec<_> = (0..3).map(|_| scope.spawn(|| compile(root))).collect();
+            runs.into_iter().map(|run| run.join().unwrap()).collect()
+        });
+
+        for output in &outputs {
+            assert!(output.status.success(), "round {round}: {}", printed(output));
+        }
+    }
+    let together = files_under(&root.join(".sharp"));
+    std::fs::remove_dir_all(root.join(".sharp")).unwrap();
+    compile_succeeds(root);
+
+    assert_eq!(together, files_under(&root.join(".sharp")));
+}
+
+/// A compile that starts while another run holds the `.sharp` folder's write lock writes nothing until the lock is let
+/// go, and then compiles.
+#[test]
+fn a_compile_takes_its_turn_after_the_run_that_holds_the_write_lock() {
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    let held = mago_database::lock::exclusive(&root.join(".sharp/write.lock")).unwrap();
+
+    let output = std::thread::scope(|scope| {
+        let run = scope.spawn(|| compile(root));
+        // A compile of a copy of the project, run meanwhile, takes as long as one that took no turn would.
+        let copy = project(ORDER, MONEY);
+        compile_succeeds(copy.path());
+        assert!(!compiled(root, "app/Order.sharp").exists(), "the compile wrote while the lock was held");
+        drop(held);
+        run.join().unwrap()
+    });
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Order.sharp").exists());
 }
 
 /// Two compiles of one tree write the same record of the compiled files, byte for byte, on one thread and on several:
@@ -2643,7 +2704,8 @@ fn compile_warns_again_until_the_cause_of_its_warning_is_gone() {
 }
 
 /// A `.sharp` folder the compile can't open fails the compile with the path it failed on and what the compile was
-/// doing, here the law checker's package in it. Root opens a folder of mode 000, so the test has nothing to show there.
+/// doing, here the write lock the compile takes before it reads the folder. Root opens a folder of mode 000, so the test
+/// has nothing to show there.
 #[cfg(unix)]
 #[test]
 fn compile_names_the_path_in_the_sharp_folder_it_cannot_open() {
@@ -2665,8 +2727,8 @@ fn compile_names_the_path_in_the_sharp_folder_it_cannot_open() {
     assert!(!output.status.success(), "{}", printed(&output));
     assert!(
         printed(&output).contains(&format!(
-            "The laws could not be checked: can't delete the folder `{}`: Permission denied (os error 13)",
-            compiled.join(".lean").display()
+            "can't write the file `{}`: Permission denied (os error 13)",
+            compiled.join("write.lock").display()
         )),
         "{}",
         printed(&output)
@@ -2952,6 +3014,25 @@ fn compile_lists_the_effects_each_extern_line_declares_for_a_class_and_a_method(
     assert!(
         read(root, ".sharp/listeners.php").ends_with(
             "    'effects' => [\n        'lib\\\\mailer' => [],\n        'lib\\\\mailer::send' => ['App.Mail.Smtp'],\n    ],\n    'tags' => [\n    ],\n];\n"
+        ),
+        "{}",
+        read(root, ".sharp/listeners.php")
+    );
+}
+
+/// Spec sections 20.2 and 25: a machine that stores as its case's value is listed with the families, under no key,
+/// each case under its value, so `withTag` and `tag()` read its cases as they read a `[Tag]` family's variants.
+#[test]
+fn compile_lists_a_machine_that_stores_as_its_value_with_each_case_under_its_value() {
+    let status = "namespace App.Shop;\n\npublic machine JourneyStatus : string\n{\n    case Open = \"open\" { public JourneyStatus.Completed complete() => JourneyStatus.Completed; }\n    final case Completed = \"completed\";\n    public static JourneyStatus.Open enter() => JourneyStatus.Open;\n}\n";
+    let directory = lawful_project(&[("app/Shop/JourneyStatus.sharp", status)]);
+    let root = directory.path();
+
+    compile_succeeds(root);
+
+    assert!(
+        read(root, ".sharp/listeners.php").ends_with(
+            "    'tags' => [\n        'App\\\\Shop\\\\JourneyStatus' => ['', ['completed' => 'App\\\\Shop\\\\JourneyStatus\\\\Completed', 'open' => 'App\\\\Shop\\\\JourneyStatus\\\\Open']],\n    ],\n];\n"
         ),
         "{}",
         read(root, ".sharp/listeners.php")
@@ -3552,7 +3633,8 @@ fn a_law_with_a_body_has_fixed_steps_for_each_of_its_cases() {
 
     assert!(output.status.success(), "{}", printed(&output));
     let theorems = runner_request(lake.path()).theorems;
-    for statement in ["App.Shared.Money.timesKeepsCurrency", "App.Shared.Money.sumKeepsCurrency"] {
+    for statement in ["«App».«Shared».«Money».«timesKeepsCurrency»", "«App».«Shared».«Money».«sumKeepsCurrency»"]
+    {
         let (_, text, steps) = theorems.iter().find(|(written, ..)| written == statement).expect("the law's theorem");
         assert_eq!(text.matches("sharp_close").count(), 2, "{text}");
         assert!(!steps.is_empty() && !steps.contains("sharp_close"), "{statement}: {steps}");
@@ -3603,12 +3685,12 @@ fn a_law_the_fixed_steps_leave_unproven_goes_on_to_lean_s_search() {
     let [steps, search] = [&requests[0], &requests[1]];
     assert!(!names(steps, "Sharp.Lean.Proof"), "the first runner imports only the runtime library");
     assert!(
-        names(steps, "App.Shared.Money.addKeepsCurrency.proof")
-            && names(steps, "App.Shared.Purse.addKeepsCurrency.proof")
+        names(steps, "«App».«Shared».«Money».«addKeepsCurrency».proof")
+            && names(steps, "«App».«Shared».«Purse».«addKeepsCurrency».proof")
     );
     assert!(names(search, "Sharp.Lean.Proof"), "the second runner proves with Lean's search");
-    assert!(!names(search, "App.Shared.Money.addKeepsCurrency.proof"), "the proven law is not proved again");
-    assert!(names(search, "App.Shared.Purse.addKeepsCurrency.proof"));
+    assert!(!names(search, "«App».«Shared».«Money».«addKeepsCurrency».proof"), "the proven law is not proved again");
+    assert!(names(search, "«App».«Shared».«Purse».«addKeepsCurrency».proof"));
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     assert!(
         printed(&output)
@@ -3739,6 +3821,27 @@ fn a_proof_is_not_attempted_again_while_its_law_is_unchanged() {
     assert!(compiled(root, "app/Shared/Money.sharp").exists());
 }
 
+/// `.sharp/proofs.json` keeps how Lean judged a law, and never that Lean rejected a generated module the law reaches,
+/// since an edit the law's key does not hold can fix the module: here a runner whose request opens no `Sharp` rejects
+/// every module, and the next compile, after an edit no law reaches, checks the laws again and proves them.
+#[cfg(unix)]
+#[test]
+fn a_law_whose_module_lean_rejected_is_checked_again_by_the_next_compile() {
+    let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]);
+    let root = directory.path();
+    let lake = tempfile::tempdir().unwrap();
+    let rejecting = cache_with_runner(lake.path(), "perl -pe 's/^open Sharp$/open Sharq/' | \"$real\" \"$@\"");
+    let refused = process::output(command(root, "never").env("XDG_CACHE_HOME", rejecting)).unwrap();
+    assert!(printed(&refused).contains("the checker translated the code it reaches wrongly"), "{}", printed(&refused));
+    let unread = "    public int pages() => 1;\n\n    law addKeepsCurrency";
+    write(root, "app/Shared/Money.sharp", &LAWFUL_MONEY.replace("    law addKeepsCurrency", unread));
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "the laws were checked again: {}", printed(&output));
+    assert!(compiled(root, "app/Shared/Money.sharp").exists());
+}
+
 #[test]
 fn compile_needs_no_lean_for_a_project_with_no_law() {
     let directory = project(ORDER, MONEY);
@@ -3781,7 +3884,8 @@ fn compile_deletes_the_lean_package_once_no_law_remains() {
             Path::new("app/Order.sharpc"),
             Path::new("compiled.bin"),
             Path::new("listeners.php"),
-            Path::new("preload.php")
+            Path::new("preload.php"),
+            Path::new("write.lock")
         ]
     );
 }
@@ -3842,8 +3946,11 @@ fn compile_proves_a_law_whose_calls_go_from_one_file_to_another_and_back_with_no
 
     assert!(output.status.success(), "{}", printed(&output));
     assert!(compiled(root, "app/Shared/Alpha.sharp").exists());
-    let alpha = generated_module(lake.path(), "Code.App.Shared.Alpha");
-    assert!(alpha.contains("def App.Shared.Beta.middle"), "the group's module holds Beta's declaration: {alpha}");
+    let alpha = generated_module(lake.path(), "Code.«App».«Shared».«Alpha»");
+    assert!(
+        alpha.contains("def «App».«Shared».«Beta».«middle»"),
+        "the group's module holds Beta's declaration: {alpha}"
+    );
     assert!(!alpha.contains("import Code."), "{alpha}");
 }
 
@@ -3859,8 +3966,8 @@ fn a_generated_module_derives_no_repr_since_no_proof_prints_a_value() {
     let output = process::output(command(root, "never").env("XDG_CACHE_HOME", counting_cache(lake.path()))).unwrap();
 
     assert!(output.status.success(), "{}", printed(&output));
-    let money = generated_module(lake.path(), "Code.App.Shared.Money");
-    assert!(money.contains("structure App.Shared.Money where"), "{money}");
+    let money = generated_module(lake.path(), "Code.«App».«Shared».«Money»");
+    assert!(money.contains("structure «App».«Shared».«Money» where"), "{money}");
     assert!(money.contains("  deriving DecidableEq, Inhabited\n"), "{money}");
     assert!(!money.contains("Repr"), "{money}");
 }
@@ -3886,13 +3993,13 @@ fn compile_proves_a_law_through_an_extension_member_as_the_static_call_it_runs_a
     let output = process::output(command(root, "never").env("XDG_CACHE_HOME", counting_cache(lake.path()))).unwrap();
 
     assert!(output.status.success(), "{}", printed(&output));
-    let laws = generated_module(lake.path(), "Code.App.Shared.Shape");
+    let laws: String = runner_request(lake.path()).modules.into_iter().map(|(_, text)| text).collect();
     for call in [
-        "App.Shared.ShapeMath.doubled s",
-        "App.Shared.ShapeMath.isFlat s",
-        "App.Shared.ShapeMath.twice n",
-        "App.Shared.ShapeMath.doubled (s.getD default)",
-        "App.Shared.ShapeMath.isFlat (s.getD default)",
+        "«App».«Shared».«ShapeMath».«doubled» «s»",
+        "«App».«Shared».«ShapeMath».«isFlat» «s»",
+        "«App».«Shared».«ShapeMath».«twice» «n»",
+        "«App».«Shared».«ShapeMath».«doubled» («s».getD default)",
+        "«App».«Shared».«ShapeMath».«isFlat» («s».getD default)",
     ] {
         assert!(laws.contains(call), "{call}:\n{laws}");
     }
@@ -4131,6 +4238,23 @@ fn a_move_that_breaks_a_machine_s_invariant_on_no_small_value_is_refused_by_name
         "{}",
         printed(&output)
     );
+}
+
+/// A machine whose second law names a parameter `until` and whose `Going` case holds a field `while`, two of Lean's
+/// own words.
+const SUBSCRIPTION_STATUS: &str = "namespace App.Repro;\n\nimport Sharp.Time.Instant;\n\npublic machine SubscriptionStatus\n{\n    case Waiting\n    {\n        public SubscriptionStatus.Going go(Instant at) => SubscriptionStatus.Going(at, 0);\n    }\n\n    case Going(Instant at, int @while)\n    {\n        public SubscriptionStatus.Paused pause() => SubscriptionStatus.Paused;\n        public SubscriptionStatus.Done finish() => SubscriptionStatus.Done;\n    }\n\n    case Paused\n    {\n        public SubscriptionStatus.Done end() => SubscriptionStatus.Done;\n    }\n\n    final case Done;\n\n    public static SubscriptionStatus.Waiting enter() => SubscriptionStatus.Waiting;\n\n    law goingHoldsTheTime(Instant at) => SubscriptionStatus.enter().go(at).at == at;\n    law pausingHoldsTheResume(Instant at, Instant until) => SubscriptionStatus.enter().go(at).pause() is SubscriptionStatus.Paused;\n}\n";
+
+/// A PHP# name is a name to Lean whatever it is, Lean's own words `until` and `while` too, so the laws that reach it
+/// prove.
+#[test]
+fn a_law_proves_whatever_its_parameters_and_the_fields_it_reaches_are_named() {
+    let directory = library_project(&[("app/Repro/SubscriptionStatus.sharp", SUBSCRIPTION_STATUS)]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Repro/SubscriptionStatus.sharp").exists());
 }
 
 /// `Holder`, which holds a `JsonValue?`, whose `Any?` a law cannot read, beside the law `law`.
@@ -4527,25 +4651,19 @@ fn a_law_reasons_about_a_union_of_one_machine_s_cases() {
 }
 
 /// Spec sections 20.2 and 28: a value typed as a union of one machine's cases is a value of the machine, so a law calls
-/// a move on it, as the case it holds runs the move, and tests which case it is. A move called on a case it doesn't
-/// move from throws, and a law holds wherever its code throws. A law that is false in the case the moves give is not
-/// proven.
+/// a move every case of the union moves from on it, as the case it holds runs the move, and tests which case it is. A
+/// law that is false in the case the moves give is not proven.
 #[test]
 fn a_law_follows_a_value_typed_as_a_union_of_one_machine_s_cases() {
     let step = |law: &str| {
         format!(
-            "namespace App;\n\ninternal machine Step\n{{\n    case A {{ internal Step.B|Step.C go(bool done) => done ? Step.C : Step.B; }}\n    case B {{ internal Step.B|Step.C go(bool done) => done ? Step.C : Step.B; }}\n    final case C;\n    internal static Step.A enter() => Step.A;\n    {law}\n}}\n"
+            "namespace App;\n\ninternal machine Step\n{{\n    case A {{ internal Step.A|Step.B go(bool done) => done ? Step.B : Step.A; }}\n    case B {{ internal Step.B|Step.C go(bool done) => done ? Step.C : Step.B; }}\n    final case C;\n    internal static Step.A enter() => Step.A;\n    {law}\n}}\n"
         )
     };
     let gate = "namespace App;\n\ninternal machine Gate\n{\n    case Open { internal Gate.Shut|Gate.Gone close(bool forever) => forever ? Gate.Gone : Gate.Shut; }\n    case Shut { internal Gate.Open open() => Gate.Open; }\n    final case Gone;\n    internal static Gate.Open enter() => Gate.Open;\n    law shutReopens() => Gate.enter().close(false) is Gate.Shut s ? s.open() is Gate.Open : false;\n}\n";
 
     let directory = lawful_project(&[
-        (
-            "app/Step.sharp",
-            &step(
-                "law twoMovesReachC() => Step.enter().go(false).go(true) is Step.C;\n    law doneThrowsOnGo() => Step.enter().go(true).go(true) is Step.B;",
-            ),
-        ),
+        ("app/Step.sharp", &step("law twoMovesReachC() => Step.enter().go(true).go(true) is Step.C;")),
         ("app/Gate.sharp", gate),
     ]);
 
@@ -6152,6 +6270,39 @@ fn compile_proves_a_law_over_a_counting_loop_under_an_if() {
 /// Spec section 28's `Money`: a law the checker proves alone, a law its body proves by recursion on a smaller int, one
 /// proven by recursion on a list's rest, and one under a `when` condition.
 const SPECIMEN_MONEY: &str = "namespace App.Shared;\n\npublic class Money\n{\n    public Money(public int amount { get; }, public string currency { get; }) { }\n    public Money add(Money other) => new Money(this.amount + other.amount, this.currency);\n    public Money times(int n) => n <= 0 ? new Money(0, this.currency) : this.add(this.times(n - 1));\n\n    law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;\n    law timesKeepsCurrency(Money m, int n) => m.times(n).currency == m.currency\n    {\n        if (n <= 0) {\n            return;\n        }\n        Money.timesKeepsCurrency(m, n - 1);\n        Money.addKeepsCurrency(m, m.times(n - 1));\n    }\n\n    public static Money sum(Money total, List<Money> items) => match (items) {\n        [] => total,\n        [Money first, ...List<Money> rest] => Money.sum(total.add(first), rest),\n    };\n\n    law sumKeepsCurrency(Money total, List<Money> items) => Money.sum(total, items).currency == total.currency\n    {\n        match (items) {\n            [] => { return; },\n            [Money first, ...List<Money> rest] => {\n                Money.sumKeepsCurrency(total.add(first), rest);\n                Money.addKeepsCurrency(total, first);\n            },\n        }\n    }\n\n    public static int refundable(int paid, int refunded) => Math.max(paid - refunded, 0);\n\n    law neverAbovePaid(int paid, int refunded) when paid >= 0 && refunded >= 0\n        => Money.refundable(paid, refunded) <= paid;\n}\n";
+
+/// Spec section 23: a call only `__call` or `__callStatic` answers, instance or static, is a missing method in a library
+/// and in a project alike, where 0.6.45 compiled it.
+#[test]
+fn a_call_only_a_magic_method_answers_is_refused_in_a_library_and_a_project() {
+    let bag = "<?php\n\nnamespace Lib;\n\nfinal class Bag\n{\n    /** @param list<mixed> $arguments */\n    public function __call(string $name, array $arguments): mixed\n    {\n        return null;\n    }\n\n    /** @param list<mixed> $arguments */\n    public static function __callStatic(string $name, array $arguments): mixed\n    {\n        return null;\n    }\n}\n";
+    let uses = "namespace App;\n\nimport Lib.Bag;\n\nextern Bag uses none;\n\npublic class Uses\n{\n    public static void magic(Bag b)\n    {\n        b.anything(1);\n        Bag.anything(1);\n    }\n}\n";
+    for kind in ["library", "project"] {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        write(root, "mago.toml", "php-version = \"8.4\"\n\n[source]\npaths = [\"app\", \"src\"]\n");
+        write(
+            root,
+            "composer.json",
+            &format!(
+                "{{\"type\": \"{kind}\", \"autoload\": {{\"psr-4\": {{\"App\\\\\": \"app/\", \"Lib\\\\\": \"src/Lib/\"}}}}}}\n"
+            ),
+        );
+        write(root, "composer.lock", "{}\n");
+        write(root, "src/Lib/Bag.php", bag);
+        write(root, "app/Uses.sharp", uses);
+
+        let output = compile(root);
+
+        assert_eq!(output.status.code(), Some(1), "{kind}: {}", printed(&output));
+        assert_eq!(
+            printed(&output).matches("Method `Bag.anything` does not exist.").count(),
+            2,
+            "{kind}: {}",
+            printed(&output)
+        );
+    }
+}
 
 /// A project that installs the whole standard library, as every project does, holding `files`.
 fn library_project(files: &[(&str, &str)]) -> tempfile::TempDir {

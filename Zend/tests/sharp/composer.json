@@ -187,6 +187,7 @@
                 "Accessors/",
                 "Store/"
             ],
+            "StoredValues\\": "StoredValues/",
             "Strict\\": "Strict/",
             "TableChanges\\": "TableChanges/",
             "Tallies\\": "Tallies/",
@@ -198,6 +199,7 @@
             "TypedExterns\\": "TypedExterns/",
             "Typed\\": "TypedOrders/",
             "Unions\\": "Unions/",
+            "VariantTags\\": "VariantTags/",
             "Writes\\": "Writes/",
             "XmlDocuments\\": "XmlDocuments/"
         }

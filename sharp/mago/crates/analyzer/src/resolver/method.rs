@@ -82,8 +82,10 @@ use crate::resolver::property::DeclaredPropertyKind;
 use crate::resolver::property::get_localized_property_type;
 use crate::resolver::property::localize_property_type;
 use crate::resolver::property::resolve_declared_property;
+use crate::resolver::property::resolve_tuple_element;
 use crate::resolver::selector::resolve_member_selector;
 use crate::statement::class_like::law::uncallable_law;
+use crate::statement::class_like::machine::check_move_call;
 use crate::utils::expression::analyze_member_object;
 use crate::utils::expression::get_bare_name_variable_id;
 use crate::utils::expression::is_this;
@@ -212,6 +214,9 @@ pub struct MethodResolutionResult {
     pub unresolved_methods: Vec<UnresolvedMethod>,
     /// The properties a PHP# call runs in place of a missing method, see [`resolve_called_property`].
     pub called_properties: Vec<CalledProperty>,
+    /// The position and the type of each tuple element whose function a PHP# call runs, as `entry.twice(2)` runs the
+    /// element `twice` of a `[Function<int(int)> twice, string name]`, spec section 30.
+    pub called_elements: Vec<(usize, TUnion)>,
     /// The static method of the extension a PHP# call runs, spec section 26, which leaves the other targets empty.
     pub extension: Option<MethodIdentifier>,
     /// The extension members a PHP# call runs on parts of the receiver, each with those parts, beside the other targets,
@@ -269,6 +274,17 @@ where
         && name.value == b"toString"
         && let Some(object_type) = artifacts.get_expression_type(object).cloned()
         && refuse_mixed_text(context, &object_type, access_span)
+    {
+        result.has_invalid_target = true;
+
+        return Ok(result);
+    }
+
+    // Spec section 20.2: a move is called on a value of a case it moves from.
+    if context.dialect.is_sharp()
+        && let ClassLikeMemberSelector::Identifier(name) = selector
+        && let Some(object_type) = artifacts.get_expression_type(object).cloned()
+        && check_move_call(context, object, &object_type, word(name.value), selector.span())
     {
         result.has_invalid_target = true;
 
@@ -418,6 +434,18 @@ where
                 TAtomic::Callable(callable) if callable.is_closure() => {
                     closure_object = TObject::new_named(word("Closure"));
                     &closure_object
+                }
+                // Spec section 30: a call of a tuple's named element runs the function the element holds.
+                TAtomic::Array(TArray::List(list))
+                    if context.dialect.is_sharp()
+                        && let ClassLikeMemberSelector::Identifier(name) = selector
+                        && let Some((position, (element, _))) =
+                            list.tuple_elements().into_iter().flatten().enumerate().find(|(_, (_, element))| {
+                                element.is_some_and(|element| element.as_bytes() == name.value)
+                            }) =>
+                {
+                    result.called_elements.push((position, element.clone()));
+                    continue;
                 }
                 TAtomic::Array(array) if context.dialect.is_sharp() => {
                     // An empty value with no declared type, an empty literal the semantic checks refuse or an emptied
@@ -701,15 +729,22 @@ where
                     result.part_members.push((method, parts));
                 }
                 // A refusal the resolution reported stands alone.
+                // A tuple's missing element is refused as its read is, since a tuple has no members of its own.
                 resolved => {
                     if !matches!(resolved, Some(Extension::Refused)) {
-                        report_non_existent_collection_member(
-                            context,
-                            (kind, &parts),
-                            object.span(),
-                            selector.span(),
-                            word(name.value),
-                        );
+                        if let [tuple @ TAtomic::Array(TArray::List(list))] = parts.types.as_ref()
+                            && let Some(elements) = list.tuple_elements()
+                        {
+                            resolve_tuple_element(context, tuple, &elements, name, false);
+                        } else {
+                            report_non_existent_collection_member(
+                                context,
+                                (kind, &parts),
+                                object.span(),
+                                selector.span(),
+                                word(name.value),
+                            );
+                        }
                         result.lacks_sharp_method = true;
                     }
                     result.has_invalid_target = true;

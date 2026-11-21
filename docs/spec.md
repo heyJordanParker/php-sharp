@@ -3709,7 +3709,7 @@ import Sharp.Text.NormalizationForm;
 0xD800.toCharacter();                             // throws ValueError
 ```
 
-**Text and bytes:** a `string` is text and always valid UTF-8. Binary data, as `Ip.toBinary` gives, and the bytes another system counts or signs are `Bytes`, a separate type. A plain PHP value that becomes a `string` has each byte sequence that is not UTF-8 replaced by U+FFFD, and one that becomes `Bytes` keeps every byte. `text.toBytes()` gives a string's UTF-8 bytes, and `bytes.toText()` reads bytes as UTF-8, replacing each sequence that is not UTF-8 by U+FFFD. `Bytes` has `length()`, `slice(start, end)`, which throws `OutOfRangeException` for a range outside the bytes, and `toList()`, which gives each byte as an `int` from 0 to 255. A string literal is text too: one whose escapes write bytes that are no UTF-8 is a compile error that writes those bytes as `Bytes`, and `\u{E9}` writes a character's UTF-8 bytes:
+**Text and bytes:** a `string` is text and always valid UTF-8. Binary data, as `Ip.toBinary` gives, and the bytes another system counts or signs are `Bytes`, a separate type. A plain PHP value that becomes a `string` has each byte sequence that is not UTF-8 replaced by U+FFFD, and one that becomes `Bytes` keeps every byte. `text.toBytes()` gives a string's UTF-8 bytes, and `bytes.toText()` reads bytes as UTF-8, replacing each sequence that is not UTF-8 by U+FFFD. `Bytes` has `length()`, `slice(start, end)`, which throws `OutOfRangeException` for a range outside the bytes, `toList()`, which gives each byte as an `int` from 0 to 255, and `a + b`, which gives the bytes of `a` followed by those of `b` and is the one way to join two `Bytes`. A string literal is text too: one whose escapes write bytes that are no UTF-8 is a compile error that writes those bytes as `Bytes`, and `\u{E9}` writes a character's UTF-8 bytes:
 
 <!-- example text-bytes: statements
 import Sharp.Net.Ip;
@@ -3720,6 +3720,7 @@ import Sharp.Net.Ip;
 "école".toBytes().toList();                // [195, 169, 99, 111, 108, 101]
 "école".toBytes().slice(0, 2).toText();    // "é"
 "école".toBytes().slice(0, 9);             // throws: "`slice` takes a range inside the bytes, and the range is outside it."
+([1, 2].toBytes() + [3].toBytes()).toList();   // [1, 2, 3]
 Ip.toBinary("192.168.0.1").toList();       // [192, 168, 0, 1]
 Ip.toBinary("::1").length();               // 16
 "\xB1\x31";                                // compile error: this literal's escapes are no UTF-8 text; bytes are [0xB1, 0x31].toBytes()
@@ -4191,15 +4192,75 @@ public class Order
     public OrderStatus status { get; private set; } = OrderStatus.open();
     public OrderStatus copied { get; set; } = OrderStatus.open();          // compile error: a machine property has a private set
 
-    public void pay(int cents) { this.status = this.status.pay(cents); }
+    public bool pay(int cents)
+    {
+        if (this.status is OrderStatus.Draft draft) {
+            this.status = draft.pay(cents);
+            return true;
+        }
+
+        return false;
+    }
+
+    public void rush(int cents) { this.status = this.status.pay(cents); }   // compile error: a move is called on the case it moves from
     public void copy(Order o) { this.status = o.status; }                   // compile error: it changes only by a move of its own
     public void force() { this.status = OrderStatus.Paid(5); }              // compile error: only entry points and moves build a case
 }
 ```
 
+<!-- example machine -->
+```csharp
+// app/Shop/Invoice.sharp
+namespace App.Shop;
+
+public class Invoice
+{
+    public OrderStatus status { get; private set; } = OrderStatus.open();
+
+    public bool pay(int cents)
+    {
+        if (this.status is not OrderStatus.Draft draft) {
+            return false;
+        }
+
+        this.status = draft.pay(cents);
+        return true;
+    }
+}
+```
+
+<!-- example machine -->
+```csharp
+// app/Shop/Run.sharp
+namespace App.Shop;
+
+public class Run
+{
+    public late OrderStatus status { get; private set; }
+
+    public void open() { this.status = OrderStatus.open(); }
+}
+```
+
+<!-- example machine -->
+```csharp
+// app/Shop/Line.sharp
+namespace App.Shop;
+
+public struct Line
+{
+    public OrderStatus status { get; init; } = OrderStatus.open();
+
+    public static Line paid(Line line) => line.status is OrderStatus.Draft draft ? line with { status: draft.pay(5) } : line;   // compiles
+    public static Line reset(Line line) => line with { status: OrderStatus.open() };                                              // compile error: it changes only by a move of its own
+}
+```
+
 - **Only entry points, moves, `parse` and `Json.decode` build a case.** A case with no fields is one object.
-- **A property of a machine type has a `private set`,** starts at an entry point, and changes only as `x = x.move(…)`. A promoted constructor parameter of a machine type is a compile error, since a caller could pass any case.
-- **A move called on a case it doesn't move from throws `Sharp\StateError`,** which names the machine, the case and the cases the move moves from: "OrderStatus is Paid, and pay moves from Draft."
+- **A move belongs to the case it moves from.** A move in a case's block is a member of that case's type alone, and a move in the machine's body is a member of every case that isn't `final`. A call of a move through the machine's type, or through a union that holds a case without the move, is a compile error that names the test to write first: "`pay` moves from `OrderStatus.Draft`, and `this.status` may be `Paid`, `Shipped` or `Cancelled`: test it first, as in `if (this.status is OrderStatus.Draft draft)`." So no program calls a move from a case that lacks it.
+- **A property of a machine type has a `private set`,** starts at an entry point, and changes only by a move of the value it holds: `this.status = draft.pay(cents)`, where a type pattern bound `draft` from `this.status`, in an `is`, in an `is not` that leaves, or in a `match` arm. A promoted constructor parameter of a machine type is a compile error, since a caller could pass any case.
+- **A `late` property of a machine type** takes no initial value. Its write of an entry point is accepted in any method of its class, and every other write is a move. A read before the first write throws, as for every `late` property.
+- **A struct's property of a machine type is `{ get; init; }`,** starts at an entry point by its initial value or its constructor, and a `with` that sets it takes a move of the original's value: `line with { status: draft.pay(5) }`, where `draft` was bound from `line.status`.
 - **The checker checks the graph.** Every case is reachable from an entry point. A case with no move out is `final`, and a `final` case has no move out. When a machine has `final` cases, every case reaches one. Each is a compile error that names the case: "The case `OrderStatus.Paid` has no move out, so it is `final`."
 - **A law whose one parameter is a case of the machine is an invariant** (section 28): the checker proves it after every entry point and every move.
 - **A backed machine whose cases hold no data, and that is not marked `[Tag]`, stores as its case's value,** as a backed enum does (section 10), so `Json.encode(account);   // {"id":7,"balance":"12.50","status":"active"}` writes the `status` machine as `"active"`, and `parse`, `Json.decode` and `Query.decode` read the case back from its value. A machine with a case that holds data stores as a family, marked `[Tag]`.
@@ -4240,9 +4301,10 @@ match (result) {
 
 - **On an enum,** arms that handle every case need no `default`. A missed case is a compile error that names it.
 - **On a sealed interface,** the same holds for its implementers (section 20.1).
+- **On a union of classes,** such as `Twig|Leaf`, the same holds for its members: arms that name each member, or a class or interface each member extends or implements, need no `default`. A missed member is a compile error that names it. A `match` on a union of classes may still have a `default`.
 - **A machine's cases** (section 20.2), as an enum's are: adding a case makes every `match` that misses it a compile error.
 - **On a List,** arms that handle every list need no `default`. A list pattern without a rest handles lists of its number of items, and one with a rest every longer list too. Each element is covered by the same rules as a `match` on one value of the element type, so `[Circle c, ...]` and `[Square s, ...]` together handle every list of a sealed `Shape` with a first item. A typed rest must take any `List` of the element type, as `...List<Shape> rest` does. A missed list is a compile error that names it in plain words.
-- **On a nullable enum, sealed interface or List,** such as a `Status?` or a `List<Money>?`, the arms handle `null` too.
+- **On a nullable enum, sealed interface, union of classes or List,** such as a `Status?`, a `(Twig|Leaf)?` or a `List<Money>?`, the arms handle `null` too.
 - **On any other value,** `match` must have a `default` arm.
 - **An arm with `when`** does not count toward covering a case.
 - **A `match` on a project's enum or sealed interface lists its cases,** nullable or not, so a case added later is a compile error at each `match` that misses it. Cases that share an arm are joined with `or`, as in `Status.Pending or Status.Failed => {}`, and `default` there is a compile error that names the cases it stands for: "A `match` on `TransactionStatus` lists its cases; missing: `TransactionStatus.Failed` and `TransactionStatus.Canceled`." A `match` on a plain PHP enum, or on an enum of an installed package, keeps `default`, because its library can add cases in an upgrade, as one on an `int` or a `string` does.
@@ -5314,6 +5376,8 @@ public class Feed
     public bool bare() => add_action("init", () => { });              // compile error: no function add_action exists
 }
 ```
+
+**PHP# code calls a method a plain PHP class declares,** by its PHP declaration or by its PHPDoc's `@method` or `@mixin`, as the checker reads them. A call only the class's `__call` or `__callStatic` answers, instance or static, is the error any undeclared method gets: on a `Bag` that declares `__call` and `__callStatic` alone, `bag.anything(1)` and `Bag.anything(1)` are refused with "Method `Bag.anything` does not exist.", where a call a `@mixin` declares, as Eloquent's `users.whereIn("id", ids)`, compiles and is typed by the method it names.
 
 **An `extern` line states a plain PHP method's or function's signature,** so PHP# code calls it by types PHP# checks. The line is written in PHP# method order: the return type, the class and its type parameters, as in `Builder<TModel>`, the method, and the parameters. A PHP# call is checked against the signature the line states, never against the library's docblock, and `uses` follows it as on any `extern` line (section 29):
 
@@ -6442,6 +6506,53 @@ Shipment.fromRow("letter", "to Bo").label;   // "to Bo"
 Shipment.fromRow("crate", "none");           // throws: "No shipment is of the kind crate."
 -->
 
+<!-- example class-tag: statements
+import Sharp.Key;
+import Sharp.Tag;
+public machine JourneyStatus : string
+{
+    case Open = "open" { public JourneyStatus.Completed complete() => JourneyStatus.Completed; }
+    final case Completed = "completed";
+    public static JourneyStatus.Open enter() => JourneyStatus.Open;
+}
+[Tag("type")]
+public sealed interface Tender { }
+[Key("card")]
+public struct Card : Tender { public Card(public string last4 { get; }) { } }
+public class Example
+{
+    public void run()
+    {
+        …
+    }
+}
+-->
+```csharp
+typeof(JourneyStatus.Completed).tag();              // "completed"
+typeof(JourneyStatus).withTag("completed");         // typeof(JourneyStatus.Completed)
+typeof(Card).tag();                                 // "card", from [Key("card")]
+typeof(JourneyStatus).tag();                        // null: the machine is no variant
+```
+
+<!-- example class-decode: statements
+public machine LinkStatus : string
+{
+    case Draft = "draft" { public LinkStatus.Published publish() => LinkStatus.Published; }
+    final case Published = "published";
+    public static LinkStatus.Draft enter() => LinkStatus.Draft;
+}
+public class Page
+{
+    public Page(public string title { get; }) { }
+    public LinkStatus status { get; private set; } = LinkStatus.enter();
+}
+-->
+```csharp
+const row = ["status": "draft", "title": "Home"];
+typeof(Page).decode(row);                       // a Page whose status is LinkStatus.Draft, read by its tag
+typeof(Page).decode(["title": 5]);              // throws InvalidFields: title: expected string, got int 5
+```
+
 **Each reflection value keys a `Map` and joins a `Set` as the member it reflects,** however often reflection read it. Two `Method`s, two `Property`s, two `Field`s, two `Constant`s and two `Constructor`s are equal when one class declares them under one name, two `Parameter`s when they are one position of one method, two `EnumCase`s when they are one case of one enum, and two `TupleElement`s when they have one name, or none, and one type. Equal values share their `hash()`, so `Map<Method, List<Relation>>` compiles:
 
 <!-- example reflection-keys: statements
@@ -7078,6 +7189,7 @@ sharp.compile_command = "vendor/bin/mago --no-version-check --no-extensions comp
 
 - **A request runs the command at most once,** in the project root, waits for it, and loads what it wrote. The root is the nearest folder above the file that holds `.sharp/`, so a project's first compile is by hand.
 - **A project compiles once at a time.** A request holds the lock of `.sharp/compile.lock` while it runs the command. A request that finds a file stale while another compiles waits for it, checks its file again, and runs the command only when the file is still stale, so after a refused compile it gets the refusal from the record.
+- **Runs of `mago` that write `.sharp/` take turns.** Each holds the lock of `.sharp/write.lock` from before it reads the folder's record to after it deletes what it did not write, so a `mago compile` and a `mago analyze` started together on one tree each pass, and the second reads the record the first wrote. The command a request runs takes this lock while the request holds `.sharp/compile.lock`.
 - **The command ends with the request.** It runs in a process group of its own, and each process of the group still running once the command exits is killed, as is the whole group when the request ends first.
 - **`--no-extensions` leaves the extension hosts' rules out of the compile a request waits for.** They run in `mago analyze` and in CI.
 
@@ -8000,6 +8112,7 @@ const [money, items] = order.totals();                              // unpack an
 
 - **A tuple can have any number of elements.** The checker suggests a struct past four.
 - **Names are optional in a tuple type.** `[Money, int]` compiles.
+- **A named element that holds a function is called by its name,** as a property that holds one is (section 14): `entry.twice(2)` on a `[Function<int(int)> twice, string name]` runs the element's function, checked by its function type.
 - **A list literal becomes a tuple** when the declared type is a tuple, whatever its elements are: an element a lambda gives, as `[data, media.values().map((Media r) => Reference.copy(r))]`, and a literal a lambda returns through a generic method into a declared tuple. A tuple a `Map` holds stays one through `get(k) ?? throw`, so `const [tag, named, value] = tags.get(k) ?? throw …` unpacks it.
 - **Map entries are tuples:** `for (const [key, plan] of plans)`.
 

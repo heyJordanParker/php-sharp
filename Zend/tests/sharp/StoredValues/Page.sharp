@@ -1,0 +1,8 @@
+namespace StoredValues;
+
+public class Page
+{
+    public Page(public string title { get; }, public Author author { get; }, public Attachment attachment { get; }) { }
+
+    public LinkStatus status { get; private set; } = LinkStatus.enter();
+}

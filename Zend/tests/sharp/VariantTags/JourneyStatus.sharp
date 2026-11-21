@@ -1,0 +1,8 @@
+namespace VariantTags;
+
+public machine JourneyStatus : string
+{
+    case Open = "open" { public JourneyStatus.Completed complete() => JourneyStatus.Completed; }
+    final case Completed = "completed";
+    public static JourneyStatus.Open enter() => JourneyStatus.Open;
+}

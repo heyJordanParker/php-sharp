@@ -8,9 +8,25 @@ public class Order
 
     public OrderStatus status { get; private set; } = OrderStatus.open();
 
-    public void pay(int cents) { this.status = this.status.pay(cents); }
+    public bool pay(int cents)
+    {
+        if (this.status is OrderStatus.Draft draft) {
+            this.status = draft.pay(cents);
+            return true;
+        }
 
-    public void ship() { this.status = this.status.ship(); }
+        return false;
+    }
+
+    public bool ship()
+    {
+        if (this.status is not OrderStatus.Paid paid) {
+            return false;
+        }
+
+        this.status = paid.ship();
+        return true;
+    }
 
     public static string encode(OrderStatus status) => Json.encode(status);
 

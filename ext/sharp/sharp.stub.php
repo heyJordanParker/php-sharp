@@ -109,6 +109,8 @@ function parseVariant(string $family, mixed $value, bool $throws = true): ?objec
 
 function withTag(string $family, string $tag): ?string {}
 
+function tag(string $variant): ?string {}
+
 function resolve(string $host): array {}
 
 function processorCount(): int {}

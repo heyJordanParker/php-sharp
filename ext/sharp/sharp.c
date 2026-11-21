@@ -227,6 +227,8 @@ static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
 			return attr | ZEND_SHARP_OPERATOR_SYNTAX;
 		case ZEND_AST_DIM:
 			return attr | ZEND_DIM_SHARP;
+		case ZEND_AST_SILENCE:
+			return attr | ZEND_SHARP_SILENCE;
 		default:
 			return attr;
 	}
@@ -11807,7 +11809,8 @@ static bool sharp_listener_lists_fit(const zval *lists)
  * 'attributes' => [the lowercase name of a plain PHP class an `extern` line gives attributes => [the workspace-relative
  * path of each .sharp file whose line does, ...], ...], 'effects' => [the lowercase name of a plain PHP class or method
  * an `extern` line declares => [the dotted full name of each effect it declares, ...], ...], 'tags' => [a family's full
- * name => [the key its `[Tag]` names, [a variant's name => its class's full name, ...]], ...]]. */
+ * name => [the key its `[Tag]` names, or '' for a machine that stores as its value, [a variant's name => its class's
+ * full name, ...]], ...]]. A name of digits, as an int-backed machine's case's, is PHP's integer key. */
 static bool sharp_listener_table_fits(const zval *table)
 {
 	const zval *inputs = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "inputs", sizeof("inputs") - 1) : NULL;
@@ -11829,8 +11832,8 @@ static bool sharp_listener_table_fits(const zval *table)
 		if (!class || !sharp_element(element, 0, IS_STRING) || !variants) {
 			return false;
 		}
-		ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(variants), class, file) {
-			if (!class || Z_TYPE_P(file) != IS_STRING) {
+		ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(variants), file) {
+			if (Z_TYPE_P(file) != IS_STRING) {
 				return false;
 			}
 		} ZEND_HASH_FOREACH_END();
@@ -12757,18 +12760,23 @@ static void sharp_read_variant(zend_class_entry *family, zval *value, sharp_read
 	zval held;
 	ZVAL_UNDEF(&held);
 	zval *name = sharp_input_field(value, key, &held);
-	zval *variant_name = name && Z_TYPE_P(name) == IS_STRING ? zend_hash_find(variants, Z_STR_P(name)) : NULL;
+	zval *variant_name = name && Z_TYPE_P(name) == IS_STRING ? zend_symtable_find(variants, Z_STR_P(name)) : NULL;
 	if (!variant_name) {
 		smart_str problem = {0};
 		if (name) {
 			smart_str_appends(&problem, "expected ");
 			zend_string *known;
+			zend_ulong number;
 			uint32_t index = 0, count = zend_hash_num_elements(variants);
-			ZEND_HASH_FOREACH_STR_KEY(variants, known) {
+			ZEND_HASH_FOREACH_KEY(variants, number, known) {
 				if (index > 0) {
 					smart_str_appends(&problem, index + 1 == count ? " or " : ", ");
 				}
-				smart_str_append(&problem, known);
+				if (known) {
+					smart_str_append(&problem, known);
+				} else {
+					smart_str_append_long(&problem, (zend_long) number);
+				}
 				index++;
 			} ZEND_HASH_FOREACH_END();
 			smart_str_appends(&problem, ", got ");
@@ -12833,12 +12841,66 @@ ZEND_FUNCTION(Sharp_Internal_withTag)
 		}
 		RETURN_NULL();
 	}
-	zval *variant = zend_hash_find(variants, tag);
+	zval *variant = zend_symtable_find(variants, tag);
 	if (!variant) {
 		RETURN_NULL();
 	}
 
 	RETURN_STR_COPY(Z_STR_P(variant));
+}
+
+/* The name the family `family` stores for its variant `variant`, from the table `withTag` reads, or NULL when `family`
+ * is no family that lists it, or after an exception reading the table threw. */
+static zend_string *sharp_variant_tag(const zend_class_entry *family, const zend_class_entry *variant)
+{
+	zend_string *key, *name;
+	zend_ulong number;
+	zval *listed;
+	HashTable *variants = sharp_family_variants(family, &key);
+	if (!variants) {
+		if (!EG(exception) && zend_get_attribute_str(family->attributes, "sharp\\tag", sizeof("sharp\\tag") - 1)) {
+			sharp_family_out_of_date(family->name);
+		}
+		return NULL;
+	}
+	ZEND_HASH_FOREACH_KEY_VAL(variants, number, name, listed) {
+		if (zend_string_equals_ci(Z_STR_P(listed), variant->name)) {
+			return name ? zend_string_copy(name) : zend_long_to_str((zend_long) number);
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return NULL;
+}
+
+/* Spec section 25: `Class<T>.tag()`, the name the family of the class `variant_name` stores for it, its `[Key]` or its
+ * value as a backed machine's case, read from the family among the classes it extends and the interfaces it
+ * implements. Null for a class that is no variant of a family. */
+ZEND_FUNCTION(Sharp_Internal_tag)
+{
+	zend_string *variant_name, *tag = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(variant_name)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_class_entry *variant = zend_lookup_class(variant_name);
+	if (!variant) {
+		RETURN_NULL();
+	}
+	for (const zend_class_entry *family = variant->parent; family && !tag && !EG(exception); family = family->parent) {
+		tag = sharp_variant_tag(family, variant);
+	}
+	for (uint32_t index = 0; index < variant->num_interfaces && !tag && !EG(exception); index++) {
+		tag = sharp_variant_tag(variant->interfaces[index], variant);
+	}
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+	if (!tag) {
+		RETURN_NULL();
+	}
+
+	RETURN_STR(tag);
 }
 
 /* Appends to `path` the part an element at `index` or `key` adds, as a struct's parse names an element: `["eu"]` in a

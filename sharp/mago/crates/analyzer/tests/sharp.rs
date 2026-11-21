@@ -718,7 +718,6 @@ fn a_case_is_never_too_wide() {
             ("src/App/Web/Reader.sharp", reader),
         ]),
         [
-            "src/App/Shop/Status.sharp 7:30 `Status.close` is public, and nothing outside `Status` and its subclasses uses it. | Declare it `protected`.",
             "src/App/Shop/Status.sharp 12:31 `Status.open` is public, and nothing outside `Status` uses it. | Declare it `private`.",
             "src/App/Shop/Size.sharp 8:19 `Size.label` is public, and nothing outside `Size` uses it. | Declare it `private`.",
         ]
@@ -1713,7 +1712,7 @@ fn a_null_safe_receiver_is_not_null_in_the_rest_of_its_chain() {
             "17:56 possible-method-access-on-null",
             "18:65 possible-method-access-on-null",
             "19:65 possible-method-access-on-null",
-            "21:46 non-documented-method",
+            "21:46 non-existent-method",
             "26:16 invalid-class-string-expression",
             "26:28 invalid-class-string-expression",
             "36:61 redundant-nullsafe-operator",
@@ -9003,7 +9002,7 @@ fn a_match_on_a_list_names_the_lengths_it_misses() {
         .into_iter()
         .flat_map(|issue| issue.notes)
         .collect();
-    let note = "A `match` may leave out `default` only when its arms handle every case of an enum or a sealed interface, or every value of a `List`.";
+    let note = "A `match` may leave out `default` only when its arms handle every case of an enum or a sealed interface, every member of a union of classes, or every value of a `List`.";
     assert_eq!(notes, [note; 4]);
 }
 
@@ -9440,6 +9439,56 @@ fn a_match_without_default_that_handles_every_enum_case_reports_nothing() {
         .collect();
 
     assert_eq!(reported, Vec::<&str>::new());
+}
+
+/// Spec section 21: a union of classes holds a value of one of its members, so a `match` whose type arms name each
+/// member, or a supertype of each, handles every value, on a property as on a local, and a local an `is` fails for is a
+/// member the test leaves. A property never narrows, so a `?:` that reads it again after its `is` or `is not` is
+/// refused with the form that binds the value the test reads. `null` is one more member of a nullable union, and a
+/// `match` that leaves out a member names it.
+#[test]
+fn a_type_test_on_a_union_of_classes_covers_the_members_it_names() {
+    let tree = "namespace Repro;\n\npublic final class Tree\n{\n    public Tree(public Twig|Leaf part { get; }) {}\n\n    public string kind() => match (this.part) {\n        Leaf leaf => \"leaf\",\n        Twig twig => \"twig\",\n    };\n\n    public static Leaf left(Twig|Leaf part, Leaf fallback) => part is Twig twig ? fallback : part;\n\n    public Leaf leaf(Leaf fallback) => this.part is Twig twig ? fallback : this.part;\n\n    public Leaf plain(Leaf fallback) => this.part is Twig ? fallback : this.part;\n\n    public Leaf negated(Leaf fallback) => this.part is not Twig twig ? this.part : fallback;\n\n    public static string named((Twig|Leaf)? part) => match (part) {\n        Twig twig => \"twig\",\n        Leaf leaf => \"leaf\",\n        null => \"none\",\n    };\n\n    public static string whole(Twig|Leaf part) => match (part) {\n        Part whole => \"part\",\n    };\n\n    public static string twig((Twig|Leaf)? part) => match (part) {\n        Twig twig => \"twig\",\n    };\n}\n";
+    let part = "namespace Repro;\n\npublic interface Part {}\n";
+    let twig = "namespace Repro;\n\npublic final class Twig : Part {}\n";
+    let leaf = "namespace Repro;\n\npublic final class Leaf : Part {}\n";
+
+    let issues = analyze(
+        &PLUGIN_REGISTRY,
+        settings(),
+        ("src/Repro/Tree.sharp", tree),
+        &[("src/Repro/Part.sharp", part), ("src/Repro/Twig.sharp", twig), ("src/Repro/Leaf.sharp", leaf)],
+    );
+
+    assert_eq!(
+        written_errors(tree, &issues),
+        [
+            "this.part is Twig twig ? fallback : this.part invalid-return-statement `this.part` is a property, which never narrows: bind the value the test reads, as in `this.part is Leaf leaf ? leaf : fallback`.",
+            "this.part is Twig ? fallback : this.part invalid-return-statement `this.part` is a property, which never narrows: bind the value the test reads, as in `this.part is Leaf leaf ? leaf : fallback`.",
+            "this.part is not Twig twig ? this.part : fallback invalid-return-statement `this.part` is a property, which never narrows: bind the value the test reads, as in `this.part is Leaf leaf ? leaf : fallback`.",
+            "match match-not-exhaustive This `match` misses `Leaf` and `null`.",
+        ]
+    );
+}
+
+/// Spec section 21: an enum that implements a sealed interface is the set of its cases, so arms for each case cover it
+/// as an arm for the enum does, and an arm left out names its case.
+#[test]
+fn a_match_over_a_sealed_interface_covers_an_enum_implementer_by_its_cases() {
+    let status = "namespace Shop;\n\npublic sealed interface Status { }\n";
+    let open = "namespace Shop;\n\npublic enum Open : Status\n{\n    case Fresh;\n    case Reopened(int times);\n}\n";
+    let closed =
+        "namespace Shop;\n\npublic class Closed : Status\n{\n    public Closed(public int at { get; }) { }\n}\n";
+    let report = "namespace Shop;\n\npublic class Report\n{\n    public static int every(Status status) => match (status) {\n        Open.Fresh => 0,\n        Open.Reopened(int times) => times,\n        Closed closed => closed.at,\n    };\n\n    public static int whole(Status status) => match (status) {\n        Open open => 0,\n        Closed closed => closed.at,\n    };\n\n    public static int fresh(Status status) => match (status) {\n        Open.Fresh => 0,\n        Closed closed => closed.at,\n    };\n}\n";
+
+    let issues = analyze(
+        &PLUGIN_REGISTRY,
+        settings(),
+        ("src/Shop/Report.sharp", report),
+        &[("src/Shop/Status.sharp", status), ("src/Shop/Open.sharp", open), ("src/Shop/Closed.sharp", closed)],
+    );
+
+    assert_eq!(written_errors(report, &issues), ["match match-not-exhaustive This `match` misses `Open.Reopened`."]);
 }
 
 /// An enum declared in PHP# has its cases counted as a PHP enum's, inside its own methods too, where an arm with `when`
@@ -29148,6 +29197,32 @@ fn a_uses_that_names_no_effect_lists_the_effects_its_file_can_name() {
     );
 }
 
+/// Spec section 29: a class of the file's namespace hides the standard library's effect of its short name, as a class
+/// of the current namespace hides an imported one in C#, and so does an imported class. So `uses` that names one is
+/// refused with the class it names and the effect it hides, and the effect imported under another name reaches it.
+#[test]
+fn a_class_with_an_effects_name_hides_the_effect_in_uses() {
+    let files = ("app/Probe/Files.sharp", "namespace Probe;\n\npublic static class Files\n{\n}\n");
+    let http = ("app/Vendor/Http.sharp", "namespace Vendor;\n\npublic static class Http\n{\n}\n");
+    let reader = (
+        "app/Probe/Reader.sharp",
+        "namespace Probe;\n\nimport Vendor.Http;\n\npublic interface Reader\n{\n    void read(Function<void() uses Files> read);\n\n    void fetch(Function<void() uses Http> fetch);\n}\n",
+    );
+    let aliased = (
+        "app/Probe/Aliased.sharp",
+        "namespace Probe;\n\nimport Sharp.IO.Files as FileSystem;\n\npublic interface Aliased\n{\n    void read(Function<void() uses FileSystem> read);\n}\n",
+    );
+
+    assert_eq!(
+        worded(reader, &[files, http]),
+        [
+            "7:36 invalid-effect `Files` here is `Probe.Files`, a class of this namespace, which hides the effect `Sharp.IO.Files`. | Written here. | Import the effect under another name, as `import Sharp.IO.Files as FilesEffect;`, and write `uses FilesEffect`.",
+            "9:37 invalid-effect `Http` here is `Vendor.Http`, an imported class, which hides the effect `Sharp.Net.Http`. | Written here. | Import the effect under another name, as `import Sharp.Net.Http as HttpEffect;`, and write `uses HttpEffect`.",
+        ]
+    );
+    assert_eq!(worded(aliased, &[files]), Vec::<String>::new());
+}
+
 /// An `extern event` gives the plain PHP class it marks the effects its `uses` lists, spec section 15, as an `extern`
 /// of the class does, so creating the event has them.
 #[test]
@@ -35808,6 +35883,24 @@ fn plain_php_reads_a_readonly_value_as_any_value() {
     assert_eq!(issues(("src/App/Billing/pay.php", caller), &[("src/Order.sharp", order)]), Vec::<String>::new());
 }
 
+/// Spec section 23: PHP# calls a method a plain PHP class declares, by its PHP declaration or its PHPDoc's `@method` and
+/// `@mixin`, so a call only `__call` or `__callStatic` answers, instance or static, is the error every undeclared
+/// method gets. A declared method stays typed, and a wrong argument to one is refused.
+#[test]
+fn a_call_only_a_magic_method_answers_is_a_missing_method() {
+    let bag = "<?php\n\nnamespace Lib;\n\n/**\n * @mixin Shelf\n * @method static int counted(int $limit)\n */\nfinal class Bag\n{\n    public function size(): int\n    {\n        return 0;\n    }\n\n    /** @param list<mixed> $arguments */\n    public function __call(string $name, array $arguments): mixed\n    {\n        return null;\n    }\n\n    /** @param list<mixed> $arguments */\n    public static function __callStatic(string $name, array $arguments): mixed\n    {\n        return null;\n    }\n}\n\nfinal class Shelf\n{\n    public function shelved(string $label): string\n    {\n        return $label;\n    }\n}\n";
+    let uses = "namespace App;\n\nimport Lib.Bag;\n\npublic class Uses\n{\n    public static void magic(Bag b)\n    {\n        b.anything(1);\n        Bag.anything(1);\n    }\n\n    public static int size(Bag b) => b.size();\n\n    public static string shelved(Bag b) => b.shelved(\"x\");\n\n    public static int counted() => Bag.counted(3);\n\n    public static string wrong(Bag b) => b.shelved(1);\n}\n";
+
+    assert_eq!(
+        refusals(("src/App/Uses.sharp", uses), &[("src/Lib/Bag.php", bag)]),
+        [
+            "9:11 non-existent-method Method `Bag.anything` does not exist. | Ensure the method `Bag.anything` is defined.",
+            "10:13 non-existent-method Method `Bag.anything` does not exist. | Ensure the method `Bag.anything` is defined.",
+            "19:52 invalid-argument Invalid argument type for argument #1 of `Shelf.shelved`: expected `string`, but found `int`. | Change the argument value to match `string`, or update the parameter's type declaration.",
+        ]
+    );
+}
+
 /// Spec section 13: PHP# does not check a plain PHP method, so a call of one through a readonly value is an error: a
 /// declared method, one a `@method` tag declares, and one the class's `__call` runs.
 #[test]
@@ -35822,7 +35915,7 @@ fn a_readonly_value_calls_no_plain_php_method() {
             "7:15 missing-readonly-marker render cannot call order.save: order is readonly. | save is a plain PHP method of Model, which PHP# does not check.",
             "8:15 missing-readonly-marker render cannot call order.touch: order is readonly. | touch is a plain PHP method of Model, which PHP# does not check.",
             "9:15 missing-readonly-marker render cannot call order.publish: order is readonly. | publish is a plain PHP method of Model, which PHP# does not check.",
-            "9:15 non-documented-method Ambiguous method call to `publish` on class `Order`. | This method is not explicitly defined | On an object of type `Order` | While this call might be handled by `__call()` or `__callStatic()`, the checker cannot verify its arguments or return type without a corresponding `@method` docblock tag. | To enable full analysis, add a `@method` tag to the docblock of the `Order` class. For example: `/** @method returnType publish(argType $argName) */`",
+            "9:15 non-existent-method Method `Order.publish` does not exist. | This method selection is invalid | This expression has type `Order` | Ensure the method `Order.publish` is defined.",
         ]
     );
 }
@@ -35896,6 +35989,55 @@ fn a_function_value_keeps_the_readonly_values_its_type_passes() {
             "keep cannot pass (Line l) => l.amount to List<readonly Line>.map: it takes a writable `Line` where a readonly one is passed. Declare its parameter `readonly Line`.",
             "keep cannot store () => order in give: it returns a readonly `Order` where a writable one is expected. Declare the return `readonly Order`.",
             "keep cannot store (Order o) => { } in either: it takes a writable `Order` where a readonly one is passed. Declare its parameter `readonly Order`.",
+        ]
+    );
+}
+
+/// Spec section 14: a tuple type is a call's type argument, as every type a type hint takes is, so a lambda's literal
+/// lands in the tuple type the call names, and the next lambda takes it as that tuple.
+#[test]
+fn a_lambda_gives_the_tuple_type_its_call_names() {
+    let numbers = "namespace App;\n\npublic class Numbers\n{\n    public static List<int> numbers() => [1, 2].map<[int number, string label]>((int item) => [item, `${item}`]).map(([int number, string label] pair) => pair.number);\n}\n";
+
+    assert_eq!(messages(("src/App/Numbers.sharp", numbers), &[]), Vec::<String>::new());
+}
+
+/// Spec section 30: a call of a tuple's named element runs the function the element holds, as a call of a property
+/// that holds one does, checked by the element's function type. A name the tuple does not write is refused as its read
+/// is, with the names the tuple writes and none of `List`'s members.
+#[test]
+fn a_call_of_a_tuple_element_runs_the_function_it_holds() {
+    let entries = "namespace Probe;\n\npublic static class Entries\n{\n    public static int direct([Function<int(int)> twice, string name] entry) => entry.twice(2);\n\n    public static int text([Function<int(int)> twice, string name] entry) => entry.twice(\"two\");\n\n    public static int missing([Function<int(int)> twice, string name] entry) => entry.missing(2);\n}\n";
+
+    let issues = analyze(&PLUGIN_REGISTRY, settings(), ("src/Probe/Entries.sharp", entries), &[]);
+
+    assert_eq!(
+        written_errors(entries, &issues),
+        [
+            "\"two\" invalid-argument Invalid argument type for argument #1 of `entry.twice`: expected `int`, but found `string`.",
+            "missing non-existent-property `[Function<int(int)> twice, string name]` has no element named `missing`: its elements are `twice` and `name`.",
+        ]
+    );
+    let helps: Vec<&str> = issues.iter().filter_map(|issue| issue.help.as_deref()).collect();
+    assert_eq!(helps, ["Change the argument value to match `int`, or update the parameter's type declaration."]);
+}
+
+/// Spec section 13: a value of a type that never changes, as a struct, is readonly wherever `readonly` is asked for, so
+/// a function value takes one as its type is written, with no `readonly` to declare, which would change nothing. A
+/// type that can change still needs its `readonly` there.
+#[test]
+fn a_type_that_never_changes_is_readonly_where_readonly_is_asked_for() {
+    let item = "namespace Repro;\n\ninternal struct ReproItem\n{\n    internal ReproItem(internal string key { get; }) {}\n\n    internal string label() => this.key;\n}\n";
+    let shelf = "namespace Repro;\n\ninternal class Shelf\n{\n    internal string key { get; set; } = \"\";\n}\n";
+    let repro = "namespace Repro;\n\ninternal final class ReadonlyRepro\n{\n    internal ReadonlyRepro(internal List<ReproItem> items { get; }, internal List<Shelf> shelves { get; }) {}\n    public int hash() => this.items.count();\n    public static bool operator ==(ReadonlyRepro a, ReadonlyRepro b)\n        => a.items.map((ReproItem item) => item.key) == b.items.map((ReproItem item) => item.label())\n            && a.shelves.map((Shelf shelf) => shelf.key) == b.shelves.map((readonly Shelf shelf) => shelf.key);\n}\n";
+
+    assert_eq!(
+        messages(
+            ("src/Repro/ReadonlyRepro.sharp", repro),
+            &[("src/Repro/ReproItem.sharp", item), ("src/Repro/Shelf.sharp", shelf)]
+        ),
+        [
+            "operator == cannot pass (Shelf shelf) => shelf.key to List<readonly Shelf>.map: it takes a writable `Shelf` where a readonly one is passed. Declare its parameter `readonly Shelf`."
         ]
     );
 }
@@ -36640,17 +36782,17 @@ const ORDER_STATUS: (&str, &str) = (
 fn a_machine_property_changes_only_by_a_move_of_its_own() {
     let order = (
         "src/Shop/Order.sharp",
-        "namespace Shop;\n\npublic class Order\n{\n    public Order(public int id { get; }) { }\n\n    public OrderStatus status { get; private set; } = OrderStatus.open();\n    public OrderStatus copied { get; set; } = OrderStatus.open();\n    public OrderStatus started { get; private set; } = OrderStatus.Shipped;\n\n    public void pay(int cents) { this.status = this.status.pay(cents); }\n    public void copy(Order o) { this.status = o.status; }\n    public void force() { this.status = OrderStatus.Paid(5); }\n    public void restart() { this.status = OrderStatus.open(); }\n}\n",
+        "namespace Shop;\n\npublic class Order\n{\n    public Order(public int id { get; }) { }\n\n    public OrderStatus status { get; private set; } = OrderStatus.open();\n    public OrderStatus copied { get; set; } = OrderStatus.open();\n    public OrderStatus started { get; private set; } = OrderStatus.Shipped;\n\n    public bool pay(int cents)\n    {\n        if (this.status is OrderStatus.Draft draft) {\n            this.status = draft.pay(cents);\n            return true;\n        }\n\n        return false;\n    }\n\n    public void copy(Order o) { this.status = o.status; }\n    public void force() { this.status = OrderStatus.Paid(5); }\n    public void restart() { this.status = OrderStatus.open(); }\n}\n",
     );
 
     assert_eq!(refusals(ORDER_STATUS, &[order]), Vec::<String>::new());
     assert_eq!(
         refusals(order, &[ORDER_STATUS]),
         [
-            "12:47 invalid-machine `this.status` holds the machine `OrderStatus`, so it changes only by a move of its own, as `this.status = this.status.pay(…)`. | Call a move of `this.status`.",
-            "13:41 invalid-machine Only the entry points and moves of `OrderStatus` build its case `OrderStatus.Paid`. | Call an entry point, as `OrderStatus.open()`, or a move of a value of `OrderStatus`.",
-            "14:43 invalid-machine `this.status` holds the machine `OrderStatus`, so it changes only by a move of its own, as `this.status = this.status.pay(…)`. | Call a move of `this.status`.",
-            "8:24 invalid-machine `Order.copied` holds the machine `OrderStatus`, so its `set` is `private`. | Write `{ get; private set; }`, and change it only by a move, as `this.copied = this.copied.pay(…)`.",
+            "21:47 invalid-machine `this.status` holds the machine `OrderStatus`, so it changes only by a move of its own, as `if (this.status is OrderStatus.Draft draft) { this.status = draft.pay(…); }`. | Call a move of the case `this.status` holds.",
+            "22:41 invalid-machine Only the entry points and moves of `OrderStatus` build its case `OrderStatus.Paid`. | Call an entry point, as `OrderStatus.open()`, or a move of a value of `OrderStatus`.",
+            "23:43 invalid-machine `this.status` holds the machine `OrderStatus`, so it changes only by a move of its own, as `if (this.status is OrderStatus.Draft draft) { this.status = draft.pay(…); }`. | Call a move of the case `this.status` holds.",
+            "8:24 invalid-machine `Order.copied` holds the machine `OrderStatus`, so its `set` is `private`. | Write `{ get; private set; }`, and change it only by a move: `if (this.copied is OrderStatus.Draft draft) { this.copied = draft.pay(…); }`.",
             "9:56 invalid-machine `Order.started` holds the machine `OrderStatus`, so its initial value is an entry point of `OrderStatus`, as `OrderStatus.open()`. | Start it with an entry point.",
         ]
     );
@@ -36666,7 +36808,7 @@ fn an_interface_property_that_holds_a_machine_is_read_only() {
     );
     let order = (
         "src/Shop/Order.sharp",
-        "namespace Shop;\n\npublic class Order : Payable\n{\n    public OrderStatus status { get; private set; } = OrderStatus.open();\n\n    public void pay(int cents) => this.status = this.status.pay(cents);\n}\n",
+        "namespace Shop;\n\npublic class Order : Payable\n{\n    public OrderStatus status { get; private set; } = OrderStatus.open();\n\n    public void ship()\n    {\n        if (this.status is OrderStatus.Paid paid) {\n            this.status = paid.ship();\n        }\n    }\n}\n",
     );
 
     assert_eq!(refusals(payable, &[ORDER_STATUS, order]), Vec::<String>::new());
@@ -36691,6 +36833,65 @@ fn a_constructor_starts_a_machine_property_with_an_entry_point() {
         refusals(taken, &[ORDER_STATUS]),
         [
             "5:37 invalid-machine `Order.status` holds the machine `OrderStatus`, so its initial value is an entry point of `OrderStatus`, as `OrderStatus.open()`. | Start it with an entry point."
+        ]
+    );
+}
+
+/// Spec section 20.2: a move belongs to the case it moves from, so a call of `pay` through the machine's type is refused
+/// with the test to write, and a holder changes its machine by a move of the case a type pattern bound from it, after
+/// `is`, after an `is not` that leaves, and in a `match` arm. A name bound from another place is no move of its own.
+#[test]
+fn a_move_is_called_on_the_case_it_moves_from() {
+    let order = (
+        "src/Shop/Order.sharp",
+        "namespace Shop;\n\npublic class Order\n{\n    public OrderStatus status { get; private set; } = OrderStatus.open();\n\n    public void rush(int cents) { this.status = this.status.pay(cents); }\n\n    public bool pay(int cents)\n    {\n        if (this.status is OrderStatus.Draft draft) {\n            this.status = draft.pay(cents);\n            return true;\n        }\n\n        return false;\n    }\n\n    public bool settle(int cents)\n    {\n        if (this.status is not OrderStatus.Draft draft) {\n            return false;\n        }\n\n        this.status = draft.pay(cents);\n        return true;\n    }\n\n    public void ship()\n    {\n        match (this.status) {\n            OrderStatus.Paid paid => { this.status = paid.ship(); },\n            OrderStatus.Draft or OrderStatus.Shipped or OrderStatus.Cancelled => {},\n        }\n    }\n\n    public void take(Order other)\n    {\n        if (other.status is OrderStatus.Draft draft) {\n            this.status = draft.pay(5);\n        }\n    }\n\n    public OrderStatus.Cancelled either(OrderStatus.Draft|OrderStatus.Paid held) => held.cancel();\n}\n",
+    );
+
+    assert_eq!(
+        refusals(order, &[ORDER_STATUS]),
+        [
+            "7:61 invalid-machine `pay` moves from `OrderStatus.Draft`, and `this.status` may be `Paid`, `Shipped` or `Cancelled`: test it first, as in `if (this.status is OrderStatus.Draft draft)`. | Call `pay` on the name the test binds, as `draft.pay(…)`.",
+            "40:27 invalid-machine `this.status` holds the machine `OrderStatus`, so it changes only by a move of its own, as `if (this.status is OrderStatus.Draft draft) { this.status = draft.pay(…); }`. | Call a move of the case `this.status` holds.",
+            "44:90 invalid-machine `cancel` moves from `OrderStatus.Draft`, and `held` may be `Paid`: test it first, as in `if (held is OrderStatus.Draft draft)`. | Call `cancel` on the name the test binds, as `draft.cancel(…)`.",
+        ]
+    );
+}
+
+/// Spec section 20.2: a `late` machine property takes its first value from an entry point in any method of its class,
+/// and every later write is a move. A property that isn't `late` takes an entry point only in its constructor.
+#[test]
+fn a_late_machine_property_starts_at_an_entry_point_in_any_method() {
+    let run = (
+        "src/Shop/Run.sharp",
+        "namespace Shop;\n\npublic class Run\n{\n    public late OrderStatus status { get; private set; }\n\n    public void open() { this.status = OrderStatus.open(); }\n}\n",
+    );
+    let order = (
+        "src/Shop/Order.sharp",
+        "namespace Shop;\n\npublic class Order\n{\n    public OrderStatus status { get; private set; } = OrderStatus.open();\n\n    public void open() { this.status = OrderStatus.open(); }\n}\n",
+    );
+
+    assert_eq!(refusals(run, &[ORDER_STATUS]), Vec::<String>::new());
+    assert_eq!(
+        refusals(order, &[ORDER_STATUS]),
+        [
+            "7:40 invalid-machine `this.status` holds the machine `OrderStatus`, so it changes only by a move of its own, as `if (this.status is OrderStatus.Draft draft) { this.status = draft.pay(…); }`. | Call a move of the case `this.status` holds."
+        ]
+    );
+}
+
+/// Spec section 20.2: a struct holds a machine as `{ get; init; }`, and a `with` that sets it takes a move of the
+/// original's value, bound from the original's property, as a write takes one.
+#[test]
+fn a_struct_holds_a_machine_that_with_moves() {
+    let line = (
+        "src/Shop/Line.sharp",
+        "namespace Shop;\n\npublic struct Line\n{\n    public OrderStatus status { get; init; } = OrderStatus.open();\n\n    public static Line paid(Line line) => line.status is OrderStatus.Draft draft ? line with { status: draft.pay(5) } : line;\n\n    public static Line reset(Line line) => line with { status: OrderStatus.open() };\n}\n",
+    );
+
+    assert_eq!(
+        refusals(line, &[ORDER_STATUS]),
+        [
+            "9:64 invalid-machine `line.status` holds the machine `OrderStatus`, so it changes only by a move of its own, as `if (line.status is OrderStatus.Draft draft) { line.status = draft.pay(…); }`. | Call a move of the case `line.status` holds."
         ]
     );
 }

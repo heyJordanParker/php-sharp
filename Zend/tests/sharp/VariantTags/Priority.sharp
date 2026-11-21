@@ -1,0 +1,8 @@
+namespace VariantTags;
+
+public machine Priority : int
+{
+    case Low = 1 { public Priority.High raise() => Priority.High; }
+    final case High = 2;
+    public static Priority.Low enter() => Priority.Low;
+}

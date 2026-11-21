@@ -1,0 +1,9 @@
+namespace VariantTags;
+
+import Sharp.Key;
+
+[Key("bank")]
+public struct Bank : Tender
+{
+    public Bank(public string iban { get; }) { }
+}

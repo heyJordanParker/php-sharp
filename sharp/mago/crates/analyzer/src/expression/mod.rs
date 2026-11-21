@@ -603,6 +603,22 @@ where
         )),
         _ => None,
     };
+    // Spec section 21: a name a test binds holds the value the test tests, which a machine's write reads, spec section
+    // 20.2, as `this.status = draft.pay(5)` after `this.status is OrderStatus.Draft draft`.
+    match node {
+        Node::Expression(Expression::Is(is)) => {
+            context.pattern_tests.insert(is.span(), is.value.span());
+        }
+        Node::Expression(Expression::PatternMatch(pattern_match))
+        | Node::Statement(Statement::PatternMatch(pattern_match)) => {
+            for arm in &pattern_match.arms {
+                if let PatternMatchArm::Pattern(arm) = arm {
+                    context.pattern_tests.insert(arm.pattern.span(), pattern_match.expression.span());
+                }
+            }
+        }
+        _ => {}
+    }
     // Spec section 21: the name `x is T name` binds is a `T` where its test holds. Its PHP assigns the name first, as
     // `($name = x) instanceof T`, so the analysis types the name by the pattern's type where that test narrows it.
     for (variable, hint) in node.filter_map(|node| match node {
@@ -931,12 +947,14 @@ where
 {
     let value_type = matched_type(pattern_match, context, block_context, artifacts);
     // After a `match` statement whose every arm returns, a local is the value no arm handles: `never` when the arms
-    // handle every value.
+    // handle every value. A union of classes holds a value of one of its members.
+    let is_union = value_type.types.len() > 1;
     let is_closed = value_type.types.iter().all(|atomic| {
         matches!(atomic, TAtomic::Null | TAtomic::Never)
             || enum_value(atomic, context.codebase).is_some()
             || closed_class(atomic, context.codebase).is_some()
             || list_element_type(atomic).is_some()
+            || (is_union && union_member(atomic, context.codebase).is_some())
     });
 
     let (missing, enums) = if is_closed {
@@ -961,7 +979,7 @@ where
             .with_annotation(
                 Annotation::primary(pattern_match.r#match.span).with_message("This `match` has no `default`."),
             )
-            .with_note("A `match` may leave out `default` only when its arms handle every case of an enum or a sealed interface, or every value of a `List`.")
+            .with_note("A `match` may leave out `default` only when its arms handle every case of an enum or a sealed interface, every member of a union of classes, or every value of a `List`.")
             .with_help("Add an arm for each value it misses, or add `default => …` as the last arm."),
     );
 
@@ -1154,7 +1172,8 @@ where
         }
     }
     // A closed set of classes leaves each class no arm tests, of all the cases of an enum with data or all the
-    // implementers of a sealed interface while the value is still the set's type, and else each class left.
+    // implementers of a sealed interface while the value is still the set's type, and else each class left, a member
+    // of a union of classes the arms leave included.
     let together = cases_handled_together(pattern_match, context, block_context, artifacts);
     let tested: Vec<&[u8]> = handled
         .iter()
@@ -1169,18 +1188,12 @@ where
         .chain(together.iter().map(|case| case.as_bytes()))
         .collect();
     let mut left_classes: Vec<&ClassLikeMetadata> = Vec::new();
-    for class in atomics().filter_map(|atomic| closed_class(atomic, context.codebase)) {
-        // A member of the set inherits the set's `permitted_inheritors` from its parent, so only a class outside its
-        // own set, the enum or the sealed interface, stands for the whole set.
-        let members: Vec<&ClassLikeMetadata> = match &class.permitted_inheritors {
-            Some(inheritors) if !inheritors.contains(&class.name) => {
-                inheritors.iter().filter_map(|inheritor| context.codebase.get_class_like(*inheritor)).collect()
-            }
-            _ => vec![class],
-        };
-        for member in members {
-            let is_tested = tested.iter().any(|tested| context.codebase.class_key(word(tested)) == member.name);
-            if !is_tested && !left_classes.iter().any(|known| known.name == member.name) {
+    for class in atomics()
+        .filter_map(|atomic| closed_class(atomic, context.codebase).or_else(|| union_member(atomic, context.codebase)))
+    {
+        let members = set_members(class, context.codebase).unwrap_or_else(|| vec![class]);
+        for member in members.into_iter().flat_map(|member| untested_members(member, &tested, context.codebase)) {
+            if !left_classes.iter().any(|known| known.name == member.name) {
                 left_classes.push(member);
             }
         }
@@ -1912,6 +1925,61 @@ fn closed_class<'codebase>(
     let class = codebase.get_class_like(object.name)?;
 
     (class.flags.is_enum_case_class() || class.permitted_inheritors.is_some()).then_some(class)
+}
+
+/// The classes of the closed set `class` stands for, spec section 20: the cases of an enum with data or the
+/// implementers of a sealed interface. A member of a set inherits the set's `permitted_inheritors` from its parent, as
+/// an enum with data that implements a sealed interface holds the interface's beside its cases, so the set is the
+/// inheritors below `class`, and `None` when none is.
+fn set_members<'codebase>(
+    class: &ClassLikeMetadata,
+    codebase: &'codebase CodebaseMetadata,
+) -> Option<Vec<&'codebase ClassLikeMetadata>> {
+    let members: Vec<&ClassLikeMetadata> = class
+        .permitted_inheritors
+        .iter()
+        .flatten()
+        .filter(|inheritor| **inheritor != class.name && codebase.is_instance_of(**inheritor, class.name))
+        .filter_map(|inheritor| codebase.get_class_like(*inheritor))
+        .collect();
+
+    (!members.is_empty()).then_some(members)
+}
+
+/// What of `member`, a class of a closed set, no class of `tested` covers, spec section 21: nothing when one names it,
+/// and else `member` itself, or, when it stands for a set of its own, as an enum with data that implements a sealed
+/// interface does, and arms test a class of that set, each class of it left.
+fn untested_members<'codebase>(
+    member: &'codebase ClassLikeMetadata,
+    tested: &[&[u8]],
+    codebase: &'codebase CodebaseMetadata,
+) -> Vec<&'codebase ClassLikeMetadata> {
+    if tested.iter().any(|tested| codebase.class_key(word(tested)) == member.name) {
+        return Vec::new();
+    }
+    let Some(parts) = set_members(member, codebase) else {
+        return vec![member];
+    };
+    let left: Vec<Vec<&ClassLikeMetadata>> =
+        parts.iter().map(|part| untested_members(part, tested, codebase)).collect();
+    if left.iter().zip(&parts).all(|(left, part)| matches!(left.as_slice(), [only] if only.name == part.name)) {
+        return vec![member];
+    }
+
+    left.into_iter().flatten().collect()
+}
+
+/// The class a value of `atomic` is, as a member of a union of classes, spec section 21: any class-like but an enum,
+/// whose cases are the members.
+fn union_member<'codebase>(
+    atomic: &TAtomic,
+    codebase: &'codebase CodebaseMetadata,
+) -> Option<&'codebase ClassLikeMetadata> {
+    let TAtomic::Object(TObject::Named(object)) = atomic else {
+        return None;
+    };
+
+    codebase.get_class_like(object.name).filter(|class| !class.kind.is_enum())
 }
 
 /// The enum and the case a type holds: one case, or every case of the enum when the case is `None`. `None` for a type
