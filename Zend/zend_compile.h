@@ -1302,6 +1302,10 @@ static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
  * list, as `App.Order, int`, in place of the class value of its one type: the key of a generic class's own statics. */
 #define ZEND_SHARP_TYPE_OF_LIST 1
 
+/* extended_value of a ZEND_SHARP_IS_TYPE that tests the local a pattern binds, its CV op1, which takes the value as the
+ * type holds it, see zend_compile_sharp_is_type. A test without it never writes its op1. */
+#define ZEND_SHARP_IS_TYPE_BINDS 1
+
 /* op1.num of a ZEND_NEW whose UNUSED op1 names no class: the TMP op2 holds the list whose one type it creates, as
  * PHP#'s `new TItem(…)` compiles, or the class value whose class it creates, as `new (type)(…)` compiles. Either gives
  * the object its type arguments, see sharp_new_class. */

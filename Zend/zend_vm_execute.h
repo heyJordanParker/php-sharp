@@ -11165,7 +11165,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_IS_TYPE
 
 	SAVE_OPLINE();
 	value = RT_CONSTANT(opline, opline->op1);
-	is = sharp_type_list_holds(Z_PTR_P(EX_VAR(opline->op2.var)), value);
+	is = sharp_type_list_holds(Z_PTR_P(EX_VAR(opline->op2.var)), value,
+		opline->extended_value == ZEND_SHARP_IS_TYPE_BINDS);
 
 
 	ZVAL_BOOL(EX_VAR(opline->result.var), is);
@@ -18027,7 +18028,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_VERIFY_
 }
 
 /* PHP#: whether the value op1 holds is of the type the IS_PTR list in the TMP op2 holds, which ZEND_SHARP_TYPE_ARGS
- * spelled for the frame, as `value is T` tests it. */
+ * spelled for the frame, as `value is T` tests it. With ZEND_SHARP_IS_TYPE_BINDS, the CV op1 is the local the test
+ * binds, which takes the value as the type holds it, and the SSA defines it there. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_ISSET_ISEMPTY_DIM_OBJ_SPEC_TMPVAR_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -19684,7 +19686,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_IS_TYPE
 
 	SAVE_OPLINE();
 	value = _get_zval_ptr_var(opline->op1.var EXECUTE_DATA_CC);
-	is = sharp_type_list_holds(Z_PTR_P(EX_VAR(opline->op2.var)), value);
+	is = sharp_type_list_holds(Z_PTR_P(EX_VAR(opline->op2.var)), value,
+		opline->extended_value == ZEND_SHARP_IS_TYPE_BINDS);
 	zval_ptr_dtor_nogc(EX_VAR(opline->op1.var));
 	ZVAL_BOOL(EX_VAR(opline->result.var), is);
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
@@ -48011,7 +48014,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_VERIFY_
 }
 
 /* PHP#: whether the value op1 holds is of the type the IS_PTR list in the TMP op2 holds, which ZEND_SHARP_TYPE_ARGS
- * spelled for the frame, as `value is T` tests it. */
+ * spelled for the frame, as `value is T` tests it. With ZEND_SHARP_IS_TYPE_BINDS, the CV op1 is the local the test
+ * binds, which takes the value as the type holds it, and the SSA defines it there. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_CV_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -52589,7 +52593,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_IS_TYPE
 
 	SAVE_OPLINE();
 	value = _get_zval_ptr_cv_BP_VAR_R(opline->op1.var EXECUTE_DATA_CC);
-	is = sharp_type_list_holds(Z_PTR_P(EX_VAR(opline->op2.var)), value);
+	is = sharp_type_list_holds(Z_PTR_P(EX_VAR(opline->op2.var)), value,
+		opline->extended_value == ZEND_SHARP_IS_TYPE_BINDS);
 
 
 	ZVAL_BOOL(EX_VAR(opline->result.var), is);
@@ -68834,7 +68839,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_IS_TYPE_SPEC
 
 	SAVE_OPLINE();
 	value = RT_CONSTANT(opline, opline->op1);
-	is = sharp_type_list_holds(Z_PTR_P(EX_VAR(opline->op2.var)), value);
+	is = sharp_type_list_holds(Z_PTR_P(EX_VAR(opline->op2.var)), value,
+		opline->extended_value == ZEND_SHARP_IS_TYPE_BINDS);
 
 
 	ZVAL_BOOL(EX_VAR(opline->result.var), is);
@@ -75594,7 +75600,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_VERIFY_TYPE_
 }
 
 /* PHP#: whether the value op1 holds is of the type the IS_PTR list in the TMP op2 holds, which ZEND_SHARP_TYPE_ARGS
- * spelled for the frame, as `value is T` tests it. */
+ * spelled for the frame, as `value is T` tests it. With ZEND_SHARP_IS_TYPE_BINDS, the CV op1 is the local the test
+ * binds, which takes the value as the type holds it, and the SSA defines it there. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ISSET_ISEMPTY_DIM_OBJ_SPEC_TMPVAR_CONST_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -77251,7 +77258,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_IS_TYPE_SPEC
 
 	SAVE_OPLINE();
 	value = _get_zval_ptr_var(opline->op1.var EXECUTE_DATA_CC);
-	is = sharp_type_list_holds(Z_PTR_P(EX_VAR(opline->op2.var)), value);
+	is = sharp_type_list_holds(Z_PTR_P(EX_VAR(opline->op2.var)), value,
+		opline->extended_value == ZEND_SHARP_IS_TYPE_BINDS);
 	zval_ptr_dtor_nogc(EX_VAR(opline->op1.var));
 	ZVAL_BOOL(EX_VAR(opline->result.var), is);
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
@@ -105478,7 +105486,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_VERIFY_TYPE_
 }
 
 /* PHP#: whether the value op1 holds is of the type the IS_PTR list in the TMP op2 holds, which ZEND_SHARP_TYPE_ARGS
- * spelled for the frame, as `value is T` tests it. */
+ * spelled for the frame, as `value is T` tests it. With ZEND_SHARP_IS_TYPE_BINDS, the CV op1 is the local the test
+ * binds, which takes the value as the type holds it, and the SSA defines it there. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_CV_CONST_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -110056,7 +110065,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_IS_TYPE_SPEC
 
 	SAVE_OPLINE();
 	value = _get_zval_ptr_cv_BP_VAR_R(opline->op1.var EXECUTE_DATA_CC);
-	is = sharp_type_list_holds(Z_PTR_P(EX_VAR(opline->op2.var)), value);
+	is = sharp_type_list_holds(Z_PTR_P(EX_VAR(opline->op2.var)), value,
+		opline->extended_value == ZEND_SHARP_IS_TYPE_BINDS);
 
 
 	ZVAL_BOOL(EX_VAR(opline->result.var), is);

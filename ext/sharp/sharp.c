@@ -8971,15 +8971,56 @@ static ZEND_COLD void sharp_type_list_unknown_error(void)
 	zend_throw_error(NULL, "Cannot read the type arguments of the class a lambda is written in from an object of another class");
 }
 
-bool sharp_type_list_holds(const sharp_type *list, const zval *value)
+/* The member of `type` that holds `value`, as sharp_type_holds tests it: the member of `T?`, and the first member of a
+ * union that holds it, as PHP picks a union member for an argument. `type` itself for any other type. */
+static const sharp_type *sharp_type_holding(const sharp_type *type, const zval *value)
+{
+	if (type->kind == SHARP_TYPE_NULLABLE) {
+		return sharp_type_holding(type->members[0], value);
+	}
+	if (type->kind == SHARP_TYPE_UNION) {
+		for (uint32_t i = 0; i < type->count; i++) {
+			if (sharp_type_holds(type->members[i], value, SHARP_HOLDS_TEST, NULL)) {
+				return sharp_type_holding(type->members[i], value);
+			}
+		}
+	}
+
+	return type;
+}
+
+bool sharp_type_list_holds(const sharp_type *list, zval *value, bool binds)
 {
 	if (UNEXPECTED(!list)) {
 		sharp_type_list_unknown_error();
 		return false;
 	}
 
+	const sharp_type *type = list->members[0];
 	/* A lazy proxy's initializer runs to read its type arguments, and can throw. */
-	return sharp_type_holds(list->members[0], value, SHARP_HOLDS_TEST, NULL) && !EG(exception);
+	if (!sharp_type_holds(type, value, SHARP_HOLDS_TEST, NULL) || EG(exception)) {
+		return false;
+	}
+	ZVAL_DEREF(value);
+	if (!binds || Z_TYPE_P(value) != IS_ARRAY) {
+		return true;
+	}
+
+	const sharp_type *holding = sharp_type_holding(type, value);
+	zval plan, crossed;
+	sharp_type_plan(&plan, holding);
+	if (Z_TYPE(plan) == IS_NULL) {
+		return true;
+	}
+	bool is_crossed = sharp_crossed(&crossed, value, &plan, holding);
+	zval_ptr_dtor(&plan);
+	if (!is_crossed) {
+		return false;
+	}
+	zval_ptr_dtor(value);
+	ZVAL_COPY_VALUE(value, &crossed);
+
+	return true;
 }
 
 zend_string *sharp_type_list_class_value(const sharp_type *list, bool whole)

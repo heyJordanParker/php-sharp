@@ -5752,14 +5752,27 @@ static void zend_compile_sharp_verify_type_args(znode *result, zend_ast *ast)
 }
 
 /* Emits the ZEND_SHARP_IS_TYPE that tests the value a ZEND_AST_SHARP_IS_TYPE holds against the type its text spells,
- * which a ZEND_SHARP_TYPE_ARGS spells for the frame first, as it spells a `new`'s type arguments. */
+ * which a ZEND_SHARP_TYPE_ARGS spells for the frame first, as it spells a `new`'s type arguments. A test that binds a
+ * name, `($value = x) instanceof T`, tests the local itself with ZEND_SHARP_IS_TYPE_BINDS, so the local takes the value
+ * as the type holds it, and the value it tests keeps its own. */
 static void zend_compile_sharp_is_type(znode *result, zend_ast *ast)
 {
 	znode value_node, type_node;
+	zend_ast *value_ast = ast->child[0];
+	bool binds = value_ast->kind == ZEND_AST_ASSIGN && value_ast->child[0]->kind == ZEND_AST_VAR
+		&& !is_this_fetch(value_ast->child[0])
+		&& zend_try_compile_cv(&value_node, value_ast->child[0], BP_VAR_W) == SUCCESS;
 
-	zend_compile_expr(&value_node, ast->child[0]);
+	if (binds) {
+		znode assigned;
+		zend_compile_expr(&assigned, value_ast);
+		zend_do_free(&assigned);
+	} else {
+		zend_compile_expr(&value_node, value_ast);
+	}
 	zend_compile_sharp_type_args(&type_node, ast->child[1]);
-	zend_emit_op_tmp(result, ZEND_SHARP_IS_TYPE, &value_node, &type_node);
+	zend_emit_op_tmp(result, ZEND_SHARP_IS_TYPE, &value_node, &type_node)->extended_value =
+		binds ? ZEND_SHARP_IS_TYPE_BINDS : 0;
 }
 
 /* Emits the ZEND_SHARP_TYPE_OF that gives the class value of the type a ZEND_AST_SHARP_TYPE_OF's text spells, or with

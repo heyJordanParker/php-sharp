@@ -310,9 +310,11 @@ typedef struct {
 bool sharp_type_accepts(const sharp_type *type, zval *value, sharp_type_problems *problems);
 
 /* Whether `value` is of the one type of `list`, as a PHP# `is` tests it: as sharp_type_accepts decides, except that an
- * int is never a `float`, as `is float` decides. A NULL list, which ZEND_SHARP_TYPE_ARGS spells for a lambda bound to an
- * object of another class than the one it is written in, throws an Error. */
-bool sharp_type_list_holds(const sharp_type *list, const zval *value);
+ * int is never a `float`, as `is float` decides. With `binds`, `value` is the local a pattern binds, and when it is of
+ * the type it becomes the value as the type holds it, each PHP array a `Map` or a `Set` the type names becoming that
+ * object, as a crossing makes it. A NULL list, which ZEND_SHARP_TYPE_ARGS spells for a lambda bound to an object of
+ * another class than the one it is written in, throws an Error. */
+bool sharp_type_list_holds(const sharp_type *list, zval *value, bool binds);
 
 /* The class with type arguments whose class value is `value`, as sharp_type_list_class_value gives it, or NULL for any
  * other string. Such a class value is the interned class name sharp_class_values knows it by, so its text is the bare

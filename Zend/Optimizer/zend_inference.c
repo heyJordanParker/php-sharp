@@ -3443,6 +3443,19 @@ static zend_always_inline zend_result _zend_update_type_info(
 			UPDATE_SSA_OBJ_TYPE(NULL, 0, ssa_op->result_def);
 			break;
 		case ZEND_SHARP_IS_TYPE:
+			/* The local a test binds takes the value as the type holds it: a PHP array, or one inside it, may become a
+			 * Sharp\Map or a Sharp\Set. */
+			if (ssa_op->op1_def >= 0) {
+				tmp = t1;
+				if (t1 & MAY_BE_ARRAY) {
+					tmp |= MAY_BE_OBJECT|MAY_BE_ARRAY_KEY_ANY|MAY_BE_ARRAY_OF_ANY|MAY_BE_RC1|MAY_BE_RCN;
+					UPDATE_SSA_TYPE(tmp, ssa_op->op1_def);
+					UPDATE_SSA_OBJ_TYPE(NULL, 0, ssa_op->op1_def);
+				} else {
+					UPDATE_SSA_TYPE(tmp, ssa_op->op1_def);
+					COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->op1_def);
+				}
+			}
 			UPDATE_SSA_TYPE(MAY_BE_FALSE|MAY_BE_TRUE, ssa_op->result_def);
 			break;
 		case ZEND_SHARP_TYPE_OF:

@@ -255,6 +255,9 @@ static bool can_replace_op1(
 		case ZEND_UNSET_CV:
 		case ZEND_ISSET_ISEMPTY_CV:
 			return 0;
+		/* PHP#: a type test that binds a local gives it the value as the type holds it. */
+		case ZEND_SHARP_IS_TYPE:
+			return opline->extended_value != ZEND_SHARP_IS_TYPE_BINDS;
 		case ZEND_INIT_ARRAY:
 		case ZEND_ADD_ARRAY_ELEMENT:
 			return !(opline->extended_value & ZEND_ARRAY_ELEMENT_REF);
