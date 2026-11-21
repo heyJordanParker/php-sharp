@@ -497,6 +497,17 @@ jobs:
           CFLAGS: -fsanitize=address -DZEND_TRACK_ARENA_ALLOC
           LDFLAGS: -fsanitize=address
         run: sharp/bin/build
+      # sharp/bin/test runs Composer on the PATH's PHP, which the other suites take from the sharp/docker image, Debian
+      # trixie's 8.4 with ext-bcmath, ext-intl and ext-zip, which heyjordanparker/php-sharp-composer requires. Ubuntu
+      # 24.04's own PHP is 8.3, and the tests' lock holds symfony packages that need 8.4.1, so composer install refused
+      # the lock on the nightly runs since 714b224cf5a, with "Your lock file does not contain a compatible set of
+      # packages" on run 44951324811.
+      - name: PHP 8.4 and Composer, as the sharp/docker image has them
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "8.4"
+          extensions: bcmath, intl, zip
+          tools: "composer:v2"
       - name: Test PHP# with AddressSanitizer
         env:
           USE_ZEND_ALLOC: 0
