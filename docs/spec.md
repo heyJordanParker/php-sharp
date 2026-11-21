@@ -1298,7 +1298,7 @@ RenewRequest request = RenewRequest.parse(payload);     // throws: "customerId: 
 RenewRequest? maybe = RenewRequest.tryParse(payload);   // null on any bad field
 ```
 
-- The keys are the parameter names of the main constructor (section 9.1), then every property an object initializer may set.
+- The keys are the parameter names of the main constructor (section 9.1), then every other stored property, whatever its setter's visibility, so a `private set` property and a machine's (section 20.2) are read and written too. A computed property stores nothing.
 - `[Key("plan_code")]` renames the key a parameter reads.
 - A nested struct parses the same way.
 - A `List` checks each element.
@@ -1325,7 +1325,7 @@ public class OrderRecord
     public OrderRecord(public int id { get; }, public string number { get; }) { }
 }
 
-OrderRecord record = OrderRecord.parse(row);   // a class parses the same way, by its main constructor's parameters, then every property an initializer may set; throws: "id: expected int, got string 'abc'"
+OrderRecord record = OrderRecord.parse(row);   // a class parses the same way, by its main constructor's parameters, then every other stored property; throws: "id: expected int, got string 'abc'"
 ```
 
 **`Json.encode` writes a struct or a class by the fields its `parse` reads,** so one declaration governs reading and writing. Each field is written under its key, a value as text as its `toString()`, and a field marked `[Key(omitNull: true)]` is left out when it is null. A missing key of such a field reads as null. A main constructor parameter that holds no property can't be written, so `Json.encode` of a type whose `parse` reads one is a compile error that names the parameter: "`Json.encode` writes `Price` from the properties its `parse` reads, and the main constructor parameter `cents` holds no property."
@@ -4202,6 +4202,7 @@ public class Order
 - **A move called on a case it doesn't move from throws `Sharp\StateError`,** which names the machine, the case and the cases the move moves from: "OrderStatus is Paid, and pay moves from Draft."
 - **The checker checks the graph.** Every case is reachable from an entry point. A case with no move out is `final`, and a `final` case has no move out. When a machine has `final` cases, every case reaches one. Each is a compile error that names the case: "The case `OrderStatus.Paid` has no move out, so it is `final`."
 - **A law whose one parameter is a case of the machine is an invariant** (section 28): the checker proves it after every entry point and every move.
+- **A backed machine whose cases hold no data, and that is not marked `[Tag]`, stores as its case's value,** as a backed enum does (section 10), so `Json.encode(account);   // {"id":7,"balance":"12.50","status":"active"}` writes the `status` machine as `"active"`, and `parse`, `Json.decode` and `Query.decode` read the case back from its value. A machine with a case that holds data stores as a family, marked `[Tag]`.
 - **A machine marked `[Tag]` stores as a family does** (section 10): `Json.encode` writes a case under its value under the tag's key and its fields, and `parse` and `Json.decode` read it back, refusing a name the machine has no case of and a field of the wrong type. A backed machine's values name its cases, so `[Key]` on a case of one is a compile error that names the value: "`OrderStatus.Paid` is named `paid` by its value, so it takes no `[Key]`." A machine with no backing names each case with `[Key]`, as a family names each variant. Each invariant of the case it reads runs as code, and one that fails throws a `ValueError` that names it: "OrderStatus.Paid breaks paidIsPositive."
 - **A `match` over a machine lists every case and takes no `default`** (section 21).
 - **Independent states are two machines on the holder,** and nested states are one machine of the flattened cases.
