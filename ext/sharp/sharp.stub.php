@@ -111,6 +111,8 @@ function withTag(string $family, string $tag): ?string {}
 
 function tag(string $variant): ?string {}
 
+function silencedWarning(): ?string {}
+
 function resolve(string $host): array {}
 
 function processorCount(): int {}

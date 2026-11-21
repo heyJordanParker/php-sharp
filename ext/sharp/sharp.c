@@ -141,6 +141,9 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	struct sharp_sort *sort;
 	/* See sharp_equality_operators, NULL until the request compares an object. */
 	HashTable *equality_operators;
+	/* The text of the error the last call inside a ZEND_SHARP_SILENCE raised in this request, or NULL. See
+	 * sharp_observe_error. */
+	zend_string *silenced_warning;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
@@ -15569,6 +15572,32 @@ static void register_class_Sharp_Internal_Internal(void)
 		ZEND_ATTRIBUTE_TARGET_METHOD | ZEND_ATTRIBUTE_TARGET_PROPERTY | ZEND_ATTRIBUTE_TARGET_PARAMETER);
 }
 
+/* Keeps the text of an error a call inside a ZEND_SHARP_SILENCE raises, which no error handler sees, for
+ * Sharp_Internal_silencedWarning. */
+static void sharp_observe_error(int type, zend_string *file, uint32_t line, zend_string *message)
+{
+	if (!zend_sharp_silenced()) {
+		return;
+	}
+	if (SHARP_G(silenced_warning)) {
+		zend_string_release(SHARP_G(silenced_warning));
+	}
+	SHARP_G(silenced_warning) = zend_string_copy(message);
+}
+
+/* `\Sharp\Internal\silencedWarning()`: the text of the warning the last silenced built-in call of this request
+ * raised, as "preg_match(): No ending matching delimiter ')' found", or null. The standard library reads a failure's
+ * reason through it, as `Regex.parse` does. */
+ZEND_FUNCTION(Sharp_Internal_silencedWarning)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	if (SHARP_G(silenced_warning)) {
+		RETURN_STR_COPY(SHARP_G(silenced_warning));
+	}
+	RETURN_NULL();
+}
+
 static PHP_MINIT_FUNCTION(sharp)
 {
 	REGISTER_INI_ENTRIES();
@@ -15600,6 +15629,7 @@ static PHP_MINIT_FUNCTION(sharp)
 	}
 	zend_observer_fiber_init_register(sharp_fiber_started);
 	zend_observer_fiber_destroy_register(sharp_fiber_destroyed);
+	zend_observer_error_register(sharp_observe_error);
 
 	sharp_ce_listener = register_class_Sharp_Internal_Listener();
 	sharp_ce_listener->create_object = sharp_listener_create;
@@ -15700,6 +15730,7 @@ static PHP_RINIT_FUNCTION(sharp)
 	ZVAL_UNDEF(&SHARP_G(compile_command_report));
 	SHARP_G(compile_command_failure) = NULL;
 	SHARP_G(compile_lock) = -1;
+	SHARP_G(silenced_warning) = NULL;
 	zend_hash_init(&SHARP_G(container_bindings), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_environment), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_modules), 8, NULL, NULL, false);
@@ -15752,6 +15783,10 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 	if (SHARP_G(compile_command_failure)) {
 		zend_string_release(SHARP_G(compile_command_failure));
 		SHARP_G(compile_command_failure) = NULL;
+	}
+	if (SHARP_G(silenced_warning)) {
+		zend_string_release(SHARP_G(silenced_warning));
+		SHARP_G(silenced_warning) = NULL;
 	}
 	/* A fatal error while the request held the lock, as one reading the listener table it compiled, ends it here. */
 	sharp_unlock_compiles();
