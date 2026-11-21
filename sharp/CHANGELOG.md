@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.44] - 2026-11-21
+
 ### Fixed
 
 - A type test that binds a name gives it the value as the tested type holds it, spec section 21, whether a type parameter or the type itself spells the type: a PHP array plain PHP gave becomes the `Map` or the `Set` the type names, once, where the test binds it. So with `[Import("json_decode")] private static Any? decode(string json, bool associative);`, `match (decode(json, true)) { T value => value, … }` gives a `Map<string, int>` for `T = Map<string, int>`, and `(read<Map<string, int>>("{\"a\":1,\"b\":2}") ?? [:]).keys().join(",")` gives `a,b`, where 0.6.43 threw "Sharp\Internal\keys(): Argument #1 ($table) must be of type Sharp\Map|Sharp\Set, array given". `T = Set<int>` from a PHP list binds a `Set`, and `value as Map<string, int>` gives the `Map`. The tested value keeps its own, so an empty plain array an `as Map<string, Any?>` read is still a `List` to the next test.
@@ -1583,7 +1585,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.43...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.44...HEAD
+[0.6.44]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.43...v0.6.44
 [0.6.43]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.42...v0.6.43
 [0.6.42]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.41...v0.6.42
 [0.6.41]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.40...v0.6.41
