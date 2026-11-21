@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 37fb10e021521ddc1aa53f35fc45b504667fb03f */
+ * Stub hash: c58236d35add7d30a7edfa8fc5d857ec4ca52036 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
@@ -49,6 +49,20 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_tag, 0, 1, IS_STR
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_silencedWarning, 0, 0, IS_STRING, 1)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_seal, 0, 1, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, path, IS_STRING, 1, "null")
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_hashValue, 0, 1, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_verifyHash, 0, 2, _IS_BOOL, 0)
+	ZEND_ARG_TYPE_INFO(0, hash, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_resolve, 0, 1, IS_ARRAY, 0)
@@ -492,6 +506,9 @@ ZEND_FUNCTION(Sharp_Internal_parseVariant);
 ZEND_FUNCTION(Sharp_Internal_withTag);
 ZEND_FUNCTION(Sharp_Internal_tag);
 ZEND_FUNCTION(Sharp_Internal_silencedWarning);
+ZEND_FUNCTION(Sharp_Internal_seal);
+ZEND_FUNCTION(Sharp_Internal_hashValue);
+ZEND_FUNCTION(Sharp_Internal_verifyHash);
 ZEND_FUNCTION(Sharp_Internal_resolve);
 ZEND_FUNCTION(Sharp_Internal_processorCount);
 ZEND_FUNCTION(Sharp_Internal_compare);
@@ -606,6 +623,9 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "withTag"), zif_Sharp_Internal_withTag, arginfo_Sharp_Internal_withTag, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "tag"), zif_Sharp_Internal_tag, arginfo_Sharp_Internal_tag, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "silencedWarning"), zif_Sharp_Internal_silencedWarning, arginfo_Sharp_Internal_silencedWarning, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "seal"), zif_Sharp_Internal_seal, arginfo_Sharp_Internal_seal, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "hashValue"), zif_Sharp_Internal_hashValue, arginfo_Sharp_Internal_hashValue, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "verifyHash"), zif_Sharp_Internal_verifyHash, arginfo_Sharp_Internal_verifyHash, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "resolve"), zif_Sharp_Internal_resolve, arginfo_Sharp_Internal_resolve, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "processorCount"), zif_Sharp_Internal_processorCount, arginfo_Sharp_Internal_processorCount, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "compare"), zif_Sharp_Internal_compare, arginfo_Sharp_Internal_compare, 0, NULL, NULL)
