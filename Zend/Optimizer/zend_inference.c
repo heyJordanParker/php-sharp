@@ -2435,8 +2435,8 @@ static const zend_property_info *lookup_prop_info(const zend_class_entry *ce, ze
 	return NULL;
 }
 
-/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array, so its declared type says
- * nothing of what such a read gives there. */
+/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array, and a Bytes as its string,
+ * so its declared type says nothing of what such a read gives there. */
 static const zend_property_info *zend_sharp_prop_info_of(const zend_op_array *op_array, const zend_property_info *prop_info)
 {
 	if (prop_info && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_CROSSING)
@@ -3400,7 +3400,8 @@ static zend_always_inline zend_result _zend_update_type_info(
 			UPDATE_SSA_OBJ_TYPE(NULL, 0, ssa_op->result_def);
 			break;
 		case ZEND_SHARP_VERIFY_TYPE_ARGS:
-			/* op1's value, dereferenced, and a float where an int becomes one. */
+			/* op1's value, dereferenced, a float where an int becomes one, and a Bytes where a string, alone or as an
+			 * element, crosses into a Bytes place, spec section 18. */
 			tmp = t1 & ~(MAY_BE_UNDEF|MAY_BE_REF);
 			if (t1 & MAY_BE_UNDEF) {
 				tmp |= MAY_BE_NULL;
@@ -3408,20 +3409,34 @@ static zend_always_inline zend_result _zend_update_type_info(
 			if (t1 & MAY_BE_LONG) {
 				tmp |= MAY_BE_DOUBLE;
 			}
+			if (t1 & MAY_BE_STRING) {
+				tmp |= MAY_BE_OBJECT|MAY_BE_RC1;
+			}
+			if (t1 & MAY_BE_ARRAY_OF_STRING) {
+				tmp |= MAY_BE_ARRAY_OF_OBJECT|MAY_BE_RC1;
+			}
 			if (t1 & (MAY_BE_RC1|MAY_BE_RCN|MAY_BE_REF)) {
 				tmp |= MAY_BE_RC1|MAY_BE_RCN;
 			}
 			UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
-			COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->result_def);
+			if (t1 & MAY_BE_STRING) {
+				UPDATE_SSA_OBJ_TYPE(NULL, 0, ssa_op->result_def);
+			} else {
+				COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->result_def);
+			}
 			break;
 		case ZEND_SHARP_RETURN_ARRAY:
-			/* op1's value, dereferenced, or for plain PHP the PHP array of a Map or a Set it holds. */
+			/* op1's value, dereferenced, or for plain PHP the PHP array of a Map or a Set it holds and the string of a
+			 * Bytes. */
 			tmp = t1 & ~(MAY_BE_UNDEF|MAY_BE_REF);
 			if (t1 & MAY_BE_UNDEF) {
 				tmp |= MAY_BE_NULL;
 			}
 			if (t1 & (MAY_BE_ARRAY|MAY_BE_OBJECT)) {
 				tmp |= MAY_BE_ARRAY|MAY_BE_ARRAY_KEY_ANY|MAY_BE_ARRAY_OF_ANY;
+			}
+			if (t1 & MAY_BE_OBJECT) {
+				tmp |= MAY_BE_STRING;
 			}
 			tmp |= MAY_BE_RC1|MAY_BE_RCN;
 			UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
