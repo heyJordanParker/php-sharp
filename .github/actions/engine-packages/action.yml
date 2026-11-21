@@ -3,8 +3,9 @@ description: >-
   Installs on a GitHub-hosted Ubuntu runner the packages sharp/bin/build-mago builds the engine mago links with, as
   sharp/docker/Dockerfile installs them: cmake builds the libzip the engine links from its archive, the engine runs
   readline on libedit, and it links libxml2's archive, whose static flags name liblzma's. Each job that builds that
-  engine installs this one list, since the ASAN job's own copy of it left out liblzma-dev and libedit-dev, and every
-  link check of its configure failed from "checking for curl_easy_perform in -lcurl... no" on.
+  engine on the runner, mago.yml's checks and release.yml's Linux build, installs this one list, since a job's own copy
+  drifts: the ASAN job's left out liblzma-dev and libedit-dev, and every link check of its configure failed from
+  "checking for curl_easy_perform in -lcurl... no" on.
 
 inputs:
   extra:

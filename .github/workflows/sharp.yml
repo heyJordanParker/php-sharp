@@ -456,12 +456,17 @@ jobs:
           end: true
   # The engine built with AddressSanitizer, so a memory error of the engine fails a test, nightly on master's tip.
   # sharp/bin/build has no flag for php-src's --enable-address-sanitizer, so it builds as php-src's own CI does: a debug
-  # build whose CFLAGS and LDFLAGS add -fsanitize=address and ZEND_TRACK_ARENA_ALLOC. sharp/docker/run passes no CFLAGS
-  # into the image, so it builds on the runner, with Ubuntu's gcc 13. The tests run with what run-tests.php's --asan
-  # sets, which sharp/bin/test doesn't take: the Zend allocator off, so ASan sees each allocation, and LeakSanitizer with
-  # php-src's suppressions. The PHP# tests run without opcache, in shared memory twice per process, and under the
-  # tracing JIT, the stores a PHP# mark passes through, and leave out the upstream tests, whose baseline lists a build
-  # without ASan. A failed run opens the red-master issue, as CI_PASSED does for a push.
+  # build whose CFLAGS and LDFLAGS add -fsanitize=address and ZEND_TRACK_ARENA_ALLOC. It builds and tests in the
+  # sharp/docker image, as every Linux suite does, with each variable passed through `env`, as BUILD_LINUX passes
+  # MAGO_ENGINE. On the runner it built on Ubuntu 24.04's packages instead, which failed it three ways in turn: without
+  # liblzma-dev every link check of the engine mago links failed, Composer's PHP 8.3 refused the tests' lock, and libzip
+  # 1.7.3 left ext/zip without ZipArchive::AFL_CREATE_OR_KEEP_FILE_FOR_EMPTY_ARCHIVE, which Sharp\IO\ZipArchive uses
+  # (runs 44891890723, 44951324811 and 44952997943). The tests run with what run-tests.php's --asan sets, which
+  # sharp/bin/test doesn't take: the Zend allocator off, so ASan sees each allocation, and LeakSanitizer with php-src's
+  # suppressions. The PHP# tests run without opcache, in shared memory twice per process, and under the tracing JIT,
+  # the stores a PHP# mark passes through, and leave out the upstream tests, whose baseline lists a build without ASan.
+  # It restores BUILD_LINUX's caches and saves none, so the caches keep room for the ones every pull request restores.
+  # A failed run opens the red-master issue, as CI_PASSED does for a push.
   ASAN:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
@@ -469,53 +474,45 @@ jobs:
     permissions:
       contents: read
       issues: write
+      packages: read
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+      CC: ccache gcc
+      CXX: ccache g++
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-      # The engine mago links, which sharp/bin/test builds, and the libraries sharp/bin/build's engine links besides,
-      # as sharp/docker/Dockerfile installs them.
-      - name: Install what the PHP# engine builds with
-        uses: ./.github/actions/engine-packages
-        with:
-          extra: libcurl4-openssl-dev libonig-dev libpq-dev libzip-dev
-      # sharp/bin/test builds mago on the runner, with the crates mago.yml's jobs fetch there. A nightly run saves no
-      # target, so the caches keep room for the ones every pull request restores.
-      - name: Rust and Mago caches
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ github.token }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Rust and Mago caches, saved by BUILD_LINUX on master
         uses: ./.github/actions/mago-cache
         with:
-          name: SHARP_ASAN
-          rust: MAGO
+          name: SHARP_LINUX
+          rust: SHARP_LINUX
           rust-paths: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
+            sharp/build/cargo
+            sharp/build/rustup
+      - name: Restore the engine mago links
+        id: mago-engine
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/linux-x86_64-engine/install
+          key: MAGO_ENGINE-debian-${{ runner.arch }}-${{ hashFiles('configure.ac', 'build/**', 'main/**', 'Zend/**', 'TSRM/**', 'sapi/**', 'ext/**', 'scripts/**', '!**/tests/**', 'sharp/bin/build-mago', 'sharp/docker/runtime/configure-options', 'sharp/docker/Dockerfile') }}
       # Only this step's CFLAGS, so mago builds without ASan.
       - name: Build with AddressSanitizer
-        env:
-          CFLAGS: -fsanitize=address -DZEND_TRACK_ARENA_ALLOC
-          LDFLAGS: -fsanitize=address
-        run: sharp/bin/build
-      # sharp/bin/test runs Composer on the PATH's PHP, which the other suites take from the sharp/docker image, Debian
-      # trixie's 8.4 with ext-bcmath, ext-intl and ext-zip, which heyjordanparker/php-sharp-composer requires. Ubuntu
-      # 24.04's own PHP is 8.3, and the tests' lock holds symfony packages that need 8.4.1, so composer install refused
-      # the lock on the nightly runs since 714b224cf5a, with "Your lock file does not contain a compatible set of
-      # packages" on run 44951324811.
-      - name: PHP 8.4 and Composer, as the sharp/docker image has them
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
-        with:
-          php-version: "8.4"
-          extensions: bcmath, intl, zip
-          tools: "composer:v2"
+        run: sharp/docker/run env CFLAGS="-fsanitize=address -DZEND_TRACK_ARENA_ALLOC" LDFLAGS=-fsanitize=address sharp/bin/build
+      # An empty MAGO_ENGINE, when the engine's cache missed, has sharp/bin/build-mago build that engine first.
       - name: Test PHP# with AddressSanitizer
         env:
-          USE_ZEND_ALLOC: 0
-          USE_TRACKED_ALLOC: 1
-          SKIP_ASAN: 1
-          SKIP_PERF_SENSITIVE: 1
-          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan-suppressions.txt
-        run: sharp/bin/test
+          MAGO_ENGINE: ${{ steps.mago-engine.outputs.cache-hit == 'true' && '/src/sharp/build/linux-x86_64-engine/install' || '' }}
+        run: |
+          sharp/docker/run env USE_ZEND_ALLOC=0 USE_TRACKED_ALLOC=1 SKIP_ASAN=1 SKIP_PERF_SENSITIVE=1 \
+            LSAN_OPTIONS=suppressions=/src/.github/lsan-suppressions.txt MAGO_ENGINE="$MAGO_ENGINE" sharp/bin/test
       # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed nightly run
         if: failure()
