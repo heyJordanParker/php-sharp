@@ -1,0 +1,9 @@
+namespace Promoted;
+
+// A class open to subclasses whose constructor promotes a property, beside a property in its body.
+public abstract class Notice
+{
+    public string key { get; set; } = "notice";
+
+    public Notice(public string message { get; set; }) { }
+}

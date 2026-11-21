@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A property a constructor promotes is closed, spec sections 6.1 and 22, as a property in the class body is, in a class open to subclasses too. So with `public abstract class Notice { public Notice(public string message { get; set; }) { } }`, `typeof(Notice).properties()` reads `message` with `isVirtual` false, and `typeof(Notice).fields()` gives its storage, which a `Field` reads and writes. 0.6.43 read it as `virtual` and left it out of `fields()`, so code that stores each field of an object lost every field promoted in an open class. A subclass that declares `message` again is a compile error that names it closed, as for a body property.
+
 ## [0.6.43] - 2026-11-21
 
 ### Upgrading from 0.6.42
