@@ -4240,9 +4240,10 @@ match (result) {
 
 - **On an enum,** arms that handle every case need no `default`. A missed case is a compile error that names it.
 - **On a sealed interface,** the same holds for its implementers (section 20.1).
+- **On a union of classes,** such as `Twig|Leaf`, the same holds for its members: arms that name each member, or a class or interface each member extends or implements, need no `default`. A missed member is a compile error that names it. A `match` on a union of classes may still have a `default`.
 - **A machine's cases** (section 20.2), as an enum's are: adding a case makes every `match` that misses it a compile error.
 - **On a List,** arms that handle every list need no `default`. A list pattern without a rest handles lists of its number of items, and one with a rest every longer list too. Each element is covered by the same rules as a `match` on one value of the element type, so `[Circle c, ...]` and `[Square s, ...]` together handle every list of a sealed `Shape` with a first item. A typed rest must take any `List` of the element type, as `...List<Shape> rest` does. A missed list is a compile error that names it in plain words.
-- **On a nullable enum, sealed interface or List,** such as a `Status?` or a `List<Money>?`, the arms handle `null` too.
+- **On a nullable enum, sealed interface, union of classes or List,** such as a `Status?`, a `(Twig|Leaf)?` or a `List<Money>?`, the arms handle `null` too.
 - **On any other value,** `match` must have a `default` arm.
 - **An arm with `when`** does not count toward covering a case.
 - **A `match` on a project's enum or sealed interface lists its cases,** nullable or not, so a case added later is a compile error at each `match` that misses it. Cases that share an arm are joined with `or`, as in `Status.Pending or Status.Failed => {}`, and `default` there is a compile error that names the cases it stands for: "A `match` on `TransactionStatus` lists its cases; missing: `TransactionStatus.Failed` and `TransactionStatus.Canceled`." A `match` on a plain PHP enum, or on an enum of an installed package, keeps `default`, because its library can add cases in an upgrade, as one on an `int` or a `string` does.
