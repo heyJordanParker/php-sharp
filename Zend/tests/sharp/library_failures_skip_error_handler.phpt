@@ -1,5 +1,5 @@
 --TEST--
-A standard library call whose failure the library reads gives the result it documents when the app's error handler throws on every warning: the warning reaches no handler. A plain PHP @ still calls the handler
+A standard library call whose failure the library reads gives the result it documents when the app's error handler throws on every warning: the warning reaches no handler, and Regex.parse names PHP's own compile error. A plain PHP @ still calls the handler
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -48,7 +48,7 @@ rmdir($folder);
 ?>
 --EXPECTF--
 NULL
-ValueError: Regex.parse: "([" does not compile
+ValueError: Regex.parse: "([" does not compile: No ending matching delimiter ')' found
 ValueError: Compression.uncompress: the data is not zlib-compressed
 ValueError: Hex.decode: the text is not hexadecimal with an even length
 NULL

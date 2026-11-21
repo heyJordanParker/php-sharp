@@ -1440,7 +1440,7 @@ ZEND_API zval *zend_get_configuration_directive(zend_string *name) /* {{{ */
 
 /* PHP#: whether the nearest frame of user code is inside a ZEND_SHARP_SILENCE, whose code reads the failure of its call
  * from the result, so no error handler sees the warning. */
-static ZEND_COLD bool zend_sharp_silenced(void)
+ZEND_API ZEND_COLD bool zend_sharp_silenced(void)
 {
 	const zend_execute_data *ex = EG(current_execute_data);
 	while (ex && (!ex->func || !ZEND_USER_CODE(ex->func->type))) {

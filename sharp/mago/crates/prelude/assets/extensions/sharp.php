@@ -254,11 +254,6 @@ final class Container
 final class ContainerError extends \Error {}
 
 /**
- * A move called on a case of a machine it doesn't move from, as `pay` on an `OrderStatus` that is `Paid`.
- */
-final class StateError extends \Error {}
-
-/**
  * The handle of a listener `Events.on` starts: the engine stops the listener when the handle is destroyed.
  */
 final class Listening
@@ -331,6 +326,12 @@ function withTag(string $family, string $tag): ?string {}
  * null for a class that is no variant of a family. The standard library's `Class<T>.tag` reads by it.
  */
 function tag(string $variant): ?string {}
+
+/**
+ * The text of the warning the last silenced built-in call of this request raised, as "preg_match(): No ending
+ * matching delimiter ')' found", or null. The standard library's `Regex.parse` names a pattern's compile error by it.
+ */
+function silencedWarning(): ?string {}
 
 /**
  * Each address the system resolver gives for `$host`, as text and once, in the order getaddrinfo gives them, the hosts

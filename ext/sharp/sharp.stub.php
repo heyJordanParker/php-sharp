@@ -35,10 +35,6 @@ final class ContainerError extends \Error
 {
 }
 
-final class StateError extends \Error
-{
-}
-
 /**
  * @strict-properties
  * @not-serializable
@@ -110,6 +106,8 @@ function parseVariant(string $family, mixed $value, bool $throws = true): ?objec
 function withTag(string $family, string $tag): ?string {}
 
 function tag(string $variant): ?string {}
+
+function silencedWarning(): ?string {}
 
 function resolve(string $host): array {}
 

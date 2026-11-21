@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: b2ac68c0702edb38b1c2c4905a02108031425c77 */
+ * Stub hash: 37fb10e021521ddc1aa53f35fc45b504667fb03f */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
@@ -46,6 +46,9 @@ ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_tag, 0, 1, IS_STRING, 1)
 	ZEND_ARG_TYPE_INFO(0, variant, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_silencedWarning, 0, 0, IS_STRING, 1)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_resolve, 0, 1, IS_ARRAY, 0)
@@ -488,6 +491,7 @@ ZEND_FUNCTION(Sharp_Internal_parseAs);
 ZEND_FUNCTION(Sharp_Internal_parseVariant);
 ZEND_FUNCTION(Sharp_Internal_withTag);
 ZEND_FUNCTION(Sharp_Internal_tag);
+ZEND_FUNCTION(Sharp_Internal_silencedWarning);
 ZEND_FUNCTION(Sharp_Internal_resolve);
 ZEND_FUNCTION(Sharp_Internal_processorCount);
 ZEND_FUNCTION(Sharp_Internal_compare);
@@ -601,6 +605,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "parseVariant"), zif_Sharp_Internal_parseVariant, arginfo_Sharp_Internal_parseVariant, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "withTag"), zif_Sharp_Internal_withTag, arginfo_Sharp_Internal_withTag, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "tag"), zif_Sharp_Internal_tag, arginfo_Sharp_Internal_tag, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "silencedWarning"), zif_Sharp_Internal_silencedWarning, arginfo_Sharp_Internal_silencedWarning, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "resolve"), zif_Sharp_Internal_resolve, arginfo_Sharp_Internal_resolve, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "processorCount"), zif_Sharp_Internal_processorCount, arginfo_Sharp_Internal_processorCount, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "compare"), zif_Sharp_Internal_compare, arginfo_Sharp_Internal_compare, 0, NULL, NULL)
@@ -779,16 +784,6 @@ static zend_class_entry *register_class_Sharp_ContainerError(zend_class_entry *c
 	zend_class_entry ce, *class_entry;
 
 	INIT_NS_CLASS_ENTRY(ce, "Sharp", "ContainerError", NULL);
-	class_entry = zend_register_internal_class_with_flags(&ce, class_entry_Error, ZEND_ACC_FINAL);
-
-	return class_entry;
-}
-
-static zend_class_entry *register_class_Sharp_StateError(zend_class_entry *class_entry_Error)
-{
-	zend_class_entry ce, *class_entry;
-
-	INIT_NS_CLASS_ENTRY(ce, "Sharp", "StateError", NULL);
 	class_entry = zend_register_internal_class_with_flags(&ce, class_entry_Error, ZEND_ACC_FINAL);
 
 	return class_entry;
