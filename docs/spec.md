@@ -4192,15 +4192,75 @@ public class Order
     public OrderStatus status { get; private set; } = OrderStatus.open();
     public OrderStatus copied { get; set; } = OrderStatus.open();          // compile error: a machine property has a private set
 
-    public void pay(int cents) { this.status = this.status.pay(cents); }
+    public bool pay(int cents)
+    {
+        if (this.status is OrderStatus.Draft draft) {
+            this.status = draft.pay(cents);
+            return true;
+        }
+
+        return false;
+    }
+
+    public void rush(int cents) { this.status = this.status.pay(cents); }   // compile error: a move is called on the case it moves from
     public void copy(Order o) { this.status = o.status; }                   // compile error: it changes only by a move of its own
     public void force() { this.status = OrderStatus.Paid(5); }              // compile error: only entry points and moves build a case
 }
 ```
 
+<!-- example machine -->
+```csharp
+// app/Shop/Invoice.sharp
+namespace App.Shop;
+
+public class Invoice
+{
+    public OrderStatus status { get; private set; } = OrderStatus.open();
+
+    public bool pay(int cents)
+    {
+        if (this.status is not OrderStatus.Draft draft) {
+            return false;
+        }
+
+        this.status = draft.pay(cents);
+        return true;
+    }
+}
+```
+
+<!-- example machine -->
+```csharp
+// app/Shop/Run.sharp
+namespace App.Shop;
+
+public class Run
+{
+    public late OrderStatus status { get; private set; }
+
+    public void open() { this.status = OrderStatus.open(); }
+}
+```
+
+<!-- example machine -->
+```csharp
+// app/Shop/Line.sharp
+namespace App.Shop;
+
+public struct Line
+{
+    public OrderStatus status { get; init; } = OrderStatus.open();
+
+    public static Line paid(Line line) => line.status is OrderStatus.Draft draft ? line with { status: draft.pay(5) } : line;   // compiles
+    public static Line reset(Line line) => line with { status: OrderStatus.open() };                                              // compile error: it changes only by a move of its own
+}
+```
+
 - **Only entry points, moves, `parse` and `Json.decode` build a case.** A case with no fields is one object.
-- **A property of a machine type has a `private set`,** starts at an entry point, and changes only as `x = x.move(…)`. A promoted constructor parameter of a machine type is a compile error, since a caller could pass any case.
-- **A move called on a case it doesn't move from throws `Sharp\StateError`,** which names the machine, the case and the cases the move moves from: "OrderStatus is Paid, and pay moves from Draft."
+- **A move belongs to the case it moves from.** A move in a case's block is a member of that case's type alone, and a move in the machine's body is a member of every case that isn't `final`. A call of a move through the machine's type, or through a union that holds a case without the move, is a compile error that names the test to write first: "`pay` moves from `OrderStatus.Draft`, and `this.status` may be `Paid`, `Shipped` or `Cancelled`: test it first, as in `if (this.status is OrderStatus.Draft draft)`." So no program calls a move from a case that lacks it.
+- **A property of a machine type has a `private set`,** starts at an entry point, and changes only by a move of the value it holds: `this.status = draft.pay(cents)`, where a type pattern bound `draft` from `this.status`, in an `is`, in an `is not` that leaves, or in a `match` arm. A promoted constructor parameter of a machine type is a compile error, since a caller could pass any case.
+- **A `late` property of a machine type** takes no initial value. Its write of an entry point is accepted in any method of its class, and every other write is a move. A read before the first write throws, as for every `late` property.
+- **A struct's property of a machine type is `{ get; init; }`,** starts at an entry point by its initial value or its constructor, and a `with` that sets it takes a move of the original's value: `line with { status: draft.pay(5) }`, where `draft` was bound from `line.status`.
 - **The checker checks the graph.** Every case is reachable from an entry point. A case with no move out is `final`, and a `final` case has no move out. When a machine has `final` cases, every case reaches one. Each is a compile error that names the case: "The case `OrderStatus.Paid` has no move out, so it is `final`."
 - **A law whose one parameter is a case of the machine is an invariant** (section 28): the checker proves it after every entry point and every move.
 - **A backed machine whose cases hold no data, and that is not marked `[Tag]`, stores as its case's value,** as a backed enum does (section 10), so `Json.encode(account);   // {"id":7,"balance":"12.50","status":"active"}` writes the `status` machine as `"active"`, and `parse`, `Json.decode` and `Query.decode` read the case back from its value. A machine with a case that holds data stores as a family, marked `[Tag]`.
