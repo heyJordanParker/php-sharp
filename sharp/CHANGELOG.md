@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.43] - 2026-11-21
+
 ### Upgrading from 0.6.42
 
 - Plain PHP gets a `Bytes` as PHP's string of its bytes, spec section 18, so plain PHP that called a `Bytes` member on what PHP# gave it reads the string instead: `$cache->get('k')->toText()` is `$cache->get('k')`, `$response->body->length()` is `strlen($response->body)`, and `$random->nextBytes(4)->toList()` is `array_values(unpack('C*', $random->nextBytes(4)))`.
@@ -1575,7 +1577,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.42...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.43...HEAD
+[0.6.43]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.42...v0.6.43
 [0.6.42]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.41...v0.6.42
 [0.6.41]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.40...v0.6.41
 [0.6.40]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.39...v0.6.40
