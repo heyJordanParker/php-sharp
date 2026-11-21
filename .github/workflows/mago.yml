@@ -193,6 +193,11 @@ jobs:
           path: sharp/build/cache/engine-ccache
           key: MAGO_ENGINE_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/runtime/configure-options') }}-${{ github.sha }}
           restore-keys: MAGO_ENGINE_CCACHE-${{ runner.arch }}-
+      - name: Install what the PHP# engine builds with
+        if: steps.mago-engine.outputs.cache-hit != 'true'
+        uses: ./.github/actions/engine-packages
+        with:
+          extra: ccache
       # Only this step's CC and CXX, so mago's crates that compile C build as the job's other builds build them.
       - name: Build the engine mago links
         if: steps.mago-engine.outputs.cache-hit != 'true'
@@ -202,7 +207,6 @@ jobs:
           CXX: ccache g++
           CCACHE_DIR: ${{ github.workspace }}/sharp/build/cache/engine-ccache
         run: |
-          sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends autoconf bison ccache cmake pkg-config re2c libedit-dev libicu-dev liblzma-dev libsodium-dev libsqlite3-dev libssl-dev libxml2-dev zlib1g-dev
           ccache --zero-stats
           sharp/bin/build-mago --engine
           ccache --show-stats

@@ -288,7 +288,7 @@ typedef struct _zend_oparray_context {
 #define ZEND_ACC_FIELD                   (1 << 15) /*     |     |  X  |     */
 /*                                                        |     |     |     */
 /* PHP#: plain PHP reads the property's Map or Set as its |     |     |     */
-/* PHP array, see ext/sharp                               |     |     |     */
+/* PHP array and a Bytes as its string, see ext/sharp     |     |     |     */
 #define ZEND_ACC_SHARP_CROSSING          (1 << 16) /*     |     |  X  |     */
 /*                                                        |     |     |     */
 /* Class Flags (unused: none)                             |     |     |     */

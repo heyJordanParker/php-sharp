@@ -4264,6 +4264,30 @@ fn a_plain_php_subclass_of_a_sharp_override_meets_the_type_the_override_writes()
     }
 }
 
+/// A plain PHP subclass of a PHP# method that returns a `Bytes` meets `\Sharp\Bytes|string`, the type its PHP
+/// declaration writes, since a plain PHP caller gets PHP's string of the bytes, spec section 18. So `string` links, as
+/// the engine links it, and `int` doesn't.
+#[test]
+fn a_plain_php_subclass_of_a_method_that_returns_bytes_may_return_a_string() {
+    let digest = "namespace Demo;\n\nimport Sharp.Encoding.Hex;\n\npublic class Digest\n{\n    public virtual Bytes raw() => Hex.decode(\"ff00\");\n}\n";
+    let short = |result: &str| -> &'static str {
+        let value = if result == "string" { "\"\\x01\"" } else { "1" };
+
+        String::leak(format!(
+            "<?php\n\nnamespace Demo;\n\nclass Short extends Digest\n{{\n    #[\\Override]\n    public function raw(): {result}\n    {{\n        return {value};\n    }}\n}}\n"
+        ))
+    };
+
+    assert_eq!(
+        issues(("src/Demo/Short.php", short("string")), &[("src/Demo/Digest.sharp", digest)]),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        issues(("src/Demo/Short.php", short("int")), &[("src/Demo/Digest.sharp", digest)]),
+        ["8:21 incompatible-return-type"]
+    );
+}
+
 /// Spec section 12: a PHP# override of a plain PHP method returns that method's PHP array, so a `Map` result whose keys
 /// no PHP array holds, as a unit enum's cases, is refused at the override, as a result outside the plain PHP method's
 /// type, before the engine could refuse the class where it links it. A `Map` keyed by `string` returns as the plain
@@ -8521,6 +8545,20 @@ fn a_call_of_a_case_s_name_never_runs_the_name_as_a_function() {
             "5:73 ambiguous-object-method-access `audience.name()` calls a method on `Interaction` but a function in a property on `Level`, so PHP# cannot tell how to call it. | Narrow `audience` to one class first, as in `if (audience is Interaction interaction)`.",
             "7:54 non-existent-method Method `Level.name` does not exist. | Ensure the method `Level.name` is defined.",
         ]
+    );
+}
+
+/// A type pattern reports a name no file declares in its type arguments, as a declared type does, and the test then
+/// reports nothing more: neither that it never holds nor a refusal of its lowering.
+#[test]
+fn an_unknown_name_in_a_type_patterns_type_arguments_is_reported_as_a_declared_types_is() {
+    let kinds = "namespace Probe;\n\npublic static class Kinds\n{\n    public static bool anyType(Class<Any?> type) => type is Class<UnitEnum>;\n\n    public static bool listOf(Any? value) => value is List<UnitEnum>;\n\n    public static bool objectType(Class<Object> type) => type is Class<UnitEnum>;\n}\n";
+
+    assert_eq!(
+        explained(("src/Probe/Kinds.sharp", kinds), &[]),
+        ["5:61", "7:55", "9:66"].map(|at| format!(
+            "{at} non-existent-class-like Cannot find type `Probe.UnitEnum`. Check the name's spelling, and import the type with `import` when another namespace declares it."
+        ))
     );
 }
 
@@ -36591,6 +36629,23 @@ fn a_machine_property_changes_only_by_a_move_of_its_own() {
             "9:56 invalid-machine `Order.started` holds the machine `OrderStatus`, so its initial value is an entry point of `OrderStatus`, as `OrderStatus.open()`. | Start it with an entry point.",
         ]
     );
+}
+
+/// Spec section 20.2: an interface property that holds a machine is `{ get; }`, since an interface property has no
+/// storage and no `set`, and the implementer's own property carries the `private set` the rule checks.
+#[test]
+fn an_interface_property_that_holds_a_machine_is_read_only() {
+    let payable = (
+        "src/Shop/Payable.sharp",
+        "namespace Shop;\n\npublic interface Payable\n{\n    OrderStatus status { get; }\n}\n",
+    );
+    let order = (
+        "src/Shop/Order.sharp",
+        "namespace Shop;\n\npublic class Order : Payable\n{\n    public OrderStatus status { get; private set; } = OrderStatus.open();\n\n    public void pay(int cents) => this.status = this.status.pay(cents);\n}\n",
+    );
+
+    assert_eq!(refusals(payable, &[ORDER_STATUS, order]), Vec::<String>::new());
+    assert_eq!(refusals(order, &[ORDER_STATUS, payable]), Vec::<String>::new());
 }
 
 /// Spec section 20.2: a constructor starts a machine property with an entry point, and a property the constructor

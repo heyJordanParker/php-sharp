@@ -6,15 +6,16 @@ on:
   pull_request:
     branches:
       - master
-  # ASAN alone, nightly on master's tip.
+  # ASAN alone, nightly on master's tip, or dispatched, as a fix of a red nightly run shows it green.
   schedule:
     - cron: '17 2 * * *'
+  workflow_dispatch:
 permissions:
   contents: read
 # A pull request, and master, runs one push at a time, and only the newest push waits, since its tree holds every
 # commit before it. A run in progress always finishes, so a pull request whose pushes come faster than a run still
-# gets results: when each push cancelled the run before it, 69 of the last 150 runs were cancelled. A schedule runs in
-# a group of its own.
+# gets results: when each push cancelled the run before it, 69 of the last 150 runs were cancelled. A schedule or a
+# dispatch runs in a group of its own.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: false
@@ -31,7 +32,7 @@ jobs:
   # pull request's run passed runs every check, the Mac's among them, as the check of the merge, and a release publishes
   # what that push builds. A red push opens an issue, as CI_PASSED does, for a pull request that fixes it forward.
   CHANGES:
-    if: github.event_name != 'schedule'
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -169,13 +170,14 @@ jobs:
       - name: Build mago and its test binaries
         run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/build-mago --quiet
       # What the suites run: the CLI, phpdbg, which run-tests.php finds beside it for the tests that need it, the install
-      # sharp/bin/hosts builds FrankenPHP against, and mago. An artifact keeps no file's mode, so the files travel in a
-      # tar, compressed here, since Actions would compress them on one thread.
+      # sharp/bin/hosts builds FrankenPHP against, mago, and the build.json sharp/bin/test finds mago by. An artifact
+      # keeps no file's mode, so the files travel in a tar, compressed here, since Actions would compress them on one
+      # thread.
       - name: Pack the engine and mago for the suites
         run: |
           build="sharp/build/linux-$(uname -m)"
           tar --zstd -cf "$RUNNER_TEMP/build.tar.zst" "$build/sapi/cli/php" "$build/sapi/phpdbg/phpdbg" "$build/install" \
-            "$build/mago/debug/mago"
+            "$build/mago/debug/mago" "$build/mago/build.json"
       - name: Upload the engine and mago for the suites
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -460,27 +462,23 @@ jobs:
   # tracing JIT, the stores a PHP# mark passes through, and leave out the upstream tests, whose baseline lists a build
   # without ASan. A failed run opens the red-master issue, as CI_PASSED does for a push.
   ASAN:
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     permissions:
       contents: read
       issues: write
-    # The build's packages, as sharp/docker/Dockerfile installs them.
-    env:
-      PACKAGES: >-
-        autoconf bison pkg-config re2c libcurl4-openssl-dev libicu-dev libonig-dev libpq-dev libsodium-dev libsqlite3-dev
-        libxml2-dev libzip-dev
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-      - name: apt
-        run: |
-          sudo apt-get update
-          # shellcheck disable=SC2086 # PACKAGES is a list of packages.
-          sudo apt-get install --yes --no-install-recommends $PACKAGES
+      # The engine mago links, which sharp/bin/test builds, and the libraries sharp/bin/build's engine links besides,
+      # as sharp/docker/Dockerfile installs them.
+      - name: Install what the PHP# engine builds with
+        uses: ./.github/actions/engine-packages
+        with:
+          extra: libcurl4-openssl-dev libonig-dev libpq-dev libzip-dev
       # sharp/bin/test builds mago on the runner, with the crates mago.yml's jobs fetch there. A nightly run saves no
       # target, so the caches keep room for the ones every pull request restores.
       - name: Rust and Mago caches
@@ -522,7 +520,7 @@ jobs:
   # `# syntax=` frontend, which BuildKit pulls from Docker Hub with no login (#86), and actionlint, at the version this
   # job installs, passes over every workflow, with the runner labels .github/actionlint.yaml sets.
   WORKFLOWS:
-    if: github.event_name != 'schedule'
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -567,7 +565,7 @@ jobs:
   # cancelled, a release that failed to publish among them. mago.yml's ci-passed is the other
   # required check, and its plain-php job runs mago from Composer on plain PHP.
   CI_PASSED:
-    if: always() && github.event_name != 'schedule'
+    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request')
     needs:
       - CHANGES
       - BUILD_LINUX

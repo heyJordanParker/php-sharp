@@ -778,7 +778,8 @@ ZEND_API zval *zend_std_read_property(zend_object *zobj, zend_string *name, int 
 	property_offset = zend_get_property_offset(zobj->ce, name, (type == BP_VAR_IS) || (zobj->ce->__get != NULL), cache_slot, &prop_info);
 
 	/* PHP#: code outside a .sharp file reads a property whose type holds a Map or a Set as its PHP array, spec section
-	 * 12. Its cache slot keeps no offset, so each of its reads comes back here, and a PHP# read keeps the slot's. */
+	 * 12, and a Bytes as its string, spec section 18. Its cache slot keeps no offset, so each of its reads comes back
+	 * here, and a PHP# read keeps the slot's. */
 	bool crossing = UNEXPECTED(prop_info && (prop_info->flags & ZEND_ACC_SHARP_CROSSING))
 		&& (type == BP_VAR_R || type == BP_VAR_IS) && !sharp_runs_sharp_code();
 	if (crossing && cache_slot) {

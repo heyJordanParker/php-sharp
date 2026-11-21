@@ -4377,7 +4377,7 @@ ZEND_METHOD(ReflectionClass, getStaticProperties)
 
 		/* enforce read only access */
 		ZVAL_DEREF(prop);
-		/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+		/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 		if (UNEXPECTED(reflection_property_crosses(prop_info)) && !sharp_runs_sharp_code()) {
 			zval array;
 			sharp_array_of(&array, prop);
@@ -4416,7 +4416,7 @@ ZEND_METHOD(ReflectionClass, getStaticPropertyValue)
 	EG(fake_scope) = old_scope;
 
 	if (prop && !Z_ISUNDEF_P(prop)) {
-		/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+		/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 		if (prop_info && UNEXPECTED(reflection_property_crosses(prop_info)) && !sharp_runs_sharp_code()) {
 			ZVAL_DEREF(prop);
 			sharp_array_of(return_value, prop);
@@ -6205,7 +6205,7 @@ ZEND_METHOD(ReflectionProperty, getValue)
 		member_p = zend_read_static_property_ex(intern->ce, ref->unmangled_name, 0);
 		if (member_p) {
 			RETVAL_COPY_DEREF(member_p);
-			/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+			/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 			if (ref->prop && UNEXPECTED(ref->prop->flags & ZEND_ACC_SHARP_CROSSING) && !sharp_runs_sharp_code()) {
 				sharp_cross_read(return_value);
 			}
