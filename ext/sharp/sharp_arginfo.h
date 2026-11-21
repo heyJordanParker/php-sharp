@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: c7a679c4c74cfe49952a089bdd045ec8945ac48e */
+ * Stub hash: 37fb10e021521ddc1aa53f35fc45b504667fb03f */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
@@ -784,16 +784,6 @@ static zend_class_entry *register_class_Sharp_ContainerError(zend_class_entry *c
 	zend_class_entry ce, *class_entry;
 
 	INIT_NS_CLASS_ENTRY(ce, "Sharp", "ContainerError", NULL);
-	class_entry = zend_register_internal_class_with_flags(&ce, class_entry_Error, ZEND_ACC_FINAL);
-
-	return class_entry;
-}
-
-static zend_class_entry *register_class_Sharp_StateError(zend_class_entry *class_entry_Error)
-{
-	zend_class_entry ce, *class_entry;
-
-	INIT_NS_CLASS_ENTRY(ce, "Sharp", "StateError", NULL);
 	class_entry = zend_register_internal_class_with_flags(&ce, class_entry_Error, ZEND_ACC_FINAL);
 
 	return class_entry;

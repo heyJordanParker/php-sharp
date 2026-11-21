@@ -15621,8 +15621,6 @@ static PHP_MINIT_FUNCTION(sharp)
 
 	register_class_Sharp_Container();
 	sharp_ce_container_error = register_class_Sharp_ContainerError(zend_ce_error);
-	/* Spec section 20.2: a move called on a machine's case it doesn't move from throws it. */
-	register_class_Sharp_StateError(zend_ce_error);
 	sharp_fiber_slot = zend_get_resource_handle("sharp");
 	if (sharp_fiber_slot < 0) {
 		return FAILURE;
