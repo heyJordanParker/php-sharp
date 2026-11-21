@@ -34,7 +34,7 @@ var_dump($database->scalar('SELECT 6 * 7'));
 $path = sys_get_temp_dir() . '/sharp-effect-preload-' . getmypid() . '.sqlite';
 $cache = new Sharp\Data\Cache($path);
 $cache->set('k', 'v');
-var_dump($cache->get('k')?->toText());
+var_dump($cache->get('k'));
 unset($cache);
 unlink($path);
 try {

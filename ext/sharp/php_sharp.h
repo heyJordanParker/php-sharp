@@ -73,10 +73,12 @@ bool sharp_cross_property(const zend_property_info *info, zval *value);
  * Set holds converts the same way, and a PHP array that holds none is itself. A Map with a key no PHP array holds, a
  * class, a struct, a collection or an enum without backing values, is itself. A Map two of whose keys are one PHP array
  * key, as 5 and "5" are, or a backed enum case and its backing value, throws a ValueError that names both, since a PHP
- * array would keep only one of them, and `result` is then the value itself. Any other value is itself. */
+ * array would keep only one of them, and `result` is then the value itself. Spec section 18: a Bytes is PHP's string of
+ * its bytes, alone and wherever a PHP array, a Map or a Set holds it. Any other value is itself. */
 void sharp_array_of(zval *result, zval *value);
 
-/* Makes `value`, which a property whose type holds a Map or a Set gives plain PHP code, what sharp_array_of gives. */
+/* Makes `value`, which a property whose type holds a Map, a Set or a Bytes gives plain PHP code, what sharp_array_of
+ * gives. */
 void sharp_cross_read(zval *value);
 
 /* Whether some property of `ce` has ZEND_ACC_SHARP_CROSSING, SHARP_CLASS_HAS_CROSSING_PROPS. Each reader of an object's

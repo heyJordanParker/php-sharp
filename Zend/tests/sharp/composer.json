@@ -51,6 +51,7 @@
             "Billing\\": "Operators/",
             "BoundExtensions\\": "BoundExtensions/",
             "BuiltInClassValues\\": "BuiltInClassValues/",
+            "BytesCrossings\\": "BytesCrossings/",
             "CallerChecked\\": "CallerChecked/",
             "CallerLines\\": "CallerLines/",
             "Callers\\": "Callers/",
