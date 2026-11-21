@@ -4,6 +4,14 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Changed
+
+- Name resolution finds the class-like a bare name in a `.sharp` file names by default, spec section 23, in one lookup by its short name, where 0.6.44 compared the name with the short name of each of up to 118 default class-likes. A one-file edit of a 2,128-file project retires 56.2 G instructions in `mago analyze` where it retired 58.2 G, medians of 4 alternating rounds, with the same `.sharp` folder and issues.
+
+### Fixed
+
+- The name a type pattern binds is the type the pattern names, spec section 21, as a C# pattern variable has its declared type, in a `match` arm, after `is`, and after an `is not` that leaves. So over `Reply|Pending`, two interfaces, `result is Reply reply ? reply.status() : -1` and `if (result is not Reply reply) { return -1; } return reply.status();` compile, where 0.6.44 refused each call with "`reply.status()` calls a method on `Reply` but a function in a property on `Pending`", since it read `reply` as `Reply|Pending&Reply`. The help of that error, "Narrow `reply` to one class first, as in `if (reply is Reply reply)`", now names a pattern that works.
+
 ## [0.6.44] - 2026-11-21
 
 ### Fixed
