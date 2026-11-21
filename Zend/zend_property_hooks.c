@@ -210,7 +210,7 @@ static void zho_declared_it_fetch_current(zend_object_iterator *iter)
 				ZEND_REF_ADD_TYPE_SOURCE(Z_REF_P(property), prop_info);
 			}
 		}
-		/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+		/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 		if (!hooked_iter->by_ref && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_CROSSING) && !sharp_runs_sharp_code()) {
 			sharp_array_of(&hooked_iter->current_data, property);
 		} else {

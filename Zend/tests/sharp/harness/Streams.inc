@@ -15,6 +15,24 @@ final class Stream
     }
 }
 
+/** A plain PHP source whose `raw` may give any value, which a PHP# subclass gives as a `Bytes`. */
+class MixedSource
+{
+    public function raw(): mixed
+    {
+        return null;
+    }
+}
+
+/** A plain PHP source whose `raw` gives an object, which a PHP# subclass gives as a `Bytes`. */
+class ObjectSource
+{
+    public function raw(): object
+    {
+        return new \stdClass();
+    }
+}
+
 /** What plain PHP receives as `$value`: a string as its bytes in hexadecimal, and any other value as its type. */
 function shown(mixed $value): string
 {

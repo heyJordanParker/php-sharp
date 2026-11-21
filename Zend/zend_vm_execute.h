@@ -958,7 +958,7 @@ copy_deref:
 		} else {
 			ZVAL_COPY_DEREF(EX_VAR(opline->result.var), prop);
 		}
-		/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+		/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 		if ((type == BP_VAR_R || type == BP_VAR_IS) && prop != &EG(uninitialized_zval)
 		 && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_CROSSING) && !sharp_function_is_sharp(EX(func))) {
 			sharp_cross_read(EX_VAR(opline->result.var));
@@ -3119,7 +3119,7 @@ static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV 
 					value_type = Z_TYPE_INFO_P(value);
 					if (EXPECTED(value_type != IS_UNDEF)
 					 && EXPECTED(zend_check_property_access(Z_OBJ_P(array), p->key, 0) == SUCCESS)) {
-						/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+						/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 						if (sharp_class_has_crossing_props(Z_OBJCE_P(array))
 						 && UNEXPECTED(sharp_cross_slot_read(&crossed, Z_OBJ_P(array), value))) {
 							value = &crossed;
@@ -3592,9 +3592,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_LEAVE_S
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
-/* PHP#: the value a function whose result may hold a Map or a Set returns or yields, see ZEND_SHARP_RESULT_CROSSES. Its
- * caller, or the code that resumed the generator, past the internal functions between them, gets the PHP array of each
- * Map and Set in it when that code is plain PHP, spec section 12, and the value itself when it is PHP#. */
+/* PHP#: the value a function whose result may hold a Map, a Set or a Bytes returns or yields, see
+ * ZEND_SHARP_RESULT_CROSSES. Its caller, or the code that resumed the generator, past the internal functions between
+ * them, gets the PHP array of each Map and Set in it, spec section 12, and the string of each Bytes, spec section 18,
+ * when that code is plain PHP, and the value itself when it is PHP#. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FAST_CALL_SPEC_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -5455,7 +5456,7 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_CONST);
-				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+				/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 				if (IS_CONST != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
@@ -21409,7 +21410,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_CAST_SPEC_TMP
 
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_TMP_VAR);
-				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+				/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 				if (IS_TMP_VAR != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
@@ -24299,7 +24300,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_CAST_SPEC_VAR
 
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_VAR);
-				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+				/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 				if (IS_VAR != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
@@ -43668,7 +43669,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_CAST_SPEC_CV_
 
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_CV);
-				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+				/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 				if (IS_CV != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
@@ -60869,7 +60870,7 @@ static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV  zend
 					value_type = Z_TYPE_INFO_P(value);
 					if (EXPECTED(value_type != IS_UNDEF)
 					 && EXPECTED(zend_check_property_access(Z_OBJ_P(array), p->key, 0) == SUCCESS)) {
-						/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+						/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 						if (sharp_class_has_crossing_props(Z_OBJCE_P(array))
 						 && UNEXPECTED(sharp_cross_slot_read(&crossed, Z_OBJ_P(array), value))) {
 							value = &crossed;
@@ -61266,9 +61267,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_LEAVE_SPEC_T
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
-/* PHP#: the value a function whose result may hold a Map or a Set returns or yields, see ZEND_SHARP_RESULT_CROSSES. Its
- * caller, or the code that resumed the generator, past the internal functions between them, gets the PHP array of each
- * Map and Set in it when that code is plain PHP, spec section 12, and the value itself when it is PHP#. */
+/* PHP#: the value a function whose result may hold a Map, a Set or a Bytes returns or yields, see
+ * ZEND_SHARP_RESULT_CROSSES. Its caller, or the code that resumed the generator, past the internal functions between
+ * them, gets the PHP array of each Map and Set in it, spec section 12, and the string of each Bytes, spec section 18,
+ * when that code is plain PHP, and the value itself when it is PHP#. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FAST_CALL_SPEC_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -63129,7 +63131,7 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_CAST_
 
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_CONST);
-				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+				/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 				if (IS_CONST != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
@@ -78881,7 +78883,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_CAST_SPEC_TMP_TAIL
 
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_TMP_VAR);
-				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+				/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 				if (IS_TMP_VAR != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
@@ -81771,7 +81773,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_CAST_SPEC_VAR_TAIL
 
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_VAR);
-				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+				/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 				if (IS_VAR != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
@@ -101140,7 +101142,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_CAST_SPEC_CV_TAILC
 
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_CV);
-				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+				/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 				if (IS_CV != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
@@ -116272,7 +116274,7 @@ copy_deref:
 		} else {
 			ZVAL_COPY_DEREF(EX_VAR(opline->result.var), prop);
 		}
-		/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+		/* PHP#: plain PHP code reads a property's Map or Set as its PHP array, and its Bytes as its string. */
 		if ((type == BP_VAR_R || type == BP_VAR_IS) && prop != &EG(uninitialized_zval)
 		 && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_CROSSING) && !sharp_function_is_sharp(EX(func))) {
 			sharp_cross_read(EX_VAR(opline->result.var));

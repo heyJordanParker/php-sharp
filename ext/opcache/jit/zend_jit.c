@@ -649,7 +649,8 @@ static zend_property_info* zend_get_known_property_info(const zend_op_array *op_
 	    info->hooks) {
 		return NULL;
 	}
-	/* PHP#: plain PHP code reads this property's Map or Set as its PHP array, which only the VM's handler gives. */
+	/* PHP#: plain PHP code reads this property's Map or Set as its PHP array, and a Bytes as its string, which only the
+	 * VM's handler gives. */
 	if (UNEXPECTED(info->flags & ZEND_ACC_SHARP_CROSSING) && !sharp_function_is_sharp((const zend_function *) op_array)) {
 		return NULL;
 	}

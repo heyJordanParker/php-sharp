@@ -1,0 +1,11 @@
+namespace BytesCrossings;
+
+import Lib.Streams.ObjectSource;
+import Sharp.Encoding.Hex;
+
+public class ObjectCopy : ObjectSource
+{
+    public override Bytes raw() => Hex.decode("0d0e");
+
+    public static string shown(ObjectCopy copy) => Hex.encode(copy.raw());
+}
