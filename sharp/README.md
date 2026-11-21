@@ -118,10 +118,10 @@ sharp.compile_command => no value => no value
 
 `sharp/docker/runtime/frankenphp.Dockerfile` builds the engine with docker-library's `8.5/trixie/zts` recipe, from this repository's source instead of the php.net tarball, with `ext/sharp` built in, then runs FrankenPHP v1.13.5's own Dockerfile stages on it, as FrankenPHP's images build on `php:8.5-zts-trixie`. It keeps docker-library's layout, so `docker-php-ext-*` and `install-php-extensions` work unchanged and an app on FrankenPHP's image switches to PHP# by changing only its `FROM` line. The `docker-php-*` scripts are verbatim copies, and `zts/docker-php-entrypoint` is docker-library's `zts` variant's. `sharp/bin/hosts` builds the same FrankenPHP release for `HOSTS`. Go 1.27, `e-dant/watcher` 0.14.5 and `install-php-extensions` 2.13.2 are pinned where FrankenPHP takes the latest. FrankenPHP's source is fetched by its release's commit, and the `e-dant/watcher` archive and the `install-php-extensions` script are checked against their SHA-256s. Compare the Dockerfile, the shared scripts and `zts/docker-php-entrypoint` with docker-library's `8.5/trixie/zts`, and the Dockerfile with FrankenPHP's `Dockerfile`, on every merge from either. FrankenPHP's stage rewrites `php` in the `zts` entrypoint to `frankenphp run`, so the image starts FrankenPHP on its default command.
 
-The build context is the git tree, the same one CI builds from:
+The build context is the checkout, which CI builds from at the run's commit. The repository's `.dockerignore` leaves out the checkout's build output:
 
 ```sh
-git archive HEAD | docker build -f sharp/docker/runtime/frankenphp.Dockerfile -t php-sharp -
+docker build -f sharp/docker/runtime/frankenphp.Dockerfile -t php-sharp .
 ```
 
 A server whose PHP comes from its distribution, such as Ubuntu's packages, can't load PHP#'s extensions there: PHP# reports module API `20261009`, and every distribution extension is built for PHP's own. There PHP runs in the image, and FrankenPHP serves the app. General FrankenPHP and Docker practice is [FrankenPHP's](https://frankenphp.dev/docs/production/), and docker-library's [documentation](https://github.com/docker-library/docs/blob/master/php/README.md) applies to the image's PHP unchanged. What follows is what a production app on PHP# gets wrong without being told.

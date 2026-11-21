@@ -7,6 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - A property a constructor promotes is closed, spec sections 6.1 and 22, as a property in the class body is, in a class open to subclasses too. So with `public abstract class Notice { public Notice(public string message { get; set; }) { } }`, `typeof(Notice).properties()` reads `message` with `isVirtual` false, and `typeof(Notice).fields()` gives its storage, which a `Field` reads and writes. 0.6.43 read it as `virtual` and left it out of `fields()`, so code that stores each field of an object lost every field promoted in an open class. A subclass that declares `message` again is a compile error that names it closed, as for a body property, and since a parameter takes no `virtual`, its help says "Declare `message` in `Notice`'s body as `virtual` to let a subclass override it."
+- The Composer package `heyjordanparker/mago-sharp` holds only what Composer installs again, as 0.6.42's did. 0.6.43's held Mago's Rust crates and their test fixtures, 6,531 files where 0.6.42's held 291, so a project whose analysis reads `vendor/` got hundreds of errors from them, and `mago compile` refused 153 of their `.sharp` fixtures. The runtime image builds from the checkout instead, with `docker build -f sharp/docker/runtime/frankenphp.Dockerfile -t php-sharp .`, as `sharp/README.md` shows.
 
 ## [0.6.43] - 2026-11-21
 
