@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- An attribute on a machine case's field takes an object, as one on a constructor's parameter does, since an attribute's arguments follow one rule wherever the attribute stands. So `final case Forward([Route("/forward", middleware: [new Throttle(perMinute: 20)])] string? redirectUrl) = "forward";` compiles, and Reflection reads the `Route` on `Forward`'s `redirectUrl` with its `Throttle`. 0.6.45 checked the attribute's arguments as a constant's value and refused the `new` with "A constant's value is known before the code runs, and `new Throttle(perMinute: 20)` runs code: use a static field."
+
 ## [0.6.45] - 2026-11-21
 
 ### Changed
