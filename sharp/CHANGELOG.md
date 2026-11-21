@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Added
+
+- `Class<T>.tag()` gives the name a family stores for a variant, spec section 25, the inverse of `withTag`: the name its `[Key]` gives, or a backed machine's case's value. So with `public machine JourneyStatus : string { case Open = "open" { … } final case Completed = "completed"; … }`, `typeof(JourneyStatus.Completed).tag()` is `"completed"`, and a query that filters rows by state reads that name instead of writing `"completed"` a second time. `typeof(Card).tag()` is `"card"` from `[Key("card")]`, and `typeof(JourneyStatus).tag()` is null, since the machine is no variant. `withTag` now finds a case of a machine that stores as its value too, which 0.6.45 never listed as a family, so `typeof(JourneyStatus).withTag("completed")` is `typeof(JourneyStatus.Completed)` where 0.6.45 gave null, and `typeof(F).withTag(c.tag() ?? "")` is `c` for every variant `c` of `F`, an `int`-backed machine's `case Low = 1` included.
+
 ### Fixed
 
 - An attribute on a machine case's field takes an object, as one on a constructor's parameter does, since an attribute's arguments follow one rule wherever the attribute stands. So `final case Forward([Route("/forward", middleware: [new Throttle(perMinute: 20)])] string? redirectUrl) = "forward";` compiles, and Reflection reads the `Route` on `Forward`'s `redirectUrl` with its `Throttle`. 0.6.45 checked the attribute's arguments as a constant's value and refused the `new` with "A constant's value is known before the code runs, and `new Throttle(perMinute: 20)` runs code: use a static field."

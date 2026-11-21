@@ -6443,6 +6443,34 @@ Shipment.fromRow("letter", "to Bo").label;   // "to Bo"
 Shipment.fromRow("crate", "none");           // throws: "No shipment is of the kind crate."
 -->
 
+<!-- example class-tag: statements
+import Sharp.Key;
+import Sharp.Tag;
+public machine JourneyStatus : string
+{
+    case Open = "open" { public JourneyStatus.Completed complete() => JourneyStatus.Completed; }
+    final case Completed = "completed";
+    public static JourneyStatus.Open enter() => JourneyStatus.Open;
+}
+[Tag("type")]
+public sealed interface Tender { }
+[Key("card")]
+public struct Card : Tender { public Card(public string last4 { get; }) { } }
+public class Example
+{
+    public void run()
+    {
+        …
+    }
+}
+-->
+```csharp
+typeof(JourneyStatus.Completed).tag();              // "completed"
+typeof(JourneyStatus).withTag("completed");         // typeof(JourneyStatus.Completed)
+typeof(Card).tag();                                 // "card", from [Key("card")]
+typeof(JourneyStatus).tag();                        // null: the machine is no variant
+```
+
 **Each reflection value keys a `Map` and joins a `Set` as the member it reflects,** however often reflection read it. Two `Method`s, two `Property`s, two `Field`s, two `Constant`s and two `Constructor`s are equal when one class declares them under one name, two `Parameter`s when they are one position of one method, two `EnumCase`s when they are one case of one enum, and two `TupleElement`s when they have one name, or none, and one type. Equal values share their `hash()`, so `Map<Method, List<Relation>>` compiles:
 
 <!-- example reflection-keys: statements

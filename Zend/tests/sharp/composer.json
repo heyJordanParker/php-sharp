@@ -198,6 +198,7 @@
             "TypedExterns\\": "TypedExterns/",
             "Typed\\": "TypedOrders/",
             "Unions\\": "Unions/",
+            "VariantTags\\": "VariantTags/",
             "Writes\\": "Writes/",
             "XmlDocuments\\": "XmlDocuments/"
         }
