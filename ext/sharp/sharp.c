@@ -13748,6 +13748,10 @@ ZEND_FUNCTION(Sharp_Internal_seal)
 		zend_string_release(text);
 		return;
 	}
+	if (Z_TYPE_P(value) != IS_OBJECT || !(sharp_is_secret(Z_OBJCE_P(value)) || sharp_is_hashed(Z_OBJCE_P(value)))) {
+		zend_argument_type_error(1, "must be a Secret or a Hashed without a path, %s given", zend_zval_value_name(value));
+		RETURN_THROWS();
+	}
 	zend_object *object = Z_OBJ_P(value);
 	zval held;
 	if (sharp_is_hashed(object->ce)) {

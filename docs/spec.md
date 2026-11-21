@@ -6166,6 +6166,8 @@ Json.encode([1.5, Math.log(0.0)]);                                              
 <!-- example secret-values: statements
 import Sharp.Encoding.Json;
 import Sharp.Security.Secret;
+import Sharp.System.Environment;
+public Example(Environment environment) { environment.setVariable("SHARP_KEYS", "spec:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="); }
 -->
 ```csharp
 public class SmtpAccount
