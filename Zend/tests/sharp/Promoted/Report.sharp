@@ -1,0 +1,21 @@
+namespace Promoted;
+
+// Reads whether a subclass may replace each property of `Notice`, and each storage `fields()` gives of it with the
+// value it holds on an `Alert`, spec section 25.
+public static class Report
+{
+    public static List<string> facts()
+    {
+        List<string> lines = [];
+        for (const property of typeof(Notice).properties()) {
+            lines.add(`property ${property.name}${property.isVirtual ? " virtual" : ""}`);
+        }
+        const alert = new Alert("saved");
+        for (const stored of typeof(Notice).fields()) {
+            lines.add(`field ${stored.name} ${Report.shown(stored.get(alert))}`);
+        }
+        return lines;
+    }
+
+    private static string shown(Any? value) => value is string text ? text : "other";
+}

@@ -34,6 +34,7 @@ method App.Facts.Ledger.reset(depth) Protected
 property App.Facts.Tag.made Public
 property App.Facts.Tag.label Internal
 field App.Facts.Tag.made Public
+field App.Facts.Tag.label Internal
 property Lib.PlainLedger.code Public
 property Lib.PlainLedger.level Protected
 property Lib.PlainLedger.count Private

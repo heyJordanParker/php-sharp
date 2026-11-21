@@ -11,6 +11,16 @@ set -euo pipefail
 repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 api() { gh api "repos/$repo/$1" --jq "$2"; }
 
+# next's own pull request into master starts every run of next: a push to next with no such pull request open starts
+# none, and nothing lands. It closed when a merge took it, as #536 closed at 8b2454ab1ff, so a tick that finds next
+# ahead of master with none open opens it again, and nothing else opens it.
+if [[ $(api "compare/master...next" .ahead_by) -gt 0 \
+  && -z $(api "pulls?base=master&head=${repo%%/*}:next&state=open" '.[0].html_url // empty') ]]; then
+  url=$(gh pr create --repo "$repo" --base master --head next --title "PHP# next" \
+    --body "The one integration branch. Every lane pushes here, and this pull request's runs test each push. sharp/bin/land lands each commit whose runs passed through a land/<sha> pull request, so this one stays open.")
+  echo "$url is next's own pull request again, so a push to next starts its runs."
+fi
+
 # The runs list's status filter finds a run minutes after it ends, so a run counts by its own conclusion.
 passed() {
   api "actions/workflows/$1/runs?head_sha=$2&event=pull_request&per_page=100" \
@@ -36,7 +46,10 @@ for sha in $shas; do
     echo "$sha passed PHP# in $php_sharp, and Mago has passed no run of it yet."
     continue
   fi
-  open=$(api "pulls?base=master&state=open&per_page=100" ".[] | select(.head.sha == \"$sha\") | .html_url")
+  # Only a land/ branch's pull request: next's own one has the same head when next's newest commit passed, and its
+  # merge closed it, as #536 merged at 8b2454ab1ff.
+  open=$(api "pulls?base=master&state=open&per_page=100" \
+    ".[] | select(.head.sha == \"$sha\" and (.head.ref | startswith(\"land/\"))) | .html_url")
   # The ruleset turns auto-merge off when it goes on before the pull request's Spec guard run reports: #551's went off a
   # second after it went on, "Repository rule violations found", and stayed on once Spec guard had passed. So a
   # pull request opens without it, and the next tick, which finds it open, turns it on.

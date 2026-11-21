@@ -161,6 +161,7 @@
             "Polymorphic\\": "Polymorphic/",
             "PreloadedLambdas\\": "PreloadedLambdas/",
             "Preloaded\\": "Preloaded/",
+            "Promoted\\": "Promoted/",
             "Probe\\": "TraitKeys/",
             "Publishing\\": "Publishing/",
             "Queued\\": "Queued/",
