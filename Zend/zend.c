@@ -1438,6 +1438,35 @@ ZEND_API zval *zend_get_configuration_directive(zend_string *name) /* {{{ */
 		} \
 	} while (0)
 
+/* PHP#: whether the nearest frame of user code is inside a ZEND_SHARP_SILENCE, whose code reads the failure of its call
+ * from the result, so no error handler sees the warning. */
+static ZEND_COLD bool zend_sharp_silenced(void)
+{
+	const zend_execute_data *ex = EG(current_execute_data);
+	while (ex && (!ex->func || !ZEND_USER_CODE(ex->func->type))) {
+		ex = ex->prev_execute_data;
+	}
+	if (!ex || !ex->opline) {
+		return false;
+	}
+
+	const zend_op_array *op_array = &ex->func->op_array;
+	uint32_t op_num = ex->opline - op_array->opcodes;
+	for (uint32_t i = 0; i < op_array->last_live_range; i++) {
+		const zend_live_range *range = &op_array->live_range[i];
+		if ((range->var & ZEND_LIVE_MASK) != ZEND_LIVE_SILENCE || op_num < range->start || op_num >= range->end) {
+			continue;
+		}
+		/* A silence's range starts right after its ZEND_BEGIN_SILENCE. */
+		const zend_op *begin = &op_array->opcodes[range->start - 1];
+		if (begin->opcode == ZEND_BEGIN_SILENCE && (begin->extended_value & ZEND_SHARP_SILENCE)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 ZEND_API ZEND_COLD void zend_error_zstr_at(
 		int orig_type, zend_string *error_filename, uint32_t error_lineno, zend_string *message)
 {
@@ -1539,7 +1568,8 @@ ZEND_API ZEND_COLD void zend_error_zstr_at(
 	/* if we don't have a user defined error handler */
 	if (Z_TYPE(EG(user_error_handler)) == IS_UNDEF
 		|| !(EG(user_error_handler_error_reporting) & type)
-		|| EG(error_handling) != EH_NORMAL) {
+		|| EG(error_handling) != EH_NORMAL
+		|| zend_sharp_silenced()) {
 		zend_error_cb(orig_type, error_filename, error_lineno, message);
 	} else switch (type) {
 		case E_ERROR:

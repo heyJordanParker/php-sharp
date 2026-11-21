@@ -11583,7 +11583,8 @@ static void zend_compile_silence(znode *result, zend_ast *ast) /* {{{ */
 	zend_ast *expr_ast = ast->child[0];
 	znode silence_node;
 
-	zend_emit_op_tmp(&silence_node, ZEND_BEGIN_SILENCE, NULL, NULL);
+	zend_op *begin = zend_emit_op_tmp(&silence_node, ZEND_BEGIN_SILENCE, NULL, NULL);
+	begin->extended_value = ast->attr & ZEND_SHARP_SILENCE;
 
 	if (expr_ast->kind == ZEND_AST_VAR) {
 		/* For @$var we need to force a FETCH instruction, otherwise the CV access will

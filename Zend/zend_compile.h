@@ -1314,6 +1314,11 @@ static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 /* attr of a ZEND_AST_NEW whose class is a PHP# class value, as in `new (type)(…)`, which names no type arguments. */
 #define ZEND_SHARP_NEW_CLASS_VALUE 1
 
+/* attr of a ZEND_AST_SILENCE of PHP# code, and extended_value of its ZEND_BEGIN_SILENCE. PHP# code reads the failure
+ * of the call inside from its result, so a warning the call raises reaches no error handler, see zend_error_zstr_at.
+ * Set in ext/sharp for every ZEND_AST_SILENCE. */
+#define ZEND_SHARP_SILENCE 1
+
 #define ZEND_LAST_CATCH			(1<<0)
 
 #define ZEND_FREE_ON_RETURN     (1<<0)

@@ -227,6 +227,8 @@ static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
 			return attr | ZEND_SHARP_OPERATOR_SYNTAX;
 		case ZEND_AST_DIM:
 			return attr | ZEND_DIM_SHARP;
+		case ZEND_AST_SILENCE:
+			return attr | ZEND_SHARP_SILENCE;
 		default:
 			return attr;
 	}
