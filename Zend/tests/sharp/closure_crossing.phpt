@@ -19,7 +19,7 @@ foreach (['int' => fn () => 42, 'kept' => Library::kept(fn () => 42)] as $key =>
         echo get_class($error), ': ', $error->getMessage(), "\n";
     }
 }
-var_dump($cache->getOrCreate('text', fn () => 'text')->toText());
+var_dump($cache->getOrCreate('text', fn () => 'text'));
 unset($cache);
 unlink($path);
 

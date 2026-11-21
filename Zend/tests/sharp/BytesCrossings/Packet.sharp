@@ -1,0 +1,10 @@
+namespace BytesCrossings;
+
+public class Packet
+{
+    public Packet(public Bytes payload { get; }) { }
+
+    public Bytes? trailer { get; set; } = null;
+
+    public int trailerLength() => this.trailer?.length() ?? 0;
+}

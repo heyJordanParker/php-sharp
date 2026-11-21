@@ -167,6 +167,15 @@ no_notify() {
   fi
   grep -q "did not match any packages" <<< "$output"
 }
+# Every workspace crate keeps version 0.0.0, which a release never bumps, so a bump rebuilds only the root package and
+# mago-build-id, which only the root package reads. A crate's own CARGO_PKG_VERSION is that 0.0.0, so a crate takes the
+# release version from the mago binary instead.
+no_crate_version() {
+  if grep -rn --include='*.rs' CARGO_PKG_VERSION crates docs; then
+    echo "A workspace crate reads its own version, always 0.0.0. Pass it the binary's version, crate::consts::VERSION." >&2
+    return 1
+  fi
+}
 # cargo install puts typos in the folder cargo keeps installed tools in, which cargo finds its own subcommands in, but
 # which a Mac with Homebrew's rustup leaves off PATH. That folder can hold an older rustup's rustc, so it never joins
 # PATH.
@@ -192,6 +201,7 @@ gate_mago_checks() {
   # The fuzz crate is a workspace of its own, which fuzz.yml builds only in its nightly run.
   step rustup run "$rust" cargo metadata --locked --format-version 1 --manifest-path crates/syntax/fuzz/Cargo.toml > /dev/null
   step no_notify
+  step no_crate_version
   step unchanged_by php scripts/regen-sdk-node-kinds.php
   step rustup run "$rust" cargo fmt --all -- --check
   step rustup run "$rust" cargo clippy --workspace --all-targets --all-features -- -D warnings

@@ -1,5 +1,5 @@
 --TEST--
-Preloading keeps the string members of Sharp.Text: contains, lowercase, uppercase, startsWith, endsWith, replace, which puts empty text to replace before each character and after the last, and split, which takes a limit and splits an empty delimiter before each character and after the last
+Preloading keeps the string members of Sharp.Text: contains, lowercase, uppercase, startsWith, endsWith, replace, which puts empty text to replace before each character and after the last, and split, which takes a limit and splits an empty delimiter before each character and after the last, and a preloaded method that returns a Bytes gives plain PHP the string of its bytes
 --INI--
 opcache.enable=1
 opcache.enable_cli=1
@@ -27,6 +27,10 @@ echo json_encode(TextCalls::split('a,b,', ',')), "\n";
 echo json_encode(TextCalls::splitAtMost('a:b:c', ':', 2)), "\n";
 echo json_encode(TextCalls::split('abc', '')), "\n";
 var_dump(TextCalls::replace('abc', '', '-'));
+foreach (['ff00b1', '0a'] as $hex) {
+    $bytes = Sharp\Encoding\Hex::decode($hex);
+    var_dump(strlen($bytes), bin2hex($bytes), ord($bytes[0]), bin2hex($bytes . '!'));
+}
 ?>
 --EXPECT--
 bool(true)
@@ -42,3 +46,11 @@ string(6) "bonono"
 ["a","b:c"]
 ["","a","b","c",""]
 string(7) "-a-b-c-"
+int(3)
+string(6) "ff00b1"
+int(255)
+string(8) "ff00b121"
+int(1)
+string(2) "0a"
+int(10)
+string(4) "0a21"

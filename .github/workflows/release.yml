@@ -1,8 +1,9 @@
 name: Release
 
 # Builds a release's assets: the mago binary per platform with its attestation, Mago's source archives, the SHA-256 of
-# every asset and the release's notes. PHP# and Mago release at one version: ext/sharp/php_sharp.h's PHP_SHARP_VERSION
-# and sharp/mago/Cargo.toml's version must be equal, and sharp/CHANGELOG.md must have that version's section.
+# every asset and the release's notes. PHP# and Mago release at one version, the version of sharp/mago/Cargo.toml's
+# root package, mago, which the engine builds into ext/sharp's sharp_version.h, and sharp/CHANGELOG.md must have that
+# version's section.
 #
 # A release builds its binaries once, as Humble and Farley's Continuous Delivery asks. sharp.yml's RELEASE_ASSETS calls
 # this workflow in every pull request's run, beside the suites, and sharp.yml's RELEASE publishes exactly a bump's files
@@ -43,7 +44,7 @@ jobs:
         run: |
           rustup update stable
           cargo metadata --no-deps --format-version 1 | jq -r '
-            .packages[0] |
+            .packages[] | select(.name == "mago") |
             [
               "version=" + .version,
               "maintainer=" + (.authors[0] // ""),
@@ -52,15 +53,6 @@ jobs:
             ] |
             join("\n")
           ' | tee -a "$GITHUB_OUTPUT"
-      - name: PHP# and Mago share one version
-        env:
-          VERSION: ${{ steps.crate_metadata.outputs.version }}
-        run: |
-          engine=$(sed -n 's/^#define PHP_SHARP_VERSION "\(.*\)"$/\1/p' ../../ext/sharp/php_sharp.h)
-          if [[ "$engine" != "$VERSION" ]]; then
-            echo "::error::ext/sharp/php_sharp.h is PHP# $engine, and sharp/mago/Cargo.toml is Mago $VERSION. Release both at one version."
-            exit 1
-          fi
       # The section runs from its "## [<version>]" heading, which may carry a date, to the next version's heading or
       # the link definitions that end the file.
       - name: The release notes are sharp/CHANGELOG.md's section of the version
@@ -98,7 +90,8 @@ jobs:
       homepage: ${{ steps.crate_metadata.outputs.homepage }}
       msrv: ${{ steps.crate_metadata.outputs.msrv }}
 
-  # sharp/mago/.gitattributes leaves Mago's sources out of git archive, and so out of php-sharp's own tag archives.
+  # sharp/mago/.gitattributes leaves Mago's build script, tests and docs out of git archive, so Mago's source archives
+  # copy the checkout.
   source_archive:
     name: Create source code archives
     runs-on: ubuntu-latest

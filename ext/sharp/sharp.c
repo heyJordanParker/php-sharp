@@ -51,6 +51,7 @@ extern PHP_JSON_API zend_class_entry *php_json_exception_ce;
 #include "sharp_unit.h"
 #include "sharp_build_id.h"
 #include "sharp_native.h"
+#include "sharp_version.h"
 
 #define SHARP_COMPILED_FOLDER ".sharp"
 /* How the path of an input that stands for the .sharp files of its folder ends: the bridge's unit::SOURCE_LISTING. */
@@ -8123,6 +8124,21 @@ static bool sharp_type_takes_bytes(const sharp_type *type)
 		&& zend_string_equals_literal_ci(type->class_name, "Sharp\\Bytes");
 }
 
+/* Whether `value` is the standard library's `Bytes`, which plain PHP receives as PHP's string of its bytes. */
+static bool sharp_is_bytes(const zval *value)
+{
+	return Z_TYPE_P(value) == IS_OBJECT && zend_string_equals_literal_ci(Z_OBJCE_P(value)->name, "Sharp\\Bytes");
+}
+
+/* The slot of the `Bytes` object `bytes` that holds PHP's string of its bytes. */
+static zval *sharp_bytes_data(zend_object *bytes)
+{
+	zend_property_info *data = zend_hash_str_find_ptr(&bytes->ce->properties_info, ZEND_STRL("data"));
+	ZEND_ASSERT(data && !(data->flags & ZEND_ACC_STATIC));
+
+	return OBJ_PROP(bytes, data->offset);
+}
+
 /* Spec section 18: puts in `value` the `Bytes` that holds the string `value` holds, every byte kept. It is built as its
  * engine-only creation, with no constructor: a plain PHP string becomes `Bytes` only where it crosses. */
 static void sharp_bytes_wrap(zval *value)
@@ -8136,13 +8152,11 @@ static void sharp_bytes_wrap(zval *value)
 		}
 		return;
 	}
-	zend_property_info *data = zend_hash_str_find_ptr(&ce->properties_info, ZEND_STRL("data"));
-	ZEND_ASSERT(data && !(data->flags & ZEND_ACC_STATIC));
 	zval bytes;
 	if (object_init_to_build(&bytes, ce) == FAILURE) {
 		return;
 	}
-	zval *slot = OBJ_PROP(Z_OBJ(bytes), data->offset);
+	zval *slot = sharp_bytes_data(Z_OBJ(bytes));
 	ZVAL_COPY_VALUE(slot, value);
 	Z_PROP_FLAG_P(slot) = 0;
 	ZVAL_COPY_VALUE(value, &bytes);
@@ -14136,6 +14150,10 @@ void sharp_array_of(zval *result, zval *value)
 		}
 		return;
 	}
+	if (sharp_is_bytes(value)) {
+		ZVAL_COPY(result, sharp_bytes_data(Z_OBJ_P(value)));
+		return;
+	}
 	if (Z_TYPE_P(value) != IS_ARRAY || zend_hash_num_elements(Z_ARRVAL_P(value)) == 0) {
 		ZVAL_COPY(result, value);
 		return;
@@ -14155,7 +14173,7 @@ void sharp_array_of(zval *result, zval *value)
 	ZEND_HASH_FOREACH_KEY_VAL(array, index, name, element) {
 		zval *held = element;
 		ZVAL_DEREF(held);
-		if (!SHARP_IS_COLLECTION(held)) {
+		if (!SHARP_IS_COLLECTION(held) && !sharp_is_bytes(held)) {
 			continue;
 		}
 		zval crossed;

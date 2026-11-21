@@ -49,7 +49,7 @@ var_dump($draws === array_map(fn () => $second->nextInt(1, 7), range(1, 20)));
 var_dump(min($draws) >= 1 && max($draws) <= 6, $first->nextInt(5, 5));
 $secure = new Sharp\Random();
 $float = $secure->nextFloat();
-var_dump($float >= 0.0 && $float < 1.0, $secure->nextBytes(4)->length());
+var_dump($float >= 0.0 && $float < 1.0, strlen($secure->nextBytes(4)));
 $shuffled = $secure->shuffle([1, 2, 3, 4]);
 sort($shuffled);
 var_dump($shuffled === [1, 2, 3, 4], in_array($secure->pick(['a', 'b']), ['a', 'b'], true), $secure->pick([]));

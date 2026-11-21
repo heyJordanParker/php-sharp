@@ -1,0 +1,7 @@
+namespace BytesCrossings;
+
+import Lib.Streams;
+import Lib.Streams.Stream;
+
+extern Bytes Stream.read(int length) uses none;
+extern string Streams.described(List<Bytes>|Map<string, Bytes> values) uses none;
