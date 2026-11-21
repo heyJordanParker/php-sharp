@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.45] - 2026-11-21
+
 ### Changed
 
 - Name resolution finds the class-like a bare name in a `.sharp` file names by default, spec section 23, in one lookup by its short name, where 0.6.44 compared the name with the short name of each of up to 118 default class-likes. A one-file edit of a 2,128-file project retires 56.2 G instructions in `mago analyze` where it retired 58.2 G, medians of 4 alternating rounds, with the same `.sharp` folder and issues.
@@ -1597,7 +1599,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.44...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.45...HEAD
+[0.6.45]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.44...v0.6.45
 [0.6.44]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.43...v0.6.44
 [0.6.43]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.42...v0.6.43
 [0.6.42]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.41...v0.6.42
