@@ -7,6 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Changed
 
 - A compile walks the project's folders once. Its record of the source files takes each file's status from the walk the loader lists the files with, before any file is read, where 0.6.41 walked every folder a second time for the record. The record now names exactly the files the compile reads: a file an `excludes` pattern leaves out, or one under the folder a `paths` glob starts with that the glob doesn't match, no longer makes the next compile run again when it changes. A one-file edit of a 2,128-file project retires 58.1 G instructions in `mago analyze` where it retired 61.7 G, medians of 4 alternating rounds, with the same `.sharp` folder and issues.
+- A whole `mago analyze` of a project with no extension host enabled analyzes the project once: it reports the analysis its compile into `.sharp/` made, where 0.6.41 analyzed every file a second time for the report. A plain PHP project paid for that second analysis too. A whole `mago analyze` of 8,451 Laravel vendor files retires 74.8 G instructions where it retired 143.5 G, and 12.5 CPU-seconds where it took 23.9, medians of 3 alternating rounds, with the same issues. A one-file edit of a 2,128-file project with no host retires 31.0 G where it retired 49.3 G, medians of 4 alternating rounds, with the same `.sharp` folder and issues. A run with `--no-stubs` or `--substitute` still analyzes again, since it reads the files otherwise than the compile does.
 
 ### Fixed
 
