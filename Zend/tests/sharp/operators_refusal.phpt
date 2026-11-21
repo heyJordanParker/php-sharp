@@ -124,10 +124,10 @@ line 17: `|` takes `int`, but both sides are `bool`: write `||` for two `bool` v
   PHP# gives `|`, `&`, `^`, `~`, `<<`, `>>` and their compound forms to `int` only.
   help: `||`, `&&` and `!=` join two `bool` values.
 line 23: This `match` misses `Status.Closed`.
-  A `match` may leave out `default` only when its arms handle every case of an enum or a sealed interface, or every value of a `List`.
+  A `match` may leave out `default` only when its arms handle every case of an enum or a sealed interface, every member of a union of classes, or every value of a `List`.
   help: Add an arm for each value it misses, or add `default => …` as the last arm.
 line 32: A `match` needs a `default` arm.
-  A `match` may leave out `default` only when its arms handle every case of an enum or a sealed interface, or every value of a `List`.
+  A `match` may leave out `default` only when its arms handle every case of an enum or a sealed interface, every member of a union of classes, or every value of a `List`.
   help: Add `default => …` as the last arm.
 line 40: Left operand in binary operation has type `Any?`.
   An `Any` may hold any value, so arithmetic on it is unsafe until it is checked.
