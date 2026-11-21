@@ -45,7 +45,7 @@ const RUNTIME = ['value', 'throws', 'message'];
 // the generic `semantics`. Only these move to the `compile error` line inside the construct. A new one joins in a PR of its own.
 const MOVES = ['match-not-exhaustive', 'rejected-nullable-parameter', 'A `match` needs a `default` arm.'];
 const SECTION = '§\d+(?:\.\d+)*|README';
-const TYPE_DECLARATION = '~^(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign|extern)\s+)*(?:class|struct|enum|interface|event|trait|module)\b|^extern\b|^module\b~';
+const TYPE_DECLARATION = '~^(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign|extern)\s+)*(?:class|struct|enum|machine|interface|event|trait|module)\b|^extern\b|^module\b~';
 const CONTROL_STATEMENT = '~^\s*(?:\}\s*)?(?:if|else|while|for|foreach|do|try|catch|finally)\b~';
 const MEMBER = '~^(?:\[.*\]\s*)*(?:public|private|protected|internal|static)\b|^[\w<>?,|.\[\]]+\s+\w+\s*\([^)]*\)\s*(?:\{|=>)~';
 const PHP_DECLARATION = '~^(?:(?:abstract|final|readonly)\s+)*(?:class|interface|trait|enum|function)\b|^(?:namespace|use)\b~';
@@ -689,7 +689,7 @@ function split_types(array $file, bool $named): array
         }
         if (preg_match('~^(?:namespace|import)\b~', $declaration)) {
             array_push($head, ...$lines);
-        } elseif (preg_match('~^(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign)\s+)*(?:class|struct|enum|interface|event|trait)\b~', $declaration)) {
+        } elseif (preg_match('~^(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign)\s+)*(?:class|struct|enum|machine|interface|event|trait)\b~', $declaration)) {
             $written = array_filter(array_column($lines, 1), static fn (?array $at): bool => $at !== null) !== [];
             if ($named ? $written : $kept === 0) {
                 array_push($first, ...$lines);
@@ -759,16 +759,17 @@ function run_line(array $block, array $line): bool
 
 /**
  * @return list<string> the full name of every type a file declares at its top level, of the trait of each PHP#
- * interface's default bodies, `HasDesign\Defaults`, which the interface's file declares (spec section 22), and of each
- * case of an enum whose cases carry data, `Badge\Marked`, which the enum's file declares (spec section 20)
+ * interface's default bodies, `HasDesign\Defaults`, which the interface's file declares (spec section 22), of each
+ * case of an enum whose cases carry data, `Badge\Marked`, which the enum's file declares (spec section 20), and of each
+ * case of a machine, `OrderStatus\Paid`, which the machine's file declares (spec section 20.2)
  */
 function declared_names(string $contents, string $language): array
 {
     $namespace = preg_match('~^namespace ([\w.\\\\]+)~m', $contents, $m) ? str_replace('.', '\\', $m[1]) : '';
     preg_match_all($language === 'php'
         ? '~^(?:(?:abstract|final|readonly)\s+)*(class|interface|trait|enum)\s+(\w+)~m'
-        : '~^(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign)\s+)*(class|struct|enum|interface|event|trait)\s+(\w+)~m', $contents, $found, PREG_SET_ORDER);
-    preg_match_all('~^\s*case\s+(\w+)\s*(\()?~m', $contents, $cases, PREG_SET_ORDER);
+        : '~^(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign)\s+)*(class|struct|enum|machine|interface|event|trait)\s+(\w+)~m', $contents, $found, PREG_SET_ORDER);
+    preg_match_all('~^\s*(?:final\s+)?case\s+(\w+)\s*(\()?~m', $contents, $cases, PREG_SET_ORDER);
     $carries_data = array_filter($cases, static fn (array $case): bool => isset($case[2])) !== [];
 
     $names = [];
@@ -777,7 +778,7 @@ function declared_names(string $contents, string $language): array
         if ($language === 'sharp' && $kind === 'interface') {
             $names[] = ltrim("$namespace\\$name\\Defaults", '\\');
         }
-        if ($language === 'sharp' && $kind === 'enum' && $carries_data) {
+        if ($language === 'sharp' && ($kind === 'machine' || $kind === 'enum' && $carries_data)) {
             foreach ($cases as [, $case]) {
                 $names[] = ltrim("$namespace\\$name\\$case", '\\');
             }
