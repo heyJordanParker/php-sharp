@@ -242,8 +242,7 @@ jobs:
 
       - name: Install what the PHP# engine builds with
         if: contains(matrix.job.os, 'ubuntu')
-        shell: bash
-        run: sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends autoconf bison cmake pkg-config re2c libedit-dev libicu-dev liblzma-dev libsodium-dev libsqlite3-dev libssl-dev libxml2-dev zlib1g-dev
+        uses: ./.github/actions/engine-packages
 
       - name: install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
