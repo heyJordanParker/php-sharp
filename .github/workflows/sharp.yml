@@ -465,7 +465,8 @@ jobs:
   # sharp/bin/test doesn't take: the Zend allocator off, so ASan sees each allocation, and LeakSanitizer with php-src's
   # suppressions. The PHP# tests run without opcache, in shared memory twice per process, and under the tracing JIT,
   # the stores a PHP# mark passes through, and leave out the upstream tests, whose baseline lists a build without ASan.
-  # It restores BUILD_LINUX's caches and saves none, so the caches keep room for the ones every pull request restores.
+  # It restores BUILD_LINUX's Rust and Mago caches and saves none, so the caches keep room for the ones every pull
+  # request restores.
   # A failed run opens the red-master issue, as CI_PASSED does for a push.
   ASAN:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -497,22 +498,14 @@ jobs:
           rust-paths: |
             sharp/build/cargo
             sharp/build/rustup
-      - name: Restore the engine mago links
-        id: mago-engine
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/linux-x86_64-engine/install
-          key: MAGO_ENGINE-debian-${{ runner.arch }}-${{ hashFiles('configure.ac', 'build/**', 'main/**', 'Zend/**', 'TSRM/**', 'sapi/**', 'ext/**', 'scripts/**', '!**/tests/**', 'sharp/bin/build-mago', 'sharp/docker/runtime/configure-options', 'sharp/docker/Dockerfile') }}
       # Only this step's CFLAGS, so mago builds without ASan.
       - name: Build with AddressSanitizer
         run: sharp/docker/run env CFLAGS="-fsanitize=address -DZEND_TRACK_ARENA_ALLOC" LDFLAGS=-fsanitize=address sharp/bin/build
-      # An empty MAGO_ENGINE, when the engine's cache missed, has sharp/bin/build-mago build that engine first.
+      # sharp/bin/test builds mago, and sharp/bin/build-mago the engine it links first.
       - name: Test PHP# with AddressSanitizer
-        env:
-          MAGO_ENGINE: ${{ steps.mago-engine.outputs.cache-hit == 'true' && '/src/sharp/build/linux-x86_64-engine/install' || '' }}
         run: |
           sharp/docker/run env USE_ZEND_ALLOC=0 USE_TRACKED_ALLOC=1 SKIP_ASAN=1 SKIP_PERF_SENSITIVE=1 \
-            LSAN_OPTIONS=suppressions=/src/.github/lsan-suppressions.txt MAGO_ENGINE="$MAGO_ENGINE" sharp/bin/test
+            LSAN_OPTIONS=suppressions=/src/.github/lsan-suppressions.txt sharp/bin/test
       # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed nightly run
         if: failure()
