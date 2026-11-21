@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.46] - 2026-11-21
+
 ### Upgrading from 0.6.45
 
 - A PHP# call of a method a plain PHP class declares nowhere, which only its `__call` or `__callStatic` answers, stops compiling. Call the real method the magic forwards to, as `cache.get("key")` on the injected repository or `User.query().where("email", e)`, or the method a `@method` or `@mixin` line of the class declares.
@@ -1635,7 +1637,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.45...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.46...HEAD
+[0.6.46]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.45...v0.6.46
 [0.6.45]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.44...v0.6.45
 [0.6.44]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.43...v0.6.44
 [0.6.43]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.42...v0.6.43
