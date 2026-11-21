@@ -21,8 +21,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   # CI_PASSED is this workflow's one required check. Every push runs every check, whatever it changed: the Linux suites,
-  # each job on 4 cores, the Mac's, the runtime image and the release's build, so every check that guards a release runs
-  # before the merge, on the tree that merges. GitHub runs 20 of the account's hosted jobs at once, across all its
+  # each job on 4 cores, the Mac's and the runtime image, and a release's bump also builds the release, so every check
+  # that guards a release runs before the merge, on the tree that merges. GitHub runs 20 of the account's hosted jobs at once, across all its
   # repositories, and a job past them waits.
   #
   # A tree runs the checks once, as bors's "not rocket science" rule tests the exact tree that lands once. A run runs
@@ -53,8 +53,15 @@ jobs:
       # pull request merged into master, so the tree it tests is that merge's, not its head's.
       - name: Name the tree this run tests
         run: echo "::notice title=Tested tree::$(git rev-parse 'HEAD^{tree}')"
-      # A run passed when it built the release's files, which RELEASE publishes from it, so a run that skipped a tree
-      # an earlier run passed never counts.
+      # A change is a release's bump while origin has no tag for sharp/mago/Cargo.toml's version, as sharp/bin/check
+      # --release prints it. So a release whose push failed is still a bump in the next pull request, and its merge
+      # publishes it, with no second bump.
+      - name: Find the version, and whether it is a release's bump
+        id: version
+        run: sharp/bin/check --release | tee -a "$GITHUB_OUTPUT"
+      # A run passed when CI_PASSED passed, and for a bump's tree when it also built the release's files, which RELEASE
+      # publishes from it, so a run that skipped a bump's tree an earlier run passed never counts. Only a bump's run
+      # builds them, so a commit's run counts by CI_PASSED alone.
       - name: Find the pull request run that passed this tree
         id: passed
         uses: ./.github/actions/passed-tree
@@ -63,7 +70,8 @@ jobs:
           events: pull_request
           passed: >-
             any(.jobs[]; .name == "CI_PASSED" and .conclusion == "success")
-            and any(.jobs[]; .name == "RELEASE_ASSETS / Write the SHA-256 of every asset" and .conclusion == "success")
+            and (${{ steps.version.outputs.bump != 'true' }}
+              or any(.jobs[]; .name == "RELEASE_ASSETS / Write the SHA-256 of every asset" and .conclusion == "success"))
       - name: The checks don't run again
         if: steps.passed.outputs.run
         env:
@@ -95,12 +103,6 @@ jobs:
           done
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "This push's changes start at ${sha:-no commit, so every job runs}."
-      # A change is a release's bump while origin has no tag for sharp/mago/Cargo.toml's version, as sharp/bin/check
-      # --release prints it. So a release whose push failed is still a bump in the next pull request, and its merge
-      # publishes it, with no second bump.
-      - name: Find the version, and whether it is a release's bump
-        id: version
-        run: sharp/bin/check --release | tee -a "$GITHUB_OUTPUT"
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -543,12 +545,13 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
-  # The release's Mago binaries, their attestations, Mago's source archives, their SHA-256s and its notes, which
-  # release.yml builds beside the suites in every pull request's run, and in a push to master whose tree no pull
-  # request's run passed, so a build that fails fails before the merge. A release's bump builds them with publish, so
-  # its macOS binary builds with profile-guided optimization, and RELEASE publishes them as they are. Its macOS build is
-  # the run's one Mac job: it also runs every check only macOS can fail, on the Mac's one build of the engine mago
-  # links, as release.yml's checks key explains. A called workflow's jobs may ask only for permissions its caller grants.
+  # release.yml, beside the suites in every pull request's run, and in a push to master whose tree no pull request's run
+  # passed. Its macOS row is the run's one Mac job, which runs every check only macOS can fail, on the Mac's one build of
+  # the engine mago links, as release.yml's checks key explains. A commit's run checks, and only a release's bump builds
+  # the release: with publish, release.yml builds Mago's binaries, the macOS one with profile-guided optimization, their
+  # attestations, Mago's source archives, their SHA-256s and its notes, beside the Mac's checks, so a build that fails
+  # fails before the merge, and RELEASE publishes them as they are. A called workflow's jobs may ask only for
+  # permissions its caller grants.
   RELEASE_ASSETS:
     needs: CHANGES
     if: ${{ !needs.CHANGES.outputs.passed }}
