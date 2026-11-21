@@ -4,6 +4,15 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A law reasons about a machine's value as the closed set of its cases, spec sections 20.2 and 28, as it does about an enum's. `is` and `match` on it test which case it is, `this` in the machine's own methods included, and `==` between two of its values compares the case and its fields, as the machine's `==` does when it runs. So `law turningOnLights() => Lamp.off().turnOn().lit();` proves where `lit()` is `this is Lamp.On`, and so does `law turningOnLightsTheLamp() => Lamp.off().turnOn() == Lamp.On;`. 0.6.41 refused the first as "a match on this subject" and then as "the checker left out On", and the second as "the checker left out Lamp.operator ==", each of those last two called a bug in the PHP# checker.
+- A law reasons about a type test inside `or`, `and` and `not`, spec sections 21 and 28, as it does about one standing alone: of a sealed interface's implementer, a machine's case, and a list pattern. So a move whose arm is `Stop or Wait => this`, or whose value is `signal is not Go ? this : Light.Red(now)`, proves its law, and so does `xs is [] or [int]`. 0.6.41 refused it as "Law stopKeeps reaches a type test in Light.Red.answer. It reads types while the code runs."
+- A law reasons about a union of one machine's cases, spec sections 20.2 and 28, as part of the machine's closed set of cases, and about `is` on a case that holds data. So a move typed `Counter.Counting|Counter.Done` proves `law twoCount() => Counter.start(2).step() is Counter.Counting;`. 0.6.41 refused the move as "reaches the type `Counter.Counting|Counter.Done` … Give it a type a law reasons about". A union across machines stays refused.
+- A machine's invariant proves after a move whose branches give different cases, spec sections 20.2 and 28, as it proves after one that gives one case: the move keeps it from a value it holds on. So `law aCountIsOneOrTwo(Counter.Counting counting) => counting.n >= 1 && counting.n <= 2;` proves where `step()` is `this.n >= 2 ? Counter.Done : Counter.Counting(this.n + 1)`. 0.6.41 refused it as "`aCountIsOneOrTwo` breaks after `step()`", though no reachable move breaks it. An invariant a reachable move breaks is still refused with the moves that break it.
+
+## [0.6.41] - 2026-11-21
+
 ### Upgrading from 0.6.40
 
 - A `string` is text and always valid UTF-8, spec section 18, and binary data is `Bytes`, a struct in `Sharp` that every file names with no import. `text.toBytes()` gives a string's UTF-8 bytes, and `bytes.toText()` reads bytes back as text, each byte sequence that is not UTF-8 becoming U+FFFD. Each byte member moves to `Bytes`:
@@ -47,6 +56,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - `mago compile` decides which file a law's refusal says has errors from the errors the analysis reported, as `mago analyze` does, spec section 28. A law that reaches a file with no errors that the compile left untranslated, as one whose lowering panicked, is refused as the checker's bug, "the checker left out Money.add, which the law reaches. This is a bug in the PHP# checker; report it to its maintainers.", where 0.6.40 said "it reaches Money.add, whose file has errors." of a file with none.
 - A law that passes a state of a sealed interface where an open interface the state implements is expected proves, spec section 28, as `Pending.keep(pending)` does when `Pending : OrderStatus, Printable` and `keep` takes a `Printable`. 0.6.40 refused it as "the checker translated the code it reaches wrongly. This is a bug in the PHP# checker".
 - A law that takes a value of a class that is a state of two sealed interfaces is refused with its reason, spec section 28, as "Law keepsCard reaches the class Card in Card.keepsCard. It is a state of both `Colored` and `Shape`, and a state belongs to one sealed interface in a law.". 0.6.40 gave the class the Lean type of the first interface by name, so a law that passed it as the other was refused as the checker's bug, and a law that passed it as the first proved.
+- A law gets the same answer on a busy machine as on an idle one, spec section 28: Lean's heartbeats alone bound its proof. Mago stops the law checker only when it has written nothing and used no processor time for its deadline, 480 seconds, so a checker that computes on a machine that gives it little of a core is never stopped, and one that waits still is. 0.6.40 stopped the checker once it wrote nothing for 480 seconds, so on a machine at a load of 150 a law whose search ran that long failed the compile with "The laws could not be checked: the law checker did not finish within 480 seconds.", though it proved on the same tree at a lower load.
+- An `internal` member of a case's block reaches the namespace its file declares, spec sections 5 and 20.2, as every `internal` member does. So in `namespace App;`, the machine `Lamp`'s own methods and laws, and every class of `App`, call its case `Off`'s `internal turnOn()`, and a class of `Web` is refused with "`Off.turnOn` is internal to `App`, and `Web` is outside it.". 0.6.40 read the namespace from the class the case runs as, `App\Lamp\Off`, so it refused the machine's own law and methods with "`Off.turnOn` is internal to `App.Lamp`, and `App` is outside it.".
 
 ## [0.6.40] - 2026-11-20
 
@@ -1541,7 +1552,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.40...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.41...HEAD
+[0.6.41]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.40...v0.6.41
 [0.6.40]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.39...v0.6.40
 [0.6.39]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.38...v0.6.39
 [0.6.38]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.37...v0.6.38

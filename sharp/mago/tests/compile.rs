@@ -4079,6 +4079,43 @@ fn a_move_that_breaks_a_machine_s_invariant_is_refused_with_the_moves_that_break
     );
 }
 
+/// Spec sections 20.2 and 28: an invariant is about the values entry points and moves reach, so each move keeps it from
+/// a value it holds on, and a value no entry point and no move reaches never breaks it. An invariant a reachable move
+/// breaks is still refused with the moves that break it.
+#[test]
+fn a_machine_s_invariant_holds_on_the_case_each_move_starts_from() {
+    let counter = |law: &str| {
+        format!(
+            "namespace App;\n\npublic machine Counter\n{{\n    case Idle {{ public Counter.Counting start() => Counter.Counting(1); }}\n    case Counting(int n) {{ public Counter step() => this.n >= 2 ? Counter.Done : Counter.Counting(this.n + 1); }}\n    final case Done;\n    public static Counter.Idle idle() => Counter.Idle;\n    {law}\n}}\n"
+        )
+    };
+    let directory = lawful_project(&[(
+        "app/Counter.sharp",
+        &counter("law aCountIsOneOrTwo(Counter.Counting counting) => counting.n >= 1 && counting.n <= 2;"),
+    )]);
+
+    let output = compile(directory.path());
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(directory.path(), "app/Counter.sharp").exists());
+
+    let directory = lawful_project(&[(
+        "app/Counter.sharp",
+        &counter("law aCountIsOne(Counter.Counting counting) => counting.n == 1;"),
+    )]);
+
+    let output = compile(directory.path());
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "error[law-unproven]: `aCountIsOne` breaks after `idle() → Idle`, `start() → Counting(n: 1)`, `step() → Counting(n: 2)`\n"
+        ),
+        "{}",
+        printed(&output)
+    );
+}
+
 /// Spec section 20.2: a move that breaks an invariant only on a value no small value of its parameters is, as
 /// `pay(7)`, is refused by its name and the names of its parameters.
 #[test]
@@ -4345,6 +4382,148 @@ fn a_law_reaching_a_state_of_two_sealed_interfaces_is_refused() {
             ),
         );
     }
+}
+
+/// Spec sections 20.2 and 28: a machine's cases are every value it has, so a law reasons about `is` on a machine
+/// value, `this` included, and about `==` between two of its values, which compares the case and its fields. A law
+/// that is false in a case is not proven.
+#[test]
+fn a_law_reasons_about_a_machine_value_s_case_tests_and_equality() {
+    let lamp = |laws: &str| {
+        format!(
+            "namespace App;\n\npublic machine Lamp\n{{\n    case Off {{ public Lamp.On turnOn() => Lamp.On; }}\n    final case On;\n    public static Lamp.Off off() => Lamp.Off;\n    public bool lit() => this is Lamp.On;\n    {laws}\n}}\n"
+        )
+    };
+    let walk = |laws: &str| {
+        format!(
+            "namespace App;\n\npublic machine Walk\n{{\n    case A {{ public Walk.B go() => Walk.B; }}\n    case B {{ public Walk.A back() => Walk.A; }}\n    public static Walk.A enter() => Walk.A;\n    {laws}\n}}\n"
+        )
+    };
+    let toggle = "namespace App;\n\npublic machine Lamp\n{\n    case Off { public Lamp.On turnOn() => Lamp.On; }\n    case On { public Lamp.Off turnOff() => Lamp.Off; }\n    public static Lamp.Off enter() => Lamp.Off;\n    law turningOnLightsTheLamp() => Lamp.enter().turnOn() == Lamp.On;\n}\n";
+    for (name, source) in [
+        (
+            "app/Lamp.sharp",
+            lamp(
+                "law turningOnLights() => Lamp.off().turnOn().lit();\n    law turningOnLightsTheLamp() => Lamp.off().turnOn() == Lamp.On;",
+            ),
+        ),
+        ("app/Lamp.sharp", toggle.to_owned()),
+        ("app/Walk.sharp", walk("law roundTrip() => Walk.enter().go().back() == Walk.enter();")),
+    ] {
+        let directory = lawful_project(&[(name, &source)]);
+
+        let output = compile(directory.path());
+
+        assert!(output.status.success(), "{}", printed(&output));
+        assert!(compiled(directory.path(), name).exists());
+    }
+    for (name, source, law) in [
+        ("app/Lamp.sharp", lamp("law dark() => Lamp.off().turnOn().lit() == false;"), "dark"),
+        ("app/Walk.sharp", walk("law wrong() => Walk.enter().go() == Walk.enter();"), "wrong"),
+    ] {
+        let directory = lawful_project(&[(name, &source)]);
+
+        let output = compile(directory.path());
+
+        assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+        assert!(
+            printed(&output).contains(&format!("error[law-unproven]: law {law} is not proven\n")),
+            "{}",
+            printed(&output)
+        );
+    }
+}
+
+/// Spec sections 21 and 28: a type test is a condition like any pattern's, so `or`, `and` and `not` combine it, of a
+/// sealed interface's implementer, of a machine's case and of a list. A law that is false where the combined test holds
+/// is not proven.
+#[test]
+fn a_law_reasons_about_a_type_test_inside_or_and_not() {
+    let light = |answer: &str, law: &str| {
+        format!(
+            "namespace App;\n\npublic machine Light\n{{\n    case Red(int at)\n    {{\n        public Light.Red answer(Signal signal, int now) => {answer};\n    }}\n\n    public static Light.Red enter(int at) => Light.Red(at);\n\n    {law}\n}}\n"
+        )
+    };
+    let lamp = "namespace App;\n\npublic machine Lamp\n{\n    case Off { public Lamp.On turnOn() => Lamp.On; }\n    final case On;\n    public static Lamp off() => Lamp.Off;\n    public bool known() => this is Lamp.Off or Lamp.On;\n    law offIsKnown() => Lamp.off().known();\n}\n";
+    let count = "namespace App;\n\npublic class Count\n{\n    public static int few(List<int> xs) => xs is [] or [int] ? 1 : 2;\n    law oneIsFew(int x) => Count.few([x]) == 1;\n    law twoAreMany(int x) => Count.few([x, x]) == 2;\n}\n";
+    let signals = |light: String| {
+        lawful_project(&[
+            ("app/Signal.sharp", "namespace App;\n\npublic sealed interface Signal\n{\n}\n"),
+            ("app/Go.sharp", "namespace App;\n\npublic class Go : Signal\n{\n}\n"),
+            (
+                "app/Stop.sharp",
+                "namespace App;\n\npublic class Stop : Signal\n{\n    public Stop(public string reason { get; }) { }\n}\n",
+            ),
+            ("app/Wait.sharp", "namespace App;\n\npublic class Wait : Signal\n{\n}\n"),
+            ("app/Light.sharp", &light),
+            ("app/Lamp.sharp", lamp),
+            ("app/Count.sharp", count),
+        ])
+    };
+    let or = "match (signal) {\n            Go => Light.Red(now),\n            Stop or Wait => this,\n        }";
+    let not = "signal is not Go ? this : Light.Red(now)";
+    for light in [
+        light(or, "law stopKeeps(int now) => Light.enter(1).answer(new Stop(\"r\"), now).at == 1;"),
+        light(not, "law waitKeeps(int now) => Light.enter(1).answer(new Wait(), now).at == 1;"),
+    ] {
+        let directory = signals(light);
+
+        let output = compile(directory.path());
+
+        assert!(output.status.success(), "{}", printed(&output));
+        for name in ["app/Light.sharp", "app/Lamp.sharp", "app/Count.sharp"] {
+            assert!(compiled(directory.path(), name).exists(), "{name}");
+        }
+    }
+    for (light, law) in [
+        (light(or, "law waitMoves(int now) => Light.enter(1).answer(new Wait(), now).at == now;"), "waitMoves"),
+        (light(not, "law stopMoves(int now) => Light.enter(1).answer(new Stop(\"r\"), now).at == now;"), "stopMoves"),
+    ] {
+        let directory = signals(light);
+
+        let output = compile(directory.path());
+
+        assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+        assert!(
+            printed(&output).contains(&format!("error[law-unproven]: law {law} is not proven\n")),
+            "{}",
+            printed(&output)
+        );
+    }
+}
+
+/// Spec sections 20.2 and 28: a union of one machine's cases is a part of the machine's closed set of cases, so a law
+/// reasons about a move that gives one of them, and about which case it gives. A law that is false in the case the move
+/// gives is not proven.
+#[test]
+fn a_law_reasons_about_a_union_of_one_machine_s_cases() {
+    let counter = |law: &str| {
+        format!(
+            "namespace App;\n\npublic machine Counter\n{{\n    case Counting(int left)\n    {{\n        public Counter.Counting|Counter.Done step() => this.left > 1 ? Counter.Counting(this.left - 1) : Counter.Done;\n    }}\n\n    final case Done;\n\n    public static Counter.Counting start(int left) => Counter.Counting(left);\n\n    {law}\n}}\n"
+        )
+    };
+
+    let directory = lawful_project(&[(
+        "app/Counter.sharp",
+        &counter(
+            "law twoCount() => Counter.start(2).step() is Counter.Counting;\n    law oneIsDone() => Counter.start(1).step() is Counter.Done;",
+        ),
+    )]);
+
+    let output = compile(directory.path());
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(directory.path(), "app/Counter.sharp").exists());
+
+    let directory = lawful_project(&[(
+        "app/Counter.sharp",
+        &counter("law oneCounts() => Counter.start(1).step() is Counter.Counting;"),
+    )]);
+
+    let output = compile(directory.path());
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(printed(&output).contains("error[law-unproven]: law oneCounts is not proven\n"), "{}", printed(&output));
 }
 
 /// Spec section 28: `<` on two values of a class runs the class's own `<=>`, so a law that compares two `Instant`s
@@ -5175,7 +5354,8 @@ fn stalling_cache(folder: &Path, work: &str) -> PathBuf {
 /// built the runtime library. Work that never ends runs under a limit of 2 seconds, and costs the compile less than two
 /// limits, which leaves room for the rest of the compile on a slow machine. It spins, and an alarm on the clock makes
 /// it write a line each second, as the runner reports each module and check it starts, so the deadline, which counts
-/// from the last thing written, never stops it, however little of a core a busy machine gives it. It spins with no
+/// from the last thing written or the last processor time used, never stops it, however little of a core a busy
+/// machine gives it. It spins with no
 /// system call, since macOS lets a process that spends its time in system calls run past its limit. It ends with no
 /// answer once it has used 10 processor seconds, so a limit that no longer stops it fails the row. Work that waits runs
 /// under a limit of 2 seconds, so its deadline is 8 seconds, and it ends with no answer after 60 seconds, so a deadline
@@ -5211,6 +5391,35 @@ fn lean_work_that_never_ends_stops_once_at_its_limit_or_deadline() {
         );
         waits.join().unwrap();
     });
+}
+
+/// Spec section 28: heartbeats alone bound a proof, so a runner that computes past its deadline without writing, as a
+/// runner on a busy machine does, is not stopped there, and its law proves. The runner replays the answer the tests'
+/// runner gave the same request, after it computes for 12 seconds without writing, with a share of a core small enough
+/// to stay under a limit of 2 processor seconds, whose deadline is 8 seconds.
+#[cfg(unix)]
+#[test]
+fn a_runner_that_computes_past_its_deadline_without_writing_finishes() {
+    let lake = tempfile::tempdir().unwrap();
+    let answer = lake.path().join("answer");
+    let recording = cache_with_runner(lake.path(), &format!("\"$real\" \"$@\" | tee '{}'", answer.display()));
+    let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]);
+    let recorded = process::output(command(directory.path(), "never").env("XDG_CACHE_HOME", recording)).unwrap();
+    assert!(recorded.status.success(), "{}", printed(&recorded));
+    let busy = tempfile::tempdir().unwrap();
+    let cache = cache_with_runner(
+        busy.path(),
+        &format!(
+            "cat > /dev/null\nperl -MTime::HiRes=time,sleep -e 'my $end = time + 12; while (time < $end) {{ my $spin = time + 0.01; 1 while time < $spin; sleep 0.29 }}'\ncat '{}'",
+            answer.display()
+        ),
+    );
+    let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]);
+
+    let (output, _) = compile_lines_within(directory.path(), 2, &cache);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(directory.path(), "app/Shared/Money.sharp").exists());
 }
 
 /// Each signal that ends a compile from a terminal or `kill` ends the Lean it waits on too, though Mago runs Lake in a

@@ -16,6 +16,11 @@ if [[ ${1:-} == --engine ]]; then
 fi
 cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
 target="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago"
+# Every file a rename publishes is written under a name with this process's id first, so two builds in one checkout
+# never rename each other's: two builders writing build.json.part both renamed it, and the second rename failed with
+# "No such file or directory". A build that fails leaves none of them.
+library=
+trap 'rm -f "$target/build.json.part.$$" ${library:+"$library/system-libs.part.$$" "$library/libphp.a.part.$$"}' EXIT
 
 # The PHP# engine mago links, which runs the extension hosts inside mago, one interpreter per analysis thread. It builds
 # with the options sharp/docker/runtime/configure-options prints, the runtime image's, so a host runs inside mago with
@@ -170,12 +175,12 @@ build_engine() {
       system=(c m pthread stdc++ c++ resolv z iconv xml2 icucore sqlite3 edit ncurses)
     fi
     archives=()
-    : > "$library/system-libs.part"
+    : > "$library/system-libs.part.$$"
     read -r -a libs <<< "$("$engine/install/bin/php-config" --libs)"
     for ((index = 0; index < ${#libs[@]}; index++)); do
       flag=${libs[index]}
       case "$flag" in
-        -framework) echo "framework=${libs[++index]}" >> "$library/system-libs.part"; continue ;;
+        -framework) echo "framework=${libs[++index]}" >> "$library/system-libs.part.$$"; continue ;;
         # -l:<file> names the archive's own file, as OpenSSL 3.5's libcrypto names jitterentropy's.
         -l:*) name= file=${flag#-l:} ;;
         -l*) name=${flag#-l} file=lib${flag#-l}.a ;;
@@ -185,7 +190,7 @@ build_engine() {
         # macOS ships libc++ alone. Its clang links it for -lstdc++, which intl's link names, but rustc links with
         # -nodefaultlibs, which keeps clang from doing so.
         [[ "$(uname -s)" == Darwin && $name == stdc++ ]] && name=c++
-        echo "$name" >> "$library/system-libs.part"
+        echo "$name" >> "$library/system-libs.part.$$"
         continue
       fi
       archive=
@@ -201,17 +206,17 @@ build_engine() {
       fi
       [[ " ${archives[*]} " == *" $archive "* ]] || archives+=("$archive")
     done
-    sort -u -o "$library/system-libs.part" "$library/system-libs.part"
+    sort -u -o "$library/system-libs.part.$$" "$library/system-libs.part.$$"
 
-    rm -f "$library/libphp.a.part"
+    rm -f "$library/libphp.a.part.$$"
     if [[ "$(uname -s)" == Darwin ]]; then
-      libtool -static -no_warning_for_no_symbols -o "$library/libphp.a.part" "${objects[@]}" "${archives[@]}"
+      libtool -static -no_warning_for_no_symbols -o "$library/libphp.a.part.$$" "${objects[@]}" "${archives[@]}"
     else
-      ar crs "$library/libphp.a.part" "${objects[@]}"
-      { echo "OPEN $library/libphp.a.part"; printf 'ADDLIB %s\n' "${archives[@]}"; echo SAVE; echo END; } | ar -M
+      ar crs "$library/libphp.a.part.$$" "${objects[@]}"
+      { echo "OPEN $library/libphp.a.part.$$"; printf 'ADDLIB %s\n' "${archives[@]}"; echo SAVE; echo END; } | ar -M
     fi
-    mv "$library/system-libs.part" "$library/system-libs"
-    mv "$library/libphp.a.part" "$library/libphp.a"
+    mv "$library/system-libs.part.$$" "$library/system-libs"
+    mv "$library/libphp.a.part.$$" "$library/libphp.a"
   fi
 }
 if $engine_only || [[ -z ${MAGO_ENGINE:-} ]]; then
@@ -231,8 +236,8 @@ mkdir -p "$target"
 PATH="$(dirname "$cargo"):$PATH" "$cargo" test --workspace --locked --no-run \
   --manifest-path "$root/sharp/mago/Cargo.toml" \
   --target-dir "$target" --jobs "$("$root/sharp/bin/jobs")" --message-format=json-render-diagnostics "$@" \
-  > "$messages.part"
-mv "$messages.part" "$messages"
+  > "$messages.part.$$"
+mv "$messages.part.$$" "$messages"
 
 # Cargo never deletes a copy of a crate it no longer uses. Each distinct `cargo test -p` or `cargo clippy -p` list
 # compiles its own copy of the shared crates, and so does each version bump or Cargo.lock change. A fresh build holds

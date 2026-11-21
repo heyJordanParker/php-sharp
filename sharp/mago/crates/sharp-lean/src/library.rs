@@ -210,20 +210,22 @@ fn stopped_code(code: i32) -> bool {
 pub(crate) enum Stop {
     /// It ran past `processor_seconds()`.
     Processor,
-    /// It went `deadline()` without finishing: it waited, or it computed on a machine too busy to give it a quarter of a
-    /// core.
+    /// It went `deadline()` without writing and without using processor time: it waited.
     Waited,
 }
 
-/// The wall-clock time Lean work may go without finishing: four times `processor_seconds()`.
+/// The wall-clock time Lean work may go without writing and without using processor time: four times
+/// `processor_seconds()`.
 pub(crate) fn deadline() -> Duration {
     Duration::from_secs(processor_seconds().saturating_mul(4))
 }
 
 /// Runs `command` in a process group of its own with `input` on its standard input, and returns how it exited and what
-/// it wrote, and whether it wrote nothing for `deadline()`, so Mago ended the group. The deadline counts from the last
-/// thing it wrote, so a runner that reports each module and check it starts never reaches it however many it checks,
-/// while a Lean that waits does. A signal that ends Mago ends the group too, as it did while the group was Mago's own.
+/// it wrote, and whether it wrote nothing and its group used no processor time for `deadline()`, so Mago ended the
+/// group. The deadline counts from the last thing it wrote or the last processor time a process of its group used, so
+/// a runner that computes never
+/// reaches it however little of a core a busy machine gives it, and heartbeats alone bound its proofs, while a Lean
+/// that waits does. A signal that ends Mago ends the group too, as it did while the group was Mago's own.
 /// An error writing `input` counts only when the command succeeded, since one that fails before it reads its input is
 /// reported by how it exited.
 pub(crate) fn output_before_deadline(command: &mut Command, input: &[u8]) -> io::Result<(Output, bool)> {
@@ -247,10 +249,10 @@ pub(crate) fn output_before_deadline(command: &mut Command, input: &[u8]) -> io:
     Ok(output)
 }
 
-/// What `group`'s leader wrote and how it exited, and whether `end` ended the group once it wrote nothing for
-/// `deadline`. A process of the group that outlives the end, as one the kernel holds on a stalled disk, keeps the
-/// group's pipes open, so the output is what the group wrote before the end, and a leader that still runs counts as
-/// ended by SIGKILL, since waiting for it could wait forever.
+/// What `group`'s leader wrote and how it exited, and whether `end` ended the group once its leader wrote nothing and
+/// the group used no processor time for `deadline`. A process of the group that outlives the end, as one the kernel holds on a
+/// stalled disk, keeps the group's pipes open, so the output is what the group wrote before the end, and a leader that
+/// still runs counts as ended by SIGKILL, since waiting for it could wait forever.
 fn wait_before_deadline(
     group: &mut ProcessGroup,
     deadline: Duration,
@@ -258,6 +260,7 @@ fn wait_before_deadline(
 ) -> io::Result<(Output, bool)> {
     let missing = || io::Error::other("a law checker process has no output stream");
     let leader = group.leader();
+    let id = leader.id();
     let (stdout, stderr) = (leader.stdout.take().ok_or_else(missing)?, leader.stderr.take().ok_or_else(missing)?);
     let (wrote, written) = mpsc::channel();
     read_all(stdout, 0, wrote.clone());
@@ -265,15 +268,24 @@ fn wait_before_deadline(
     let mut streams = [Vec::new(), Vec::new()];
     let mut open = streams.len();
     let mut waited = false;
+    let mut used = processor_time(id);
     while open > 0 {
         match written.recv_timeout(deadline) {
             Ok((_, Ok(chunk))) if chunk.is_empty() => open -= 1,
-            Ok((stream, Ok(chunk))) => streams[stream].extend_from_slice(&chunk),
+            Ok((stream, Ok(chunk))) => {
+                streams[stream].extend_from_slice(&chunk);
+                used = processor_time(id);
+            }
             Ok((_, Err(error))) => return Err(error),
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 return Err(io::Error::other("a reader of a law checker process panicked"));
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
+                let now = processor_time(id);
+                if now > used {
+                    used = now;
+                    continue;
+                }
                 waited = true;
                 match end(group) {
                     Err(error) if error.kind() == io::ErrorKind::TimedOut => {
@@ -303,6 +315,81 @@ fn killed() -> ExitStatus {
     #[cfg(windows)]
     {
         std::os::windows::process::ExitStatusExt::from_raw(1)
+    }
+}
+
+/// The processor time the process group `group` leads has used, in its platform's own units, which only compare with
+/// each other: each process of the group's own and that of the children it waited for, so the time of a process that
+/// ended stays in its parent's. Mago ends the whole group at the deadline, so the group computes while any of its
+/// processes does: the leader alone counted a runner's shell as waiting while the program it ran computed, and stopped
+/// it at the deadline. It reads the user and system clock ticks of `/proc/<id>/stat` on Linux, and the user and system
+/// time of `proc_pid_rusage` on macOS. None where it can't be read, so a group that wrote nothing for the deadline
+/// counts as waiting.
+fn processor_time(group: u32) -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        let group = group.to_string();
+        let mut used = 0;
+        for entry in fs::read_dir("/proc").ok()?.flatten() {
+            if !entry.file_name().as_encoded_bytes().iter().all(u8::is_ascii_digit) {
+                continue;
+            }
+            // A process that ended since the listing has no stat.
+            let Ok(stat) = fs::read_to_string(entry.path().join("stat")) else {
+                continue;
+            };
+            // The fields after the parenthesized command name, which may hold spaces: the state first, so the process
+            // group is the 3rd, and the user, system, waited-for children's user and children's system times the 12th
+            // to the 15th.
+            let Some((_, after)) = stat.rsplit_once(')') else {
+                continue;
+            };
+            let fields: Vec<&str> = after.split_whitespace().collect();
+            if fields.get(2) == Some(&group.as_str()) {
+                used += fields
+                    .get(11..15)
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|field| field.parse::<u64>().ok())
+                    .sum::<u64>();
+            }
+        }
+
+        Some(used)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // `<sys/proc_info.h>`'s list of the processes of one process group, which libc doesn't name.
+        const PROC_PGRP_ONLY: u32 = 2;
+        let mut ids: Vec<libc::c_int> = vec![0; 64];
+        let listed = loop {
+            let size = libc::c_int::try_from(std::mem::size_of_val(ids.as_slice())).ok()?;
+            // SAFETY: `ids` is a valid buffer of `size` bytes for `proc_listpids` to fill.
+            let filled = unsafe { libc::proc_listpids(PROC_PGRP_ONLY, group, ids.as_mut_ptr().cast(), size) };
+            let listed = usize::try_from(filled).ok()? / std::mem::size_of::<libc::c_int>();
+            if listed < ids.len() {
+                break listed;
+            }
+            ids.resize(ids.len() * 2, 0);
+        };
+        let mut used = 0;
+        for &id in &ids[..listed] {
+            // SAFETY: `rusage_info_v2` is plain data, which zeroes make valid.
+            let mut usage: libc::rusage_info_v2 = unsafe { std::mem::zeroed() };
+            // SAFETY: `usage` is a valid `rusage_info_v2` for `proc_pid_rusage` to fill at `RUSAGE_INFO_V2`.
+            // A process that ended since the listing fails, and counts no more.
+            if unsafe { libc::proc_pid_rusage(id, libc::RUSAGE_INFO_V2, (&raw mut usage).cast()) } == 0 {
+                used +=
+                    usage.ri_user_time + usage.ri_system_time + usage.ri_child_user_time + usage.ri_child_system_time;
+            }
+        }
+
+        Some(used)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        let _ = group;
+        None
     }
 }
 

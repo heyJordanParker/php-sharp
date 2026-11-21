@@ -181,18 +181,43 @@ jobs:
         with:
           path: sharp/build/linux-*-engine/install
           key: MAGO_ENGINE-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('configure.ac', 'build/**', 'main/**', 'Zend/**', 'TSRM/**', 'sapi/**', 'ext/**', 'scripts/**', '!**/tests/**', 'sharp/bin/build-mago', 'sharp/docker/runtime/configure-options') }}
+      # Every change to ext/** or Zend/** misses the cache above, and the engine then built every object again: make
+      # took 152 to 257 seconds of a 229 to 541 second step on 8 runs that each missed, on 2026-11-20. Through ccache
+      # it compiles only the files whose preprocessed text changed. The push to master saves the ccache, every run
+      # restores the newest one, and ci-passed deletes the ones a newer push replaced.
+      - name: The engine's ccache, saved by the push to master
+        id: engine-ccache
+        if: steps.mago-engine.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/cache/engine-ccache
+          key: MAGO_ENGINE_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/runtime/configure-options') }}-${{ github.sha }}
+          restore-keys: MAGO_ENGINE_CCACHE-${{ runner.arch }}-
+      # Only this step's CC and CXX, so mago's crates that compile C build as the job's other builds build them.
       - name: Build the engine mago links
         if: steps.mago-engine.outputs.cache-hit != 'true'
         working-directory: ${{ github.workspace }}
+        env:
+          CC: ccache gcc
+          CXX: ccache g++
+          CCACHE_DIR: ${{ github.workspace }}/sharp/build/cache/engine-ccache
         run: |
-          sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends autoconf bison cmake pkg-config re2c libedit-dev libicu-dev liblzma-dev libsodium-dev libsqlite3-dev libssl-dev libxml2-dev zlib1g-dev
+          sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends autoconf bison ccache cmake pkg-config re2c libedit-dev libicu-dev liblzma-dev libsodium-dev libsqlite3-dev libssl-dev libxml2-dev zlib1g-dev
+          ccache --zero-stats
           sharp/bin/build-mago --engine
+          ccache --show-stats
       - name: Save the engine mago links
         if: steps.mago-engine.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: sharp/build/linux-*-engine/install
           key: ${{ steps.mago-engine.outputs.cache-primary-key }}
+      - name: Save the engine's ccache
+        if: steps.mago-engine.outputs.cache-hit != 'true' && github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/cache/engine-ccache
+          key: ${{ steps.engine-ccache.outputs.cache-primary-key }}
 
       # sharp/bin/check mago-checks runs them, as it does on a machine: typos, the PHP SDK's tests, cargo check of
       # the workspace and of the PHP# bridge alone, the fuzz crate's Cargo.lock, no file watcher in the bridge, the PHP

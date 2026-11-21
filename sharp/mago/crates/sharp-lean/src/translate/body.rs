@@ -221,6 +221,7 @@ impl<'body, 'program> Body<'body, 'program> {
             Hint::Function(_) => self.unmodeled(hint.span(), "a function type".to_owned(), issues::LAMBDA),
             Hint::Mixed(_) => self.unmodeled(hint.span(), "Any".to_owned(), issues::TYPE_TEST),
             Hint::Iterable(_) => self.unmodeled(hint.span(), "Iterable".to_owned(), issues::LAZY),
+            Hint::Union(_) if let Some(r#enum) = self.union_enum(hint) => self.named_type(hint.span(), r#enum),
             _ => self.unmodeled(hint.span(), format!("the type `{}`", self.source(hint.span())), issues::TYPE),
         }
     }
@@ -1028,6 +1029,22 @@ impl<'body, 'program> Body<'body, 'program> {
         Some((held, names::member(&names::full_name(&self.reached_name(r#enum)), case)))
     }
 
+    /// The Lean constructor of the case `value` names, as `Counter.Counting`, when its enum's cases run as classes,
+    /// spec section 20.2.
+    fn case_constructor(&mut self, value: &Expression) -> Option<String> {
+        let Expression::Access(Access::Property(access)) = value.unparenthesized() else {
+            return None;
+        };
+        let ClassLikeMemberSelector::Identifier(case) = &access.property else {
+            return None;
+        };
+        let r#enum = self.checked.names().get(&self.checked.names().static_property_class(access)?.name);
+        self.checked.types().enum_case_class(word(r#enum), word(case.value))?;
+        self.reads(r#enum);
+
+        Some(names::member(&names::full_name(&self.reached_name(r#enum)), case.value))
+    }
+
     /// The Lean constructor of the sealed interface `atomic` is that holds a value of the implementer `hint` names,
     /// spec section 20.1.
     pub(super) fn implementer(&mut self, hint: &Hint, atomic: &TAtomic) -> Option<String> {
@@ -1067,9 +1084,22 @@ impl<'body, 'program> Body<'body, 'program> {
         translated
     }
 
-    /// The condition that `subject`, a value of `kind`, matches `pattern`, or `None` after recording why it has none.
-    pub(super) fn pattern(&mut self, subject: &str, kind: Kind, pattern: &Pattern) -> Option<String> {
+    /// The condition that `subject`, a value of `r#type`, matches `pattern`, or `None` after recording why it has none.
+    /// A type or list pattern's is the test [`Self::test`] gives it, so `or`, `and` and `not` combine it as any other,
+    /// unless it names a value, which only an arm's own match binds.
+    pub(super) fn pattern(&mut self, subject: &str, r#type: &TUnion, pattern: &Pattern) -> Option<String> {
+        let kind = self.kind(r#type);
         match pattern {
+            // Spec section 20.2: a case of an enum whose cases run as classes, as a machine's do, tests which case the
+            // subject is, whatever fields the case holds.
+            Pattern::Value(value)
+                if kind == Kind::Enum
+                    && let Some(case) = self.case_constructor(value) =>
+            {
+                let case = if r#type.is_nullable() { format!("some ({case} ..)") } else { format!("({case} ..)") };
+
+                Some(format!("(match {subject} with | {case} => true | _ => false)"))
+            }
             // A value an object is compared with is `null`: a pattern takes constants, and an object's identity is
             // nothing a law reasons about.
             Pattern::Value(value)
@@ -1110,14 +1140,17 @@ impl<'body, 'program> Body<'body, 'program> {
 
                 Some(condition)
             }
-            Pattern::Not(not) => Some(format!("(!{})", self.pattern(subject, kind, not.pattern)?)),
+            Pattern::Not(not) => Some(format!("(!{})", self.pattern(subject, r#type, not.pattern)?)),
             Pattern::Binary(binary) => {
-                let left = self.pattern(subject, kind, binary.left)?;
-                let right = self.pattern(subject, kind, binary.right)?;
+                let left = self.pattern(subject, r#type, binary.left)?;
+                let right = self.pattern(subject, r#type, binary.right)?;
 
                 Some(format!("({left} {} {right})", if binary.is_and() { "&&" } else { "||" }))
             }
-            Pattern::Parenthesized(parenthesized) => self.pattern(subject, kind, parenthesized.pattern),
+            Pattern::Parenthesized(parenthesized) => self.pattern(subject, r#type, parenthesized.pattern),
+            Pattern::Type(_) | Pattern::List(_) if !names_values(pattern) => {
+                Some(self.test(subject, None, r#type, pattern)?.condition())
+            }
             Pattern::Type(_) | Pattern::Properties(_) | Pattern::List(_) => {
                 self.unmodeled(pattern.span(), "a type test".to_owned(), issues::TYPE_TEST);
                 None
@@ -1486,10 +1519,13 @@ impl<'body, 'program> Body<'body, 'program> {
 
     /// `value`, a value of `class`'s Lean type, as a value of the PHP# class `ancestor` above it, which its structure
     /// holds: `value.toParent`, once for each class up to `ancestor`. A value of a sealed interface's implementer reads
-    /// its parent's value through the interface's accessor, spec section 20.1. A plain PHP class between them, whose
-    /// state the structure does not hold, is refused at `span`.
+    /// its parent's value through the interface's accessor, spec section 20.1. A value of a case's class is already
+    /// one of its enum's, spec section 20. A plain PHP class between them, whose state the structure does not hold, is
+    /// refused at `span`.
     fn upcast(&mut self, span: Span, value: String, class: &[u8], ancestor: &[u8]) -> String {
-        if self.reach.same_class(class, ancestor) {
+        if self.reach.same_class(class, ancestor)
+            || self.case_enum(class).is_some_and(|r#enum| self.reach.same_class(r#enum, ancestor))
+        {
             return value;
         }
         let mut upcast = value;
@@ -1858,16 +1894,36 @@ impl<'body, 'program> Body<'body, 'program> {
     /// The Lean type of the class `class` a hint names: the sealed interface it implements, spec section 20.1, as a
     /// data case's is its enum, and else its own.
     pub(crate) fn class_type(&mut self, span: Span, class: &[u8]) -> String {
-        // Spec section 20: the class a case that carries data runs as is a constructor of its enum, as a machine's
-        // `OrderStatus.Paid` is of `OrderStatus`.
-        if let Some(separator) = class.iter().rposition(|&byte| byte == b'\\')
-            && self.checked.types().enum_case_class(word(&class[..separator]), word(&class[separator + 1..])).is_some()
-        {
-            return self.class_type(span, &class[..separator]);
+        if let Some(r#enum) = self.case_enum(class) {
+            return self.class_type(span, r#enum);
         }
         match self.sealed(span, class) {
             Some((interface, _)) => interface,
             None => self.own_type(span, class),
+        }
+    }
+
+    /// The enum whose case the class `class` runs as, spec section 20: a constructor of the enum's inductive type, as a
+    /// machine's `OrderStatus.Paid` is of `OrderStatus`.
+    fn case_enum<'class>(&self, class: &'class [u8]) -> Option<&'class [u8]> {
+        let separator = class.iter().rposition(|&byte| byte == b'\\')?;
+        let (r#enum, case) = (&class[..separator], &class[separator + 1..]);
+
+        self.checked.types().enum_case_class(word(r#enum), word(case)).map(|_| r#enum)
+    }
+
+    /// The enum whose cases the union `hint` joins, spec section 20.2, as `Counter.Counting|Counter.Done` joins
+    /// `Counter`'s, whose Lean type holds each of them, or `None` when it joins anything else.
+    fn union_enum(&self, hint: &Hint) -> Option<&'program [u8]> {
+        match hint {
+            Hint::Union(union) => {
+                let (left, right) = (self.union_enum(union.left)?, self.union_enum(union.right)?);
+
+                self.reach.same_class(left, right).then_some(left)
+            }
+            Hint::Parenthesized(parenthesized) => self.union_enum(parenthesized.hint),
+            Hint::Identifier(identifier) => self.case_enum(self.checked.names().get(identifier)),
+            _ => None,
         }
     }
 
@@ -1964,6 +2020,8 @@ impl<'body, 'program> Body<'body, 'program> {
         "default".to_owned()
     }
 
+    /// What a value of `r#type` is in Lean. A machine's value, spec section 20.2, and a value of the class an enum's case
+    /// runs as are values of the enum's inductive type, the closed set of its cases, as any enum's are.
     pub(super) fn kind(&self, r#type: &TUnion) -> Kind {
         let mut kinds = r#type.types.iter().filter(|atomic| !atomic.is_null()).map(|atomic| match atomic {
             TAtomic::Scalar(TScalar::Integer(_)) => Kind::Int,
@@ -1972,7 +2030,11 @@ impl<'body, 'program> Body<'body, 'program> {
             TAtomic::Scalar(TScalar::Float(_)) => Kind::Float,
             TAtomic::Object(TObject::Enum(_)) => Kind::Enum,
             TAtomic::Object(TObject::Named(named)) => {
-                if matches!(self.checked.types().class_declaration(named.name).kind, DeclarationKind::Enum { .. }) {
+                let types = self.checked.types();
+                if matches!(types.class_declaration(named.name).kind, DeclarationKind::Enum { .. })
+                    || types.machine(named.name).is_some()
+                    || self.case_enum(named.name.as_bytes()).is_some()
+                {
                     Kind::Enum
                 } else {
                     Kind::Object
