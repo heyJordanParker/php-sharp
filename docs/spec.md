@@ -6471,6 +6471,25 @@ typeof(Card).tag();                                 // "card", from [Key("card")
 typeof(JourneyStatus).tag();                        // null: the machine is no variant
 ```
 
+<!-- example class-decode: statements
+public machine LinkStatus : string
+{
+    case Draft = "draft" { public LinkStatus.Published publish() => LinkStatus.Published; }
+    final case Published = "published";
+    public static LinkStatus.Draft enter() => LinkStatus.Draft;
+}
+public class Page
+{
+    public Page(public string title { get; }) { }
+    public LinkStatus status { get; private set; } = LinkStatus.enter();
+}
+-->
+```csharp
+const row = ["status": "draft", "title": "Home"];
+typeof(Page).decode(row);                       // a Page whose status is LinkStatus.Draft, read by its tag
+typeof(Page).decode(["title": 5]);              // throws InvalidFields: title: expected string, got int 5
+```
+
 **Each reflection value keys a `Map` and joins a `Set` as the member it reflects,** however often reflection read it. Two `Method`s, two `Property`s, two `Field`s, two `Constant`s and two `Constructor`s are equal when one class declares them under one name, two `Parameter`s when they are one position of one method, two `EnumCase`s when they are one case of one enum, and two `TupleElement`s when they have one name, or none, and one type. Equal values share their `hash()`, so `Map<Method, List<Relation>>` compiles:
 
 <!-- example reflection-keys: statements

@@ -187,6 +187,7 @@
                 "Accessors/",
                 "Store/"
             ],
+            "StoredValues\\": "StoredValues/",
             "Strict\\": "Strict/",
             "TableChanges\\": "TableChanges/",
             "Tallies\\": "Tallies/",

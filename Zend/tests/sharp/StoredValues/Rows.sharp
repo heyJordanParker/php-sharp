@@ -1,0 +1,19 @@
+namespace StoredValues;
+
+import Sharp.Encoding.Json;
+
+public static class Rows
+{
+    public static Map<string, Any?> row()
+        => ["title": "Home", "status": "published", "author": ["name": "Ada"], "attachment": ["type": "link", "url": "https://a.test"]];
+
+    public static Page decoded() => typeof(Page).decode(Rows.row());
+
+    public static Page fromJson() => Json.decode<Page>(Json.encode(Rows.row()));
+
+    public static string encoded(Page page) => Json.encode(page);
+
+    public static Page misfit() => typeof(Page).decode(["title": 5]);
+
+    public static Page misfitFromJson() => Json.decode<Page>("{\"title\":5}");
+}
