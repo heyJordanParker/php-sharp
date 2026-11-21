@@ -10,6 +10,7 @@ use mago_analyzer::collection_member;
 use mago_analyzer::collection_member_kind;
 use mago_analyzer::effects::Effects;
 use mago_analyzer::is_collection_member;
+use mago_codex::SECRET_CLASS;
 use mago_codex::defaults_trait_name;
 use mago_codex::identifier::function_like::FunctionLikeIdentifier;
 use mago_codex::identifier::method::MethodIdentifier;
@@ -1059,6 +1060,23 @@ impl<'analysis> Types<'analysis> {
         Some(format!("{}.{}", class_text(owner.name, self.codebase), String::from_utf8_lossy(&variable[1..])))
     }
 
+    /// The key plain PHP's `__get` and `__set` receive for the `extern` property the read or write `access` reaches,
+    /// spec section 14.3: the name its `[Key("…")]` gives. None for any other access, whose key is its name.
+    pub(crate) fn extern_property_key(&self, access: &Expression) -> Option<&'analysis [u8]> {
+        let (class, variable) = self.accessed_property(access)?;
+        let name = word(&variable);
+        let declaring = *self.codebase.get_class_like(word(class))?.magic_property_ids.get(&name)?;
+        let owner = self.codebase.get_class_like(declaring).filter(|owner| owner.flags.is_sharp())?;
+
+        owner
+            .magic_properties
+            .get(&name)?
+            .attributes
+            .iter()
+            .find(|attribute| attribute.name.as_bytes() == b"Sharp\\Key")?
+            .text_argument(0, b"name")
+    }
+
     /// The check a call into plain PHP takes where its result, an object of a plain PHP class that is a `Traversable`,
     /// as a generator, an `IteratorAggregate` or Laravel's `LazyCollection` is, enters a place of the type `declared`
     /// that holds an `Iterable<T>`: `declared`'s text, whose `Iterable<T>` checks each element as it is read, spec
@@ -2027,6 +2045,15 @@ impl<'analysis> Types<'analysis> {
     /// and `Json.encode` writes as its `toString()`, as the codex gives it.
     pub(crate) fn is_text_value(&self, class: Word) -> bool {
         self.codebase.is_text_value(class)
+    }
+
+    /// Whether a value of `type` may hold a `Secret` at any depth, as a `List<Secret<string>>` does, so the field that
+    /// holds it is written through `\Sharp\Internal\seal`, which encrypts each for that field.
+    pub(crate) fn holds_secret(r#type: &TUnion) -> bool {
+        r#type.get_all_child_nodes().into_iter().any(|node| {
+            matches!(node, TypeRef::Atomic(TAtomic::Object(TObject::Named(object)))
+                if object.name.as_bytes().eq_ignore_ascii_case(SECRET_CLASS))
+        })
     }
 
     /// Whether the class `class` declares or inherits the property `name`, written without `$`.

@@ -4,6 +4,23 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.46
+
+- `Sharp.Security.Password` is gone. Keep a password as a `Hashed<string>` field, `new Hashed<string>(password)`, and check one with `hashed.verify(password)` in place of `Password.verify(password, hash)`. A plain PHP hash from `Password.hash` stays a `string` that `global.password_verify` checks.
+- A PHP# class whose plain PHP parent's `__get` or `__set` serves a property, as an Eloquent model's does, reaches it only through an `extern` property or a line of the library that declares it, so a read or a write of any other name stops compiling. Declare each column the class reads or writes, as `public extern string email { get; set; }`, with `[Key("total_cents")]` where the key differs from the property's name, and make each property that isn't `extern` private, or declare it `extern`.
+
+### Added
+
+- `Secret<T>` and `Hashed<T>` in `Sharp.Security`, spec section 24, keep a password, a token or a key out of plain sight. A `Secret` holds its value in memory, `value` gives it back, and its stored form, which `Json.encode` and `serialize` write, is `{"encrypted":"…"}`: the value encrypted with XChaCha20-Poly1305 under the newest key of the key ring `SHARP_KEYS`, bound to the type and field that hold it, so text moved into another field never decrypts, and text under an older key still decrypts once a newer key is put first. `vendor/bin/mago generate-key` prints a new key. A `Hashed` keeps only the Argon2id hash of its value, `verify(value)` checks one, and its stored form is `{"hashed":"$argon2id$…"}`. A field reads the plain value too, as `{"password":"hunter2"}`. Both show as `**********` in a template and in `var_dump`. `hashed.value` is a compile error, "A `Hashed<string>` gives no value back: check one with `verify(value)`.", and so is `==` between two. A missing `SHARP_KEYS` throws `RuntimeException`, and a `Secret` outside a field, as `Json.encode(new Secret<string>("x"))`, throws the `Error` a type with no stored form throws.
+- An `extern` property has `set` where the class inherits a plain PHP `__set`, spec section 14.3, so `public extern string email { get; set; }` on an Eloquent model writes the column through `__set`, checked against `string`, and `{ get; private set; }` lets only the class's own methods write it. `[Key("total_cents")]` names the key `__get` and `__set` receive, so `public extern int totalCents { get; set; }` reaches the column `total_cents`. 0.6.46 refused any `extern` property but `{ get; }` with "An `extern` property is the one plain PHP's `__get` gives, so it is get-only". One with `set` on a class that inherits no `__set` is refused with "`Auction.buyer` has `set`, which a plain PHP `__set` stores, and `Auction` inherits no `__set`."
+
+### Changed
+
+- A compile stamps the listener table's inputs from the bytes its load read, once per run, where 0.6.45 read every PHP# file of the project from the disk again, listing its folder to check its name, and did all of it a second time for the extension hosts' folder. A one-file edit of a 2,128-file project retires 50.0 G instructions in `mago analyze` where it retired 53.0 G, medians of 8 alternating rounds, with the same `.sharp` folder and issues.
+- A read or a write of a property only a plain PHP parent's `__get` or `__set` serves is a compile error in a PHP# class, spec section 14.3, where 0.6.46 read it as `Any?` and wrote any value, so a misspelled column compiled. `this.emial = "x"` on an `Order : Model` gives "`Order` has no property `emial`. Declare it: `public extern string emial { get; set; }`.", and `order.anything` gives the same with `…` for the type, which a read doesn't state. A property the library declares, as a real property or an `@property` line, reads as before, and a plain PHP class used directly keeps its `__get` properties. A property that isn't `extern` and isn't private, on a class whose plain PHP parent defines `__get` and `__set`, is refused too, since it would stay in memory and never be saved: "`Order`'s parent `Model` stores properties through `__get` and `__set`, so a public `name` would never be saved." with the help "Write `public extern string name { get; set; }`, or make it private to keep it in memory." A property the parent declares, as Eloquent's `table`, is the parent's and compiles as before.
+
+## [0.6.46] - 2026-11-21
+
 ### Upgrading from 0.6.45
 
 - A PHP# call of a method a plain PHP class declares nowhere, which only its `__call` or `__callStatic` answers, stops compiling. Call the real method the magic forwards to, as `cache.get("key")` on the injected repository or `User.query().where("email", e)`, or the method a `@method` or `@mixin` line of the class declares.
@@ -1635,7 +1652,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.45...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.46...HEAD
+[0.6.46]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.45...v0.6.46
 [0.6.45]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.44...v0.6.45
 [0.6.44]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.43...v0.6.44
 [0.6.43]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.42...v0.6.43

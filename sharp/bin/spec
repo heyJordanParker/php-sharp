@@ -1412,7 +1412,11 @@ function measure(string $root, string $work, array $examples): array
                     . implode(' ', array_column(compile_errors($stdout), 'message')) . trim(substr($stderr, -300));
                 continue;
             }
-            $run_jobs["$folder/run"] = [[PHP_BINARY, '-n', '-d', 'error_reporting=E_ALL', "$folder/run.php"], ['SHARP_SPEC_OUTCOMES' => "$folder/outcomes"]];
+            $run_jobs["$folder/run"] = [[PHP_BINARY, '-n', '-d', 'error_reporting=E_ALL', "$folder/run.php"], [
+                'SHARP_SPEC_OUTCOMES' => "$folder/outcomes",
+                // Spec section 24: the key ring a Secret in an example is encrypted with.
+                'SHARP_KEYS' => 'spec:' . base64_encode(str_repeat("\0", 32)),
+            ]];
         }
     }
     foreach (run_all($run_jobs) as $key => [$stdout, $stderr, $status]) {

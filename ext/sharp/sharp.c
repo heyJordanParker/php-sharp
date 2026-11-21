@@ -24,7 +24,9 @@
 #include "ext/json/php_json.h"
 #include "ext/json/php_json_encoder.h"
 #include "ext/json/php_json_parser.h"
+#include "ext/random/php_random_csprng.h"
 #include "ext/spl/spl_exceptions.h"
+#include "ext/standard/base64.h"
 #include "ext/standard/basic_functions.h"
 #include "ext/standard/html.h"
 #include "ext/standard/info.h"
@@ -144,6 +146,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	/* The text of the error the last call inside a ZEND_SHARP_SILENCE raised in this request, or NULL. See
 	 * sharp_observe_error. */
 	zend_string *silenced_warning;
+	/* The field whose value Sharp_Internal_seal is writing, which each Secret in it is encrypted for, or NULL. */
+	zend_string *seal_path;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
@@ -8699,17 +8703,11 @@ static int sharp_json_object_end(php_json_parser *parser, zval *object)
 	return SUCCESS;
 }
 
-/* Spec section 22: what `Json.parse` and `Json.decode` read, the value the JSON text `json` holds, as json_decode reads
- * it with JSON_OBJECT_AS_ARRAY, each object a PHP array, but an empty object an empty Sharp\Map. Throws JsonException
- * on text that is no JSON, as JSON_THROW_ON_ERROR does. */
-ZEND_FUNCTION(Sharp_Internal_jsonDecode)
+/* Spec section 22: what `Json.parse` and `Json.decode` read, the value the JSON text `json` holds in `value`, as
+ * json_decode reads it with JSON_OBJECT_AS_ARRAY, each object a PHP array, but an empty object an empty Sharp\Map.
+ * Throws JsonException on text that is no JSON, as JSON_THROW_ON_ERROR does. */
+static bool sharp_json_decode(const zend_string *json, zval *value)
 {
-	zend_string *json;
-
-	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_STR(json)
-	ZEND_PARSE_PARAMETERS_END();
-
 	static const php_json_parser_methods methods = {
 		sharp_json_array_create,
 		sharp_json_array_append,
@@ -8721,11 +8719,26 @@ ZEND_FUNCTION(Sharp_Internal_jsonDecode)
 		sharp_json_object_end,
 	};
 	php_json_parser parser;
-	php_json_parser_init_ex(&parser, return_value, ZSTR_VAL(json), ZSTR_LEN(json), PHP_JSON_OBJECT_AS_ARRAY,
+	php_json_parser_init_ex(&parser, value, ZSTR_VAL(json), ZSTR_LEN(json), PHP_JSON_OBJECT_AS_ARRAY,
 		PHP_JSON_PARSER_DEFAULT_DEPTH, &methods);
 	if (php_json_parse(&parser)) {
 		php_json_error_code code = php_json_parser_error_code(&parser);
 		zend_throw_exception(php_json_exception_ce, php_json_get_error_msg(code), code);
+		return false;
+	}
+
+	return true;
+}
+
+ZEND_FUNCTION(Sharp_Internal_jsonDecode)
+{
+	zend_string *json;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(json)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_json_decode(json, return_value)) {
 		RETURN_THROWS();
 	}
 }
@@ -12541,13 +12554,17 @@ static zval *sharp_input_field(zval *value, zend_string *key, zval *read)
  * the paths of the structs that reported their own problems, where the walk's problem goes, and the problems a value
  * as text's own `parse` gave, which take the walk's place at their path. With `text`, a number or a bool is read from
  * its text, as Query.decode reads it, at every depth. `order` names the classes and scalar types the declaration of
- * the field being read writes, in its order, `App.Card, App.Bank`, which a union tries in that order, or is NULL. */
+ * the field being read writes, in its order, `App.Card, App.Bank`, which a union tries in that order, or is NULL.
+ * `holder` and `field` name the field of a class whose value is being read, which a Secret's encryption is bound to,
+ * or are NULL. */
 typedef struct {
 	sharp_type_problems found;
 	zval failed;
 	zval texts;
 	bool text;
 	const zend_string *order;
+	const zend_class_entry *holder;
+	const zend_string *field;
 } sharp_read;
 
 static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *read);
@@ -12559,6 +12576,8 @@ static void sharp_read_start(sharp_read *read, zval *problems, bool text, const 
 	array_init(&read->texts);
 	read->text = text;
 	read->order = order;
+	read->holder = NULL;
+	read->field = NULL;
 }
 
 static void sharp_read_end(sharp_read *read)
@@ -12654,6 +12673,8 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 	uint32_t found = zend_hash_num_elements(problems);
 	size_t length = read->found.path.s ? ZSTR_LEN(read->found.path.s) : 0;
 	const zend_string *order = read->order;
+	const zend_class_entry *holder = read->holder;
+	const zend_string *holder_field = read->field;
 
 	zval *row;
 	ZEND_HASH_FOREACH_VAL(Z_ARRVAL(rows), row) {
@@ -12680,7 +12701,11 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 			zval field_value;
 			ZVAL_COPY_DEREF(&field_value, field);
 			read->order = written_order ? Z_STR_P(written_order) : NULL;
+			read->holder = ce;
+			read->field = name;
 			sharp_read_whole(type, &field_value, read);
+			read->holder = holder;
+			read->field = holder_field;
 			zend_hash_update(Z_ARRVAL_P(into), name, &field_value);
 		} else if (!optional) {
 			zval missing;
@@ -13059,6 +13084,271 @@ static void sharp_read_machine_case(zend_class_entry *machine, zval *value, shar
 	zval_ptr_dtor(&rows);
 }
 
+/* Spec section 24: Sharp.Security's Secret and Hashed, whose stored forms the engine writes and reads, since only it
+ * knows the field that holds one and the type of the value it holds. */
+static bool sharp_is_secret(const zend_class_entry *ce)
+{
+	return zend_string_equals_literal(ce->name, "Sharp\\Security\\Secret");
+}
+
+static bool sharp_is_hashed(const zend_class_entry *ce)
+{
+	return zend_string_equals_literal(ce->name, "Sharp\\Security\\Hashed");
+}
+
+/* The JSON text of `value` that a Secret encrypts and a Hashed hashes, its stored form as `Json.encode` writes it by
+ * default, or NULL with the exception its encoding threw. */
+static zend_string *sharp_stored_text(zval *value)
+{
+	php_json_encoder encoder;
+	php_json_encode_init(&encoder);
+	encoder.max_depth = PHP_JSON_PARSER_DEFAULT_DEPTH;
+	encoder.nonfinite_as_null = true;
+	smart_str text = {0};
+	php_json_encode_zval(&text, value,
+		PHP_JSON_UNESCAPED_SLASHES | PHP_JSON_UNESCAPED_UNICODE | PHP_JSON_PRESERVE_ZERO_FRACTION, &encoder);
+	if (EG(exception) || encoder.error_code != PHP_JSON_ERROR_NONE) {
+		smart_str_free(&text);
+		if (!EG(exception)) {
+			zend_throw_exception(php_json_exception_ce, php_json_get_error_msg(encoder.error_code), encoder.error_code);
+		}
+		return NULL;
+	}
+
+	return smart_str_extract(&text);
+}
+
+/* Calls the PHP function `name`, which ext/sodium or ext/standard declares, with `count` `arguments`, into `result`.
+ * False with the exception it threw. */
+static bool sharp_call_function(const char *name, zval *result, uint32_t count, zval *arguments)
+{
+	zend_function *function = zend_hash_str_find_ptr(EG(function_table), name, strlen(name));
+	ZVAL_UNDEF(result);
+	if (!function) {
+		zend_throw_error(NULL, "Secret and Hashed need the PHP function %s(), which this build of PHP# lacks", name);
+		return false;
+	}
+	zend_call_known_function(function, NULL, NULL, result, count, arguments, NULL);
+
+	return !EG(exception);
+}
+
+/* The key of the key ring SHARP_KEYS whose id is `id`, or with `id` NULL its newest, whose id `newest` then takes, or
+ * NULL when the ring has no key of `id`. The ring is comma-separated `<id>:<base64 of 32 bytes>` entries, newest first,
+ * as `mago generate-key` prints each. Throws RuntimeException when it is not set, and ValueError naming the first entry
+ * that is no key, never its text. */
+static zend_string *sharp_ring_key(const char *id, size_t id_length, zend_string **newest)
+{
+	char *ring = sapi_getenv("SHARP_KEYS", sizeof("SHARP_KEYS") - 1);
+	if (!ring) {
+		const char *process = getenv("SHARP_KEYS");
+		ring = process ? estrdup(process) : NULL;
+	}
+	if (!ring || !*ring) {
+		zend_throw_exception(spl_ce_RuntimeException,
+			"a Secret is encrypted with the keys in SHARP_KEYS, which is not set. Generate a key with "
+			"`vendor/bin/mago generate-key`.", 0);
+		if (ring) {
+			efree(ring);
+		}
+		return NULL;
+	}
+	zend_string *found = NULL;
+	uint32_t number = 0;
+	for (const char *entry = ring; entry; ) {
+		const char *end = strchr(entry, ',');
+		size_t length = end ? (size_t) (end - entry) : strlen(entry);
+		const char *colon = memchr(entry, ':', length);
+		number++;
+		zend_string *key = colon && colon > entry
+			? php_base64_decode_ex((const unsigned char *) colon + 1, length - (colon - entry) - 1, true)
+			: NULL;
+		if (!key || ZSTR_LEN(key) != 32 || colon - entry > UINT8_MAX) {
+			if (key) {
+				zend_string_release(key);
+			}
+			zend_value_error("SHARP_KEYS: entry %" PRIu32 " is not `<id>:<base64 of 32 bytes>`", number);
+			break;
+		}
+		size_t named_length = colon - entry;
+		if (!id || (named_length == id_length && memcmp(entry, id, id_length) == 0)) {
+			if (!id) {
+				*newest = zend_string_init(entry, named_length, false);
+			}
+			found = key;
+			break;
+		}
+		zend_string_release(key);
+		entry = end ? end + 1 : NULL;
+	}
+	efree(ring);
+
+	return found;
+}
+
+/* The unpadded base64url of `bytes`, as a Secret's stored text holds them. */
+static zend_string *sharp_base64url(const zend_string *bytes)
+{
+	zend_string *text = php_base64_encode_ex((const unsigned char *) ZSTR_VAL(bytes), ZSTR_LEN(bytes),
+		PHP_BASE64_NO_PADDING);
+	for (char *c = ZSTR_VAL(text); *c; c++) {
+		*c = *c == '+' ? '-' : *c == '/' ? '_' : *c;
+	}
+
+	return text;
+}
+
+/* Spec section 24: the stored text of a Secret holding `value` in the field `path`, as `App.SmtpAccount.password`: the
+ * unpadded base64url of the newest key's id length as one byte, that id, a random 24-byte nonce and the
+ * XChaCha20-Poly1305 encryption of the value's stored text with `path` as the additional data, so it decrypts only in
+ * that field. NULL with the exception that stopped it. */
+static zend_string *sharp_encrypt(zval *value, const zend_string *path)
+{
+	zend_string *id = NULL;
+	zend_string *key = sharp_ring_key(NULL, 0, &id);
+	if (!key) {
+		return NULL;
+	}
+	zend_string *text = sharp_stored_text(value);
+	zend_string *nonce = zend_string_alloc(24, false);
+	zend_string *stored = NULL;
+	if (text && php_random_bytes_throw(ZSTR_VAL(nonce), 24) == SUCCESS) {
+		ZSTR_VAL(nonce)[24] = '\0';
+		zval arguments[4], sealed;
+		ZVAL_STR(&arguments[0], text);
+		ZVAL_STR(&arguments[1], (zend_string *) path);
+		ZVAL_STR(&arguments[2], nonce);
+		ZVAL_STR(&arguments[3], key);
+		if (sharp_call_function("sodium_crypto_aead_xchacha20poly1305_ietf_encrypt", &sealed, 4, arguments)) {
+			smart_str payload = {0};
+			smart_str_appendc(&payload, (char) ZSTR_LEN(id));
+			smart_str_append(&payload, id);
+			smart_str_append(&payload, nonce);
+			smart_str_append(&payload, Z_STR(sealed));
+			zend_string *bytes = smart_str_extract(&payload);
+			stored = sharp_base64url(bytes);
+			zend_string_release(bytes);
+		}
+		zval_ptr_dtor(&sealed);
+	}
+	if (text) {
+		zend_string_release(text);
+	}
+	zend_string_release(nonce);
+	zend_string_release(id);
+	zend_string_release(key);
+
+	return stored;
+}
+
+/* Reads into `opened` the value of a Secret whose stored text `stored` the field `path` holds. False with ValueError
+ * when no key of SHARP_KEYS decrypts it for `path`, as for text encrypted in another field or under a key the ring no
+ * longer holds, or with the exception that stopped it. */
+static bool sharp_decrypt(const zend_string *stored, const zend_string *path, zval *opened)
+{
+	zend_string *text = zend_string_init(ZSTR_VAL(stored), ZSTR_LEN(stored), false);
+	for (char *c = ZSTR_VAL(text); *c; c++) {
+		*c = *c == '-' ? '+' : *c == '_' ? '/' : *c;
+	}
+	zend_string *payload = php_base64_decode_ex((const unsigned char *) ZSTR_VAL(text), ZSTR_LEN(text), true);
+	zend_string_release(text);
+	size_t id_length = payload && ZSTR_LEN(payload) ? (unsigned char) ZSTR_VAL(payload)[0] : 0;
+	zend_string *key = NULL;
+	if (payload && ZSTR_LEN(payload) > 1 + id_length + 24) {
+		key = sharp_ring_key(ZSTR_VAL(payload) + 1, id_length, NULL);
+	}
+	bool read = false;
+	if (key) {
+		zval arguments[4], plain;
+		const char *nonce = ZSTR_VAL(payload) + 1 + id_length;
+		ZVAL_STRINGL(&arguments[0], nonce + 24, ZSTR_LEN(payload) - 1 - id_length - 24);
+		ZVAL_STR(&arguments[1], (zend_string *) path);
+		ZVAL_STRINGL(&arguments[2], nonce, 24);
+		ZVAL_STR(&arguments[3], key);
+		if (sharp_call_function("sodium_crypto_aead_xchacha20poly1305_ietf_decrypt", &plain, 4, arguments)
+				&& Z_TYPE(plain) == IS_STRING) {
+			read = sharp_json_decode(Z_STR(plain), opened);
+		}
+		zval_ptr_dtor(&plain);
+		zval_ptr_dtor(&arguments[0]);
+		zval_ptr_dtor(&arguments[2]);
+		zend_string_release(key);
+	}
+	if (payload) {
+		zend_string_release(payload);
+	}
+	if (!read && !EG(exception)) {
+		zend_value_error("the encrypted text is not one SHARP_KEYS decrypts for %s", ZSTR_VAL(path));
+	}
+
+	return read;
+}
+
+/* `App.SmtpAccount.password`, the name of the field `field` of `holder` a Secret's encryption is bound to. */
+static zend_string *sharp_secret_path(const zend_class_entry *holder, const zend_string *field)
+{
+	smart_str path = {0};
+	sharp_class_text(&path, holder);
+	smart_str_appendc(&path, '.');
+	smart_str_append(&path, field);
+
+	return smart_str_extract(&path);
+}
+
+/* The text under the one key `key` of the stored form `value`, `encrypted` for a Secret and `hashed` for a Hashed, or
+ * NULL for any other value, which is the plain value, spec section 24. */
+static zend_string *sharp_sealed_text(zval *value, const char *key)
+{
+	const HashTable *entries =Z_TYPE_P(value) == IS_ARRAY ? Z_ARRVAL_P(value)
+		: Z_TYPE_P(value) == IS_OBJECT && Z_OBJCE_P(value) == zend_standard_class_def ? Z_OBJPROP_P(value) : NULL;
+	if (!entries || zend_hash_num_elements(entries) != 1) {
+		return NULL;
+	}
+	zval *text = zend_hash_str_find(entries, key, strlen(key));
+
+	return text && Z_TYPE_P(text) == IS_STRING ? Z_STR_P(text) : NULL;
+}
+
+/* Spec section 24: builds in `built` the Secret or Hashed of `ce` that `value` stores. A plain value is read as the
+ * type it holds, and a Hashed of it hashes it. A Secret's encrypted text decrypts for the field the read is in, and a
+ * Hashed's hash is kept as it is. */
+static void sharp_read_sealed(zend_class_entry *ce, const sharp_type *arguments, zval *value, sharp_read *read,
+	zval *built)
+{
+	bool secret = sharp_is_secret(ce);
+	zend_string *stored = sharp_sealed_text(value, secret ? "encrypted" : "hashed");
+	if (stored && !secret) {
+		object_init_to_build(built, ce);
+		if (arguments) {
+			sharp_type_arguments_store(Z_OBJ_P(built), arguments);
+		}
+		zend_update_property_str(ce, Z_OBJ_P(built), "hash", sizeof("hash") - 1, stored);
+		return;
+	}
+	zval fields, held;
+	array_init(&fields);
+	if (!stored) {
+		ZVAL_COPY(&held, value);
+	} else if (!read->holder) {
+		zend_value_error("an encrypted Secret is read only in the field that holds it, whose name it is encrypted for");
+		sharp_read_failed(read);
+		zval_ptr_dtor(&fields);
+		return;
+	} else {
+		zend_string *path = sharp_secret_path(read->holder, read->field);
+		bool opened = sharp_decrypt(stored, path, &held);
+		zend_string_release(path);
+		if (!opened) {
+			sharp_read_failed(read);
+			zval_ptr_dtor(&fields);
+			return;
+		}
+	}
+	zend_hash_str_update(Z_ARRVAL(fields), "value", sizeof("value") - 1, &held);
+	sharp_read_struct(ce, arguments, &fields, read, built);
+	zval_ptr_dtor(&fields);
+}
+
 /* Spec section 10: builds, in `value`, each struct, class, family's variant, value as text and enum case `type` holds,
  * as a field `parse` reads builds them, each problem under its path in the read. With the read's `text`, a number or
  * a bool is read from its text, as `Query.decode` reads it. sharp_read_whole checks the whole value after. */
@@ -13089,6 +13379,8 @@ static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *re
 				array_init(&found);
 				sharp_read trying;
 				sharp_read_start(&trying, &found, read->text, read->order);
+				trying.holder = read->holder;
+				trying.field = read->field;
 				ZVAL_COPY(&tried, value);
 				sharp_read_whole(type->members[at], &tried, &trying);
 				bool built = !EG(exception) && zend_hash_num_elements(Z_ARRVAL(found)) == 0;
@@ -13183,11 +13475,16 @@ static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *re
 			sharp_read_variant(ce, value, read, &built);
 		}
 	} else if (zend_hash_str_exists(&ce->function_table, "#fields", sizeof("#fields") - 1)) {
-		if (readable) {
+		bool sealed = sharp_is_secret(ce) || sharp_is_hashed(ce);
+		if (readable || sealed) {
 			const char *open = memchr(ZSTR_VAL(type->text), '<', ZSTR_LEN(type->text));
 			const sharp_type *arguments =
 				open ? sharp_type_list(open + 1, ZSTR_VAL(type->text) + ZSTR_LEN(type->text) - open - 2) : NULL;
-			sharp_read_struct(ce, arguments, value, read, &built);
+			if (sealed) {
+				sharp_read_sealed(ce, arguments, value, read, &built);
+			} else {
+				sharp_read_struct(ce, arguments, value, read, &built);
+			}
 		}
 	} else {
 		/* A class that declares its own `parse` of the value, as a value as text's of a string and JsonValue's of any
@@ -13389,7 +13686,8 @@ zend_result sharp_stored_form(zend_object *object, zval *stored)
 		sharp_refuse_storage(ce, "its own `parse` reads no stored form");
 		return FAILURE;
 	}
-	if (fields) {
+	/* A Hashed's `#json` writes the hash its constructor made from the value its main constructor takes. */
+	if (fields && !sharp_is_hashed(ce)) {
 		zval rows;
 		zend_call_known_function(fields, NULL, ce, &rows, 0, NULL, NULL);
 		bool stores = !EG(exception) && sharp_fields_store(ce, sharp_type_arguments(object), &rows);
@@ -13418,6 +13716,110 @@ zend_result sharp_stored_form(zend_object *object, zval *stored)
 	zval_ptr_dtor(&written);
 
 	return SUCCESS;
+}
+
+/* `\Sharp\Internal\seal($value, $path)`, spec section 24: the stored form of the field `path`, as
+ * `App.SmtpAccount.password`, whose value is `value`, with each Secret in it encrypted for that field, a List's or a
+ * Map's elements included. A class's `#json` writes each field of a type that holds a Secret through it. Without
+ * `path`, it is the `#json` of the Secret or Hashed `value`: `{"encrypted": …}` for a Secret inside such a field, which
+ * any other place refuses, as `serialize` refuses a type with no stored form, and `{"hashed": …}` for a Hashed. */
+ZEND_FUNCTION(Sharp_Internal_seal)
+{
+	zval *value;
+	zend_string *path = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_ZVAL(value)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_STR_OR_NULL(path)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (path) {
+		zend_string *outer = SHARP_G(seal_path);
+		SHARP_G(seal_path) = path;
+		zend_string *text = sharp_stored_text(value);
+		SHARP_G(seal_path) = outer;
+		if (!text || !sharp_json_decode(text, return_value)) {
+			if (text) {
+				zend_string_release(text);
+			}
+			RETURN_THROWS();
+		}
+		zend_string_release(text);
+		return;
+	}
+	zend_object *object = Z_OBJ_P(value);
+	zval held;
+	if (sharp_is_hashed(object->ce)) {
+		zval *hash = zend_read_property(object->ce, object, "hash", sizeof("hash") - 1, true, &held);
+		object_init(return_value);
+		add_property_zval_ex(return_value, "hashed", sizeof("hashed") - 1, hash);
+		if (hash == &held) {
+			zval_ptr_dtor(&held);
+		}
+		return;
+	}
+	if (!SHARP_G(seal_path)) {
+		sharp_refuse_storage(object->ce,
+			"a Secret is stored only in a field of a class or struct, whose name its encryption is bound to");
+		RETURN_THROWS();
+	}
+	zval *held_value = zend_read_property(object->ce, object, "value", sizeof("value") - 1, true, &held);
+	zend_string *stored = sharp_encrypt(held_value, SHARP_G(seal_path));
+	if (held_value == &held) {
+		zval_ptr_dtor(&held);
+	}
+	if (!stored) {
+		RETURN_THROWS();
+	}
+	object_init(return_value);
+	add_property_str_ex(return_value, "encrypted", sizeof("encrypted") - 1, stored);
+}
+
+/* `\Sharp\Internal\hashValue($value)`: the Argon2id hash, as a PHC string, of the stored text of `value`, which a new
+ * `Hashed` holds. */
+ZEND_FUNCTION(Sharp_Internal_hashValue)
+{
+	zval *value;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_string *text = sharp_stored_text(value);
+	if (!text) {
+		RETURN_THROWS();
+	}
+	zval arguments[2];
+	ZVAL_STR(&arguments[0], text);
+	ZVAL_STRINGL(&arguments[1], "argon2id", sizeof("argon2id") - 1);
+	sharp_call_function("password_hash", return_value, 2, arguments);
+	zval_ptr_dtor(&arguments[0]);
+	zval_ptr_dtor(&arguments[1]);
+}
+
+/* `\Sharp\Internal\verifyHash($hash, $value)`: whether `hash`, a Hashed's PHC string, is that of the stored text of
+ * `value`. */
+ZEND_FUNCTION(Sharp_Internal_verifyHash)
+{
+	zend_string *hash;
+	zval *value;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_STR(hash)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_string *text = sharp_stored_text(value);
+	if (!text) {
+		RETURN_THROWS();
+	}
+	zval arguments[2];
+	ZVAL_STR(&arguments[0], text);
+	ZVAL_STR_COPY(&arguments[1], hash);
+	sharp_call_function("password_verify", return_value, 2, arguments);
+	zval_ptr_dtor(&arguments[0]);
+	zval_ptr_dtor(&arguments[1]);
 }
 
 zend_result sharp_read_stored_form(zend_class_entry *ce, zval *stored, const zval *type_arguments,
@@ -15729,6 +16131,7 @@ static PHP_RINIT_FUNCTION(sharp)
 	SHARP_G(compile_command_failure) = NULL;
 	SHARP_G(compile_lock) = -1;
 	SHARP_G(silenced_warning) = NULL;
+	SHARP_G(seal_path) = NULL;
 	zend_hash_init(&SHARP_G(container_bindings), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_environment), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_modules), 8, NULL, NULL, false);
