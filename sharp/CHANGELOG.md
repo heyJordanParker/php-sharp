@@ -4,6 +4,12 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- An attribute on a machine case's field takes an object, as one on a constructor's parameter does, since an attribute's arguments follow one rule wherever the attribute stands. So `final case Forward([Route("/forward", middleware: [new Throttle(perMinute: 20)])] string? redirectUrl) = "forward";` compiles, and Reflection reads the `Route` on `Forward`'s `redirectUrl` with its `Throttle`. 0.6.45 checked the attribute's arguments as a constant's value and refused the `new` with "A constant's value is known before the code runs, and `new Throttle(perMinute: 20)` runs code: use a static field."
+
+## [0.6.45] - 2026-11-21
+
 ### Changed
 
 - Name resolution finds the class-like a bare name in a `.sharp` file names by default, spec section 23, in one lookup by its short name, where 0.6.44 compared the name with the short name of each of up to 118 default class-likes. A one-file edit of a 2,128-file project retires 56.2 G instructions in `mago analyze` where it retired 58.2 G, medians of 4 alternating rounds, with the same `.sharp` folder and issues.
@@ -1597,7 +1603,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.44...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.45...HEAD
+[0.6.45]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.44...v0.6.45
 [0.6.44]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.43...v0.6.44
 [0.6.43]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.42...v0.6.43
 [0.6.42]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.41...v0.6.42
