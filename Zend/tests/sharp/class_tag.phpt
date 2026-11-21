@@ -14,6 +14,12 @@ var_dump(Tags::casesRoundTrip());
 var_dump(Tags::low());
 var_dump(Tags::numberedCasesRoundTrip());
 var_dump(Tags::variantsRoundTrip());
+var_dump(Tags::voucherCode());
+try {
+    Tags::unknown();
+} catch (Sharp\InvalidFields $error) {
+    echo get_class($error), ': ', $error->getMessage(), "\n";
+}
 ?>
 --EXPECT--
 string(9) "completed"
@@ -24,3 +30,5 @@ bool(true)
 string(1) "1"
 bool(true)
 bool(true)
+string(3) "V-7"
+Sharp\InvalidFields: type: expected 1, bank or card, got string 'cash'

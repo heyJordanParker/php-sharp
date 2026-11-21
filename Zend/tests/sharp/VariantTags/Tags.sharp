@@ -24,6 +24,10 @@ public static class Tags
         => typeof(Tender).withTag(Tags.named(typeof(Card))) == typeof(Card)
             && typeof(Tender).withTag(Tags.named(typeof(Bank))) == typeof(Bank);
 
+    public static string voucherCode() => Tender.parse(["type": "1", "code": "V-7"]) is Voucher voucher ? voucher.code : "none";
+
+    public static Tender unknown() => Tender.parse(["type": "cash"]);
+
     private static string named(Class<Object> variant)
         => variant.tag() ?? throw new ValueError("The class is no variant of a family.");
 }

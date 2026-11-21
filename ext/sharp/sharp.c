@@ -12760,18 +12760,23 @@ static void sharp_read_variant(zend_class_entry *family, zval *value, sharp_read
 	zval held;
 	ZVAL_UNDEF(&held);
 	zval *name = sharp_input_field(value, key, &held);
-	zval *variant_name = name && Z_TYPE_P(name) == IS_STRING ? zend_hash_find(variants, Z_STR_P(name)) : NULL;
+	zval *variant_name = name && Z_TYPE_P(name) == IS_STRING ? zend_symtable_find(variants, Z_STR_P(name)) : NULL;
 	if (!variant_name) {
 		smart_str problem = {0};
 		if (name) {
 			smart_str_appends(&problem, "expected ");
 			zend_string *known;
+			zend_ulong number;
 			uint32_t index = 0, count = zend_hash_num_elements(variants);
-			ZEND_HASH_FOREACH_STR_KEY(variants, known) {
+			ZEND_HASH_FOREACH_KEY(variants, number, known) {
 				if (index > 0) {
 					smart_str_appends(&problem, index + 1 == count ? " or " : ", ");
 				}
-				smart_str_append(&problem, known);
+				if (known) {
+					smart_str_append(&problem, known);
+				} else {
+					smart_str_append_long(&problem, (zend_long) number);
+				}
 				index++;
 			} ZEND_HASH_FOREACH_END();
 			smart_str_appends(&problem, ", got ");
