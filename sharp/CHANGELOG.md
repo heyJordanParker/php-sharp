@@ -24,6 +24,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - An `[Import]` method whose result is a function type, alone or nullable, gives the native closure its built-in returns as it is, spec section 23, as an `extern` result of a built-in does, since PHP never declares a closure's types. So with `[Import("set_error_handler")] public static Function<bool?(int, string, string, int)>? swap(Function<bool?(int, string, string, int)>? handler) uses PhpGlobals;`, `Errors.swap(h)` gives back the very handler plain PHP installed, as `fn (...$arguments) => true`, where 0.6.46 gave a new closure that wrapped it and checked each result. An `[Import]` result of any other type is checked as before, as `List<int>` is.
+- A type test that names nothing makes the local it tests the value its type holds when it matches, spec section 21, so each read the test narrows reads the `Map` or the `Set` the type names. `value is Map<string, int> ? value.keys().join(",") : "none"` gives `a` for a plain PHP array `["a" => 1]`, where 0.6.46 threw "Sharp\Internal\keys(): Argument #1 ($table) must be of type Sharp\Map|Sharp\Set, array given", and so does an arm `Map<string, int> => value.keys().join(",")` of a `match (value)`. A test that fails leaves the local as it was, and the local keeps the converted value after the test, so a change made through a narrowed read, as `value.add(2)`, reaches it.
 
 ## [0.6.46] - 2026-11-21
 
