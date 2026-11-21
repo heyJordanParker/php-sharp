@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.45
+
+- A PHP# call of a method a plain PHP class declares nowhere, which only its `__call` or `__callStatic` answers, stops compiling. Call the real method the magic forwards to, as `cache.get("key")` on the injected repository or `User.query().where("email", e)`, or the method a `@method` or `@mixin` line of the class declares.
+
 ### Added
 
 - `Class<T>.tag()` gives the name a family stores for a variant, spec section 25, the inverse of `withTag`: the name its `[Key]` gives, or a backed machine's case's value. So with `public machine JourneyStatus : string { case Open = "open" { … } final case Completed = "completed"; … }`, `typeof(JourneyStatus.Completed).tag()` is `"completed"`, and a query that filters rows by state reads that name instead of writing `"completed"` a second time. `typeof(Card).tag()` is `"card"` from `[Key("card")]`, and `typeof(JourneyStatus).tag()` is null, since the machine is no variant. `withTag` now finds a case of a machine that stores as its value too, which 0.6.45 never listed as a family, so `typeof(JourneyStatus).withTag("completed")` is `typeof(JourneyStatus.Completed)` where 0.6.45 gave null, and `typeof(F).withTag(c.tag() ?? "")` is `c` for every variant `c` of `F`, an `int`-backed machine's `case Low = 1` included.
@@ -12,6 +16,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Changed
 
+- A call from PHP# code to a method a plain PHP class declares nowhere is `non-existent-method`, the error every undeclared method gets, on a class with `__call` or `__callStatic` too, spec section 23. So on a `Bag` that declares only `__call` and `__callStatic`, `bag.anything(1)` and `Bag.anything(1)` give "Method `Bag.anything` does not exist.", in a project and in a library. 0.6.45 compiled both, typed as `Any?` with any arguments, with no error. A method the class declares by its PHP code or its PHPDoc's `@method` or `@mixin` compiles as before, typed, and plain PHP files keep `non-documented-method`.
 - A move is called on the case it moves from, checked at compile time, spec section 20.2: a move in a case's block is a member of that case alone, and one in the machine's body of every case that isn't `final`. So `public void pay(int cents) { this.status = this.status.pay(cents); }`, which 0.6.45 compiled and which threw `Sharp\StateError` from every case but `Draft`, stops compiling with "`pay` moves from `OrderStatus.Draft`, and `this.status` may be `Paid`, `Shipped` or `Cancelled`: test it first, as in `if (this.status is OrderStatus.Draft draft)`." Write `if (this.status is OrderStatus.Draft draft) { this.status = draft.pay(cents); }` in its place, or test it with `is not` and leave first: a write takes a move of the name a type pattern bound from the place it writes. No compiled program throws `Sharp\StateError` any more, and a case's class declares only its own moves. A `late` machine property takes its first value from an entry point in any method of its class, where 0.6.45 refused `this.status = OrderStatus.open();` outside a constructor with "`this.status` holds the machine `OrderStatus`, so it changes only by a move of its own". A struct holds a machine as `{ get; init; }`, and `line with { status: draft.pay(5) }` moves it, where 0.6.45 refused the property with "`Line.status` holds the machine `OrderStatus`, so its `set` is `private`."
 
 ### Fixed

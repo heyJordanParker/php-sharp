@@ -5377,6 +5377,8 @@ public class Feed
 }
 ```
 
+**PHP# code calls a method a plain PHP class declares,** by its PHP declaration or by its PHPDoc's `@method` or `@mixin`, as the checker reads them. A call only the class's `__call` or `__callStatic` answers, instance or static, is the error any undeclared method gets: on a `Bag` that declares `__call` and `__callStatic` alone, `bag.anything(1)` and `Bag.anything(1)` are refused with "Method `Bag.anything` does not exist.", where a call a `@mixin` declares, as Eloquent's `users.whereIn("id", ids)`, compiles and is typed by the method it names.
+
 **An `extern` line states a plain PHP method's or function's signature,** so PHP# code calls it by types PHP# checks. The line is written in PHP# method order: the return type, the class and its type parameters, as in `Builder<TModel>`, the method, and the parameters. A PHP# call is checked against the signature the line states, never against the library's docblock, and `uses` follows it as on any `extern` line (section 29):
 
 <!-- example typed-extern -->
