@@ -4,6 +4,18 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.46
+
+- A PHP# class whose plain PHP parent's `__get` or `__set` serves a property, as an Eloquent model's does, reaches it only through an `extern` property or a line of the library that declares it, so a read or a write of any other name stops compiling. Declare each column the class reads or writes, as `public extern string email { get; set; }`, with `[Key("total_cents")]` where the key differs from the property's name, and make each property that isn't `extern` private, or declare it `extern`.
+
+### Added
+
+- An `extern` property has `set` where the class inherits a plain PHP `__set`, spec section 14.3, so `public extern string email { get; set; }` on an Eloquent model writes the column through `__set`, checked against `string`, and `{ get; private set; }` lets only the class's own methods write it. `[Key("total_cents")]` names the key `__get` and `__set` receive, so `public extern int totalCents { get; set; }` reaches the column `total_cents`. 0.6.46 refused any `extern` property but `{ get; }` with "An `extern` property is the one plain PHP's `__get` gives, so it is get-only". One with `set` on a class that inherits no `__set` is refused with "`Auction.buyer` has `set`, which a plain PHP `__set` stores, and `Auction` inherits no `__set`."
+
+### Changed
+
+- A read or a write of a property only a plain PHP parent's `__get` or `__set` serves is a compile error in a PHP# class, spec section 14.3, where 0.6.46 read it as `Any?` and wrote any value, so a misspelled column compiled. `this.emial = "x"` on an `Order : Model` gives "`Order` has no property `emial`. Declare it: `public extern string emial { get; set; }`.", and `order.anything` gives the same with `…` for the type, which a read doesn't state. A property the library declares, as a real property or an `@property` line, reads as before, and a plain PHP class used directly keeps its `__get` properties. A property that isn't `extern` and isn't private, on a class whose plain PHP parent defines `__get` and `__set`, is refused too, since it would stay in memory and never be saved: "`Order`'s parent `Model` stores properties through `__get` and `__set`, so a public `name` would never be saved." with the help "Write `public extern string name { get; set; }`, or make it private to keep it in memory." A property the parent declares, as Eloquent's `table`, is the parent's and compiles as before.
+
 ## [0.6.46] - 2026-11-21
 
 ### Upgrading from 0.6.45

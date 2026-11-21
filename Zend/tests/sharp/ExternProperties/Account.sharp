@@ -1,0 +1,28 @@
+namespace ExternProperties;
+
+import Lib.Columns;
+
+extern Columns uses any;
+
+// An `extern` property with `set` writes what the plain PHP parent's `__set` stores and reads what its `__get` gives,
+// under the key `[Key]` names. PHP declares no property for either.
+public class Account : Columns
+{
+    public extern string email { get; set; }
+
+    [Key("total_cents")]
+    public extern int totalCents { get; private set; }
+
+    public void open(string email)
+    {
+        this.email = email;
+        this.totalCents = 0;
+    }
+
+    public void charge(int cents)
+    {
+        this.totalCents += cents;
+    }
+
+    public string summary() => `${this.email}: ${this.totalCents}`;
+}

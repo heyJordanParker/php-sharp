@@ -2857,10 +2857,11 @@ A read typed `Any?` this way compiles with no warning, and an `as`, an `is` or a
 
 A declared property the code can't read, such as an Eloquent model's protected `table` or `hidden`, is the property `__get` reads, as plain PHP reads it from outside the class.
 
-**A `.sharp` class whose plain PHP parent defines `__get` has those properties too,** as a PHP# Eloquent model has the relations it loaded, by the same rules.
+**A `.sharp` class whose plain PHP parent defines `__get` or `__set` reaches a property they serve only through an `extern` property,** or through a declaration of the library, as a real property or an `@property` line. A read or a write of any other name is a compile error that names the `extern` property to write, so a misspelled column never compiles: "`Booking` has no property `guest`. Declare it: `public extern … guest { get; }`." A write names the type of the value it writes, as in `public extern string emial { get; set; }`.
 
 <!-- example magic-property-models -->
 ```php
+/** @property-read Contact $host */
 abstract class Model
 {
     public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
@@ -2874,22 +2875,31 @@ namespace App;
 
 public class Booking : Model
 {
-    public Contact guest() => new Contact();
-
-    public string guestName() => (this.guest as Contact)?.name ?? "";   // compiles: the property __get reads
+    public string hostName() => this.host.name;                        // compiles: the @property-read line declares it
+    public string guestName() => (this.guest as Contact)?.name ?? "";   // compile error: `Booking` has no property `guest`. Declare it: `public extern … guest { get; }`.
 }
 ```
-<!-- run magic-property-models
-new Booking().guestName();    // "guest"
--->
 
-**A `.sharp` class states the type of a property its plain PHP parent's `__get` gives with an `extern` property,** as in `public extern Collection<int, Product> products { get; }` on an Eloquent model. It reads only, holds no value, and takes no modifier but its access. PHP declares no property for it, so a read reaches `__get`. The read has the declared type, and the value `__get` gives is checked against it where it enters PHP#, so a value of another class throws `TypeError` there. It may share its name with a method, as a model's relation `products()` and the relation `products` its `__get` loads do, the one exception to the rule that one name declares one member. A class that inherits no `__get` has no such property, so an `extern` property there is a compile error.
+**A `.sharp` class states the type of a property its plain PHP parent's `__get` gives and `__set` stores with an `extern` property,** as in `public extern Collection<int, Product> products { get; }` or `public extern string email { get; set; }` on an Eloquent model. It holds no value and takes no modifier but its access, and its `set` may narrow its own access, as in `{ get; private set; }`. PHP declares no property for it, so a read reaches `__get` and a write reaches `__set`. The read has the declared type, and the value `__get` gives is checked against it where it enters PHP#, so a value of another class throws `TypeError` there. A write is checked against the declared type and passed to `__set` as it is: converting a value for storage is the parent's own job, as an Eloquent cast is. `[Key("total_cents")]` names the key `__get` and `__set` receive when it differs from the property's name. It may share its name with a method, as a model's relation `products()` and the relation `products` its `__get` loads do, the one exception to the rule that one name declares one member. A class that inherits no `__get` has no such property, and one that inherits no `__set` has none with `set`, so either is a compile error.
 
 <!-- example extern-properties -->
 ```php
 abstract class Catalogue
 {
-    public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
+    private array $stored = [];
+
+    public function __get(string $name): mixed
+    {
+        if (array_key_exists($name, $this->stored)) {
+            return $this->stored[$name];
+        }
+        $loaded = new Contact();
+        $loaded->name = $name;
+
+        return $loaded;
+    }
+
+    public function __set(string $name, mixed $value): void { $this->stored[$name] = $value; }
 }
 ```
 
@@ -2902,14 +2912,24 @@ public class Listing : Catalogue
 {
     public extern Contact seller { get; }
 
+    [Key("price_cents")]
+    public extern int priceCents { get; set; }
+
     public Contact seller() => new Contact();
 
     public string sellerName() => this.seller.name;      // compiles: the extern property types the read __get gives
+
+    public int reprice(int cents)
+    {
+        this.priceCents = cents;                         // compiles: __set stores it under "price_cents"
+        return this.priceCents;
+    }
 }
 ```
 <!-- run extern-properties
 new Listing().sellerName();    // "seller"
 new Listing().seller().name;   // "Ada"
+new Listing().reprice(900);    // 900
 -->
 
 <!-- example extern-property-errors -->
@@ -2925,7 +2945,7 @@ public class Banner
 
 <!-- example extern-property-shapes -->
 ```php
-abstract class Catalogue
+abstract class Gallery
 {
     public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
 }
@@ -2936,9 +2956,35 @@ abstract class Catalogue
 // app/Auction.sharp
 namespace App;
 
-public class Auction : Catalogue
+public class Auction : Gallery
 {
-    public extern Contact buyer { get; set; }           // compile error: An `extern` property is the one plain PHP's `__get` gives, so it is get-only
+    public extern Contact buyer { get; set; }           // compile error: `Auction.buyer` has `set`, which a plain PHP `__set` stores, and `Auction` inherits no `__set`.
+}
+```
+
+**A property a class keeps in memory where its plain PHP parent stores every other one is a compile error,** unless it is private. On a class whose parent defines `__get` and `__set`, as an Eloquent model's does, a property that isn't `extern` holds its value in the object and never reaches the parent's storage, so it would never be saved. The error names both fixes: "`Invoice`'s parent `Ledger` stores properties through `__get` and `__set`, so a public `number` would never be saved." A property the parent declares itself, as Eloquent's `table`, stays the parent's.
+
+<!-- example stored-properties -->
+```php
+abstract class Ledger
+{
+    private array $stored = [];
+
+    public function __get(string $name): mixed { return $this->stored[$name] ?? null; }
+    public function __set(string $name, mixed $value): void { $this->stored[$name] = $value; }
+}
+```
+
+<!-- example stored-properties -->
+```csharp
+// app/Invoice.sharp
+namespace App;
+
+public class Invoice : Ledger
+{
+    public extern string reference { get; set; }        // compiles: __set stores it
+    private int printed = 0;                            // compiles: the class's own memory
+    public string number { get; set; } = "";            // compile error: `Invoice`'s parent `Ledger` stores properties through `__get` and `__set`, so a public `number` would never be saved.
 }
 ```
 
