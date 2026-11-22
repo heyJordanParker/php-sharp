@@ -87,6 +87,8 @@ use mago_codex::ttype::template::variance::Variance;
 use mago_codex::ttype::union::TUnion;
 use mago_codex::visibility::Visibility;
 use mago_database::file::File;
+use mago_extension::RuleCalls;
+use mago_extension::RuleTimes;
 use mago_extension::Value;
 use mago_extension::ValueReader;
 use mago_extension::ValueWriter;
@@ -146,7 +148,7 @@ const METHOD_OF_SHARP_CLASS: u8 = 1;
 const METHOD_OF_EXACT_NAMES: u8 = 2;
 
 /// The values of a message before its fields: its protocol's name and its kind.
-const HEADER_LENGTH: usize = 2;
+pub(super) const HEADER_LENGTH: usize = 2;
 const INITIAL_MESSAGE_CAPACITY: usize = 16;
 const DESCRIBE_REQUEST: u16 = 1;
 const RETURN_TYPE_REQUEST: u16 = 2;
@@ -915,6 +917,81 @@ pub(super) fn encode_provider_request<'type_info>(
         ProviderRequestKind::CallableSignature => CALLABLE_SIGNATURE_REQUEST,
         ProviderRequestKind::Assertion => ASSERTION_REQUEST,
     };
+    let (invocation, mut request) = encode_provider_invocation(
+        message_kind,
+        target,
+        invocation,
+        artifacts,
+        source_file,
+        codebase,
+        trace_enabled,
+        calling_function_like,
+    )?;
+    request.payload = provider_request_payload(message_kind, generation, provider_indices, invocation);
+
+    Ok(request)
+}
+
+/// The invocation a return-type request for `target` sends, as [`encode_provider_request`] encodes it, which a request
+/// recorded without the hosts keeps and [`return_type_request_payload`] sends once they start.
+pub(super) fn encode_return_type_invocation(
+    target: ProviderTarget<'_>,
+    invocation: &Invocation<'_, '_, '_>,
+    artifacts: &AnalysisArtifacts,
+    source_file: &File,
+    codebase: &CodebaseMetadata,
+    calling_function_like: Option<FunctionLikeIdentifier>,
+) -> Result<Value, ExternalAnalyzerError> {
+    encode_provider_invocation(
+        RETURN_TYPE_REQUEST,
+        target,
+        invocation,
+        artifacts,
+        source_file,
+        codebase,
+        false,
+        calling_function_like,
+    )
+    .map(|(invocation, _)| invocation)
+}
+
+/// The payload of a return-type request of `invocation` to the providers at `provider_indices`.
+pub(super) fn return_type_request_payload(generation: u64, provider_indices: &[u16], invocation: Value) -> Vec<Value> {
+    provider_request_payload(RETURN_TYPE_REQUEST, generation, provider_indices, invocation)
+}
+
+fn provider_request_payload(
+    message_kind: u16,
+    generation: u64,
+    provider_indices: &[u16],
+    invocation: Value,
+) -> Vec<Value> {
+    let mut writer = message_writer(message_kind);
+    writer.write_value(object(
+        sdk_class!("Internal\\Analyzer\\ReturnTypeRequest"),
+        vec![
+            ("generation", Value::Int(generation.cast_signed())),
+            ("providerIndices", provider_indices_value(provider_indices)),
+            ("invocation", invocation),
+        ],
+    ));
+
+    writer.finish()
+}
+
+/// The invocation object of a provider request of `message_kind` for `target`, and the request's types and counts,
+/// with no payload yet.
+#[allow(clippy::too_many_arguments)]
+fn encode_provider_invocation<'type_info>(
+    message_kind: u16,
+    target: ProviderTarget<'_>,
+    invocation: &Invocation<'_, '_, '_>,
+    artifacts: &'type_info AnalysisArtifacts,
+    source_file: &File,
+    codebase: &CodebaseMetadata,
+    trace_enabled: bool,
+    calling_function_like: Option<FunctionLikeIdentifier>,
+) -> Result<(Value, ReturnTypeRequest<'type_info>), ExternalAnalyzerError> {
     let mut receiver_type = None;
     let (invocation_kind, class, name) = match target {
         ProviderTarget::Function(name) => (INVOCATION_FUNCTION, None, name),
@@ -933,9 +1010,8 @@ pub(super) fn encode_provider_request<'type_info>(
         }
     };
 
-    encode_return_type_request(
+    encode_invocation(
         message_kind,
-        provider_indices,
         invocation_kind,
         class,
         receiver_type.as_ref(),
@@ -944,7 +1020,6 @@ pub(super) fn encode_provider_request<'type_info>(
         artifacts,
         source_file,
         codebase,
-        generation,
         trace_enabled,
         calling_function_like,
     )
@@ -1292,9 +1367,9 @@ fn write_issue_source(
     Ok(())
 }
 
-fn encode_return_type_request<'type_info>(
+#[allow(clippy::too_many_arguments)]
+fn encode_invocation<'type_info>(
     message_kind: u16,
-    provider_indices: &[u16],
     invocation_kind: u8,
     class: Option<&[u8]>,
     receiver_type: Option<&TUnion>,
@@ -1303,10 +1378,9 @@ fn encode_return_type_request<'type_info>(
     artifacts: &'type_info AnalysisArtifacts,
     source_file: &File,
     codebase: &CodebaseMetadata,
-    generation: u64,
     trace_enabled: bool,
     calling_function_like: Option<FunctionLikeIdentifier>,
-) -> Result<ReturnTypeRequest<'type_info>, ExternalAnalyzerError> {
+) -> Result<(Value, ReturnTypeRequest<'type_info>), ExternalAnalyzerError> {
     let include_argument_types = message_kind == RETURN_TYPE_REQUEST || message_kind == ASSERTION_REQUEST;
     let mut type_snapshot_duration = Duration::ZERO;
     let (kind, declaring_class, receiver_type) = match (invocation_kind, class, receiver_type) {
@@ -1409,29 +1483,23 @@ fn encode_return_type_request<'type_info>(
             ("callingFunctionLike", calling_function_like),
         ],
     );
-    let mut writer = message_writer(message_kind);
-    writer.write_value(object(
-        sdk_class!("Internal\\Analyzer\\ReturnTypeRequest"),
-        vec![
-            ("generation", Value::Int(generation.cast_signed())),
-            ("providerIndices", provider_indices_value(provider_indices)),
-            ("invocation", invocation_object),
-        ],
-    ));
 
     let mut types = Vec::with_capacity(receiver_type_count + argument_types.len());
     types.extend(receiver_types.into_iter().map(Cow::Owned));
     types.extend(argument_types);
 
-    Ok(ReturnTypeRequest {
-        payload: writer.finish(),
-        snapshotted_types: types.len(),
-        receiver_type_count,
-        types,
-        arguments: argument_count,
-        typed_arguments,
-        type_snapshot_duration,
-    })
+    Ok((
+        invocation_object,
+        ReturnTypeRequest {
+            payload: Vec::new(),
+            snapshotted_types: types.len(),
+            receiver_type_count,
+            types,
+            arguments: argument_count,
+            typed_arguments,
+            type_snapshot_duration,
+        },
+    ))
 }
 
 fn get_method_receiver_type(method_context: &MethodTargetContext<'_>) -> Result<TUnion, ExternalAnalyzerError> {
@@ -3983,19 +4051,20 @@ pub(super) fn message_reader(payload: &[Value], expected_kind: u16) -> Result<Va
     Ok(reader)
 }
 
-/// Splits the codebase reads a provider or issue filter made, with its worker's class loads, which the SDK places right
-/// after the header, from the response they came with.
-pub(super) fn take_codebase_reads(
+/// Splits the codebase reads a provider or issue filter made, with its worker's class loads, and how long each of its
+/// rules took, which the SDK places right after the header, from the response they came with.
+pub(super) fn take_reads_and_rule_times(
     mut response: Vec<Value>,
-) -> Result<(ResponseReads, Vec<Value>), ExternalAnalyzerError> {
+) -> Result<(ResponseReads, Vec<RuleCalls>, Vec<Value>), ExternalAnalyzerError> {
     let fields =
         response.get(HEADER_LENGTH..).ok_or_else(|| protocol("analyzer response is shorter than its header"))?;
     let mut reader = ValueReader::new(fields);
     let reads = ResponseReads::decode(&mut reader)?;
+    let rule_times = RuleTimes::decode(&mut reader)?;
     let end = response.len() - reader.remaining();
     response.drain(HEADER_LENGTH..end);
 
-    Ok((reads, response))
+    Ok((reads, rule_times, response))
 }
 
 pub(super) fn message_kind(payload: &[Value]) -> Result<u16, ExternalAnalyzerError> {
@@ -5169,7 +5238,7 @@ pub(super) mod testing {
     }
 
     /// The response that declines `request`, a property type or call forwarding request, after the codebase reads
-    /// the worker made for it: no issue read and no code read, sent as lists 0 and 1.
+    /// the worker made for it, no issue read and no code read, sent as lists 0 and 1, and no rule time.
     pub fn declined_response(request: &[Value]) -> Vec<Value> {
         let kind = match message_kind(request).unwrap() {
             PROPERTY_TYPE_REQUEST => PROPERTY_TYPE_RESPONSE,
@@ -5183,6 +5252,7 @@ pub(super) mod testing {
             writer.write_u32(0);
         }
         writer.write_u64(1);
+        writer.write_u32(0);
         writer.write_u32(0);
         writer.write_u32(0);
         writer.write_bool(false);

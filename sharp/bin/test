@@ -285,7 +285,10 @@ elif [[ -n $shard ]]; then
   # The slices balance by the seconds sharp/baseline/seconds lists, from CI's slow-test summaries: a test's seconds
   # summed over the modes, and the proof's own, which hold the whole slice while it runs, so it weighs them times
   # the workers. A test the file doesn't list ran under a second in each mode, so it weighs 1. Each item, heaviest
-  # first, goes to the slice that weighs least so far, so every slice computes the same split.
+  # first, goes to the slice that weighs least so far, so every slice computes the same split. The list is remeasured
+  # from one run whose slices ran on processors of one speed, since a hosted runner can be 1.7 times slower than
+  # another: the tests' from run 45019486836, and the proof's 109 s, its mean over four runs, which took 96 to 125 s
+  # where the list held 53.
   read_seconds
   items=()
   while read -r test; do

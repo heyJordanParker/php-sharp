@@ -25,6 +25,8 @@ use mago_database::file::File;
 use mago_database::file::FileId;
 use mago_database::file::FileType;
 use mago_extension::Host;
+use mago_extension::RuleCalls;
+use mago_extension::RuleTimes;
 use mago_extension::Value;
 use mago_extension::WorkerError;
 use mago_extension::WorkerRequestHandler;
@@ -59,8 +61,6 @@ pub use reads::Listing;
 use reads::RecordedReads;
 use reads::ResponseReads;
 pub use reads::SessionReads;
-use rule_times::RuleCalls;
-use rule_times::RuleTimes;
 
 mod error;
 mod lifecycle;
@@ -68,11 +68,13 @@ mod metadata;
 pub mod protocol;
 mod reads;
 mod refinement;
-mod rule_times;
+mod requests;
 mod scan;
 
 pub use refinement::DeclarationRefinement;
 pub use refinement::apply_refinements;
+pub(crate) use requests::ReturnTypeRecord;
+pub use requests::ReturnTypeRequests;
 pub use scan::CodebaseScanFile;
 pub use scan::CodebaseScanPlan;
 
@@ -143,7 +145,7 @@ pub struct ExternalAnalysisSession {
     sources: foldhash::HashMap<FileId, Arc<File>>,
     reads: Mutex<RecordedReads>,
     member_reads: MemberReads,
-    rule_times: Option<Mutex<RuleTimes>>,
+    rule_times: RuleTimes,
 }
 
 /// What the metadata a session writes resolves a PHP# member read in an attribute argument against, spec section 23.
@@ -170,18 +172,18 @@ impl ExternalAnalysisSession {
             sources,
             reads: Mutex::default(),
             member_reads: MemberReads::Codebase,
-            rule_times: tracing::enabled!(tracing::Level::DEBUG).then(Mutex::default),
+            rule_times: RuleTimes::new(),
         }
     }
 
     /// The session that writes the codebase-scan payload of `file`, whose member reads resolve against `scan`, the
     /// merged scan, or are left for it when there is none yet.
     fn for_scan(file: &Arc<File>, scan: Option<&Arc<CodebaseMetadata>>) -> Self {
-        let mut session = Self::from_files([Arc::clone(file)]);
-        session.member_reads =
-            scan.map_or_else(|| MemberReads::Later(AtomicBool::new(false)), |scan| MemberReads::Scan(Arc::clone(scan)));
-
-        session
+        Self {
+            member_reads: scan
+                .map_or_else(|| MemberReads::Later(AtomicBool::new(false)), |scan| MemberReads::Scan(Arc::clone(scan))),
+            ..Self::from_files([Arc::clone(file)])
+        }
     }
 
     /// The codebase a PHP# member read written with `codebase` resolves against, or None when it waits for the merged
@@ -218,26 +220,25 @@ impl ExternalAnalysisSession {
         self.reads.lock().unwrap_or_else(std::sync::PoisonError::into_inner).record(file_id, reads)
     }
 
-    /// Whether this session asks each worker how long its rules took.
-    fn times_rules(&self) -> bool {
-        self.rule_times.is_some()
+    /// `request` with, right after its header, whether the worker times each host rule it runs, which a worker reads in
+    /// one place whatever kind the request is.
+    fn asking_rule_times(&self, mut request: Vec<Value>) -> Vec<Value> {
+        request.insert(protocol::HEADER_LENGTH, Value::Bool(self.rule_times.asked()));
+
+        request
     }
 
-    fn record_rule_times(&self, calls: Vec<RuleCalls>) {
-        if let Some(rule_times) = &self.rule_times {
-            rule_times.lock().unwrap_or_else(std::sync::PoisonError::into_inner).record(calls);
-        }
+    /// Records how long each rule a worker ran took, the calls that name no file on the file of `file_id`.
+    fn record_rule_times(&self, calls: Vec<RuleCalls>, file_id: Option<FileId>) {
+        self.rule_times.record(calls, file_id.and_then(|file_id| self.source_name(file_id)));
     }
 
-    /// Records the codebase reads a provider or issue filter made while Mago analyzed `file_id`, which lead its
-    /// `response` with its worker's class loads, and returns the response without them.
-    fn record_response_reads(
-        &self,
-        file_id: FileId,
-        response: Vec<Value>,
-    ) -> Result<Vec<Value>, ExternalAnalyzerError> {
-        let (reads, response) = protocol::take_codebase_reads(response)?;
+    /// Records the codebase reads and the rule times a provider or issue filter's `response` leads with, made while
+    /// Mago analyzed `file_id`, and returns the response without them.
+    fn record_response(&self, file_id: FileId, response: Vec<Value>) -> Result<Vec<Value>, ExternalAnalyzerError> {
+        let (reads, rule_times, response) = protocol::take_reads_and_rule_times(response)?;
         self.record_reads(Some(file_id), reads)?;
+        self.record_rule_times(rule_times, Some(file_id));
 
         Ok(response)
     }
@@ -266,15 +267,6 @@ impl ExternalAnalysisSession {
     /// code sees it. A file outside this run is plain PHP, as every file but a `.sharp` file is.
     fn dialect(&self, span: Span) -> Dialect {
         self.source_file(span.file_id).map_or(Dialect::Php, Dialect::of)
-    }
-}
-
-impl Drop for ExternalAnalysisSession {
-    /// Logs how long each host rule took in the run, which ends with its session.
-    fn drop(&mut self) {
-        if let Some(rule_times) = &mut self.rule_times {
-            rule_times.get_mut().unwrap_or_else(std::sync::PoisonError::into_inner).log();
-        }
     }
 }
 
@@ -1752,6 +1744,40 @@ impl<T> ExternalAnalyzer<T> {
 
         any.then(|| NodeAnalysisRequirements::new(&targets, &requirements, method_call_hooks, class_like_hooks))
     }
+
+    /// Whether the hosts register return-type providers and nothing else: no other provider, hook, codebase scan,
+    /// before-analysis plugin, entry point, stub or worker reducer, which reduces the requests its workers saw when the
+    /// hosts stop. Such hosts change only the type of a call a provider answers, so an analysis with them differs from
+    /// one without them only in the files whose return-type requests a provider answers.
+    pub(crate) fn has_only_return_type_providers(&self) -> bool {
+        let capabilities = self.capabilities();
+        let others = [
+            capabilities.function_signatures,
+            capabilities.method_signatures,
+            capabilities.function_assertions,
+            capabilities.method_assertions,
+            capabilities.property_types,
+            capabilities.property_initialization,
+            capabilities.class_initializers,
+            capabilities.call_forwarding,
+            capabilities.issue_filters,
+            capabilities.method_call_analysis,
+            capabilities.after_file_analysis,
+            capabilities.after_analysis,
+        ];
+
+        !others.contains(&true)
+            && self.initialization_stubs.is_empty()
+            && self.node_analysis_requirements().is_none()
+            && self.backends.iter().all(|backend| {
+                let registration = &backend.registration;
+                registration.codebase_scan_hooks.is_empty()
+                    && registration.before_analysis_plugins.is_empty()
+                    && registration.entry_points.is_empty()
+                    && registration.attributed_entry_points.is_empty()
+                    && !registration.has_worker_reducer
+            })
+    }
 }
 
 impl<T> ExternalAnalyzer<T>
@@ -1829,7 +1855,7 @@ where
             let response = backend
                 .transport
                 .request_with_handler(
-                    request,
+                    session.asking_rule_times(request),
                     Some(&format_args!("the issue-filter hooks of {}", mago_bytes::BytesDisplay(&file.name))),
                     &mut handler,
                 )
@@ -1843,7 +1869,7 @@ where
             let response_fields = response.len();
             let decode_start = self.trace_enabled.then(Instant::now);
             let removed = session
-                .record_response_reads(file.id, response)
+                .record_response(file.id, response)
                 .and_then(|response| protocol::decode_issue_filter_response(&response, issue_count))
                 .inspect_err(|_| self.record_issue_filter_error())?;
             let removed = removed.into_iter().map(|index| candidate_indices[index]).collect::<Vec<_>>();
@@ -1931,7 +1957,11 @@ where
         let ipc_start = self.trace_enabled.then(Instant::now);
         let response = backend
             .transport
-            .request_with_handler(request, file_hooks.as_ref().map(|hooks| hooks as &dyn Display), handler)
+            .request_with_handler(
+                session.asking_rule_times(request),
+                file_hooks.as_ref().map(|hooks| hooks as &dyn Display),
+                handler,
+            )
             .inspect_err(|_| self.record_lifecycle_error())?;
 
         if let Some(start) = ipc_start {
@@ -2005,7 +2035,7 @@ where
             }
             let lifecycle_start = self.trace_enabled.then(Instant::now);
             let encode_start = self.trace_enabled.then(Instant::now);
-            let request = lifecycle::encode_before_analysis_request(session, plugins)
+            let request = lifecycle::encode_before_analysis_request(session.generation(), plugins)
                 .inspect_err(|_| self.record_lifecycle_error())?;
 
             if let Some(start) = encode_start {
@@ -2075,7 +2105,7 @@ where
             let lifecycle_start = self.trace_enabled.then(Instant::now);
             let encode_start = self.trace_enabled.then(Instant::now);
             let request = lifecycle::encode_after_file_analysis_request(
-                session,
+                session.generation(),
                 &plugins,
                 file,
                 program,
@@ -2163,11 +2193,12 @@ where
             let lifecycle_start = self.trace_enabled.then(Instant::now);
             let encode_start = self.trace_enabled.then(Instant::now);
             let request = lifecycle::encode_after_file_analysis_batch_request(
-                session,
+                session.generation(),
                 &plugins,
                 files,
                 include_expression_types,
                 backend_node_requirements.as_ref(),
+                session,
                 u16::try_from(backend_index)
                     .map_err(|_| error::protocol("external analyzer backend exceeds u16::MAX"))?,
             )
@@ -2230,8 +2261,9 @@ where
 
             let lifecycle_start = self.trace_enabled.then(Instant::now);
             let encode_start = self.trace_enabled.then(Instant::now);
-            let request = lifecycle::encode_after_analysis_request(session, plugins, analysis_result, files)
-                .inspect_err(|_| self.record_lifecycle_error())?;
+            let request =
+                lifecycle::encode_after_analysis_request(session.generation(), plugins, analysis_result, files)
+                    .inspect_err(|_| self.record_lifecycle_error())?;
             if let Some(start) = encode_start {
                 self.telemetry.lifecycle_encode_ns.fetch_add(duration_nanos(start.elapsed()), Ordering::Relaxed);
             }
@@ -2301,7 +2333,7 @@ where
             protocol::resolve_type_handle(&request.types, handle)
         })?;
 
-        session.record_response_reads(file_id, response)
+        session.record_response(file_id, response)
     }
 
     fn decode_provider_response<R>(
@@ -2343,7 +2375,7 @@ where
         }
         let response = backend
             .transport
-            .request_with_handler(request, Some(running), &mut handler)
+            .request_with_handler(session.asking_rule_times(request), Some(running), &mut handler)
             .inspect_err(|_| self.record_error())?;
         if let Some(start) = ipc_start {
             self.telemetry.ipc_ns.fetch_add(duration_nanos(start.elapsed()), Ordering::Relaxed);
@@ -2749,6 +2781,87 @@ where
         )
     }
 
+    /// Whether a provider of a host targets a call to `target` against `codebase`, so that the analysis with the hosts
+    /// sends the call's return-type request.
+    fn provides_return_type(&self, target: CallableTarget<'_>, codebase: &CodebaseMetadata) -> bool {
+        self.return_type_providers(target, codebase).next().is_some()
+    }
+
+    /// The providers of each host whose targets match a call to `target` against `codebase`, in order, as
+    /// [`Self::get_return_type`] sends the call's return-type request to them.
+    fn return_type_providers<'analyzer>(
+        &'analyzer self,
+        target: CallableTarget<'analyzer>,
+        codebase: &'analyzer CodebaseMetadata,
+    ) -> impl Iterator<Item = (&'analyzer Backend<T>, ProviderIndices)> + 'analyzer {
+        let declared = match target {
+            CallableTarget::Function(function) => codebase.get_function(word(function)).is_some(),
+            CallableTarget::Method { class, method } => {
+                codebase.get_declaring_method(word(class), word(method)).is_some()
+            }
+        };
+
+        self.backends.iter().filter_map(move |backend| {
+            let (indices, _) = match target {
+                CallableTarget::Function(function) => backend.matching_function_providers(function, declared),
+                CallableTarget::Method { class, method } => {
+                    backend.matching_method_providers(codebase, word(class), method, declared)
+                }
+            };
+
+            indices.map(|indices| (backend, indices))
+        })
+    }
+
+    /// Whether a host answers a request `requests` recorded for `file_id`, sent as [`Self::get_return_type`] sends it in
+    /// the analysis of the file against `codebase`: to the providers of each host whose targets match, in order, until
+    /// one gives a type. A request that fails, one the analysis could not make, and one whose provider asks for a type
+    /// of the call, which the record does not keep, count as answered too, so the file is analyzed with the hosts.
+    pub(crate) fn answers_return_type_requests(
+        &self,
+        requests: &ReturnTypeRequests,
+        file_id: FileId,
+        codebase: &CodebaseMetadata,
+        session: &ExternalAnalysisSession,
+    ) -> bool {
+        requests.requests_of(file_id).any(|request| {
+            let Ok(request) = request else {
+                return true;
+            };
+            let Some(invocation) = &request.invocation else {
+                return true;
+            };
+            let target = request.target();
+
+            self.return_type_providers(target, codebase).any(|(backend, indices)| {
+                let plugin_of = |index| match target {
+                    CallableTarget::Function(_) => provider_plugin(&backend.registration.function_providers, index),
+                    CallableTarget::Method { .. } => provider_plugin(&backend.registration.method_providers, index),
+                };
+                let payload =
+                    protocol::return_type_request_payload(session.generation(), indices.as_slice(), invocation.clone());
+                let typed = std::cell::Cell::new(false);
+                let response = self.exchange_provider_payload(
+                    backend,
+                    payload,
+                    &backend.provider_names("return-type", plugin_of, indices.as_slice()),
+                    codebase,
+                    session,
+                    |_| {
+                        typed.set(true);
+                        None
+                    },
+                );
+
+                let answer = response
+                    .and_then(|response| session.record_response(file_id, response))
+                    .and_then(|response| protocol::decode_return_type_response(&response, |_| None));
+
+                typed.get() || !matches!(answer, Ok(None))
+            })
+        })
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn get_return_type(
         &self,
@@ -2953,7 +3066,7 @@ where
                 self.exchange_provider_payload(backend, request.payload, &running, codebase, session, |handle| {
                     protocol::resolve_type_handle(&request.types, handle)
                 })?;
-            let response = session.record_response_reads(span.file_id, response)?;
+            let response = session.record_response(span.file_id, response)?;
 
             let decode_start = self.trace_enabled.then(Instant::now);
             let result = protocol::decode_property_type_response(&response, |handle| {
@@ -3038,7 +3151,7 @@ where
                 self.exchange_provider_payload(backend, request.payload, &running, codebase, session, |handle| {
                     protocol::resolve_type_handle(&request.types, handle)
                 })?;
-            let response = session.record_response_reads(source_file.id, response)?;
+            let response = session.record_response(source_file.id, response)?;
 
             let result = protocol::decode_call_forwarding_response(&response, |handle| {
                 protocol::resolve_type_handle(&request.types, handle)
@@ -3114,7 +3227,7 @@ where
                 |index| provider_plugin(&backend.registration.property_initialization_providers, index),
                 indices.as_slice(),
             );
-            let response = session.record_response_reads(
+            let response = session.record_response(
                 source_file.id,
                 self.exchange_provider_payload(backend, request, &running, codebase, session, |_| None)?,
             )?;
@@ -3216,7 +3329,7 @@ where
                 |index| provider_plugin(&backend.registration.class_initializer_providers, index),
                 indices.as_slice(),
             );
-            let response = session.record_response_reads(
+            let response = session.record_response(
                 source_file.id,
                 self.exchange_provider_payload(backend, request, &running, codebase, session, |_| None)?,
             )?;

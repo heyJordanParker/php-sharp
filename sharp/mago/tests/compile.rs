@@ -795,19 +795,140 @@ fn analyze_logs_each_host_rule_s_time_slowest_first_at_the_debug_level() {
 
     assert!(debug.status.success(), "{}", printed(&debug));
     let log = printed(&debug);
-    let rules: Vec<&str> = log.lines().filter_map(|line| line.split_once("Host rule ").map(|(_, rule)| rule)).collect();
-    let sleeping = rules.iter().position(|rule| rule.starts_with("SleepsOnEachFile::afterFileAnalysis took "));
-    let quick = rules.iter().position(|rule| rule.starts_with("ReturnsAtOnce::afterFileAnalysis took "));
-    assert!(sleeping.is_some() && sleeping < quick, "{log}");
-    let took = rules[sleeping.unwrap()].strip_prefix("SleepsOnEachFile::afterFileAnalysis took ").unwrap();
-    let (seconds, files) = took.split_once(" s over ").unwrap_or_else(|| panic!("{log}"));
-    let seconds: f64 = seconds.parse().unwrap();
-    let files: u32 = files.split_once(' ').unwrap().0.parse().unwrap();
-    assert!(files > 0 && seconds >= 0.04 * f64::from(files), "{log}");
-    let slowest_files = rules
-        .iter()
-        .filter(|rule| rule.starts_with("SleepsOnEachFile::afterFileAnalysis took ") && rule.contains(" s on "));
+    let sleeping = host_rule_took(&log, "SleepsOnEachFile::afterFileAnalysis").unwrap_or_else(|| panic!("{log}"));
+    let quick = host_rule_took(&log, "ReturnsAtOnce::afterFileAnalysis").unwrap_or_else(|| panic!("{log}"));
+    let (_, seconds, files) = sleeping;
+    assert!(sleeping.0 < quick.0 && files > 0 && seconds >= 0.04 * f64::from(files), "{log}");
+    let slowest_files = log
+        .lines()
+        .filter(|line| line.contains("Host rule SleepsOnEachFile::afterFileAnalysis took ") && line.contains(" s on "));
     assert_eq!(slowest_files.count(), files.min(5) as usize, "{log}");
+
+    let info = analyze("info");
+
+    assert!(info.status.success(), "{}", printed(&info));
+    assert!(!printed(&info).contains("Host rule"), "{}", printed(&info));
+}
+
+/// Where `rule`'s round line stands among the "Host rule" lines of `log`, how many seconds it took and over how many
+/// files, as "Host rule SleepsOnEachFile::afterFileAnalysis took 0.08 s over 2 files." gives them.
+fn host_rule_took(log: &str, rule: &str) -> Option<(usize, f64, u32)> {
+    let prefix = format!("{rule} took ");
+    log.lines().filter_map(|line| line.split_once("Host rule ").map(|(_, line)| line)).enumerate().find_map(
+        |(place, line)| {
+            let (seconds, files) = line.strip_prefix(&prefix)?.split_once(" s over ")?;
+            Some((place, seconds.parse().ok()?, files.split_once(' ')?.0.parse().ok()?))
+        },
+    )
+}
+
+/// An extension host of two return-type providers for the project's `App\measure`: `ReturnsNoType`, registered first,
+/// and `SleepsOnEachCall`, which sleeps 40 ms on each call it is asked about. Neither gives a type, so mago asks both.
+const HOST_OF_A_SLOW_PROVIDER_AND_A_QUICK_ONE: &str = r#"<?php
+
+declare(strict_types=1);
+
+use Mago\Sdk\Analyzer\FunctionReturnTypeProvider;
+use Mago\Sdk\Analyzer\FunctionTarget;
+use Mago\Sdk\Analyzer\Plugin;
+use Mago\Sdk\Analyzer\PluginDefinition;
+use Mago\Sdk\Analyzer\PluginRegistry;
+use Mago\Sdk\Analyzer\ReturnTypeProviderContext;
+use Mago\Sdk\Analyzer\Type;
+use Mago\Sdk\Extension;
+use Mago\Sdk\Worker;
+
+final class ReturnsNoType implements Plugin, FunctionReturnTypeProvider
+{
+    public function getDefinition(): PluginDefinition
+    {
+        return new PluginDefinition('returns-no-type', 'Returns no type', 'Gives no type for App\\measure.');
+    }
+
+    public function register(PluginRegistry $registry): void
+    {
+        $registry->registerFunctionReturnTypeProvider($this);
+    }
+
+    public function getTargets(): array
+    {
+        return [FunctionTarget::exact('App\\measure')];
+    }
+
+    public function getReturnType(ReturnTypeProviderContext $context): ?Type
+    {
+        return null;
+    }
+}
+
+final class SleepsOnEachCall implements Plugin, FunctionReturnTypeProvider
+{
+    public function getDefinition(): PluginDefinition
+    {
+        return new PluginDefinition('sleeps-on-each-call', 'Sleeps on each call', 'Sleeps 40 ms on each call.');
+    }
+
+    public function register(PluginRegistry $registry): void
+    {
+        $registry->registerFunctionReturnTypeProvider($this);
+    }
+
+    public function getTargets(): array
+    {
+        return [FunctionTarget::exact('App\\measure')];
+    }
+
+    public function getReturnType(ReturnTypeProviderContext $context): ?Type
+    {
+        usleep(40_000);
+
+        return null;
+    }
+}
+
+(new Worker(new Extension('typed', 'Typed', '0.0.0', analyzerPlugins: [new ReturnsNoType(), new SleepsOnEachCall()])))->run();
+"#;
+
+/// A host's providers run in the round as its hooks do, so with `MAGO_LOG=debug` a slow return-type provider's line
+/// comes before a quick one's, and at `info` neither prints.
+#[test]
+fn analyze_logs_a_slow_host_provider_before_a_quick_one_at_the_debug_level() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the host provider times test") {
+        return;
+    }
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    write(
+        root,
+        "app/Measures.php",
+        "<?php\n\nnamespace App;\n\nfunction measure(string $text): int\n{\n    return \\strlen($text);\n}\n\nfunction total(): int\n{\n    return measure('a') + measure('bb');\n}\n",
+    );
+    write(root, "tools/host.php", HOST_OF_A_SLOW_PROVIDER_AND_A_QUICK_ONE);
+    write(
+        root,
+        "mago.toml",
+        "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n\n[extension-hosts.typed]\nfile = \"tools/host.php\"\n",
+    );
+    let cache = tempfile::tempdir().unwrap();
+    let analyze = |level: &str| {
+        process::output(
+            Command::new(env!("CARGO_BIN_EXE_mago"))
+                .args(["--no-version-check", "--colors", "never", "analyze"])
+                .env("MAGO_LOG", level)
+                .env("XDG_CACHE_HOME", cache.path())
+                .current_dir(root),
+        )
+        .unwrap()
+    };
+
+    let debug = analyze("debug");
+
+    assert!(debug.status.success(), "{}", printed(&debug));
+    let log = printed(&debug);
+    let slow = host_rule_took(&log, "SleepsOnEachCall::getReturnType").unwrap_or_else(|| panic!("{log}"));
+    let quick = host_rule_took(&log, "ReturnsNoType::getReturnType").unwrap_or_else(|| panic!("{log}"));
+    assert!(slow.0 < quick.0 && slow.1 >= 0.04, "{log}");
 
     let info = analyze("info");
 
@@ -1189,6 +1310,103 @@ fn a_linter_host_sees_each_php_sharp_file_compiled_on_a_fresh_tree() {
     let log = std::fs::read_to_string(root.join("host.log")).unwrap_or_default();
     assert!(!log.is_empty() && log.lines().all(|line| line == "first"), "{log}{}", printed(&linted));
     assert!(!root.join(".sharp").exists());
+}
+
+/// An extension host of two linter rules on each class: `LintsAtOnce`, registered first, and `SleepsOnEachClass`, which
+/// sleeps 40 ms on each class it lints.
+const LINT_HOST_OF_A_SLOW_RULE_AND_A_QUICK_ONE: &str = r#"<?php
+
+declare(strict_types=1);
+
+use Mago\Sdk\Extension;
+use Mago\Sdk\Linter\LintContext;
+use Mago\Sdk\Linter\Rule;
+use Mago\Sdk\Linter\RuleDefinition;
+use Mago\Sdk\Reporting\Level;
+use Mago\Sdk\Syntax\NodeKind;
+use Mago\Sdk\Worker;
+
+final class LintsAtOnce implements Rule
+{
+    public function getDefinition(): RuleDefinition
+    {
+        return new RuleDefinition(
+            code: 'timed/lints-at-once',
+            name: 'Lints at once',
+            description: 'Does nothing on each class.',
+            defaultLevel: Level::Warning,
+            defaultEnabled: true,
+            targets: [NodeKind::Class_],
+        );
+    }
+
+    public function lint(LintContext $context): void {}
+}
+
+final class SleepsOnEachClass implements Rule
+{
+    public function getDefinition(): RuleDefinition
+    {
+        return new RuleDefinition(
+            code: 'timed/sleeps-on-each-class',
+            name: 'Sleeps on each class',
+            description: 'Sleeps 40 ms on each class.',
+            defaultLevel: Level::Warning,
+            defaultEnabled: true,
+            targets: [NodeKind::Class_],
+        );
+    }
+
+    public function lint(LintContext $context): void
+    {
+        usleep(40_000);
+    }
+}
+
+(new Worker(new Extension('timed', 'Timed', '0.0.0', linterRules: [new LintsAtOnce(), new SleepsOnEachClass()])))->run();
+"#;
+
+/// With `MAGO_LOG=debug`, `mago lint` logs how long each host linter rule took when it ends, slowest first, as a round
+/// of `mago analyze` logs its rules, and at `info` it logs none of it.
+#[test]
+fn lint_logs_a_slow_host_linter_rule_before_a_quick_one_at_the_debug_level() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the host linter rule times test") {
+        return;
+    }
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    write(root, "app/Plain.php", "<?php\n\nnamespace App;\n\nfinal class Plain {}\n");
+    write(root, "tools/host.php", LINT_HOST_OF_A_SLOW_RULE_AND_A_QUICK_ONE);
+    write(
+        root,
+        "mago.toml",
+        "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n\n[extension-hosts.timed]\nfile = \"tools/host.php\"\n",
+    );
+    let cache = tempfile::tempdir().unwrap();
+    let lint = |level: &str| {
+        process::output(
+            Command::new(env!("CARGO_BIN_EXE_mago"))
+                .args(["--no-version-check", "--colors", "never", "lint"])
+                .env("MAGO_LOG", level)
+                .env("XDG_CACHE_HOME", cache.path())
+                .current_dir(root),
+        )
+        .unwrap()
+    };
+
+    let debug = lint("debug");
+
+    assert!(debug.status.success(), "{}", printed(&debug));
+    let log = printed(&debug);
+    let slow = host_rule_took(&log, "SleepsOnEachClass::lint").unwrap_or_else(|| panic!("{log}"));
+    let quick = host_rule_took(&log, "LintsAtOnce::lint").unwrap_or_else(|| panic!("{log}"));
+    assert!(slow.0 < quick.0 && slow.2 > 0 && slow.1 >= 0.04 * f64::from(slow.2), "{log}");
+
+    let info = lint("info");
+
+    assert!(info.status.success(), "{}", printed(&info));
+    assert!(!printed(&info).contains("Host rule"), "{}", printed(&info));
 }
 
 /// An extension host that loads `App\Word`, the class of `app/Word.sharp`, and appends its process id and the word the
@@ -1751,6 +1969,96 @@ fn a_typing_host_loads_a_class_only_its_typing_makes_correct_on_a_fresh_tree() {
     compile_succeeds(root);
     compile_succeeds(root);
     assert!(compiled(root, "app/Greeting.sharp").exists());
+}
+
+/// An extension host whose one plugin types `App\Box::value()` as a string and declines every other method of
+/// `App\Box`, as a framework's host types the few methods it knows.
+const BOX_HOST: &str = r#"<?php
+
+declare(strict_types=1);
+
+use Mago\Sdk\Analyzer\MethodReturnTypeProvider;
+use Mago\Sdk\Analyzer\MethodTarget;
+use Mago\Sdk\Analyzer\Plugin;
+use Mago\Sdk\Analyzer\PluginDefinition;
+use Mago\Sdk\Analyzer\PluginRegistry;
+use Mago\Sdk\Analyzer\ReturnTypeProviderContext;
+use Mago\Sdk\Analyzer\Type;
+use Mago\Sdk\Extension;
+use Mago\Sdk\Worker;
+
+final class Boxes implements Plugin, MethodReturnTypeProvider
+{
+    public function getDefinition(): PluginDefinition
+    {
+        return new PluginDefinition('boxes', 'Boxes', 'Types the value of a box.');
+    }
+
+    public function register(PluginRegistry $registry): void
+    {
+        $registry->registerMethodReturnTypeProvider($this);
+    }
+
+    public function getTargets(): array
+    {
+        return [MethodTarget::allMethods('App\\Box')];
+    }
+
+    public function getReturnType(ReturnTypeProviderContext $context): ?Type
+    {
+        return $context->invocation->name === 'value' ? Type::string() : null;
+    }
+}
+
+(new Worker(new Extension('boxes', 'Boxes', '0.0.0', analyzerPlugins: [new Boxes()])))->run();
+"#;
+
+/// A whole `mago analyze` whose host only answers return types reports what an analysis of every file with the host
+/// reports, as `mago analyze app` gives it: the type the host gives a call reaches the file that makes it, and a file
+/// whose calls the host declines reports what it reports with no host.
+#[test]
+fn a_whole_analyze_with_a_return_type_host_reports_what_an_analysis_of_every_file_with_the_host_reports() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the return-type host analyze test") {
+        return;
+    }
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    write(
+        root,
+        "app/Box.php",
+        "<?php\n\nnamespace App;\n\nfinal class Box\n{\n    public function value()\n    {\n        return 1;\n    }\n\n    public function label(): string\n    {\n        return 'box';\n    }\n}\n",
+    );
+    write(
+        root,
+        "app/Reader.php",
+        "<?php\n\nnamespace App;\n\nfunction read_value(Box $box): int\n{\n    return $box->value();\n}\n",
+    );
+    write(
+        root,
+        "app/Labels.php",
+        "<?php\n\nnamespace App;\n\nfunction read_label(Box $box): int\n{\n    return $box->label();\n}\n",
+    );
+    write(root, "tools/host.php", BOX_HOST);
+    write(
+        root,
+        "mago.toml",
+        "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n\n[extension-hosts.boxes]\nfile = \"tools/host.php\"\n",
+    );
+
+    let whole = analyze(root, &[]);
+    let every_file = analyze(root, &["app"]);
+
+    let issues = |output: &Output| String::from_utf8_lossy(&output.stdout).into_owned();
+    assert_eq!(issues(&whole), issues(&every_file), "{}", printed(&whole));
+    for issue in [
+        "app/Reader.php:7:12: error[invalid-return-statement]: Invalid return type for function `App\\read_value`: \
+         expected `int`, but found `string`.",
+        "app/Labels.php:7:12: error[invalid-return-statement]: Invalid return type for function `App\\read_label`: \
+         expected `int`, but found `string`.",
+    ] {
+        assert!(issues(&whole).contains(issue), "{issue}: {}", printed(&whole));
+    }
 }
 
 /// An extension host whose rule `acme/no-marker` reports an error at each `host-error-here` in a file.
@@ -5347,6 +5655,198 @@ fn each_declaration_a_generated_module_writes_is_protected() {
     assert_eq!(open, Vec::<String>::new());
 }
 
+/// `App.Classes.ClassOfRepro`, a machine whose `Open` case closes into its `Closed` case, with a static `closes` that
+/// answers whether a move from one of its classes to another closes it, and `laws`.
+fn class_of_repro(laws: &str) -> String {
+    format!(
+        "namespace App.Classes;\n\npublic machine ClassOfRepro\n{{\n    case Open\n    {{\n        public ClassOfRepro.Closed close() => ClassOfRepro.Closed;\n    }}\n\n    final case Closed;\n\n    public static ClassOfRepro.Open enter() => ClassOfRepro.Open;\n\n    public static bool closes(Class<ClassOfRepro> from, Class<ClassOfRepro> to) => from != to && to == typeof(ClassOfRepro.Closed);\n\n    {laws}\n}}\n"
+    )
+}
+
+/// Spec section 25: a machine's classes are its cases, so a law reads `typeof` of a case, `Class.of` of a value, and
+/// `==` on two classes, and a law over every pair of the machine's classes proves what a method taking two reads.
+#[test]
+fn a_law_reads_the_classes_of_a_machine_s_cases() {
+    let directory = lawful_project(&[(
+        "app/Classes/ClassOfRepro.sharp",
+        &class_of_repro(
+            "law closingCloses() => Class.of(ClassOfRepro.enter().close()) == typeof(ClassOfRepro.Closed);\n    law aClosedValueIsClosed(ClassOfRepro value) => value is ClassOfRepro.Closed ? Class.of(value) == typeof(ClassOfRepro.Closed) : true;\n    law closesOnlyFromOpen(Class<ClassOfRepro> from, Class<ClassOfRepro> to) => ClassOfRepro.closes(from, to) ? from == typeof(ClassOfRepro.Open) : true;",
+        ),
+    )]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Classes/ClassOfRepro.sharp").exists());
+}
+
+/// A false law over the classes of a machine's cases is refused as not proven, with its claim still to show.
+#[test]
+fn a_false_law_over_the_classes_of_a_machine_s_cases_is_not_proven() {
+    let directory = lawful_project(&[(
+        "app/Classes/ClassOfRepro.sharp",
+        &class_of_repro(
+            "law openIsNotClosed() => Class.of(ClassOfRepro.enter()) == typeof(ClassOfRepro.Closed);\n    law everyPairCloses(Class<ClassOfRepro> from, Class<ClassOfRepro> to) => ClassOfRepro.closes(from, to);",
+        ),
+    )]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "error[law-unproven]: law openIsNotClosed is not proven\n = still to show: Class.of(ClassOfRepro.enter()) == typeof(ClassOfRepro.Closed)\n"
+        ),
+        "{}",
+        printed(&output)
+    );
+    assert!(
+        printed(&output).contains("error[law-unproven]: law everyPairCloses is not proven\n"),
+        "{}",
+        printed(&output)
+    );
+    assert!(!printed(&output).contains("translated the code it reaches wrongly"), "{}", printed(&output));
+}
+
+/// Spec section 25: the classes of an enum whose cases carry data are its cases, and the classes of a sealed
+/// interface are its implementers, so a law reads `Class.of` of their values as it does a machine's.
+#[test]
+fn a_law_reads_the_classes_of_a_data_enum_and_of_a_sealed_interface() {
+    let directory = lawful_project(&[
+        (
+            "app/Classes/Shape.sharp",
+            "namespace App.Classes;\n\npublic enum Shape\n{\n    case Dot;\n    case Circle(int radius);\n}\n",
+        ),
+        ("app/Classes/Status.sharp", "namespace App.Classes;\n\npublic sealed interface Status\n{\n}\n"),
+        (
+            "app/Classes/Waiting.sharp",
+            "namespace App.Classes;\n\npublic final class Waiting : Status\n{\n    public Waiting(public int ticket { get; }) { }\n}\n",
+        ),
+        (
+            "app/Classes/Served.sharp",
+            "namespace App.Classes;\n\npublic final class Served : Status\n{\n    public Served(public int ticket { get; }) { }\n}\n",
+        ),
+        (
+            "app/Classes/Families.sharp",
+            "namespace App.Classes;\n\npublic final class Families\n{\n    law aCircleIsACircle(int r) => Class.of(Shape.Circle(r)) == typeof(Shape.Circle);\n    law aDotIsNoCircle(int unused) => Class.of(Shape.Dot) != typeof(Shape.Circle);\n    law waitingIsWaiting(int t) => Class.of(new Waiting(t)) == typeof(Waiting);\n    law aStatusIsWaitingOrServed(Status status) => Class.of(status) == typeof(Waiting) || Class.of(status) == typeof(Served);\n}\n",
+        ),
+    ]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Classes/Families.sharp").exists());
+}
+
+/// A class outside any machine, enum or sealed interface has classes the running code alone tells apart, so a law that
+/// reads `Class.of` of its value keeps its refusal.
+#[test]
+fn a_law_over_the_class_of_a_class_outside_any_family_is_refused() {
+    let directory = lawful_project(&[(
+        "app/Classes/Lamp.sharp",
+        "namespace App.Classes;\n\npublic final class Lamp\n{\n    public Lamp(public int watts { get; }) { }\n\n    law aLampIsALamp(int watts) => Class.of(new Lamp(watts)) == typeof(Lamp);\n}\n",
+    )]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "error[unmodeled-construct]: Law aLampIsALamp reaches the plain PHP class Class in Lamp.aLampIsALamp."
+        ),
+        "{}",
+        printed(&output)
+    );
+    assert!(
+        printed(&output)
+            .contains("error[unmodeled-construct]: Law aLampIsALamp reaches a type test in Lamp.aLampIsALamp."),
+        "{}",
+        printed(&output)
+    );
+}
+
+/// `App.Props.Light`, the machine of a reported problem: a computed `isOn` that matches on `this`, reached through each
+/// case, and `laws`.
+fn computed_light(laws: &str) -> String {
+    format!(
+        "namespace App.Props;\n\ninternal machine Light\n{{\n    case Off\n    {{\n        internal Light.On turnOn(int level) => Light.On(level);\n    }}\n\n    final case On(int level);\n\n    private static Light.Off enter() => Light.Off;\n\n    internal bool isOn => match (this) {{\n        Light.On => true,\n        Light.Off => false,\n    }};\n\n    {laws}\n}}\n"
+    )
+}
+
+/// Spec section 6: a machine's computed property runs its body as a method of no arguments, which each case reads as
+/// the machine's, so a law reads it through a case and an invariant of a case reads it too.
+#[test]
+fn a_law_reads_a_machine_s_computed_property_through_each_case() {
+    let directory = lawful_project(&[(
+        "app/Props/Light.sharp",
+        &computed_light(
+            "law onlyALitLightIsOn(int level) => Light.enter().turnOn(level).isOn && !Light.enter().isOn;\n    law anOnLightIsOn(Light.On light) => light.isOn;",
+        ),
+    )]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Props/Light.sharp").exists());
+}
+
+/// A false law over a machine's computed property is refused as not proven, with its claim still to show.
+#[test]
+fn a_false_law_over_a_machine_s_computed_property_is_not_proven() {
+    let directory =
+        lawful_project(&[("app/Props/Light.sharp", &computed_light("law offIsOn() => Light.enter().isOn;"))]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output)
+            .contains("error[law-unproven]: law offIsOn is not proven\n = still to show: Light.enter().isOn\n"),
+        "{}",
+        printed(&output)
+    );
+    assert!(!printed(&output).contains("left out"), "{}", printed(&output));
+}
+
+/// Spec section 6: a plain class's computed property, written `=>` or with a `get` body, runs its body as a method of
+/// no arguments, so a law reads it, and one that calls a method, and tells a stored `raw` from a computed `Raw`.
+#[test]
+fn a_law_reads_a_class_s_computed_property() {
+    let directory = lawful_project(&[(
+        "app/Props/Meter.sharp",
+        "namespace App.Props;\n\npublic final class Meter\n{\n    public Meter(public int raw { get; }) { }\n\n    public int doubled => this.raw * 2;\n\n    public int Raw => this.raw * 2;\n\n    public int capped\n    {\n        get {\n            if (this.raw > 10) {\n                return 10;\n            }\n            return this.raw;\n        }\n    }\n\n    public int twice => this.helper();\n\n    public int helper() => this.raw + this.raw;\n\n    law doubledIsTwiceRaw(int raw) => new Meter(raw).doubled == raw * 2;\n    law upperRawIsDoubled(Meter m) => m.Raw == m.raw * 2;\n    law cappedAtTen(int raw) => new Meter(raw).capped <= 10;\n    law twiceCallsHelper(int raw) => new Meter(raw).twice == new Meter(raw).doubled;\n}\n",
+    )]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Props/Meter.sharp").exists());
+}
+
+/// A subclass can override a `virtual` computed property, so a law reads it as each implementation gives it: it proves
+/// what holds for every override, and its default body proves nothing more.
+#[test]
+fn a_law_reads_an_overridable_computed_property_as_each_implementation_gives_it() {
+    let directory = lawful_project(&[(
+        "app/Props/Gauge.sharp",
+        "namespace App.Props;\n\npublic class Gauge\n{\n    public Gauge(public int raw { get; }) { }\n\n    public virtual int doubled => this.raw * 2;\n\n    law readsTheSame(Gauge g) => g.doubled == g.doubled;\n    law isTheDefault(Gauge g) => g.doubled == g.raw * 2;\n}\n",
+    )]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(printed(&output).contains("error[law-unproven]: law isTheDefault is not proven\n"), "{}", printed(&output));
+    assert!(!printed(&output).contains("readsTheSame"), "{}", printed(&output));
+}
+
 /// `App.Shared.Stamp`, whose laws build an `Instant`: one reads what it built, and one holds only because the
 /// constructor throws for a nanosecond outside its range.
 const STAMP: &str = "namespace App.Shared;\n\nimport Sharp.Time.Instant;\n\npublic final class Stamp\n{\n    law builds(int unused) => new Instant(1, 0).epochSeconds == 1;\n    law aBuiltNanosecondIsInRange(int s, int n) => new Instant(s, n).nanosecond <= 999_999_999;\n}\n";
@@ -7652,7 +8152,7 @@ fn each_refusal_of_code_a_law_cannot_read_says_what_to_write_instead() {
     );
     let shape = (
         "app/Shared/Shape.sharp",
-        "namespace App.Shared;\n\nimport Lib;\nimport Lib.Clock;\n\npublic class Shape\n{\n    public Shape(public int raw { get; }) { }\n    public int doubled => this.raw * 2;\n\n    public static int hour(int a) => Clock.hour();\n    public static int length(string s) => Lib.measure(s);\n    public static int kept<T>(T item) => 1;\n\n    law l1(int a) => Shape.hour(a) == Shape.hour(a);\n    law l2(string s) => Shape.length(s) == Shape.length(s);\n    law l3(int a) => Shape.kept(a) == 1;\n    law l4(Shape s) => s.doubled == s.doubled;\n}\n",
+        "namespace App.Shared;\n\nimport Lib;\nimport Lib.Clock;\n\npublic class Shape\n{\n    public Shape(public int raw { get; }) { }\n    public int scaled { get => field; set => field = value; } = 0;\n\n    public static int hour(int a) => Clock.hour();\n    public static int length(string s) => Lib.measure(s);\n    public static int kept<T>(T item) => 1;\n\n    law l1(int a) => Shape.hour(a) == Shape.hour(a);\n    law l2(string s) => Shape.length(s) == Shape.length(s);\n    law l3(int a) => Shape.kept(a) == 1;\n    law l4(Shape s) => s.scaled == s.scaled;\n}\n",
     );
     let directory = library_project(&[shape, clock, helpers, stub]);
     let root = directory.path();
@@ -7665,7 +8165,7 @@ fn each_refusal_of_code_a_law_cannot_read_says_what_to_write_instead() {
         "Law l1 reaches the plain PHP class Clock in Shape.hour. Write the code the law reaches in PHP#, or pass the value plain PHP computes to the law as a parameter.",
         "Law l2 reaches the plain PHP function `Lib.measure` in Shape.length. Write the code the law reaches in PHP#, or pass the value plain PHP computes to the law as a parameter.",
         "Law l3 reaches the type parameter T in Shape.kept. Give it a type a law reasons about: int, bool, string, a List, a Map, or a PHP# class, enum or interface, with or without `?`.",
-        "Law l4 reaches the accessor of Shape.doubled in Shape.l4. Compute the value in a method, and give the property no accessor body.",
+        "Law l4 reaches the accessor of Shape.scaled in Shape.l4. Compute the value in a method, and give the property no accessor body.",
     ] {
         assert!(printed.contains(&format!("error - unmodeled-construct: {message}")), "{message}\n{printed}");
     }
@@ -7681,13 +8181,19 @@ fn a_law_reaching_a_loop_that_reads_a_local_it_adds_to_is_refused() {
     );
 }
 
-/// PHP finds a property by its exact name, so a law knows a stored `raw` and an accessor `Raw` apart.
+/// PHP finds a property by its exact name, so a law knows a stored `raw` and a computed `Raw` apart.
 #[test]
-fn a_law_knows_a_stored_field_from_an_accessor_whose_name_differs_only_in_case() {
-    assert_unmodeled(
-        "namespace App.Shared;\n\npublic class Shape\n{\n    public Shape(public int raw { get; }) { }\n    public int Raw => this.raw * 2;\n\n    law doubledHolds(Shape s) => s.Raw == s.Raw;\n}\n",
-        "Law doubledHolds reaches the accessor of Shape.Raw in Shape.doubledHolds. Compute the value in a method, and give the property no accessor body.",
-    );
+fn a_law_knows_a_stored_field_from_a_computed_property_whose_name_differs_only_in_case() {
+    let directory = lawful_project(&[(
+        "app/Shared/Shape.sharp",
+        "namespace App.Shared;\n\npublic class Shape\n{\n    public Shape(public int raw { get; }) { }\n    public int Raw => this.raw * 2;\n\n    law doubledHolds(Shape s) => s.Raw == s.raw * 2;\n}\n",
+    )]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Shared/Shape.sharp").exists());
 }
 
 #[test]
