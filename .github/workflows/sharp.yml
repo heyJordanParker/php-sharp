@@ -13,13 +13,15 @@ on:
 permissions:
   contents: read
 # A pull request, and master, runs one push at a time, and only the newest push waits, since its tree holds every
-# commit before it. A run in progress finishes, so a pull request whose pushes come faster than a run still gets
-# results: when each push cancelled the run before it, 69 of the last 150 runs were cancelled. Only a failed job
-# cancels a pull request's run, which can no longer pass, as .github/actions/cancel-failed-run explains. A schedule or
-# a dispatch runs in a group of its own.
+# commit before it. next's own pull request lets its run in progress finish, since sharp/bin/land lands any commit of
+# next whose runs passed, and next takes pushes faster than a run ends: when each push cancelled the run before it, 69
+# of the last 150 runs were cancelled. Any other pull request merges only its newest commit, so a push cancels its run
+# in progress, where release #675's run on 75c9837da5a waited 38 minutes behind the run on a commit it replaced. A push
+# to master lets its run finish, since the run publishes. A failed job cancels a pull request's run, which can no
+# longer pass, as .github/actions/cancel-failed-run explains. A schedule or a dispatch runs in a group of its own.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || (github.event_name == 'push' && github.ref) || github.run_id }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.head_ref != 'next' }}
 jobs:
   # CI_PASSED is this workflow's one required check. Every push runs every check, whatever it changed: the Linux suites,
   # each job on 4 cores, the Mac's and the runtime image, so every check that guards a release runs before the merge, on
