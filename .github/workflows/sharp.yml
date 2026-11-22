@@ -288,9 +288,9 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
-  # sharp/mago's workspace tests on Linux, every fifth test of every test binary, by exact name, with sharp/bin/test
-  # --mago --shard, so a set of slow tests spreads over the jobs, on BUILD_LINUX's test binaries. BUILD_LINUX runs the
-  # fifth slice, with the doc tests and the property tests, which need its target.
+  # sharp/mago's workspace tests on Linux, a fifth of the tests each, which sharp/bin/test --mago --shard balances by
+  # the seconds sharp/baseline/seconds lists, by exact name, on BUILD_LINUX's test binaries. BUILD_LINUX runs the fifth
+  # slice, with the doc tests and the property tests, which need its target.
   MAGO:
     name: MAGO (${{ matrix.shard }}/5)
     needs: [CHANGES, BUILD_LINUX]
@@ -335,7 +335,7 @@ jobs:
           path: ${{ runner.temp }}
       - name: Unpack BUILD_LINUX's test binaries
         run: tar --zstd -xf "$RUNNER_TEMP/tests.tar.zst"
-      - name: Test every fifth test of the workspace
+      - name: Test a fifth of the workspace's tests
         run: sharp/bin/test --linux --mago --no-build --shard ${{ matrix.shard }}/5
       - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
