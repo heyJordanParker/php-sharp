@@ -7,7 +7,11 @@ description: >-
   /proc/stat, and its memory the machine's memory in use, MemTotal less MemAvailable, which counts its containers. The
   self-hosted Mac runs other work beside the job, so there the job is the runner's Runner.Worker process and every
   process under it: the CPU is each live one's time plus the time of every child it reaped, as proc_pid_rusage reports
-  it, and the memory the sum of their resident sets.
+  it, and the memory the sum of their resident sets. On Linux the notice also gives steal_seconds, the time the
+  hypervisor ran other machines on the job's CPUs, from /proc/stat, and on each system cpu, the processor's model, as
+  lscpu or sysctl names it: the
+  same Mago tests took 21 to 51 s across the MAGO slices of run 45025617782, so a slow job shows whether its machine was
+  slower or shared.
 
 inputs:
   end:
@@ -26,7 +30,7 @@ runs:
         mkdir -p "$state"
         echo 0 > "$state/peak-kib"
         if [[ $RUNNER_OS == Linux ]]; then
-          awk '/^cpu /{print $2 + $3 + $4 + $7 + $8}' /proc/stat > "$state/cpu-start"
+          awk '/^cpu /{print $2 + $3 + $4 + $7 + $8, $9}' /proc/stat > "$state/cpu-start"
           sample='awk "/^MemTotal:/{total = \$2} /^MemAvailable:/{available = \$2} END{print total - available}" /proc/meminfo'
         else
           pid=$$
@@ -53,9 +57,15 @@ runs:
         state="$RUNNER_TEMP/usage"
         kill "$(< "$state/sampler")"
         if [[ $RUNNER_OS == Linux ]]; then
-          end=$(awk '/^cpu /{print $2 + $3 + $4 + $7 + $8}' /proc/stat)
-          cpu=$(( (end - $(< "$state/cpu-start")) / $(getconf CLK_TCK) ))
+          read -r start_used start_stolen < "$state/cpu-start"
+          read -r end_used end_stolen < <(awk '/^cpu /{print $2 + $3 + $4 + $7 + $8, $9}' /proc/stat)
+          cpu=$(( (end_used - start_used) / $(getconf CLK_TCK) ))
+          stolen=" steal_seconds=$(( (end_stolen - start_stolen) / $(getconf CLK_TCK) ))"
+          # lscpu, since an arm64 machine's /proc/cpuinfo names no model.
+          model=$(lscpu | awk -F ': *' '/^Model name:/ && model == "" {model = $2} END {print model}')
         else
+          stolen=''
+          model=$(sysctl -n machdep.cpu.brand_string)
           cpu=$(/usr/bin/python3 - "$(< "$state/worker")" <<'PYTHON'
         import ctypes, subprocess, sys
 
@@ -90,4 +100,4 @@ runs:
         PYTHON
           )
         fi
-        echo "::notice title=usage::cpu_seconds=$cpu peak_mib=$(( $(< "$state/peak-kib") / 1024 ))"
+        echo "::notice title=usage::cpu_seconds=$cpu peak_mib=$(( $(< "$state/peak-kib") / 1024 ))$stolen cpu=$model"
