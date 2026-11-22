@@ -4,6 +4,14 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.50] - 2026-11-22
+
+### Upgrading from 0.6.49
+
+- Make each effect class extend an abstract one: declare its members in a `public effect abstract class`, and the real class as `public effect class SystemStore : Store`. The standard library's effects are abstract too, so plain PHP that wrote `new Sharp\Net\Http()` writes `new Sharp\Net\SystemHttp()`. Replace `Clock.fixed(instant)` with `new FakeClock(instant)` and `new Random(seed)` with `new FakeRandom(seed)`, from `Sharp.Testing`.
+- Give each plain PHP call a module binding makes an `extern` line, as a method's call needs one.
+- List your test folder under `autoload-dev` in `composer.json`, or each test module in it is refused.
+
 ### Changed
 
 - Every effect is an abstract boundary, spec section 29, so a unit test runs the real class that holds an effect over a fake. A project declares its effect as `public effect abstract class Store` with its members, its real implementation as `public effect class RedisStore : Store`, which only a module binding creates, and a fake as `public class FakeStore : Store`, which any code creates with `new`. Code has the effect by the type it holds, so a class takes a `Store`. 0.6.49 accepted a concrete `effect class` with no boundary, and `public effect class RedisStore` alone now fails with "`RedisStore` is an effect class, so it extends an abstract effect class that declares its members." Each of the standard library's twelve effects is abstract, with its real implementation beside it as `SystemHttp`, `SystemClock` and the rest, which `Sharp/Module.sharp` binds, so plain PHP that wrote `new Sharp\Net\Http()` writes `new Sharp\Net\SystemHttp()`. `Sharp.Testing` holds a fake of each, as `new FakeHttp([response])`, which keeps each request in `sent`. `Clock.fixed(instant)` is `new FakeClock(instant)`, which `advance(duration)` and `sleep` move on, and `new Random(seed)` is `new FakeRandom(seed)`.
@@ -1715,7 +1723,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.49...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.50...HEAD
+[0.6.50]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.49...v0.6.50
 [0.6.49]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.48...v0.6.49
 [0.6.48]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.47...v0.6.48
 [0.6.47]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.46...v0.6.47
