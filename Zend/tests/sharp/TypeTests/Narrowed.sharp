@@ -17,6 +17,10 @@ public static class Narrowed
 
     public static bool holdsTwo(Any? value) => value is Set<int> ? value.contains(2) : false;
 
+    public static bool onlyA(Any? value) => value is Map<string, int> && value.keys().join(",") == "a";
+
+    public static List<bool> both(Any? value) => [value is Map<string, int>, value is List<int>];
+
     public static string matched(Any? value) => match (value) {
         Map<string, int> => value.keys().join(","),
         default => "none",
