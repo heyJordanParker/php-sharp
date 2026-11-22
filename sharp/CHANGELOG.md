@@ -8,6 +8,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 - `typeof(T).encode(value)` gives the stored form of `value` as a value, spec section 10, what `Json.encode` writes as text: each JSON object a `Map`, each JSON array a `List` and each scalar itself, with every field `parse` reads at any visibility. `typeof(T).decode` reads it back, so `typeof(T).decode(typeof(T).encode(x)) == x`, and a storage layer in another namespace stores a class's `internal` fields, which its own `Field.get` can't read. A `Map` field that `decode` reads from a `Map` reads each key by its text, as it reads a JSON object's, so `["7": "top"]` gives a `Map<int, string>` the key `7`, which 0.6.47 refused with "shelves[\"7\"]: key expected int, got string '7'".
 
+### Changed
+
+- The law checker that proves a law with its fixed steps imports no more of Lean's own library than `Init`, where 0.6.47 also imported 111 modules of `Std` and `Lean` into every such check, which only the attribute that marked a law's statement read. A law's statement is the one definition of the project's code whose type is a `Prop`, so the generated code marks it with nothing. The check of the law a one-file edit adds to a 2,128-file project retires 2.41 G instructions where it retired 2.69 G, in 0.41 s of CPU where it took 0.46 s, and peaks at 410 MiB where it peaked at 473 MiB, medians of 20 alternating rounds, with the same answer. Every law of that project proves as before.
+
 ### Fixed
 
 - A computed property whose type is a machine compiles at any visibility, spec section 20.2, since it stores nothing a write could change, so `public OrderStatus progress => this.status;` beside `public OrderStatus status { get; private set; }` compiles. 0.6.47 refused it with "`Order.progress` holds the machine `OrderStatus`, so its `set` is `private`." A property that stores a machine still has a `private set`.
