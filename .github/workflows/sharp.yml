@@ -656,6 +656,9 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
+      - name: Remove what the next Mac job doesn't reuse
+        if: always()
+        uses: ./.github/actions/clean-kept-build
   # release.yml builds Mago's binaries, the macOS one with profile-guided optimization, their attestations, Mago's source
   # archives, their SHA-256s and the release's notes, in the push to master whose version has no tag, and RELEASE
   # publishes them as they are once every check of the push passed. A pull request's run never builds them, so the Mac
