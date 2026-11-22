@@ -91,7 +91,34 @@ run_step() {
   tests_group=
 }
 
+# Ends the part of the run under way with its wall seconds and the CPU-seconds the shell and the processes it waited
+# for used in it, as bash's times counts them, so a change to one part is judged by that part whatever else the machine
+# runs. Then it starts the part its heading names, if any.
+part_heading=''
+part_started=0
+part_cpu=0
+part() {
+  local now="${EPOCHREALTIME/[^0-9]/}" cpu=0 time wall used
+  times > "$TMPDIR/sharp-bin-test-times"
+  for time in $(< "$TMPDIR/sharp-bin-test-times"); do
+    [[ $time =~ ^([0-9]+)m([0-9]+)[.,]([0-9]{3})s$ ]]
+    cpu=$((cpu + (BASH_REMATCH[1] * 60 + BASH_REMATCH[2]) * 1000 + 10#${BASH_REMATCH[3]}))
+  done
+  if [[ -n $part_heading ]]; then
+    wall=$(((now - part_started) / 100000))
+    used=$(((cpu - part_cpu) / 100))
+    printf '%s took %d.%d s and %d.%d CPU-seconds.\n' "$part_heading" $((wall / 10)) $((wall % 10)) $((used / 10)) $((used % 10))
+  fi
+  part_heading="${1:-}"
+  part_started=$now
+  part_cpu=$cpu
+  if [[ -n $part_heading ]]; then
+    echo "== $part_heading"
+  fi
+}
+
 finish() {
+  part
   if [[ ${#failed[@]} -gt 0 ]]; then
     printf 'Failed: %s\n' "${failed[@]}" >&2
     exit 1
@@ -109,11 +136,14 @@ finish() {
 if $mago; then
   # The tests run a PHP SDK worker from sharp/mago's vendor folder, and lake, which mago compile proves laws with:
   # installing the pinned Lean first keeps the tests that run lake at once from each installing it.
+  part "composer install in sharp/mago, and the pinned Lean"
   composer install --no-interaction --no-progress --quiet --working-dir="$root/sharp/mago"
   elan toolchain install "$(cat "$root/sharp/mago/crates/sharp-lean/lean/lean-toolchain")"
   if $build; then
+    part "sharp/bin/build-mago"
     "$root/sharp/bin/build-mago" --quiet
   fi
+  part
   messages="$build_dir/mago/build.json"
   if [[ ! -f $messages ]]; then
     echo "$messages is missing. Run sharp/bin/build-mago first." >&2
@@ -148,16 +178,17 @@ if $mago; then
       index=$((index + 1))
     done < <(cd "$folder" && "$executable" --list --format terse | sed -n 's/: test$//p')
     if (( selected > 0 )); then
-      echo "== $selected tests of ${executable##*/}, from ${folder#"$root"/}"
+      part "$selected tests of ${executable##*/}, from ${folder#"$root"/}"
       run_step "${executable##*/}" "$folder" "$executable" --exact --test-threads "$jobs" "${skips[@]}"
+      part
     fi
   done
   if $build && { [[ -z $shard ]] || (( shard_index == shard_count )); }; then
     cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
-    echo "== the doc tests"
+    part "the doc tests"
     run_step "the doc tests" "$root" env PATH="$(dirname "$cargo"):$PATH" "$cargo" test --workspace --locked --doc \
       --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" --jobs "$jobs" -- --test-threads "$jobs"
-    echo "== mago-codex's property tests"
+    part "mago-codex's property tests"
     run_step "mago-codex's property tests" "$root" env PATH="$(dirname "$cargo"):$PATH" "$cargo" test -p mago-codex \
       --features property-tests --locked --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" \
       --jobs "$jobs" -- --test-threads "$jobs"
@@ -233,6 +264,7 @@ if [[ "$engine_version" != "$version" || "$("$php" -n -r 'echo PHP_ZTS;')" != 1 
 fi
 
 if $build; then
+  part "sharp/bin/build-mago"
   "$root/sharp/bin/build-mago" --quiet
 fi
 mago="$build_dir/mago/debug/mago"
@@ -247,7 +279,7 @@ fi
 # refuses a link outside the project. Composer keeps the copy an earlier run installed while the lock is unchanged, so
 # a copy that differs from sharp/composer is reinstalled first, and the install then dumps the autoloader, which runs
 # the package's plugin: composer reinstall runs no plugin.
-echo "== composer install in Zend/tests/sharp"
+part "composer install in Zend/tests/sharp"
 package="$root/Zend/tests/sharp/vendor/heyjordanparker/php-sharp-composer"
 if [[ -d $package ]] && ! diff -rq "$root/sharp/composer" "$package" > /dev/null \
   && ! composer reinstall --no-interaction --no-progress --quiet --no-autoloader \
@@ -260,7 +292,7 @@ if ! composer install --no-interaction --no-progress --quiet --working-dir="$roo
   exit 1
 fi
 
-echo "== mago compile, built from sharp/mago"
+part "mago compile, built from sharp/mago"
 if ! "$mago" --no-version-check --colors never --workspace "$root/Zend/tests/sharp" compile; then
   echo "mago compile refused a PHP# test fixture, and the engine runs only compiled files." >&2
   exit 1
@@ -275,7 +307,7 @@ export RUN_RESOURCE_HEAVY_TESTS=1
 run_tests() {
   local mode="$1"
   shift
-  echo "== $mode"
+  part "$mode"
   run_step "$mode" "$root" "$php" run-tests.php -P -q \
     -d opcache.jit=disable \
     -d opcache.protect_memory=1 \
@@ -318,14 +350,14 @@ else
 fi
 
 if $census; then
-  echo "== every write and comparison of a field that holds a PHP# mark"
+  part "every write and comparison of a field that holds a PHP# mark"
   run_step "the census of PHP# marks" "$root" "$php" sharp/bin/census
 fi
 
 if $spec; then
-  echo "== every rule of sharp/bin/spec, on the examples of sharp/spec-self-test.md"
+  part "every rule of sharp/bin/spec, on the examples of sharp/spec-self-test.md"
   run_step "the self-test of sharp/bin/spec" "$root" "$php" sharp/bin/spec --self-test
-  echo "== every code example in docs/spec.md and README.md, compared with sharp/baseline/spec"
+  part "every code example in docs/spec.md and README.md, compared with sharp/baseline/spec"
   run_step "the code examples of docs/spec.md and README.md" "$root" "$php" sharp/bin/spec
 fi
 
@@ -333,7 +365,7 @@ fi
 # says whether it compiled. A file passes when that line is all it printed, as when a php -l of its own linted it, where
 # a process per fixture took 44 s on the Mac.
 check_differential() {
-  echo "== every file mago compile accepted against php -l, through its .sharpc file"
+  part "every file mago compile accepted against php -l, through its .sharpc file"
   local files=("$root"/Zend/tests/sharp/*/*.sharp) output line file linted='' index=0 mismatch=false
   output="$("$php" -l "${files[@]}" 2>&1)" || true
   while IFS= read -r line; do
@@ -373,7 +405,7 @@ fi
 # vendor/autoload.php on the engine. composer run-script runs post-autoload-dump with no flags.
 check_phpunit() {
   local project="$root/sharp/phpunit" isolation
-  echo "== a PHP# test class under PHPUnit, in sharp/phpunit"
+  part "a PHP# test class under PHPUnit, in sharp/phpunit"
   rm -rf "$project/vendor" "$project/.sharp"
   if ! composer install --no-interaction --no-progress --quiet --working-dir="$project" \
     || ! composer run-script --no-interaction post-autoload-dump --working-dir="$project" \
@@ -394,7 +426,7 @@ if $phpunit; then
 fi
 
 if $run_proof; then
-  echo "== mago convert on sharp/mago/crates/converter/tests/project"
+  part "mago convert on sharp/mago/crates/converter/tests/project"
   mkdir "$TMPDIR/convert" "$TMPDIR/convert/project"
   run_step "the whole-project proof of mago convert" "$root" "$proof" "$TMPDIR/convert/project"
 fi
