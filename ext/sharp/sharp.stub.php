@@ -95,8 +95,6 @@ function keep(string $key, ?\Closure $compute = null): mixed {}
 
 function equals(mixed $value, mixed $other): bool {}
 
-function storedValue(mixed $value): mixed {}
-
 function jsonEncode(mixed $value, int $flags, int $indent): string {}
 
 function jsonDecode(string $json): mixed {}
