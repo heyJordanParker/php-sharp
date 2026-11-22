@@ -233,13 +233,15 @@ jobs:
           rustc -V
 
       # The corpus's packages, as its committed lock names them, with the self-hosted Mac's Homebrew Composer and the
-      # job's token, so GitHub's rate limit for anonymous downloads never stops a release.
+      # job's token, so GitHub's rate limit for anonymous downloads never stops a release. The token goes as a bearer
+      # token: Composer 2.9.3 refuses a github-oauth token holding "-", "/", "+" or "=", and refused the job's token
+      # so on run 45016534123, while it sends a bearer token as it is.
       - name: setup PHP corpus for PGO profiling
         if: matrix.job.pgo
         shell: bash
         working-directory: sharp/mago/corpus
         env:
-          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.GITHUB_TOKEN }}"}}'
+          COMPOSER_AUTH: '{"bearer": {"github.com": "${{ secrets.GITHUB_TOKEN }}"}}'
         run: composer install --ignore-platform-reqs --no-interaction --no-progress
 
       # The PHP# engine mago links, which sharp/bin/build-mago --engine builds for the runner's own platform, each
