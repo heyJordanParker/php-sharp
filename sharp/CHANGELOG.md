@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Changed
+
+- A watch round after an edit that deletes, renames or moves a class analyzes again only the files that name the class, read a class it extended or implemented, or declare a class named like its namespace, where 0.6.50 analyzed the whole project again. Renaming one class of a 2,128-file project under `mago analyze --watch` takes 0.82 CPU-seconds a round where it took 7.44, with the same issues.
+
 ## [0.6.50] - 2026-11-22
 
 ### Upgrading from 0.6.49
