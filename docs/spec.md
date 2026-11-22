@@ -5112,11 +5112,11 @@ public interface Priced
     string label => `${this.cents} ${Priced.CURRENCY}`;                // compiles: a default body built from the interface's own members
     static int operator <=>(Priced a, Priced b) => a.cents <=> b.cents;   // compiles: every Priced compares by cents, so a < b works
     int count { get; } = 0;                                            // compile error: an interface holds no storage, so it gives no initial value
-    law cheapFirst(Priced a, Priced b) => a.cents <= b.cents || a > b;  // compile error: a law is proved against code, and any class may implement an interface later
+    law cheapFirst(Priced a, Priced b) => a.cents <= b.cents || a > b;  // compiles: each PHP# class that implements Priced proves it
 }
 ```
 
-Each class that implements `Priced`, without its two refused lines, gets its constant, its default body and its operator:
+Each class that implements `Priced`, without its refused line and its law, which the plain PHP `LegacyBook` below could not prove, gets its constant, its default body and its operator:
 
 <!-- example interface-members-in-classes -->
 ```csharp
@@ -5185,7 +5185,7 @@ App\Priced::CURRENCY;                  // "USD"
 
 - An interface constant follows a class constant's rules, and is read through the interface or any class that implements it.
 - An interface holds no storage, so a property it states gives no initial value, and a computed property's expression is its default body.
-- An interface states no law: a law is proved against the code of a class or an enum, and any class may implement an interface later.
+- An interface's law is proved by each PHP# class that implements it, and a plain PHP class that implements an interface with laws is a compile error, since plain PHP proves nothing (section 28).
 - An interface's operator applies to every implementer, a plain PHP class included, as section 19 chooses every operator: from the types of both sides, the most specific one runs.
 - A plain PHP class that implements an interface with default bodies uses `<Interface>\Defaults`, or it is a compile error that names the trait.
 - A plain PHP class that extends or implements a PHP# type satisfies it as PHP links it: each method it declares or inherits, from the project or a package, fits the PHP declaration of the member it implements or overrides, by PHP's rules and without docblocks, or `mago compile` refuses the class's file. The next rule names the one exception: a method with no return type under an interface's member. That declaration erases the PHP# types, so `Self` is `static`, a `List` is `array`, a `Map` or a `Set` parameter, and such a result a plain PHP caller gets as its array, is `\Sharp\Map|array` or `\Sharp\Set|array`, a `Bytes` parameter, and such a result a plain PHP caller gets as its string, is `\Sharp\Bytes|string`, and `Any`, `Any?` and a type parameter without a bound declare no type. `mago compile` checks a plain PHP file only there, where it meets a PHP# declaration, and every other error in the file stays `mago analyze`'s, as in a plain PHP project.
@@ -7571,6 +7571,8 @@ module
 ```
 
 A law the checker cannot prove is a compile error that names it (section 27).
+
+**An interface states laws that each PHP# class implementing it proves,** with no body of its own (section 22). Each class that implements the interface and is not abstract proves each law with the interface's values read as its own, so a call of the interface's method in the claim runs the class's method. A proof that breaks is `law-unproven` on the class, and names each of its methods the law calls: "`MemoryLedger.credit` breaks `Ledger.creditAdds`." A law over the interface's values takes the interface's laws as facts, and knows its methods only through them. A plain PHP class that implements an interface with laws is the error `interface-law-implementer`: "`App.Books.FileLedger` is plain PHP, which can't prove `Ledger.creditAdds`. Write it in PHP#."
 
 **Laws hold only over pure code** (section 29). The checker translates pure PHP# code to Lean, and Lean's kernel checks the proofs. A law reaches the code it calls, and that code's own calls, and code no law reaches is never translated or refused:
 
