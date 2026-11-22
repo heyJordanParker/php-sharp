@@ -66,7 +66,7 @@ function externs(string $root, string $path): array
         } elseif (preg_match('/^public (?:static class ([A-Z][A-Za-z0-9]*)|effect class ([A-Z][A-Za-z0-9]*) : [A-Z][A-Za-z0-9]*)$/', $text, $match)) {
             $match[1] = $match[1] !== '' ? $match[1] : $match[2];
             $class = $namespace === null ? null : "$namespace.$match[1]";
-        } elseif (preg_match('/\bextern\b/', $text) && !preg_match('~^(?:extern |//|/\*|\*)~', $text)) {
+        } elseif (preg_match('/^(?:[a-z]+ )+extern\b/', $text)) {
             if ($class === null || !preg_match($method, $text, $match)) {
                 fail($path, $index + 1, $text, EXTERN_FORM);
             }
