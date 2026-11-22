@@ -58,6 +58,7 @@ use mago_database::DatabaseReader;
 use mago_database::file::File;
 use mago_database::file::FileId;
 use mago_database::file::FileType;
+use mago_database::file::FolderNamespace;
 use mago_names::ResolvedNames;
 use mago_names::STANDARD_ROOT_CLASSES;
 use mago_names::default_root_classes;
@@ -213,6 +214,18 @@ fn analyze_with_references(
     analyze_refined(registry, settings, analyzed, others, library, |_| {})
 }
 
+/// The file `name` holding `code`, as the loader marks it: the standard library's under its folder, and a test file, one
+/// an `autoload-dev` folder holds, under `tests/`.
+fn fixture_file(name: &'static str, code: &'static str) -> File {
+    let mut file = File::ephemeral(Cow::Borrowed(name.as_bytes()), Cow::Borrowed(code.as_bytes()));
+    file.is_standard_library = name.starts_with(STANDARD_LIBRARY);
+    if name.starts_with("tests/") {
+        file.folder_namespace = Some(FolderNamespace::Test);
+    }
+
+    file
+}
+
 /// [`analyze_with_references`], with `refine` run on the scanned codebase before population, where an external
 /// analyzer's metadata reaches it, as the PHP SDK's metadata codec sets a flag no source sets, such as `UNCHECKED`.
 fn analyze_refined(
@@ -229,8 +242,7 @@ fn analyze_refined(
         .chain(others)
         .chain(library)
         .map(|(name, code)| {
-            let mut file = File::ephemeral(Cow::Borrowed(name.as_bytes()), Cow::Borrowed(code.as_bytes()));
-            file.is_standard_library = name.starts_with(STANDARD_LIBRARY);
+            let mut file = fixture_file(name, code);
             if name.starts_with("vendor/") {
                 file.file_type = FileType::Vendored;
             }
@@ -339,8 +351,7 @@ fn analyze_package(
         .iter()
         .chain(&EFFECT_CLASSES)
         .map(|(name, code)| {
-            let mut file = File::ephemeral(Cow::Borrowed(name.as_bytes()), Cow::Borrowed(code.as_bytes()));
-            file.is_standard_library = name.starts_with(STANDARD_LIBRARY);
+            let mut file = fixture_file(name, code);
             file.is_project = !file.is_standard_library && !name.starts_with("library/");
 
             database.add(file)
@@ -7798,6 +7809,27 @@ fn a_property_a_plain_php_parent_stores_is_reached_through_an_extern_property() 
         refusals(("src/Demo/Auction.sharp", auction), &[("src/Lib/Catalogue.php", catalogue)]),
         [
             "7:39 missing-magic-method `Auction.buyer` has `set`, which a plain PHP `__set` stores, and `Auction` inherits no `__set`. | Make it `{ get; }`, or extend the plain PHP class whose `__set` stores it.",
+        ]
+    );
+}
+
+/// Spec section 14.3: the parent stores the properties a PHP# class declares, so a stored property a plain PHP trait
+/// gives the class, as Eloquent's `SoftDeletes` gives `forceDeleting`, is the trait's own field, and nothing reports it
+/// in the vendor file the project can't change. The class's own stored property beside it is refused at its line.
+#[test]
+fn a_stored_property_a_plain_php_trait_gives_a_model_is_the_traits_own() {
+    let model = "<?php\n\nnamespace Acme\\Orm;\n\nabstract class Model\n{\n    public function __get(string $key): mixed\n    {\n        return null;\n    }\n\n    public function __set(string $key, mixed $value): void\n    {\n    }\n}\n";
+    let soft_deletes =
+        "<?php\n\nnamespace Acme\\Orm;\n\ntrait SoftDeletes\n{\n    protected $forceDeleting = false;\n}\n";
+    let repro = "namespace App;\n\nimport Acme.Orm.Model;\nimport Acme.Orm.SoftDeletes;\n\npublic class Repro : Model, SoftDeletes\n{\n}\n";
+    let counted = "namespace App;\n\nimport Acme.Orm.Model;\nimport Acme.Orm.SoftDeletes;\n\npublic class Counted : Model, SoftDeletes\n{\n    protected int count = 0;\n}\n";
+    let library = [("vendor/acme/orm/src/Model.php", model), ("vendor/acme/orm/src/SoftDeletes.php", soft_deletes)];
+
+    assert_eq!(refusals(("app/Repro.sharp", repro), &library), Vec::<String>::new());
+    assert_eq!(
+        refusals(("app/Counted.sharp", counted), &library),
+        [
+            "8:19 incompatible-property-visibility `Counted`'s parent `Model` stores properties through `__get` and `__set`, so a protected `count` would never be saved. | Write `public extern int count { get; set; }`, or make it private to keep it in memory."
         ]
     );
 }
@@ -28391,16 +28423,8 @@ fn an_extern_namespace_line_gives_its_namespace_to_the_root_names_of_its_folder(
 /// codebase and the effect summaries of every body `files` declare.
 fn summarized(files: &[(&'static str, &'static str)]) -> (CodebaseMetadata, Vec<EffectSummary>) {
     let Prelude { mut database, mut metadata, mut symbol_references } = PRELUDE.clone();
-    let file_ids: Vec<_> = files
-        .iter()
-        .chain(&EFFECT_CLASSES)
-        .map(|(name, code)| {
-            let mut file = File::ephemeral(Cow::Borrowed(name.as_bytes()), Cow::Borrowed(code.as_bytes()));
-            file.is_standard_library = name.starts_with(STANDARD_LIBRARY);
-
-            database.add(file)
-        })
-        .collect();
+    let file_ids: Vec<_> =
+        files.iter().chain(&EFFECT_CLASSES).map(|(name, code)| database.add(fixture_file(name, code))).collect();
 
     let arena = LocalArena::new();
     let mut programs = Vec::new();
@@ -34266,6 +34290,46 @@ fn an_event_or_a_class_gives_every_property_its_interfaces_state() {
     );
 }
 
+/// A member a plain PHP trait gives a PHP# class is the class's own when PHP links it, so one narrower than an interface
+/// above the class states, a trait's `protected $label` for `label { get; }` or its `protected function greet()` for
+/// `greet()`, is refused at the class's name, naming the trait, in the file the compile checks, and not in the vendor
+/// file of the trait.
+#[test]
+fn an_interface_member_a_trait_gives_too_narrowly_is_refused_at_the_class() {
+    let labelled =
+        ("app/Labelled.sharp", "namespace App;\n\npublic interface Labelled\n{\n    string label { get; }\n}\n");
+    let has_label = (
+        "vendor/acme/tags/src/HasLabel.php",
+        "<?php\n\nnamespace Acme\\Tags;\n\ntrait HasLabel\n{\n    protected $label = 'x';\n}\n",
+    );
+    let tagged = (
+        "app/Tagged.sharp",
+        "namespace App;\n\nimport Acme.Tags.HasLabel;\n\npublic class Tagged : Labelled, HasLabel\n{\n}\n",
+    );
+    let greets = ("app/Greets.sharp", "namespace App;\n\npublic interface Greets\n{\n    string greet();\n}\n");
+    let greeting = (
+        "vendor/acme/tags/src/Greeting.php",
+        "<?php\n\nnamespace Acme\\Tags;\n\ntrait Greeting\n{\n    protected function greet(): string\n    {\n        return 'hi';\n    }\n}\n",
+    );
+    let greeter = (
+        "app/Greeter.sharp",
+        "namespace App;\n\nimport Acme.Tags.Greeting;\n\npublic class Greeter : Greets, Greeting\n{\n}\n",
+    );
+
+    assert_eq!(
+        worded(tagged, &[labelled, has_label]),
+        [
+            "5:14 incompatible-property-access `Tagged` gives `label` as `protected`, from `HasLabel`, and `Labelled` states it `public`. | Inherited here. | Declared here. | Stated here. | Declare `label` `public` in `HasLabel`."
+        ]
+    );
+    assert_eq!(
+        worded(greeter, &[greets, greeting]),
+        [
+            "5:14 incompatible-visibility Visibility of `Greeter.greet` must not be narrowed from public to protected | Method declared as protected but should be public or wider | Parent method `Greets.greet` is declared as public here | In class `Greeter` | Declared in `Greeting` here. | Visibility can only be widened (e.g., protected → public) not narrowed. | Change the visibility to public or wider."
+        ]
+    );
+}
+
 /// Spec section 22: a PHP# interface states a property `{ get; }` or `{ get; init; }`, since a `set` reaches its own
 /// namespace at most. A plain PHP interface states one `{ get; set; }`, and a class gives it `{ get; set; }`. A class
 /// that gives it get-only is refused, naming the `set` the interface states.
@@ -35367,6 +35431,63 @@ fn every_parameter_of_a_bound_class_or_a_binding_needs_a_binding() {
     assert!(refusals(send_receipt, &others).iter().all(|refusal| !refusal.contains(" missing-service ")));
 }
 
+/// Spec sections 27 and 32: the engine builds a program's class as it builds a bound class, so each parameter of its
+/// main constructor needs a binding in the module of its namespace or of a namespace above it. A program in
+/// `Tests.Lib` never reaches `App`'s bindings, and one under `App`, or beside a `Tests.Lib` module that binds the
+/// service, compiles.
+#[test]
+fn a_program_s_constructor_needs_a_binding_for_each_service_it_takes() {
+    let application = ("app/Application.sharp", "namespace App;\n\npublic class Application\n{\n}\n");
+    let app = ("app/Module.sharp", "namespace App;\n\nmodule\n{\n    singleton Application = Application;\n}\n");
+    let lib = (
+        "tests/Lib/Module.sharp",
+        "namespace Tests.Lib;\n\nimport App.Application;\n\nmodule\n{\n    singleton Application = Application;\n}\n",
+    );
+    let probe = |path: &'static str, namespace: &str| {
+        (
+            path,
+            leak(format!(
+                "namespace {namespace};\n\nimport App.Application;\n\npublic class MainProbe\n{{\n    public MainProbe(private Application application) {{ }}\n\n    public void main() {{ }}\n}}\n"
+            )),
+        )
+    };
+    let unbound = "7:22 missing-service `MainProbe` needs an `Application`, and no module binds one: the container can't build `MainProbe`. | Bind `Application` in a module of `MainProbe`'s namespace or one above it, as in `transient Application = Application;`.";
+
+    for (program, others, expected) in [
+        (probe("tests/Lib/MainProbe.sharp", "Tests.Lib"), vec![application, app], vec![unbound]),
+        (probe("tests/Lib/MainProbe.sharp", "Tests.Lib"), vec![application, app, lib], vec![]),
+        (probe("app/Main/MainProbe.sharp", "App.Main"), vec![application, app], vec![]),
+    ] {
+        let refused: Vec<String> =
+            refusals(program, &others).into_iter().filter(|refusal| refusal.contains(" missing-service ")).collect();
+        assert_eq!(refused, expected, "{}", program.0);
+    }
+}
+
+/// Spec section 32: only a test start turns a test module on, so a test module belongs in a test file, one an
+/// `autoload-dev` folder holds. In a program's file it would do nothing, and it is refused. In a test file it compiles.
+#[test]
+fn a_test_module_outside_a_test_file_is_refused() {
+    let app = ("app/Module.sharp", "namespace App;\n\nmodule\n{\n}\n");
+    let file = |path: &'static str, class: &str| {
+        (
+            path,
+            leak(format!(
+                "namespace App;\n\nmodule : App\n{{\n}}\n\npublic class {class}\n{{\n    public void main() {{ }}\n}}\n"
+            )),
+        )
+    };
+    let misplaced = "3:1 invalid-binding A test module belongs in the test file that uses it. | Move the module into the test file of the tests it serves, in a folder `composer.json` lists under `autoload-dev`.";
+
+    for (written, expected) in
+        [(file("app/Main.sharp", "Main"), vec![misplaced]), (file("tests/MainTest.sharp", "MainTest"), vec![])]
+    {
+        let refused: Vec<String> =
+            refusals(written, &[app]).into_iter().filter(|refusal| refusal.contains("A test module")).collect();
+        assert_eq!(refused, expected, "{}", written.0);
+    }
+}
+
 /// Spec section 32, as .NET's scope validation and Dagger's graph check refuse them: a service that needs itself, at
 /// each binding on the cycle, and a `scoped` service a `singleton` holds, directly or through `transient` services. A
 /// `singleton` that holds another `singleton` leaves that one's services to its own binding, which is refused once.
@@ -35867,6 +35988,86 @@ fn namespaces_that_import_each_other_are_refused_at_each_import() {
     let child = class("App.Tenant.Store", "Till", &["App.Tenant.Tenant"]);
     let parent_alone = class("App.Tenant", "Tenant", &[]);
     assert_eq!(compile_errors(child, &[parent_alone]), Vec::<String>::new());
+}
+
+/// Spec section 23: a test file's imports are no edges of the namespace graph. So `tests/A/ThingTest.sharp`, which
+/// declares `App.A` to test it, imports `App.B.User` while `App.B` imports `App.A`, and neither file is refused. The
+/// same import in a production file of `App.A` still closes the cycle.
+#[test]
+fn a_test_file_s_imports_close_no_import_cycle() {
+    let account = ("app/A/Account.sharp", "namespace App.A;\n\npublic class Account\n{\n}\n");
+    let user = (
+        "app/B/User.sharp",
+        "namespace App.B;\n\nimport App.A.Account;\n\npublic class User\n{\n    public static int of(Account account) => 1;\n}\n",
+    );
+    let thing_test = (
+        "tests/A/ThingTest.sharp",
+        "namespace App.A;\n\nimport App.B.User;\n\npublic class ThingTest\n{\n    public int testIt() => User.of(new Account());\n}\n",
+    );
+    assert_eq!(compile_errors(thing_test, &[account, user]), Vec::<String>::new());
+    assert_eq!(compile_errors(user, &[account, thing_test]), Vec::<String>::new());
+
+    let thing = (
+        "app/A/Thing.sharp",
+        "namespace App.A;\n\nimport App.B.User;\n\npublic class Thing\n{\n    public int run() => User.of(new Account());\n}\n",
+    );
+    assert_eq!(
+        compile_errors(user, &[account, thing]),
+        [
+            "`App.B` and `App.A` import each other (Thing.sharp imports User). Move the code, or declare an interface in one namespace that the other implements."
+        ]
+    );
+}
+
+/// Spec section 32: a module's `imports` line limits its namespaces' production files, so a test file that declares
+/// `App.Shared.Entitlements` imports `Tests.Lib.TenantTestCase`, which the namespace's list leaves out.
+#[test]
+fn a_test_file_imports_past_the_list_of_the_namespace_it_declares() {
+    let module = (
+        "app/Shared/Entitlements/Module.sharp",
+        "namespace App.Shared.Entitlements;\n\nmodule\n{\n    imports App.Shared.Ledger;\n}\n",
+    );
+    let test_case = ("tests/Lib/TenantTestCase.sharp", "namespace Tests.Lib;\n\npublic class TenantTestCase\n{\n}\n");
+    let owners_test = (
+        "tests/Feature/Entitlements/InheritedActionOwnersTest.sharp",
+        "namespace App.Shared.Entitlements;\n\nimport Tests.Lib.TenantTestCase;\n\npublic class InheritedActionOwnersTest : TenantTestCase\n{\n}\n",
+    );
+
+    assert_eq!(compile_errors(owners_test, &[module, test_case, LISTED_CLASSES[2]]), Vec::<String>::new());
+}
+
+/// Spec section 32: production code can't use a class a test file declares, by an import or by a name of its own
+/// namespace that needs none, as `new FakeOwners()` or the type `FakeOwners`. Each name is refused where it is written.
+#[test]
+fn production_code_can_t_use_a_test_file_s_class() {
+    let fake = (
+        "tests/A/FakeOwners.sharp",
+        "namespace App.A;\n\ninternal class FakeOwners\n{\n    public int count() => 2;\n}\n",
+    );
+    let billing = (
+        "app/A/Billing.sharp",
+        "namespace App.A;\n\npublic class Billing\n{\n    public int total() => new FakeOwners().count();\n\n    public int counted(FakeOwners owners) => owners.count();\n}\n",
+    );
+    let test_case = ("tests/Lib/TenantTestCase.sharp", "namespace Tests.Lib;\n\npublic class TenantTestCase\n{\n}\n");
+    let invoice = (
+        "app/Shared/Billing/Invoice.sharp",
+        "namespace App.Shared.Billing;\n\nimport Tests.Lib.TenantTestCase;\n\npublic class Invoice : TenantTestCase\n{\n}\n",
+    );
+
+    assert_eq!(
+        refusals(billing, &[fake]),
+        [
+            "5:31 production-uses-test-code Production code can't use `FakeOwners`, a test file's class. | Declare `FakeOwners` in production code, or use it only in a test.",
+            "7:24 production-uses-test-code Production code can't use `FakeOwners`, a test file's class. | Declare `FakeOwners` in production code, or use it only in a test.",
+        ]
+    );
+    assert_eq!(
+        refusals(invoice, &[test_case]),
+        [
+            "3:8 production-uses-test-code Production code can't use `TenantTestCase`, a test file's class. | Declare `TenantTestCase` in production code, or use it only in a test.",
+            "5:24 production-uses-test-code Production code can't use `TenantTestCase`, a test file's class. | Declare `TenantTestCase` in production code, or use it only in a test.",
+        ]
+    );
 }
 
 /// Spec section 32: a listed name that names no namespace of the project or its libraries is the ordinary error of an

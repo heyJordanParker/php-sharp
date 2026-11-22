@@ -23,12 +23,11 @@ defaults:
 jobs:
   # ci-passed is this workflow's one required check. Every push runs every job, whatever it changed. A run runs none of
   # the tests when a pull request's run passed ci-passed on its tree, as sharp.yml's CHANGES explains. A push to master
-  # runs checks again, which saves the target every pull request's run restores, but for a release's push, which builds
-  # nothing. A push whose tree no pull request's run passed runs every job, and its red push opens an issue, as
-  # ci-passed does, for a pull request that fixes it forward. The workspace's tests run in sharp.yml, which CI_PASSED
-  # covers: on Linux in MAGO, on BUILD_LINUX's build, so Linux builds Mago's dev target once, and on macOS in
-  # release.yml's macOS build, the run's one Mac job, so a defect only macOS finds, such as one in the watch mode's
-  # FSEvents code, fails before the merge.
+  # runs checks again, which saves the target every pull request's run restores. A push whose tree no pull request's
+  # run passed runs every job, and its red push opens an issue, as ci-passed does, for a pull request that fixes it
+  # forward. The workspace's tests run in sharp.yml, which CI_PASSED covers: on Linux in MAGO, on BUILD_LINUX's build, so
+  # Linux builds Mago's dev target once, and on macOS in MACOS, the run's one Mac job, so a defect only macOS finds, such
+  # as one in the watch mode's FSEvents code, fails before the merge.
   CHANGES:
     runs-on: ubuntu-latest
     permissions:
@@ -41,7 +40,6 @@ jobs:
         working-directory: .
     outputs:
       base: ${{ steps.base.outputs.sha }}
-      bump: ${{ steps.version.outputs.bump }}
       passed: ${{ steps.passed.outputs.run }}
       rust: ${{ steps.rust.outputs.version }}
     steps:
@@ -91,11 +89,6 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "This push's changes start at ${sha:-no commit, so every job runs}."
 
-      # A release's bump, as sharp.yml's CHANGES explains.
-      - name: Find whether it is a release's bump
-        id: version
-        run: sharp/bin/check --release | tee -a "$GITHUB_OUTPUT"
-
       - name: Find the pull request run that passed this tree
         id: passed
         uses: ./.github/actions/passed-tree
@@ -122,7 +115,7 @@ jobs:
   # sharp.yml's BUILD_LINUX does.
   checks:
     needs: CHANGES
-    if: ${{ !needs.CHANGES.outputs.passed || (github.event_name == 'push' && needs.CHANGES.outputs.bump != 'true') }}
+    if: ${{ !needs.CHANGES.outputs.passed || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     # A build of the engine takes up to 20 more minutes, which the engine's cache spares a run whose engine
     # inputs an earlier run built.
@@ -251,8 +244,8 @@ jobs:
   # upstream's carthage-software/mago at the release this checker left from, as an extension host does,
   # installs no second checker, and one that requires a later release installs nothing. Then runs mago on
   # a one-class .sharp project with the binary checks built, and sharp/phpunit's tests, which stop. On macOS,
-  # release.yml's macOS build runs the same check on the release binary, in the run's one Mac job. A push to master
-  # whose tree a pull request's run passed runs none of them.
+  # sharp.yml's MACOS runs the same check on its dev build, and release.yml's macOS build on the release binary. A push
+  # to master whose tree a pull request's run passed runs none of them.
   plain-php:
     needs: [CHANGES, checks]
     if: ${{ !needs.CHANGES.outputs.passed }}

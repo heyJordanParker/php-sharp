@@ -5851,13 +5851,79 @@ static bool sharp_add_static_accessor_row(zval *properties, const zend_function 
 	return true;
 }
 
+/* Whether `info` is the hidden static the bridge declares for an `extern` property, spec section 14.3, named `name#extern`:
+ * it holds the key its plain PHP parent's `__get` and `__set` receive, and carries its access and its attributes, since
+ * PHP declares no property of its name. */
+static bool sharp_is_extern_carrier(const zend_property_info *info)
+{
+	const char *name = zend_get_unmangled_property_name(info->name);
+	size_t length = strlen(name);
+
+	return (info->flags & ZEND_ACC_STATIC) && sharp_class_is_sharp(info->ce) && length > strlen("#extern")
+		&& memcmp(name + length - strlen("#extern"), "#extern", strlen("#extern")) == 0;
+}
+
+/* The hidden static of the `extern` property `name` of `ce`, see sharp_is_extern_carrier, or NULL for any other name. */
+static const zend_property_info *sharp_extern_carrier(const zend_class_entry *ce, const zend_string *name)
+{
+	zend_string *carried = zend_strpprintf(0, "%s#extern", ZSTR_VAL(name));
+	const zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, carried);
+	zend_string_release_ex(carried, false);
+
+	return info && sharp_is_extern_carrier(info) ? info : NULL;
+}
+
+/* The line `$name` of sharp_declared that states the type of the `extern` property whose hidden static is `carrier`, and
+ * what writes it, `set private extern`, into `line`, with the property's name in `name`, which the caller releases. */
+static bool sharp_extern_line(const zend_property_info *carrier, zend_string **name, sharp_declared_member *line)
+{
+	const char *carried = zend_get_unmangled_property_name(carrier->name);
+	*name = zend_string_init(carried, strlen(carried) - strlen("#extern"), false);
+	zend_string *key = zend_strpprintf(0, "$%s", ZSTR_VAL(*name));
+	bool found = sharp_declared_line(carrier->ce, ZSTR_VAL(key), ZSTR_LEN(key), line);
+	zend_string_release_ex(key, false);
+
+	return found;
+}
+
+/* Adds to `properties` the row reflection reads of the `extern` property whose hidden static is `carrier`, read on a class
+ * value of `ce` whose type arguments are `arguments`, as Sharp_Internal_properties makes a row: its access and its
+ * attributes are its hidden static's, and its type and what writes it its line, see sharp_extern_line. False with an
+ * Error when no type reads. */
+static bool sharp_add_extern_row(
+	zval *properties, const zend_property_info *carrier, const zend_class_entry *ce, const sharp_type *arguments)
+{
+	zend_string *name;
+	sharp_declared_member line;
+	const sharp_type *types = sharp_extern_line(carrier, &name, &line)
+		? sharp_declared_types(line.type, line.type_length, carrier->ce, ce, arguments)
+		: NULL;
+	if (!types) {
+		zend_throw_error(NULL, "PHP# reads no type for %s::$%s. This is a bug in PHP#", ZSTR_VAL(carrier->ce->name),
+			ZSTR_VAL(name));
+		zend_string_release_ex(name, false);
+		return false;
+	}
+	zval property;
+	array_init_size(&property, 5);
+	add_next_index_str(&property, zend_string_copy(carrier->ce->name));
+	add_next_index_str(&property, name);
+	sharp_add_declared_type(&property, types->members[0]);
+	sharp_add_visibility(&property, carrier->flags, carrier->attributes);
+	add_next_index_stringl(&property, line.words, line.words_length);
+	zend_hash_next_index_insert_new(Z_ARRVAL_P(properties), &property);
+
+	return true;
+}
+
 /* Spec section 25: what `Class<T>.properties()` reads, the properties and fields of the class `type` names, its own
  * first and then those it inherits, in the order they are declared, at every visibility, its statics included. Each is
  * the list of the class that declares it, its name, its type as sharp_add_declared_type adds it, its access modifier as
  * sharp_add_visibility adds it, and what writes it and its modifiers as sharp_property_declared_type gives them. A
  * static whose accessors run as hidden static methods, see sharp_static_accessor, is read from them in its storage's
- * place, and one with no storage of the class, as a computed one, after the others, in the order its `get` is
- * declared. A class's are read once a request, see request_reflected. */
+ * place. An `extern` property, which PHP declares no property for, follows the stored ones, in the order it is
+ * declared, as sharp_add_extern_row reads it, and a static with no storage of the class, as a computed one, follows
+ * them, in the order its `get` is declared. A class's are read once a request, see request_reflected. */
 ZEND_FUNCTION(Sharp_Internal_properties)
 {
 	zend_string *value;
@@ -5918,6 +5984,14 @@ ZEND_FUNCTION(Sharp_Internal_properties)
 		add_next_index_str(&property, writer.s ? writer.s : ZSTR_EMPTY_ALLOC());
 		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &property);
 	} ZEND_HASH_FOREACH_END();
+	ZEND_HASH_FOREACH_PTR(&ce->properties_info, info) {
+		if (sharp_is_extern_carrier(info) && !sharp_add_extern_row(return_value, info, ce, arguments)) {
+			zend_string_release_ex(key, false);
+			zval_ptr_dtor(return_value);
+			RETVAL_NULL();
+			RETURN_THROWS();
+		}
+	} ZEND_HASH_FOREACH_END();
 	const zend_function *func;
 	ZEND_HASH_FOREACH_PTR(&ce->function_table, func) {
 		const zend_string *method = func->common.function_name;
@@ -5966,6 +6040,13 @@ ZEND_FUNCTION(Sharp_Internal_accessors)
 	const zend_function *get = !info || (info->flags & ZEND_ACC_STATIC)
 		? sharp_static_accessor(ce, ZSTR_VAL(name), ZEND_PROPERTY_HOOK_GET)
 		: NULL;
+	/* An `extern` property runs no accessor of its own: PHP runs its plain PHP parent's `__get` and `__set`. */
+	if (!info && !get && sharp_extern_carrier(ce, name)) {
+		array_init_size(return_value, 2);
+		add_next_index_null(return_value);
+		add_next_index_null(return_value);
+		return;
+	}
 	if (!info && !get) {
 		zend_throw_error(NULL, "Property %s::$%s does not exist", ZSTR_VAL(ce->name), ZSTR_VAL(name));
 		RETURN_THROWS();
@@ -6236,11 +6317,15 @@ static int sharp_accessor_kind(const zend_string *name, zend_string **property)
 }
 
 /* The property `name` of `ce`, which the reflection functions read and write, with the Error PHP gives a direct use of
- * an `internal` property from a namespace outside its class's when `caller` can't reach it. A private or protected
- * property is checked by the object's handlers, which run in the caller's scope. */
+ * an `internal` property from a namespace outside its class's when `caller` can't reach it, an `extern` one's by its
+ * hidden static, see sharp_is_extern_carrier. A private or protected property is checked by the object's handlers,
+ * which run in the caller's scope, and an `extern` one by sharp_extern_call. */
 static bool sharp_reaches_property(const zend_execute_data *caller, const zend_class_entry *ce, zend_string *name)
 {
 	const zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, name);
+	if (!info) {
+		info = sharp_extern_carrier(ce, name);
+	}
 	if (info && !(info->flags & (ZEND_ACC_PRIVATE | ZEND_ACC_PROTECTED)) && info->attributes
 			&& zend_get_attribute_str(info->attributes, ZEND_STRL("sharp\\internal\\internal"))
 			&& !sharp_reaches_internal(caller, info->ce)) {
@@ -6332,9 +6417,79 @@ static void sharp_static_write(zend_class_entry *scope, zend_class_entry *ce, ze
 	zend_assign_to_variable(slot, &written, IS_TMP_VAR, true);
 }
 
+/* The access modifier that reaches the write of an `extern` property, as the words of its line give it after `set`:
+ * ZEND_ACC_PRIVATE, ZEND_ACC_PROTECTED or ZEND_ACC_PUBLIC, `internal` too, with `internal` set. */
+static uint32_t sharp_extern_set_flags(const char *reach, size_t length, bool *internal)
+{
+	*internal = length >= strlen("internal") && memcmp(reach, "internal", strlen("internal")) == 0;
+	if (length >= strlen("private") && memcmp(reach, "private", strlen("private")) == 0) {
+		return ZEND_ACC_PRIVATE;
+	}
+	if (length >= strlen("protected") && memcmp(reach, "protected", strlen("protected")) == 0) {
+		return ZEND_ACC_PROTECTED;
+	}
+
+	return ZEND_ACC_PUBLIC;
+}
+
+/* The call by `caller`'s code of the plain PHP parent's `__get` on `receiver`, or of its `__set` with `value`, with the
+ * key of the `extern` property `name` whose hidden static is `carrier`, spec section 14.3, into `return_value`. The
+ * code reaches it as a direct use of the property would: a read by the property's access, and a write by the access
+ * its line gives its `set`, with the Error PHP gives a property it can't reach, and a get-only one is read-only. */
+static void sharp_extern_call(const zend_execute_data *caller, zend_object *receiver, const zend_property_info *carrier,
+	zend_string *name, zval *value, zval *return_value)
+{
+	const zend_class_entry *scope = caller ? caller->func->common.scope : NULL;
+	uint32_t flags = carrier->flags;
+	if (value) {
+		zend_string *property;
+		sharp_declared_member line;
+		bool found = sharp_extern_line(carrier, &property, &line);
+		zend_string_release_ex(property, false);
+		if (!found || line.words_length < strlen("set ") || memcmp(line.words, "set ", strlen("set ")) != 0) {
+			zend_throw_error(NULL, "Property %s::$%s is read-only", ZSTR_VAL(carrier->ce->name), ZSTR_VAL(name));
+			return;
+		}
+		bool internal;
+		flags = sharp_extern_set_flags(
+			line.words + strlen("set "), line.words_length - strlen("set "), &internal);
+		if (internal && !sharp_reaches_internal(caller, carrier->ce)) {
+			zend_throw_error(NULL, "Cannot modify internal(set) property %s::$%s from %s, outside namespace %.*s",
+				ZSTR_VAL(carrier->ce->name), ZSTR_VAL(name), sharp_code_name(caller),
+				sharp_namespace_length(carrier->ce), ZSTR_VAL(carrier->ce->name));
+			return;
+		}
+	}
+	if (((flags & ZEND_ACC_PRIVATE) && carrier->ce != scope)
+			|| ((flags & ZEND_ACC_PROTECTED) && !zend_check_protected(carrier->ce, scope))) {
+		const char *visibility = zend_visibility_string(flags);
+		if (value) {
+			zend_throw_error(NULL, "Cannot modify %s(set) property %s::$%s from %s%s", visibility,
+				ZSTR_VAL(carrier->ce->name), ZSTR_VAL(name), scope ? "scope " : "global scope",
+				scope ? ZSTR_VAL(scope->name) : "");
+		} else {
+			zend_throw_error(NULL, "Cannot access %s property %s::$%s", visibility, ZSTR_VAL(carrier->ce->name),
+				ZSTR_VAL(name));
+		}
+		return;
+	}
+	zval *held = &carrier->ce->default_static_members_table[carrier->offset];
+	ZVAL_DEINDIRECT(held);
+	zval key;
+	ZVAL_STR(&key, Z_STR_P(held));
+	if (!value) {
+		zend_call_method_with_1_params(receiver, receiver->ce, NULL, "__get", return_value, &key);
+		return;
+	}
+	zval written;
+	zend_call_method_with_2_params(receiver, receiver->ce, NULL, "__set", &written, &key, value);
+	zval_ptr_dtor(&written);
+}
+
 /* The read of the property `name` that `class_name` declares on `receiver`, or of the static `name`, into
  * `return_value`, by the code that called the standard library member whose body made the internal call
- * `execute_data`, see Sharp_Internal_read. A static whose accessors run as hidden static methods runs its `get`. */
+ * `execute_data`, see Sharp_Internal_read. A static whose accessors run as hidden static methods runs its `get`, and an
+ * `extern` property calls its plain PHP parent's `__get` with its key, see sharp_extern_call. */
 static void sharp_reflected_read(zend_execute_data *execute_data, zend_object *receiver, zend_string *class_name,
 	zend_string *name, zval *return_value)
 {
@@ -6348,6 +6503,11 @@ static void sharp_reflected_read(zend_execute_data *execute_data, zend_object *r
 	zend_function *get = is_static ? sharp_static_accessor(ce, ZSTR_VAL(name), ZEND_PROPERTY_HOOK_GET) : NULL;
 	if (get) {
 		sharp_static_accessor_call(scope, get, ce, name, NULL, return_value);
+		return;
+	}
+	const zend_property_info *carrier = is_static ? NULL : sharp_extern_carrier(ce, name);
+	if (carrier) {
+		sharp_extern_call(caller, receiver, carrier, name, NULL, return_value);
 		return;
 	}
 	zval value;
@@ -6381,7 +6541,8 @@ ZEND_FUNCTION(Sharp_Internal_read)
 /* The write of `value` into the property `name` that `class_name` declares on `receiver`, or into the static `name`,
  * by the code that called the standard library member whose body made the internal call `execute_data`, see
  * Sharp_Internal_write. A static whose accessors run as hidden static methods runs its `set`, and one with no `set` and
- * no storage is read-only. */
+ * no storage is read-only. An `extern` property calls its plain PHP parent's `__set` with its key, see
+ * sharp_extern_call. */
 static void sharp_reflected_write(zend_execute_data *execute_data, zend_object *receiver, zend_string *class_name,
 	zend_string *name, zval *value, zval *return_value)
 {
@@ -6392,6 +6553,11 @@ static void sharp_reflected_write(zend_execute_data *execute_data, zend_object *
 		RETURN_THROWS();
 	}
 	zend_class_entry *scope = caller ? caller->func->common.scope : NULL;
+	const zend_property_info *carrier = is_static ? NULL : sharp_extern_carrier(ce, name);
+	if (carrier) {
+		sharp_extern_call(caller, receiver, carrier, name, value, return_value);
+		return;
+	}
 	if (!is_static) {
 		zend_update_property_ex(scope, receiver, name, value);
 		return;

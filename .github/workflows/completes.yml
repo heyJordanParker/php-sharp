@@ -33,8 +33,11 @@ jobs:
           php "$RUNNER_TEMP/spec" --base "$BASE"
   # A commit message line such as `Completes: §6.1, §9` claims those sections are done, so the pull request that lands
   # the commit checks the claim, whichever commits it lands with: a pull request from a branch of next has a body of its
-  # own. sharp/bin/spec --completes, which reads the claims from BODY, fails on a malformed claim, on a section with no
-  # checked example and on a section sharp/baseline/spec still lists. The messages come from the API, as data.
+  # own. sharp/bin/spec --completes, which reads the claims on its standard input, fails on a malformed claim, on a
+  # section with no checked example and on a section sharp/baseline/spec still lists. The messages come from the API, as
+  # data. They go to php through a pipe, since Linux takes no single argument or environment variable over 128 KiB:
+  # next's own pull request #576, 109 commits, stopped with "/usr/bin/php: Argument list too long" when they went in
+  # BODY. The step runs in bash with pipefail, so a failed API call fails it.
   COMPLETES:
     runs-on: ubuntu-24.04
     permissions:
@@ -47,6 +50,7 @@ jobs:
           ref: refs/pull/${{ github.event.pull_request.number }}/merge
           persist-credentials: false
       - name: Every section a commit message completes has its examples passing
+        shell: bash
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           GH_TOKEN: ${{ github.token }}
@@ -63,6 +67,5 @@ jobs:
             echo "::error::This pull request has $COMMITS commits, and GitHub lists only 250 of them, so their Completes: lines can't all be read."
             exit 1
           fi
-          BODY=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/commits?per_page=100" --jq '.[].commit.message')
-          export BODY
-          php "$RUNNER_TEMP/spec" --completes
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/commits?per_page=100" --jq '.[].commit.message' \
+            | php "$RUNNER_TEMP/spec" --completes

@@ -139,7 +139,7 @@ gate_workflows() {
 }
 
 # SPEC_GUARD and COMPLETES, with the merge base's sharp/bin/spec, as completes.yml runs them. COMPLETES reads the pull
-# request's body, so it runs when BODY holds it.
+# request's body on its standard input, so it runs when BODY holds it.
 gate_spec_guard() {
   local base
   base="$(base)"
@@ -150,7 +150,7 @@ gate_spec_guard() {
   git -C "$root" show "$base:sharp/bin/spec" > "$TMPDIR/spec"
   step php "$TMPDIR/spec" --base "$base"
   if [[ -n ${BODY:-} ]]; then
-    step php "$TMPDIR/spec" --completes
+    step php "$TMPDIR/spec" --completes <<< "$BODY"
   else
     echo "COMPLETES checks the pull request body's Completes: line. Set BODY to the body to check it."
   fi
