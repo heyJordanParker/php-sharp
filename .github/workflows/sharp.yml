@@ -244,12 +244,14 @@ jobs:
         with:
           end: true
 
-  # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in two slices, each without opcache, in shared
+  # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in three slices, each without opcache, in shared
   # memory twice per process, and under the tracing JIT production runs with the opcache. The slices balance by the
   # seconds sharp/baseline/seconds lists, and the one that weighs least runs mago convert's whole-project proof, as
-  # sharp/bin/test explains. The second slice also runs the census, the differential and PHPUnit.
+  # sharp/bin/test explains. The last slice also runs the census, the differential and PHPUnit. A hosted runner can be
+  # 1.9 times slower than another on the same slice, so a slice's share sets how long a slow draw holds the run: with
+  # two slices, LINUX (2/2) on an AMD EPYC 7763 ran its 246 s of modes in 474 s on run 45038360121.
   LINUX:
-    name: LINUX (${{ matrix.shard }}/2)
+    name: LINUX (${{ matrix.shard }}/3)
     needs: [CHANGES, BUILD_LINUX]
     if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: ubuntu-24.04
@@ -261,7 +263,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
@@ -299,8 +301,8 @@ jobs:
         run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
       - name: Test PHP#
         run: >-
-          sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/2
-          ${{ matrix.shard == 2 && '--census --differential --phpunit' || '' }}
+          sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/3
+          ${{ matrix.shard == 3 && '--census --differential --phpunit' || '' }}
       - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
