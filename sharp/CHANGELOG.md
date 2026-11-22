@@ -4,6 +4,12 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.49] - 2026-11-22
+
+### Upgrading from 0.6.48
+
+- Rename each `foreign class` to `effect class`: `foreign` is no longer a modifier, so a class declared with it stops compiling.
+
 ### Changed
 
 - An effect class is declared `effect class`. 0.6.48 spelled it `foreign class`. `effect` is a modifier only among a class's modifiers, spec section 29, so a parameter, a local or a property may be named `effect`, and `foreign` is a name like any other, so `public foreign class Store` fails as any unknown word before `class` does. The codes `foreign-in-static` and `foreign-outside-module` are `effect-object-in-static` and `effect-object-outside-module`.
@@ -1697,7 +1703,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.48...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.49...HEAD
+[0.6.49]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.48...v0.6.49
 [0.6.48]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.47...v0.6.48
 [0.6.47]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.46...v0.6.47
 [0.6.46]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.45...v0.6.46
