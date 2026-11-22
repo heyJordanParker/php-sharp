@@ -7,6 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Changed
 
 - A watch round after an edit that deletes, renames or moves a class analyzes again only the files that name the class, read a class it extended or implemented, or declare a class named like its namespace, where 0.6.50 analyzed the whole project again. Renaming one class of a 2,128-file project under `mago analyze --watch` takes 0.82 CPU-seconds a round where it took 7.44, with the same issues.
+- A test file, one of a folder `composer.json` lists under `autoload-dev`, is a leaf of the project, spec sections 5, 23 and 32. It still declares the namespace it tests and reaches its `internal` members. Its imports are no edges of the namespace graph, so `tests/A/ThingTest.sharp` in `App.A` imports `App.B.User` while `App.B` imports `App.A`, where 0.6.50 refused both files with "`App.A` and `App.B` import each other". A module's `imports` line limits only its namespaces' production files, so a test file in `App.Shared.Entitlements` imports `Tests.Lib.TenantTestCase`, where 0.6.50 refused it with "`App.Shared.Entitlements` imports only `App.Shared.Ledger`." Production code can't use a class a test file declares, by an import or by a name of its own namespace: `new FakeOwners()` in `app/A/Billing.sharp`, beside a `FakeOwners` in `tests/A/`, fails with "Production code can't use `FakeOwners`, a test file's class.", where 0.6.50 compiled it.
 
 ### Fixed
 
