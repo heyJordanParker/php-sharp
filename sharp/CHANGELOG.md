@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A law follows an enum's case through a test that names one case, as it follows the other cases where the test fails, since each test of an enum, a machine and a sealed interface names every case and every implementer, and leaves no value to a catch-all. So beside `public enum Phase { case Idle; case Busy(int job); case Failed(string reason); }`, a `struct Slot` that holds a `Phase`, and a machine case whose `advance()` builds `new Slot(this.slot.phase, this.slot.count)`, `law advancingKeepsThePhase(Slot slot, int position) => Worker.Running(slot, position).advance().slot.phase is Phase.Busy(int at) ? (slot.phase is Phase.Busy(int was) ? at == was : false) : slot.phase is Phase.Idle || (slot.phase is Phase.Failed(string reason) ? true : false);` proves, and so does the same law after a move that copies the slot, where 0.6.50 refused both with "law advancingKeepsThePhase is not proven" and the whole claim still to show. `slot.phase is Phase.Idle` tests a case that carries no data beside cases that do, where 0.6.50 refused it with "a match on this subject". A law that claims the job grows by one is still not proven, with its claim still to show, and so is a law whose claim Lean computes to `false`, such as `Pending.start() is Paid` for a move that gives `Pending`.
+
 ## [0.6.50] - 2026-11-22
 
 ### Upgrading from 0.6.49
