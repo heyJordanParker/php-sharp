@@ -30,12 +30,22 @@ $closed = 'host=127.0.0.1 port=1 connect_timeout=5';
 
 $calls = [
     'bcmath' => fn () => expect(bcadd('0.1', '0.2', 1), '0.3', "bcadd('0.1', '0.2', 1)"),
+    'calendar' => fn () => expect(cal_days_in_month(CAL_GREGORIAN, 2, 2024), 29, 'cal_days_in_month(CAL_GREGORIAN, 2, 2024)'),
     'exif' => fn () => expect(exif_tagname(0x010F), 'Make', 'exif_tagname(0x010F)'),
+    'ftp' => function () {
+        $present = present([FTP\Connection::class], ['ftp_connect', 'ftp_ssl_connect']);
+        return "$present; " . expect(@ftp_connect('127.0.0.1', 1, 5), false, 'ftp_connect() on a closed port');
+    },
     'gd' => function () {
         ob_start();
         imagepng(imagecreatetruecolor(3, 2));
         return expect(imagesx(imagecreatefromstring(ob_get_clean())), 3, 'imagesx() of a 3x2 PNG imagepng() wrote');
     },
+    'igbinary' => fn () => expect(
+        igbinary_unserialize(igbinary_serialize(['a' => [1, 2]])),
+        ['a' => [1, 2]],
+        "igbinary_unserialize() of what igbinary_serialize() wrote of ['a' => [1, 2]]",
+    ),
     'imagick' => function () {
         $image = new Imagick();
         $image->newImage(3, 2, 'white', 'png');
@@ -52,6 +62,20 @@ $calls = [
         $handler = function (int $signal): void {};
         pcntl_signal(SIGUSR1, $handler);
         return expect(pcntl_signal_get_handler(SIGUSR1) === $handler, true, 'pcntl_signal_get_handler(SIGUSR1) === the handler pcntl_signal() set');
+    },
+    'pdo_mysql' => function () {
+        $present = present([Pdo\Mysql::class]);
+        expect(in_array('mysql', PDO::getAvailableDrivers(), true), true, "in_array('mysql', PDO::getAvailableDrivers())");
+        try {
+            new PDO('mysql:host=127.0.0.1;port=1');
+        } catch (PDOException $exception) {
+            return "$present; " . expect(
+                str_starts_with($exception->getMessage(), 'SQLSTATE[HY000] [2002]'),
+                true,
+                "str_starts_with() of the PDOException new PDO() threw on a closed port, 'SQLSTATE[HY000] [2002]'",
+            );
+        }
+        throw new RuntimeException('new PDO() on a closed port connected');
     },
     'pdo_pgsql' => function () use ($closed) {
         $present = present([Pdo\Pgsql::class]);
@@ -80,12 +104,49 @@ $calls = [
         $present = present([Redis::class, RedisCluster::class, RedisSentinel::class, RedisException::class]);
         $redis = new Redis();
         expect($redis->isConnected(), false, 'new Redis()->isConnected()');
+        $serializer = expect(
+            $redis->setOption(Redis::OPT_SERIALIZER, Redis::SERIALIZER_IGBINARY),
+            true,
+            'Redis::setOption(Redis::OPT_SERIALIZER, Redis::SERIALIZER_IGBINARY)',
+        );
         try {
             $redis->connect('127.0.0.1', 1, 5);
         } catch (RedisException $exception) {
-            return "$present; " . expect($exception->getMessage(), 'Connection refused', 'Redis::connect() on a closed port threw a RedisException whose getMessage()');
+            return "$present; $serializer; " . expect($exception->getMessage(), 'Connection refused', 'Redis::connect() on a closed port threw a RedisException whose getMessage()');
         }
         throw new RuntimeException('Redis::connect() on a closed port connected');
+    },
+    'shmop' => function () {
+        $memory = shmop_open(ftok(__FILE__, 's'), 'c', 0600, 8);
+        shmop_write($memory, 'shared', 0);
+        $read = shmop_read($memory, 0, 6);
+        shmop_delete($memory);
+        return expect($read, 'shared', 'shmop_read() of the block shmop_write() wrote');
+    },
+    'sockets' => function () {
+        expect(socket_create_pair(AF_UNIX, SOCK_STREAM, 0, $pair), true, 'socket_create_pair(AF_UNIX, SOCK_STREAM, 0)');
+        socket_write($pair[0], 'paired');
+        return expect(socket_read($pair[1], 6), 'paired', 'socket_read() of what socket_write() wrote on the other end of the pair');
+    },
+    'sysvmsg' => function () {
+        $queue = msg_get_queue(ftok(__FILE__, 'm'));
+        msg_send($queue, 1, 'queued', false);
+        msg_receive($queue, 1, $type, 16, $message, false);
+        msg_remove_queue($queue);
+        return expect($message, 'queued', 'msg_receive() of the message msg_send() queued');
+    },
+    'sysvsem' => function () {
+        $semaphore = sem_get(ftok(__FILE__, 'e'));
+        $held = sem_acquire($semaphore) && sem_release($semaphore);
+        sem_remove($semaphore);
+        return expect($held, true, 'sem_acquire() and sem_release() of the semaphore sem_get() made');
+    },
+    'sysvshm' => function () {
+        $memory = shm_attach(ftok(__FILE__, 'h'), 1024);
+        shm_put_var($memory, 1, 'kept');
+        $read = shm_get_var($memory, 1);
+        shm_remove($memory);
+        return expect($read, 'kept', 'shm_get_var() of the variable shm_put_var() put');
     },
     'zip' => function () {
         $path = tempnam(sys_get_temp_dir(), 'zip');

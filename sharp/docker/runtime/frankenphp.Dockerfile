@@ -219,6 +219,18 @@ FROM scratch AS frankenphp-source
 # the commit its v1.13.5 tag names, so a moved tag builds nothing else.
 ADD https://github.com/php/frankenphp.git#a3663e9e2cc4c258018a28ee068e50cc12f3ed2d /
 
+# The PECL extensions the image installs, each fetched by the commit its release tag names, so an outage of
+# pecl.php.net can't stop a release. igbinary 3.2.17RC1 is its first release that builds on PHP 8.5.
+FROM scratch AS igbinary-source
+ADD https://github.com/igbinary/igbinary.git#edda7101adf583df047d028a154abf3bf04ced61 /
+
+FROM scratch AS imagick-source
+ADD https://github.com/Imagick/imagick.git#70087bab33eab913e99ac77d64d04d1a2fd0b7b0 /
+
+# A git source brings phpredis's liblzf submodule, which GitHub's tag archive leaves out.
+FROM scratch AS phpredis-source
+ADD https://github.com/phpredis/phpredis.git#df4fab2de7fc327c54c94a13af2b9542e4fbd720 /
+
 FROM ${GOLANG_IMAGE} AS golang-base
 
 #
@@ -259,6 +271,17 @@ RUN ln /etc/caddy/Caddyfile /etc/frankenphp/Caddyfile && \
 		https://github.com/mlocati/docker-php-extension-installer/releases/download/2.13.2/install-php-extensions && \
 	echo '27fa8d80bd4e22feb9ddcadff1ca40c8f3e8ea942eb2dd8f446ed1afd2f2f0ab  /usr/local/bin/install-php-extensions' | sha256sum -c && \
 	chmod +x /usr/local/bin/install-php-extensions
+
+# PHP#: the extensions beside PHP's own that link outside libraries and that framework images ship, so an app's image
+# builds none of them again on each release: the PostgreSQL drivers, gd, imagick, and redis with igbinary as its
+# serializer, which install-php-extensions installs first and builds redis against. It keeps each one's runtime
+# libraries and removes its build packages. The sources mount for this step alone, so none stays in the image.
+RUN --mount=type=bind,from=igbinary-source,target=/usr/src/igbinary,rw \
+	--mount=type=bind,from=imagick-source,target=/usr/src/imagick,rw \
+	--mount=type=bind,from=phpredis-source,target=/usr/src/phpredis,rw \
+	install-php-extensions gd pdo_pgsql pgsql /usr/src/igbinary /usr/src/imagick /usr/src/phpredis && \
+	# Remove files with non-deterministic content (embedded timestamps and mtimes) to keep image digests reproducible
+	rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache
 
 CMD ["--config", "/etc/frankenphp/Caddyfile", "--adapter", "caddyfile"]
 HEALTHCHECK CMD curl -f http://localhost:2019/metrics || exit 1

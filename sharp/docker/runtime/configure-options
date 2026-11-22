@@ -30,6 +30,18 @@ echo --enable-intl
 echo --enable-bcmath
 # PHP#: the standard library's Sharp.IO.ZipArchive runs on zip's ZipArchive, so every engine builds it
 echo --with-zip
+# PHP#: every extension of PHP's own source that links no outside library, which an app would otherwise build again on
+# each release, and MySQL's PDO driver, which runs on mysqlnd
+echo --enable-calendar
+echo --enable-exif
+echo --enable-ftp
+echo --enable-pcntl
+echo --enable-shmop
+echo --enable-sockets
+echo --enable-sysvmsg
+echo --enable-sysvsem
+echo --enable-sysvshm
+echo --with-pdo-mysql
 # --enable-mysqlnd is included here because it's harder to compile after the fact than extensions are (since it's a plugin for several extensions, not an extension in itself)
 echo --enable-mysqlnd
 # https://wiki.php.net/rfc/argon2_password_hash
