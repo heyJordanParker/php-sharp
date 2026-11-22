@@ -10,7 +10,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Added
 
-- With `MAGO_LOG=debug`, `mago analyze` and `mago compile` log how long each extension host rule took in the analysis round, slowest first, as "Host rule App\Rules\NoRawQuery::analyze took 4.21 s over 1,204 files.", then the five slowest files of the slowest rule, as "Host rule App\Rules\NoRawQuery::analyze took 1.20 s on app/Reports/Ledger.sharp.". Each round of `mago analyze --watch` logs its own. A host's worker times its rules only when `mago` logs at that level, so a round at the default level prints and costs what it did in 0.6.50.
+- With `MAGO_LOG=debug`, `mago analyze` and `mago compile` log how long each extension host rule took in the analysis round, slowest first, as "Host rule App\Rules\NoRawQuery::analyze took 4.21 s over 1,204 files.", then the five slowest files of the slowest rule, as "Host rule App\Rules\NoRawQuery::analyze took 1.20 s on app/Reports/Ledger.sharp.". A rule is each hook, provider and issue filter a host registers, as "Host rule App\Types\Models::getReturnType took 2.10 s over 640 files.". Each round of `mago analyze --watch` logs its own, and `mago lint` logs its host linter rules the same way when it ends. A host's worker times its rules only when `mago` logs at that level, so a run at the default level prints and costs what it did in 0.6.50.
 
 ### Changed
 
