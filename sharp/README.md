@@ -30,7 +30,7 @@ sharp/bin/test --census         # also check every write and comparison of a fie
 sharp/bin/test --spec           # also compile and run every code example in docs/spec.md and README.md
 sharp/bin/test --differential   # also check that php -l compiles every Zend/tests/sharp/*/*.sharp file
 sharp/bin/test --phpunit        # also run the PHP# test class in sharp/phpunit/ under PHPUnit
-sharp/bin/test --linux --upstream # run Zend/tests, ext/reflection, ext/tokenizer and ext/opcache, without opcache
+sharp/bin/test --linux --upstream # run Zend/tests but Zend/tests/sharp, ext/reflection, ext/tokenizer and ext/opcache, without opcache
 sharp/bin/test --mago           # run sharp/mago/'s workspace tests, its doc tests and mago-codex's property tests
 sharp/bin/test --mago --cargo-built # run only the doc tests and the property tests, which cargo builds
 sharp/bin/hosts --linux         # serve sharp/hosts/ from FrankenPHP, and compare with sharp/hosts/expected/

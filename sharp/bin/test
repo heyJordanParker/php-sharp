@@ -2,7 +2,8 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: sharp/bin/test [--linux] [--no-build] [--census] [--spec] [--differential] [--phpunit] [--upstream | --mago | --shard <i>/<n> | paths...]" >&2
+  echo "usage: sharp/bin/test [--linux] [--no-build] [--census] [--spec] [--differential] [--phpunit] [--shard <i>/<n> | paths...]" >&2
+  echo "       sharp/bin/test [--linux] [--no-build] --upstream" >&2
   echo "       sharp/bin/test [--linux] [--no-build] --mago [--shard <i>/<n>]" >&2
   echo "       sharp/bin/test [--linux] --mago --cargo-built" >&2
   exit 2
@@ -46,7 +47,7 @@ done
 if { $upstream || $mago; } && [[ ${#tests[@]} -gt 0 ]] || { $upstream && $mago; }; then
   usage
 fi
-if $mago && { $census || $spec || $differential || $phpunit; }; then
+if { $mago || $upstream; } && { $census || $spec || $differential || $phpunit; }; then
   usage
 fi
 if $cargo_built && { ! $mago || ! $build || [[ -n $shard ]]; }; then
@@ -301,7 +302,10 @@ fi
 proof=sharp/mago/crates/converter/tests/project.sh
 run_proof=false
 if $upstream; then
-  tests=(Zend/tests ext/reflection ext/tokenizer ext/opcache)
+  # php-src's own tests, without Zend/tests/sharp, the PHP# suite, which the slices run in every mode: in the upstream
+  # run it was 506 of 7,436 tests, every one of the slowest, and the compile of its 939 fixtures took 51 s more.
+  mapfile -t tests < <(cd "$root" && find Zend/tests ext/reflection ext/tokenizer ext/opcache -path Zend/tests/sharp -prune \
+    -o -name '*.phpt' -print | LC_ALL=C sort)
 elif [[ -n $shard ]]; then
   # The slices balance by the seconds sharp/baseline/seconds lists, from CI's slow-test summaries: a test's seconds
   # summed over the modes, and the proof's own, which hold the whole slice while it runs, so it weighs them times
@@ -357,6 +361,44 @@ if [[ "$engine_version" != "$version" || "$("$php" -n -r 'echo PHP_ZTS;')" != 1 
   exit 1
 fi
 
+export SKIP_IO_CAPTURE_TESTS=1
+export STACK_LIMIT_DEFAULTS_CHECK=1
+export RUN_RESOURCE_HEAVY_TESTS=1
+
+run_tests() {
+  local mode="$1"
+  shift
+  part "$mode"
+  run_step "$mode" "$root" "$php" run-tests.php -P -q \
+    -d opcache.jit=disable \
+    -d opcache.protect_memory=1 \
+    -j"$jobs" \
+    -g FAIL,BORK,LEAK,XLEAK \
+    --no-progress \
+    --offline \
+    --show-diff \
+    --show-slow 1000 \
+    --set-timeout 120 \
+    "$@" "${tests[@]}"
+}
+
+# The upstream tests run on the engine alone, so they need no mago and no PHP# fixtures.
+if $upstream; then
+  baseline=sharp/baseline/linux
+  results="$build_dir/upstream-results"
+  run_tests "without opcache, compared with $baseline" -W "$results"
+  awk -F '\t' -v OFS='\t' -v prefix="$root/" '
+    $1 != "PASSED" {
+      if (index($2, prefix) == 1) $2 = substr($2, length(prefix) + 1)
+      print
+    }' "$results" | LC_ALL=C sort -o "$results"
+  if ! diff -u "$root/$baseline" "$results"; then
+    echo "The upstream results differ from $baseline. Only the Architect accepts a new baseline, with: cp ${results#"$root"/} $baseline" >&2
+    failed+=("the comparison with $baseline")
+  fi
+  finish
+fi
+
 if $build; then
   part "sharp/bin/build-mago"
   "$root/sharp/bin/build-mago" --quiet
@@ -409,53 +451,17 @@ fi
 
 export TEST_MAGO_EXECUTABLE="$mago"
 
-export SKIP_IO_CAPTURE_TESTS=1
-export STACK_LIMIT_DEFAULTS_CHECK=1
-export RUN_RESOURCE_HEAVY_TESTS=1
-
-run_tests() {
-  local mode="$1"
-  shift
-  part "$mode"
-  run_step "$mode" "$root" "$php" run-tests.php -P -q \
-    -d opcache.jit=disable \
-    -d opcache.protect_memory=1 \
-    -j"$jobs" \
-    -g FAIL,BORK,LEAK,XLEAK \
-    --no-progress \
-    --offline \
-    --show-diff \
-    --show-slow 1000 \
-    --set-timeout 120 \
-    "$@" "${tests[@]}"
-}
-
-if $upstream; then
-  baseline=sharp/baseline/linux
-  results="$build_dir/upstream-results"
-  run_tests "without opcache, compared with $baseline" -W "$results"
-  awk -F '\t' -v OFS='\t' -v prefix="$root/" '
-    $1 != "PASSED" {
-      if (index($2, prefix) == 1) $2 = substr($2, length(prefix) + 1)
-      print
-    }' "$results" | LC_ALL=C sort -o "$results"
-  if ! diff -u "$root/$baseline" "$results"; then
-    echo "The upstream results differ from $baseline. Only the Architect accepts a new baseline, with: cp ${results#"$root"/} $baseline" >&2
-    failed+=("the comparison with $baseline")
-  fi
-else
-  # The PHP# suite runs in the four ways production runs the engine: without opcache, in opcache shared memory with
-  # each test twice in one process, under the function JIT, which compiles each function of a file as the file loads,
-  # and under the tracing JIT, with every hot counter at 1, so it compiles the code the tests run as soon as it runs.
-  # Each expects the output of the run without opcache. Apple silicon has no thread-safe JIT, as ext/opcache/config.m4
-  # warns, so macOS runs the first two.
-  run_tests "without opcache"
-  run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
-  if [[ $os == linux ]]; then
-    run_tests "with the function JIT" -d opcache.enable_cli=1 -d opcache.jit=function -d opcache.jit_buffer_size=32M
-    run_tests "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
-      -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
-  fi
+# The PHP# suite runs in the four ways production runs the engine: without opcache, in opcache shared memory with each
+# test twice in one process, under the function JIT, which compiles each function of a file as the file loads, and
+# under the tracing JIT, with every hot counter at 1, so it compiles the code the tests run as soon as it runs. Each
+# expects the output of the run without opcache. Apple silicon has no thread-safe JIT, as ext/opcache/config.m4 warns,
+# so macOS runs the first two.
+run_tests "without opcache"
+run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
+if [[ $os == linux ]]; then
+  run_tests "with the function JIT" -d opcache.enable_cli=1 -d opcache.jit=function -d opcache.jit_buffer_size=32M
+  run_tests "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
+    -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
 fi
 
 if $census; then

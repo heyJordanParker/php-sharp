@@ -368,8 +368,8 @@ jobs:
         with:
           end: true
   # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before, and
-  # sharp/bin/spec's self-test. Each took 155 and 54 seconds on release pull request #379's run, where LINUX (1/2), which
-  # ran the self-test after its slice, took 377 seconds, the longest suite job.
+  # sharp/bin/spec's self-test. The upstream tests leave out Zend/tests/sharp, which the LINUX slices run in every mode:
+  # with it, its fixtures' compile and the tests took 281 s of this job's 361 on run 45051337556, the slowest Linux job.
   UPSTREAM:
     needs: [CHANGES, BUILD_LINUX]
     if: ${{ !needs.CHANGES.outputs.passed }}
