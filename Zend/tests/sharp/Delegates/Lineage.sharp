@@ -1,0 +1,25 @@
+namespace App.Delegates;
+
+import Lib.Lineage.Base;
+import Lib.Lineage.Leaf;
+import Lib.Lineage.Sub;
+
+extern Base uses none;
+extern Sub uses Http;
+extern Sub.later uses any;
+
+// Delegates of the methods of a plain PHP class and its subclasses, each held to the lines of the class that declares
+// the method, as the checker holds a call.
+public static class Lineage
+{
+    static Method method(Class<Object> type, string name) => type.methods().first(method => method.name == name);
+
+    public static Function<int(Sub)> inherited() => Lineage.method(typeof(Sub), "run").createDelegate<Function<int(Sub)>>();
+
+    public static Function<int(Sub) uses Http> declared()
+        => Lineage.method(typeof(Sub), "send").createDelegate<Function<int(Sub) uses Http>>();
+
+    public static Any? anyEffect() => Lineage.method(typeof(Sub), "later").createDelegate<Function<int(Sub) uses Http>>();
+
+    public static Any? undeclared() => Lineage.method(typeof(Leaf), "own").createDelegate<Function<int(Leaf)>>();
+}

@@ -35,7 +35,7 @@ Each claim below ran on master `02c05cb5f1` in slot 3, or was read from the sour
 
 ## Decisions team-lead approved
 
-1. **`Scope.run` is a library method, and this PR builds section 29's rule for function parameters (answer 4).** `sharp/composer/library/Sharp/Scope.sharp` declares `public static T run<T>(Function<T()> body) => Internal.runScoped(body);` with `extern Internal.runScoped;`, as `Events.sharp` wraps `Internal.listen`. The whole section 29 rule holds: a function parameter whose type states no effects holds any function, each call takes on the effects of the function it passes there, and the parameter never escapes the call. The `function-effects` example passes, and its baseline entry leaves. The prelude path issue #60 deletes gains nothing.
+1. **`Scope.run` is a library method, and this PR builds section 29's rule for function parameters (answer 4).** `sharp/composer/library/Sharp/Scope.sharp` declares `public static T run<T>(Function<T()> body) => Internal.runScoped(body);` with `extern Internal.runScoped uses none;`, as `Events.sharp` wraps `Internal.listen`. The whole section 29 rule holds: a function parameter whose type states no effects holds any function, each call takes on the effects of the function it passes there, and the parameter never escapes the call. The `function-effects` example passes, and its baseline entry leaves. The prelude path issue #60 deletes gains nothing.
 2. **`Sharp\Container::scope` is deleted, and `Sharp\Internal\runScoped` replaces it,** so one call starts a scope. Its test and `modules.md` move to `Scope.run`.
 3. **A scope is a refcounted table with an ended mark, and each fiber holds its current scope** in a slot of its `zend_fiber_context`, through the fiber observers (section "How ext/sharp keeps the scope stack").
 4. **CI gains a thread-safe Linux job.** `sharp/bin/build --zts` and `sharp/bin/test --zts` build and test in `sharp/build/<os>-<arch>-zts`, beside the NTS build. A `LINUX_ZTS` job in `.github/workflows/sharp.yml` runs `sharp/bin/build --linux --zts` and `sharp/bin/test --linux --zts --opcache --repeat --passes`: every mode. Linux has a thread-safe JIT, so every `*_jit_*` test passes there. Only Apple Silicon has none, so MACOS stays NTS. `CI_PASSED` needs `LINUX_ZTS`.
@@ -148,7 +148,7 @@ namespace Sharp;
 
 import Sharp.Internal;
 
-extern Internal.runScoped;
+extern Internal.runScoped uses none;
 
 public static class Scope
 {
@@ -168,7 +168,7 @@ namespace Sharp\Internal;
 function runScoped(\Closure $body): mixed {}
 ```
 
-`extern Internal.runScoped;` declares it pure, because starting a scope reaches nothing outside the container. Its effects are the body's, which `Scope.run` takes on.
+`extern Internal.runScoped uses none;` declares it pure, because starting a scope reaches nothing outside the container. Its effects are the body's, which `Scope.run` takes on.
 
 The name of the engine function, at its one callsite, `Internal.runScoped(body)`. `Scope` and `run` are the language owner's and fixed:
 

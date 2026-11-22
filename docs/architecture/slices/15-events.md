@@ -16,7 +16,7 @@ Error: Call to undefined function Sharp\Internal\emit()
 
 **Five of section 15's seven examples pass `sharp/bin/spec` only because none of them claims a value or a throw,** so `sharp/bin/spec` never runs an `emit`. The two that fail are listed in `sharp/baseline/spec/§15/`:
 
-- `listeners`: "`JobFailed` is not an event." The harness has the plain PHP `Illuminate\Queue\Events\JobFailed` but no `extern event JobFailed;`.
+- `listeners`: "`JobFailed` is not an event." The harness has the plain PHP `Illuminate\Queue\Events\JobFailed` but no `extern event JobFailed uses none;`.
 - `scoped-listener`: "Comparisons do not chain". `Events.on<RowImported>(…)` needs a call's type arguments, which php-sharp #102 (generics, open) adds, and `Sharp.Events` has no class.
 
 **The work is mostly engine and standard library, and it reuses three finished pieces:** the emit engine on php-sharp `feat/slice-events` (`6970c355a8`, never opened as a pull request), #121's `sharp_container_build`, and the standard library's own `Module.sharp` binding.
@@ -34,7 +34,7 @@ Error: Call to undefined function Sharp\Internal\emit()
 4. **The dispatcher is a standard library service, `Sharp.Dispatcher`, which a module binds,** and the engine hands it every `emit`. The standard library binds `ImmediateDispatcher`. Corrected by team-lead after the review: `dispatch(Any emitted, List<Function<void(Any)>> listeners)` calls each `listener(emitted)`, so one closure kind serves `emit` and PSR-14. The API is drawn under "The dispatcher".
 5. **The dispatcher is one service for the whole app,** as the spec says: "An app replaces the dispatcher once at startup". Corrected by team-lead after the review, which found that resolving it from the emitting class's namespace missed every event a PHP# package in `vendor/` or plain PHP emits. `emit` resolves `Sharp.Dispatcher` from the app's top module that binds it, whoever emits, and a running test's module still replaces it. Drawn with how the top module is found under "The dispatcher".
 6. **`Events.on<T>` lowers to one engine call, and its handle is an engine object.** `Sharp\Internal\listen(string $event, \Closure $listener): \Sharp\Listening`, and `Sharp\Listening` stops the listener in its destructor. The standard library may call a `Sharp\Internal` function, and no other PHP# code may. Corrected by team-lead: `Sharp.Events` is `public static class Events`, with no modifier for effects. The spec says "`Events` is the effect of `emit`. It is the one standard effect that is not an effect class: a method has it when its body emits, and no object carries it", so #118's handling of `Events` as an effect with no class stays. `on` gets the effect `Events` by inference from its body, because `listen` is declared `extern Internal.listen uses Events;`, the way every plain PHP function's effects are declared.
-7. **The harness gains two spec files.** `sharp/harness/app/Stubs/Laravel.sharp` declares `extern event JobFailed;`, and `sharp/harness/app/Imports/RowImported.sharp` declares `public event RowImported(int row);`. Each sits at the path its own spec example writes, so `extern-event` and `standalone-event` replace them with the same text.
+7. **The harness gains two spec files.** `sharp/harness/app/Stubs/Laravel.sharp` declares `extern event JobFailed uses none;`, and `sharp/harness/app/Imports/RowImported.sharp` declares `public event RowImported(int row);`. Each sits at the path its own spec example writes, so `extern-event` and `standalone-event` replace them with the same text.
 
 ## Rulings
 
@@ -54,7 +54,7 @@ Built and tested. #118, #124 and #102 merged into master and then into this bran
 - `Sharp\Internal\listen` and `Sharp\Listening`, the engine half of `Events.on<T>`, tested from plain PHP.
 - The table's inputs and the development check (ruling 5). `mago compile` writes the table in every project with a PHP# file.
 - The container runs a module file in a symbol table of its own, which ended the tracing-JIT leak the first version of this note named as a risk.
-- The harness's `extern event JobFailed;` and `RowImported`, so `listeners` left `sharp/baseline/spec/`.
+- The harness's `extern event JobFailed uses none;` and `RowImported`, so `listeners` left `sharp/baseline/spec/`.
 - Ruling 3: no implementation of `Sharp\Dispatcher::dispatch` is held to its declaration, and `dispatch` declares `uses Events`, so a call of it has the effect `emit` has.
 - "Code without a body allows it with `uses Events`", which #118 built, now has a section 15 test.
 - Ruling 4: `Sharp\Psr\ListenerProvider` gives a PSR-14 dispatcher every listener of an event, and `sharp/composer` requires `psr/event-dispatcher`.
@@ -94,7 +94,7 @@ The old note on `feat/slice-events` was approved, and its decisions on table ord
 - **mago:** a release `mago` built from master `76d220c199` in this worktree, with `CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_LTO=off rustup run 1.97.0 cargo build --release --locked -j 2`, at `sharp/build/darwin-arm64/mago/release/mago`.
 - **engine:** `sharp/bin/build` from the same commit, PHP 8.5.11 NTS DEBUG at `sharp/build/darwin-arm64/sapi/cli/php`.
 - **examples:** `TEST_MAGO_EXECUTABLE=<that mago> <that php> sharp/bin/spec` printed "Checked 180 examples, ignored 1, and 82 fail." Its section 15 lines are quoted below.
-- **single rules:** a probe project at `~/.claude/jobs/6affb5f6/tmp/slice-events-engine/probe`, laid out as `sharp/bin/spec` lays out an example: the harness, the standard library at `vendor/heyjordanparker/php-sharp-composer/`, and `app/Probe/` with an interface, two events, an `extern event JobFailed;`, a listener class with a `Mailer` service and four listeners, a `Module.sharp` binding `Mailer`, an emitting `Register`, and one file per refusal. `mago compile` ran on it, and `run.php` ran its compiled `Register.pay` on the engine.
+- **single rules:** a probe project at `~/.claude/jobs/6affb5f6/tmp/slice-events-engine/probe`, laid out as `sharp/bin/spec` lays out an example: the harness, the standard library at `vendor/heyjordanparker/php-sharp-composer/`, and `app/Probe/` with an interface, two events, an `extern event JobFailed uses none;`, a listener class with a `Mailer` service and four listeners, a `Module.sharp` binding `Mailer`, an emitting `Register`, and one file per refusal. `mago compile` ran on it, and `run.php` ran its compiled `Register.pay` on the engine.
 - **the handle:** `~/.claude/jobs/6affb5f6/tmp/slice-events-engine/handle.php`, a destructor in a local nobody reads, on the engine without opcache, with opcache's optimizer, and with the function and tracing JIT.
 
 # Every line of section 15
@@ -121,7 +121,7 @@ The states are **works**, **refused** (the spec's code gets an error), **compile
 | **Timing:** the default dispatcher runs listeners before `emit` returns | Missing | `ImmediateDispatcher`, bound by the standard library | the standard library's `Module.sharp` |
 | **Timing:** "An app replaces the dispatcher once at startup … or not at all in tests" | Missing | a module's `Dispatcher` binding, a test module's binding | #121's module order |
 
-The probe compiled `OrderNotices`, whose `alert(JobFailed e) on JobFailed` names the plain PHP class that `app/Probe/Laravel.sharp` marks with `extern event JobFailed;`. That is the harness change `listeners` needs. The probe's `.sharp/listeners.php`:
+The probe compiled `OrderNotices`, whose `alert(JobFailed e) on JobFailed` names the plain PHP class that `app/Probe/Laravel.sharp` marks with `extern event JobFailed uses none;`. That is the harness change `listeners` needs. The probe's `.sharp/listeners.php`:
 
 ```php
 return [
@@ -412,7 +412,7 @@ php-sharp (feat/events-engine)
 │           └── tests/sharp.rs  <- the dispatcher's effects, code without a body that emits, Events.on's
 │                                  type, effect and dropped handle, the Sharp.Internal import, the Sharp namespace
 ├── sharp/harness/
-│   ├── app/Stubs/Laravel.sharp <- new: extern event JobFailed;
+│   ├── app/Stubs/Laravel.sharp <- new: extern event JobFailed uses none;
 │   ├── app/Imports/RowImported.sharp   <- new: public event RowImported(int row);
 │   ├── Psr/EventDispatcher/EventDispatcherInterface.php, ListenerProviderInterface.php
 │   │                           <- new: psr/event-dispatcher 1.0's interfaces

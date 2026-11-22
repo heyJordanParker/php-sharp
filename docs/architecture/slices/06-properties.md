@@ -69,7 +69,7 @@ Each question is about syntax or meaning. The recommendation is mine, and the bu
    - #123 builds `required` (line 257), object initializers, and the every-path check for a non-nullable get-only property, as `uninitialized-property` "`count` is get-only and never set: give `count` an initial value, or set it on every path through the constructor." This PR extends that check to `T?` and to the spec's wording. It adds no second definite-assignment mechanism.
    - If team-lead orders this PR first, it builds the every-path check on master's `artifacts.method_initialized_properties` and #123 adapts. That is the second mechanism the order above avoids.
 2. **The harness gains three files,** listed in the PR body for review:
-   - `sharp/harness/app/Stubs/Str.sharp`: `extern Str;`. `Str.slug` is pure plain PHP, and line 198's getter needs it declared. A probe with this file compiles `public string slug => Str.slug(this.name);` with no error.
+   - `sharp/harness/app/Stubs/Str.sharp`: `extern Str uses none;`. `Str.slug` is pure plain PHP, and line 198's getter needs it declared. A probe with this file compiles `public string slug => Str.slug(this.name);` with no error.
    - `sharp/harness/app/Trimmed.sharp` and `sharp/harness/app/Tracked.sharp`, the behaviors line 323 names, in the shape question 10 settles.
 3. **Static accessor bodies, static computed properties and get-only statics join this PR.** PHP has no hooks on a static property, so master refuses all three as "not supported yet". `static lazy` needs the bridge to lower every PHP# read of a static member into a hidden static method. That lowering also serves these three, which line 255's and line 256's bullets cover with no `static` exception.
 4. **Section 9's parameter limits for `via`, `willSet`, `didSet` and `lazy` move with the features.** While a feature is refused, a parameter refuses it with the same "not supported yet". Once built, a parameter gives section 9's error, "declare balance in the class body to give it via", so line 446 passes. Line 447, an accessor body on a parameter, compiles today against section 9's rule. Recommended: this PR refuses it too, with the same message, so section 9's last entry leaves.
@@ -374,7 +374,7 @@ php-sharp
 │                                                  property override, static computed and hooked properties, and
 │                                                  reflection. Named so because master's Members.sharp, which
 │                                                  class_members.inc and static_members.phpt load, holds the name
-├── sharp/harness/app/Stubs/Str.sharp           <- added: extern Str;
+├── sharp/harness/app/Stubs/Str.sharp           <- added: extern Str uses none;
 ├── sharp/harness/app/Trimmed.sharp             <- added
 ├── sharp/harness/app/Tracked.sharp             <- added
 └── sharp/baseline/spec/§6*/                    <- the nine section 6 entries leave, and §9/parameter-member-limits
@@ -415,7 +415,7 @@ Commits land in this order, each with its tests seen failing first:
 4. **`nameof`.** `property-references` passes.
 5. **`lazy` and the static read lowering of decision 3.** `lazy-property` passes.
 6. **`via`.** `property-behaviors` passes.
-7. **The example lines outside section 6:** `extern Str;` and the answers to questions 1 and 2. `field-and-property` and `initial-values` pass.
+7. **The example lines outside section 6:** `extern Str uses none;` and the answers to questions 1 and 2. `field-and-property` and `initial-values` pass.
 8. **Reflection,** to question 6's answer.
 
 Run, before the PR opens:
