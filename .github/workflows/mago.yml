@@ -122,6 +122,7 @@ jobs:
     timeout-minutes: 50
 
     permissions:
+      actions: write
       contents: read
 
     steps:
@@ -233,6 +234,12 @@ jobs:
           path: ${{ env.CARGO_TARGET_DIR }}/test-run/mago
           if-no-files-found: error
 
+      # As .github/actions/cancel-failed-run explains.
+      - &cancel-failed-run
+        name: Cancel the run, which can no longer pass
+        if: failure() && github.event_name == 'pull_request'
+        uses: ./.github/actions/cancel-failed-run
+
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -252,6 +259,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
+      actions: write
       contents: read
 
     steps:
@@ -292,6 +300,8 @@ jobs:
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/target
         run: sharp/bin/check plain-php
+
+      - *cancel-failed-run
 
       - name: Write the job's CPU-seconds and peak memory
         if: always()
