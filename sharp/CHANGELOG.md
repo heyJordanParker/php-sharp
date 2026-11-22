@@ -8,6 +8,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 - Count `missing-extern` where a baseline or a script counted `incompatible-effects` for plain PHP no `extern` line declares: that refusal has its own code now.
 
+### Added
+
+- With `MAGO_LOG=debug`, `mago analyze` and `mago compile` log how long each extension host rule took in the analysis round, slowest first, as "Host rule App\Rules\NoRawQuery::analyze took 4.21 s over 1,204 files.", then the five slowest files of the slowest rule, as "Host rule App\Rules\NoRawQuery::analyze took 1.20 s on app/Reports/Ledger.sharp.". Each round of `mago analyze --watch` logs its own. A host's worker times its rules only when `mago` logs at that level, so a round at the default level prints and costs what it did in 0.6.50.
+
 ### Changed
 
 - Plain PHP no `extern` line declares fails with its own code, `missing-extern`, spec section 29, so a project counts the lines it still has to write apart from real effect conflicts. "`Mailchimp` has no `extern` line." keeps its message and its help, where 0.6.50 reported it as `incompatible-effects`.
