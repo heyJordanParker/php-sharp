@@ -28,6 +28,12 @@ inputs:
       A jq expression over a run's jobs, as GET /actions/runs/<id>/jobs returns them, that is true when the run passed
       what the caller needs.
     required: true
+  commit:
+    description: >-
+      A commit of master whose tree to look for in place of the job's own, as a push that finishes an earlier release
+      looks for the run that built that release's images.
+    required: false
+    default: ''
 
 outputs:
   run:
@@ -45,16 +51,17 @@ runs:
         WORKFLOW: ${{ inputs.workflow }}
         EVENTS: ${{ inputs.events }}
         PASSED: ${{ inputs.passed }}
-        HEAD: ${{ github.event.pull_request.head.sha }}
+        HEAD: ${{ !inputs.commit && github.event.pull_request.head.sha || '' }}
+        COMMIT: ${{ inputs.commit || github.sha }}
       run: |
         api() { gh api "repos/$GITHUB_REPOSITORY/$1" --jq "$2"; }
-        tree=$(api "git/commits/$GITHUB_SHA" .tree.sha)
+        tree=$(api "git/commits/$COMMIT" .tree.sha)
         if [[ -n $HEAD ]]; then
           commits=$HEAD
         else
-          commits=$GITHUB_SHA
-          for head in $(api "commits/$GITHUB_SHA/pulls" '.[] | select(.base.ref == "master") | .head.sha'); do
-            if [[ $head != "$GITHUB_SHA" ]]; then
+          commits=$COMMIT
+          for head in $(api "commits/$COMMIT/pulls" '.[] | select(.base.ref == "master") | .head.sha'); do
+            if [[ $head != "$COMMIT" ]]; then
               commits+=" $head"
             fi
           done

@@ -6,8 +6,8 @@ name: Release
 # version's section.
 #
 # A release builds its binaries once, as Humble and Farley's Continuous Delivery asks. sharp.yml's RELEASE_ASSETS calls
-# this workflow only in the push to master whose version has no tag yet, and sharp.yml's RELEASE publishes exactly the
-# files it built in that run. A pull request's run never builds them: once the version moved to the start of each
+# this workflow only in the push of the release's commit while its GitHub release isn't published, and sharp.yml's
+# RELEASE publishes exactly the files it built in that run. A pull request's run never builds them: once the version moved to the start of each
 # cycle, every run on next built the profile-guided release, and run 44997846679 took 45 minutes, 16.5 of them the
 # release build alone after every check had ended. Its attestations name this workflow as their signer, which install.sh
 # and mago self-update verify, so the binaries build here and nowhere else.

@@ -7,8 +7,9 @@ set -euo pipefail
 # each check meets the platform it meets in CI. CI's jobs run the gates no other script holds through this script:
 # BUILD_LINUX the generated files, WORKFLOWS the workflows, and mago.yml's checks and plain-php theirs.
 #
-# With --release, it prints what CI's CHANGES jobs write to $GITHUB_OUTPUT: sharp/mago/Cargo.toml's version, and
-# bump: whether origin has no tag yet for that version, so the change releases it.
+# With --release, it prints what CI's CHANGES jobs write to $GITHUB_OUTPUT about sharp/mago/Cargo.toml's version: the
+# version; tagged, the commit tag v<version> names on origin, empty until sharp/bin/land creates it; missing, each part
+# of the release not published yet; and bump, whether any is, so a push to master publishes what is missing.
 usage() {
   echo "usage: sharp/bin/check [workflows | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php]..." >&2
   echo "       sharp/bin/check --release" >&2
@@ -22,27 +23,84 @@ rust="$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' "$root/sharp/mago/Cargo.toml")
 CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")"
 export CARGO_BUILD_JOBS
 
-# git ls-remote --exit-code exits 2 when origin has no such ref, and with another code when it can't ask.
-bump() {
-  local version status=0
+# A release publishes three parts, each once, so a part an earlier run left missing is what the next push to master
+# publishes, and a published one stays: assets, the GitHub release v<version> with mago's files, images, the runtime
+# image ghcr.io/heyjordanparker/php-sharp:<version> and its <version>-dev, and composer, tag v<version> of
+# heyJordanParker/php-sharp-composer and heyJordanParker/mago-sharp. Run 45033462105 published 0.6.50's GitHub release
+# and failed before its images and its Composer tags, which a check of the tag alone then counted as released. The image
+# and the mirrors are public, so their checks need no login. git ls-remote --exit-code exits 2 when a remote has no such
+# ref, and with another code when it can't ask.
+release() {
+  local version refs status=0 tagged='' missing=() published token tag code mirror
   version="$(sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q;}' "$root/sharp/mago/Cargo.toml")"
-  git -C "$root" ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null || status=$?
-  echo "version=$version"
+  # An annotated tag lists its commit on a second line, ^{}, which sorts last.
+  refs="$(git -C "$root" ls-remote --exit-code --tags origin "refs/tags/v$version" "refs/tags/v$version^{}")" || status=$?
   case "$status" in
-    0) echo "bump=false" ;;
-    2) echo "bump=true" ;;
+    0) tagged="$(awk 'END {print $1}' <<< "$refs")" ;;
+    2) ;;
     *)
       echo "git ls-remote couldn't ask origin for tag v$version: it exited $status." >&2
       exit 1
       ;;
   esac
+  if ! published="$(cd "$root" && gh release view "v$version" --json isDraft --jq '.isDraft | not' 2>&1)"; then
+    if [[ $published != *"release not found"* ]]; then
+      echo "gh couldn't read release v$version: $published" >&2
+      exit 1
+    fi
+    published=false
+  fi
+  if [[ $published != true ]]; then
+    missing+=(assets)
+  fi
+  token="$(curl -fsS 'https://ghcr.io/token?scope=repository:heyjordanparker/php-sharp:pull' | jq -r .token)"
+  for tag in "$version" "$version-dev"; do
+    code="$(curl -sS -o /dev/null -w '%{http_code}' --head -H "Authorization: Bearer $token" \
+      -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
+      "https://ghcr.io/v2/heyjordanparker/php-sharp/manifests/$tag")"
+    case "$code" in
+      200) ;;
+      404)
+        missing+=(images)
+        break
+        ;;
+      *)
+        echo "ghcr.io answered $code for image ghcr.io/heyjordanparker/php-sharp:$tag." >&2
+        exit 1
+        ;;
+    esac
+  done
+  for mirror in php-sharp-composer mago-sharp; do
+    status=0
+    git ls-remote --exit-code --tags "https://github.com/heyJordanParker/$mirror" "refs/tags/v$version" > /dev/null \
+      || status=$?
+    case "$status" in
+      0) ;;
+      2)
+        missing+=(composer)
+        break
+        ;;
+      *)
+        echo "git ls-remote couldn't ask heyJordanParker/$mirror for tag v$version: it exited $status." >&2
+        exit 1
+        ;;
+    esac
+  done
+  echo "version=$version"
+  echo "tagged=$tagged"
+  echo "missing=${missing[*]}"
+  if ((${#missing[@]} > 0)); then
+    echo "bump=true"
+  else
+    echo "bump=false"
+  fi
 }
 
 if [[ ${1:-} == --release ]]; then
   if [[ $# -ne 1 ]]; then
     usage
   fi
-  bump
+  release
   exit 0
 fi
 
