@@ -570,6 +570,25 @@ fn a_class_with_an_exported_method_is_used() {
     );
 }
 
+/// Spec sections 5 and 27: PHP runs a class's `main` when it runs the class's file as its script, which the checker
+/// never sees, so a class that declares `main` is used, and neither it nor its `main` is too wide, as an `[Export]`
+/// method's class is. Its other public members are as wide as their uses.
+#[test]
+fn a_program_class_is_used_and_neither_it_nor_its_main_is_too_wide() {
+    let import = (
+        "src/App/Console/Import.sharp",
+        "namespace App.Console;\n\npublic class Import\n{\n    public int main() => 0;\n\n    public int size() => 1;\n}\n",
+    );
+
+    assert_eq!(unused_classes(&[import]), Vec::<String>::new());
+    assert_eq!(
+        too_wide(&[import]),
+        [
+            "src/App/Console/Import.sharp 7:16 `Import.size` is public, and nothing outside `Import` uses it. | Declare it `private`."
+        ]
+    );
+}
+
 /// Spec section 5: a use from plain PHP counts, and plain PHP names the class it writes, whichever class declares the
 /// member it reaches. So a PHP# class whose only use is plain PHP's, through a constructor and a static method it
 /// inherits from a plain PHP parent, is used by each form plain PHP names it in.
@@ -25758,7 +25777,7 @@ fn a_named_constructor_of_a_generic_class_takes_the_type_arguments_of_its_new() 
             "namespace Demo;\n\npublic class Plain\n{\n    public Plain(public int count { get; }) { }\n\n    public Plain.one(int count) : this(count) { }\n}\n",
         ),
     ];
-    let shop = "namespace Demo;\n\npublic class Shop\n{\n    public Any named() => new Box.of(1);\n\n    public Any main() => new Box(1);\n\n    public Box<int> numbers() => new Box<int>.of(1);\n\n    public Box<int> texts() => new Box<string>.of(\"one\");\n\n    public Any wrong() => new Box<int>.of(\"one\");\n\n    public Any plain() => new Plain<int>.one(1);\n}\n";
+    let shop = "namespace Demo;\n\npublic class Shop\n{\n    public Any named() => new Box.of(1);\n\n    public Any direct() => new Box(1);\n\n    public Box<int> numbers() => new Box<int>.of(1);\n\n    public Box<int> texts() => new Box<string>.of(\"one\");\n\n    public Any wrong() => new Box<int>.of(\"one\");\n\n    public Any plain() => new Plain<int>.one(1);\n}\n";
 
     assert_eq!(
         messages(("src/Demo/Shop.sharp", shop), &others)[2],
@@ -36957,6 +36976,23 @@ fn only_a_machine_case_takes_final_members_and_a_value_beside_its_data() {
         refusals(ticket, &[]),
         ["5:5 semantics Case `Open` takes no `public`: only a machine's case takes `final`. | Remove `public`."]
     );
+}
+
+/// Spec section 20.2: a move named like a member that changes a collection, as a `List`'s `remove`, `clear` or
+/// `removeLast`, is a move, in a `match` arm as after `is`, since spec section 26 lets only a collection's extension
+/// take its receiver by `ref`, so a call on a case's value never changes the name that holds it.
+#[test]
+fn a_move_named_like_a_changing_collection_member_is_a_move() {
+    let slot = (
+        "src/Shop/Slot.sharp",
+        "namespace Shop;\n\npublic machine Slot\n{\n    case Empty { public Slot.OnFile assign(int id) => Slot.OnFile(id); }\n    case OnFile(int id)\n    {\n        public Slot.Empty remove() => Slot.Empty;\n        public Slot.Empty clear() => Slot.Empty;\n        public Slot.Empty removeLast() => Slot.Empty;\n    }\n    public static Slot.Empty start() => Slot.Empty;\n}\n",
+    );
+    let holder = (
+        "src/Shop/Holder.sharp",
+        "namespace Shop;\n\npublic final class Holder\n{\n    public Slot slot { get; private set; } = Slot.start();\n\n    public void release()\n    {\n        match (this.slot) {\n            Slot.Empty => {},\n            Slot.OnFile held => { this.slot = held.remove(); },\n        }\n    }\n\n    public void empty()\n    {\n        if (this.slot is Slot.OnFile held) {\n            this.slot = held.clear();\n        }\n    }\n\n    public void last()\n    {\n        if (this.slot is Slot.OnFile held) {\n            this.slot = held.removeLast();\n        }\n    }\n}\n",
+    );
+
+    assert_eq!(refusals(holder, &[slot]), Vec::<String>::new());
 }
 
 /// Spec section 20.2: a machine's graph is checked. Every case is reachable from an entry point, a case with no move

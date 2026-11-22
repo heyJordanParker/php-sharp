@@ -6,6 +6,7 @@
 
 use std::borrow::Cow;
 use std::ops::Range;
+use std::sync::Arc;
 
 use foldhash::HashSet;
 use mago_analyzer::smaller::Path;
@@ -286,7 +287,7 @@ impl<'body, 'program> Body<'body, 'program> {
     }
 
     /// `statements` in order. The statements after an `if` whose block returns run where its condition does not hold.
-    fn statements(&mut self, statements: &Sequence<'_, Statement<'_>>) {
+    pub(super) fn statements(&mut self, statements: &Sequence<'_, Statement<'_>>) {
         let outer = self.path.clone();
         for statement in statements {
             self.statement(statement);
@@ -433,15 +434,15 @@ impl<'body, 'program> Body<'body, 'program> {
                         let Some(test) = self.is_test(is) else {
                             return "default".to_owned();
                         };
-                        let then = self.under(holds, |body| body.branch(then));
-                        let otherwise = self.branch(conditional.r#else);
+                        let then = self.under(holds, |body| body.branch_of(then, expression));
+                        let otherwise = self.branch_of(conditional.r#else, expression);
 
                         return self.choose(&choice(vec![(test, then)], otherwise));
                     }
                     let condition = self.value(conditional.condition);
-                    let then = self.under(holds, |body| body.branch(then));
+                    let then = self.under(holds, |body| body.branch_of(then, expression));
                     let fails = self.path.branch(conditional.condition, false);
-                    let otherwise = self.under(fails, |body| body.branch(conditional.r#else));
+                    let otherwise = self.under(fails, |body| body.branch_of(conditional.r#else, expression));
 
                     self.choose(&Choice::If(
                         condition,
@@ -451,7 +452,7 @@ impl<'body, 'program> Body<'body, 'program> {
                 }
                 None => unreachable!("PHP# parses no `?:` with two operands, as {:?}", expression.span()),
             },
-            Expression::PatternMatch(r#match) => self.pattern_match(r#match),
+            Expression::PatternMatch(r#match) => self.pattern_match(expression, r#match),
             Expression::Call(Call::Method(call)) => self.method_call(expression, call),
             Expression::Call(Call::NullSafeMethod(call)) => self.null_safe_call(expression, call),
             Expression::Call(Call::Function(call)) => {
@@ -701,9 +702,10 @@ impl<'body, 'program> Body<'body, 'program> {
     }
 
     /// `==`, or `!=` when `negated`, of the values `lhs` and `rhs` of the types `types`, as spec section 19 compares
-    /// them, the way the bridge's [`Equality`] tells: Lean's `==` on values that hold no object, and the `==` a class
-    /// declares, or a struct gets with no code, as its `op_Equality` gives it. A nullable side is lifted: null equals
-    /// only null, and two values run that `==`. `span` is where a refusal stands.
+    /// them, the way the bridge's [`Equality`] tells: Lean's `==` on values that hold no object, the `==` a class
+    /// declares, or a struct gets with no code, as its `op_Equality` gives it, and two `List`s element by element, as
+    /// [`Body::elements_equal`] gives it. A nullable side is lifted: null equals only null, and two values run that
+    /// `==`. `span` is where a refusal stands.
     pub(crate) fn equal(
         &mut self,
         span: Span,
@@ -711,36 +713,58 @@ impl<'body, 'program> Body<'body, 'program> {
         (lhs, rhs): (&str, &str),
         negated: bool,
     ) -> String {
-        let (what, reason) = match self.checked.types().equality(types.0, types.1) {
+        let nullable = (types.0.is_nullable(), types.1.is_nullable());
+        let equal = match self.checked.types().equality(types.0, types.1) {
             Equality::Identical if negated => return format!("({lhs} != {rhs})"),
             Equality::Identical => return format!("({lhs} == {rhs})"),
             Equality::Declared(owner, name) => {
                 if !self.is_translated_class(span, owner.as_bytes()) {
                     return "default".to_owned();
                 }
-                let equal =
-                    self.lifted(owner.as_bytes(), name, (types.0.is_nullable(), types.1.is_nullable()), (lhs, rhs));
-                return if negated { format!("(!{equal})") } else { equal };
+
+                self.lifted(nullable, (lhs, rhs), |body, sides| body.operator(owner.as_bytes(), name, "==", sides))
             }
             Equality::Elements => {
-                (format!("the class operator `{}`", if negated { "!=" } else { "==" }), issues::CLASS_OPERATOR)
+                let elements = (element_type(types.0), element_type(types.1));
+
+                self.lifted(nullable, (lhs, rhs), |body, sides| body.elements_equal(span, &elements, sides))
             }
-            Equality::Numbers => ("a float".to_owned(), issues::FLOAT),
-            Equality::Tables => ("a collection".to_owned(), issues::COLLECTION),
+            Equality::Numbers => return self.unmodeled(span, "a float".to_owned(), issues::FLOAT),
+            Equality::Tables => return self.unmodeled(span, "a collection".to_owned(), issues::COLLECTION),
             Equality::Running => {
                 let operator = if negated { "!=" } else { "==" };
-                (format!("`{operator}` on values only the running code tells apart"), issues::TYPE_TEST)
+                let what = format!("`{operator}` on values only the running code tells apart");
+                return self.unmodeled(span, what, issues::TYPE_TEST);
             }
         };
 
-        self.unmodeled(span, what, reason)
+        if negated { format!("(!{equal})") } else { equal }
     }
 
-    /// `==` of `lhs` and `rhs` by the `==` `class` declares as the static method `name`, where `nullable` tells which
-    /// side may be null, as spec section 19 lifts it: null equals only null, and two values run the method.
-    fn lifted(&mut self, class: &[u8], name: &[u8], nullable: (bool, bool), (lhs, rhs): (&str, &str)) -> String {
+    /// `==` of two `List`s `lhs` and `rhs`, whose elements have the types `elements`, as spec section 19 compares them:
+    /// `Sharp.elementsEqual` of the elements' own `==`, which holds when both hold as many elements and each pair is
+    /// equal, compared in order until one is not, as the engine compares them.
+    fn elements_equal(&mut self, span: Span, elements: &(TUnion, TUnion), (lhs, rhs): (&str, &str)) -> String {
+        let (a, b) = (self.fresh(), self.fresh());
+        let element = self.nested_lines(|body| body.equal(span, (&elements.0, &elements.1), (&a, &b), false));
+        let temporary = self.fresh();
+        self.lines.push(format!("let {temporary} ← Sharp.elementsEqual (fun {a} {b} => do"));
+        self.lines.extend(indented(&element, 4));
+        self.lines.push(format!("  ) {lhs} {rhs}"));
+
+        temporary
+    }
+
+    /// `==` of `lhs` and `rhs` by `compare`, which compares two values, where `nullable` tells which side may be null,
+    /// as spec section 19 lifts it: null equals only null, and two values run `compare`.
+    fn lifted(
+        &mut self,
+        nullable: (bool, bool),
+        (lhs, rhs): (&str, &str),
+        compare: impl FnOnce(&mut Self, (&str, &str)) -> String,
+    ) -> String {
         let (held, absent) = match nullable {
-            (false, false) => return self.operator(class, name, "==", (lhs, rhs)),
+            (false, false) => return compare(self, (lhs, rhs)),
             (true, true) => (format!("({lhs}.isSome && {rhs}.isSome)"), format!("pure ({lhs}.isNone && {rhs}.isNone)")),
             (true, false) => (format!("{lhs}.isSome"), "pure false".to_owned()),
             (false, true) => (format!("{rhs}.isSome"), "pure false".to_owned()),
@@ -748,36 +772,20 @@ impl<'body, 'program> Body<'body, 'program> {
         let value =
             |side: &str, nullable: bool| if nullable { format!("({side}.getD default)") } else { side.to_owned() };
         let values = (value(lhs, nullable.0), value(rhs, nullable.1));
-        let present = self.nested_lines(|body| body.operator(class, name, "==", (&values.0, &values.1)));
+        let present = self.nested_lines(|body| compare(body, (&values.0, &values.1)));
 
         self.choose(&Choice::If(held, Box::new(Choice::Branch(present)), Box::new(Choice::Branch(vec![absent]))))
     }
 
     /// Whether the field `field`, of the declared type `r#type`, holds equal values in `a` and `b`, two values of the
     /// struct `class`, by the field's own `==`, spec section 19. An implementer of a sealed interface reads it through
-    /// the interface's accessor. A class the type names is the enum or the object it names, as the codex populates a
-    /// declared type, and a type that names one inside another, as `List<Instant>`, keeps the class operator refusal.
+    /// the interface's accessor. The type is read as the codex populates a declared type, as [`Body::populated`] reads
+    /// it.
     pub(crate) fn fields_equal(&mut self, span: Span, class: &[u8], field: &[u8], r#type: &TUnion) -> String {
-        let mut populated = Vec::new();
-        for atomic in r#type.types.iter() {
-            populated.push(match atomic {
-                TAtomic::Reference(TReference::Symbol { name, parameters: None, intersection_types: None, .. }) => {
-                    match self.checked.types().class_declaration(*name).kind {
-                        DeclarationKind::Enum { .. } => TAtomic::Object(TObject::new_enum(*name)),
-                        _ => TAtomic::Object(TObject::Named(TNamedObject::new(*name))),
-                    }
-                }
-                atomic
-                    if !atomic
-                        .get_all_child_nodes()
-                        .iter()
-                        .any(|node| matches!(node, TypeRef::Atomic(TAtomic::Reference(_)))) =>
-                {
-                    atomic.clone()
-                }
-                _ => return self.unmodeled(span, "the class operator `==`".to_owned(), issues::CLASS_OPERATOR),
-            });
-        }
+        let Some(populated) = r#type.types.iter().map(|atomic| self.populated(atomic)).collect::<Option<Vec<_>>>()
+        else {
+            return self.unmodeled(span, "the class operator `==`".to_owned(), issues::CLASS_OPERATOR);
+        };
         let r#type = TUnion::from_vec(populated);
 
         let mut values = Vec::new();
@@ -793,6 +801,34 @@ impl<'body, 'program> Body<'body, 'program> {
         }
 
         self.equal(span, (&r#type, &r#type), (&values[0], &values[1]), false)
+    }
+
+    /// `atomic`, a part of a declared type, as the codex populates it: a class it names is the enum or the object it
+    /// names, and so is each class a `List`'s elements name. None for any other type that names a class inside it.
+    fn populated(&self, atomic: &TAtomic) -> Option<TAtomic> {
+        Some(match atomic {
+            TAtomic::Reference(TReference::Symbol { name, parameters: None, intersection_types: None, .. }) => {
+                match self.checked.types().class_declaration(*name).kind {
+                    DeclarationKind::Enum { .. } => TAtomic::Object(TObject::new_enum(*name)),
+                    _ => TAtomic::Object(TObject::Named(TNamedObject::new(*name))),
+                }
+            }
+            TAtomic::Array(TArray::List(list)) if list.known_elements.is_none() => {
+                let elements = list.element_type.types.iter().map(|atomic| self.populated(atomic));
+                let mut list = list.clone();
+                list.element_type = Arc::new(TUnion::from_vec(elements.collect::<Option<Vec<_>>>()?));
+                TAtomic::Array(TArray::List(list))
+            }
+            atomic
+                if !atomic
+                    .get_all_child_nodes()
+                    .iter()
+                    .any(|node| matches!(node, TypeRef::Atomic(TAtomic::Reference(_)))) =>
+            {
+                atomic.clone()
+            }
+            _ => return None,
+        })
     }
 
     /// The call of the operator `class` declares, or gets with no code, as the static method `name` it runs as, spec
@@ -828,7 +864,7 @@ impl<'body, 'program> Body<'body, 'program> {
             Expression::Parenthesized(parenthesized) => self.exact_int(parenthesized.expression),
             Expression::Literal(Literal::Integer(integer)) => {
                 match integer.value.and_then(|value| i64::try_from(value).ok()) {
-                    Some(value) => format!("({value} : Int)"),
+                    Some(value) => format!("({value} : _root_.Int)"),
                     None => format!("{}.toInt", self.value(expression)),
                 }
             }
@@ -910,6 +946,14 @@ impl<'body, 'program> Body<'body, 'program> {
                 format!("(!{operand})")
             }
             UnaryPrefixOperator::Plus(_) => self.value(unary.operand),
+            // `(string)` of an int is its decimal digits, as `Sharp/Lean/String.lean`'s `int.text` writes them.
+            UnaryPrefixOperator::StringCast(..)
+                if self.kind(self.checked.types().expression_type(unary.operand)) == Kind::Int
+                    && !self.checked.types().expression_type(unary.operand).is_nullable() =>
+            {
+                let operand = self.value(unary.operand);
+                format!("(int.text {operand})")
+            }
             operator => {
                 let what = format!("the operator `{}`", self.source(operator.span()));
                 self.unmodeled(unary.span(), what, issues::OPERATOR)
@@ -917,10 +961,10 @@ impl<'body, 'program> Body<'body, 'program> {
         }
     }
 
-    /// A `match` in an expression gives the value of the first arm whose pattern and guard hold, and throws when none
-    /// does.
-    fn pattern_match(&mut self, r#match: &PatternMatch) -> String {
-        let Some((arms, otherwise)) = self.arms(r#match, Self::arm_value) else {
+    /// A `match` in an expression, `expression`, gives the value of the first arm whose pattern and guard hold, and
+    /// throws when none does.
+    fn pattern_match(&mut self, expression: &Expression, r#match: &PatternMatch) -> String {
+        let Some((arms, otherwise)) = self.arms(r#match, |body, arm| body.arm_value(arm, expression)) else {
             return "default".to_owned();
         };
 
@@ -960,10 +1004,10 @@ impl<'body, 'program> Body<'body, 'program> {
         Some((arms, otherwise))
     }
 
-    /// The branch of an arm of a `match` in an expression, which ends in the arm's value.
-    fn arm_value(&mut self, body: &PatternMatchArmBody) -> Branch {
+    /// The branch of an arm of `whole`, a `match` in an expression, which ends in the arm's value.
+    fn arm_value(&mut self, body: &PatternMatchArmBody, whole: &Expression) -> Branch {
         match body {
-            PatternMatchArmBody::Expression(expression) => self.branch(expression),
+            PatternMatchArmBody::Expression(expression) => self.branch_of(expression, whole),
             PatternMatchArmBody::Block(block) => {
                 unreachable!("the checker accepts a block arm only in a match statement, not {:?}", block.span())
             }
@@ -1408,7 +1452,7 @@ impl<'body, 'program> Body<'body, 'program> {
             (b"count", 0) => {
                 let list = self.value(call.object);
                 if self.exact {
-                    return self.bind(format!("int.ofInt (List.length {list} : Int)"));
+                    return self.bind(format!("int.ofInt (List.length {list} : _root_.Int)"));
                 }
 
                 format!("(int.count {list})")
@@ -1487,7 +1531,7 @@ impl<'body, 'program> Body<'body, 'program> {
 
         match (name.as_str(), arguments.as_slice()) {
             ("count", []) if self.exact => {
-                self.bind(format!("int.ofInt (List.length (Sharp.Map.entries {map}) : Int)"))
+                self.bind(format!("int.ofInt (List.length (Sharp.Map.entries {map}) : _root_.Int)"))
             }
             ("get", [key]) => self.map_get(call.object, &map, key),
             _ => {
@@ -2265,6 +2309,19 @@ impl<'body, 'program> Body<'body, 'program> {
         self.nested_lines(|body| body.value(expression))
     }
 
+    /// The statements of a branch whose value is `expression`'s, as a value of `whole`, the `?:` or `match` it is a
+    /// branch of: where `whole` may be null and `expression` never is, its value is `some` of it, so each branch gives
+    /// `whole`'s Lean type, which a branch that gives `none` needs.
+    fn branch_of(&mut self, expression: &Expression, whole: &Expression) -> Branch {
+        let types = self.checked.types();
+        let lifted = types.expression_type(whole).is_nullable() && !types.expression_type(expression).can_be_null();
+
+        self.nested_lines(|body| {
+            let value = body.value(expression);
+            if lifted { format!("(some {value})") } else { value }
+        })
+    }
+
     /// The statements `statement` translates to on its own, which a branch of an `if` holds.
     fn nested_statement(&mut self, statement: &Statement) -> Vec<String> {
         let outer = std::mem::take(&mut self.lines);
@@ -2386,8 +2443,29 @@ pub(crate) fn indented(lines: &[String], by: usize) -> impl Iterator<Item = Stri
 
 /// The `Map` members a law reads, each by its name and the arguments it takes, spec section 28: each is the function of
 /// `Sharp/Lean/Map.lean` of its name. The refusal of any other member names them.
-const MAP_MEMBERS: [(&str, usize); 6] =
-    [("count", 0), ("isEmpty", 0), ("get", 1), ("has", 1), ("keys", 0), ("values", 0)];
+const MAP_MEMBERS: [(&str, usize); 7] =
+    [("count", 0), ("isEmpty", 0), ("isNotEmpty", 0), ("get", 1), ("has", 1), ("keys", 0), ("values", 0)];
+
+/// The type of an element of a value of `list`, a `List` type: its element type joined with the type of each element
+/// it is known to hold, as a literal's are.
+fn element_type(list: &TUnion) -> TUnion {
+    let mut types: Vec<TAtomic> = Vec::new();
+    for atomic in list.types.iter() {
+        let TAtomic::Array(TArray::List(list)) = atomic else {
+            continue;
+        };
+        let known = list.known_elements.iter().flat_map(|known| known.values().map(|(_, element)| element));
+        for element in std::iter::once(list.element_type.as_ref()).chain(known) {
+            for atomic in element.types.iter().filter(|atomic| !atomic.is_never()) {
+                if !types.contains(atomic) {
+                    types.push(atomic.clone());
+                }
+            }
+        }
+    }
+
+    TUnion::from_vec(types)
+}
 
 /// Whether `class` names a PHP# collection.
 fn is_collection(class: &[u8]) -> bool {

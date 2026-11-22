@@ -7199,7 +7199,7 @@ public static class Pairs
 
 A file's extension marks it as PHP#. The engine, Composer's autoloader, editors and the checker all choose the grammar from the filename.
 
-A PHP# file has no PHP tags, so `<?php`, `<?`, `<?=` and `?>` are compile errors. Its first line is code, after the byte order mark an editor may save:
+A PHP# file has no PHP tags, so `<?php`, `<?`, `<?=` and `?>` are compile errors. Its first line is code, after the byte order mark an editor may save, or a program's `#!` line:
 
 <!-- example file-header -->
 ```csharp
@@ -7222,6 +7222,42 @@ public class StoreHelper { … }        // compile error: move StoreHelper to St
 ```
 
 Plain PHP files keep `.php` and `<?php`, and the two call each other freely. Composer's autoloader tries `.sharp` after `.php`.
+
+**A `.sharp` file whose class declares `main` runs as a program.** PHP runs it by its path, as in `php app/Console/Import.sharp data.csv`, or through its `#!` line, as in `./app/Console/Import.sharp data.csv`:
+
+<!-- example program -->
+```csharp
+#!/usr/bin/env php
+namespace App.Console;
+
+import Sharp.System.Environment;
+
+public class Import
+{
+    private Environment environment;
+
+    public Import(Environment environment)
+    {
+        this.environment = environment;
+    }
+
+    public int main()
+    {
+        if (this.environment.arguments.count() < 2) {
+            return 64;
+        }
+
+        return 0;
+    }
+}
+```
+
+- `main` is `public int main()` or `public void main()`. It takes no parameters, and any other `main` is a compile error.
+- When PHP runs the file as its script, the CLI's script, a server's script or `auto_prepend_file`, the engine builds the class through the container, as it builds a class that declares an `on` method, with no module binding, and calls `main`. Before it builds the class, the engine loads the project's Composer autoloader.
+- An `int` result is the process's exit code. A `void` `main` returns to PHP, as a web front controller that names the `.sharp` file as the server's script does, and as a prepend does.
+- A file that `include` or the autoloader loads only declares its class.
+- A `#!` line is allowed as a `.sharp` file's first line only, and is skipped. A `#!` anywhere else is a compile error.
+- The program reads its arguments from `Environment.arguments`, and exits from elsewhere with `Process.exit`.
 
 **`Position` says where code sits in its source.** PHP's magic constants `__DIR__`, `__FILE__`, `__LINE__`, `__FUNCTION__`, `__METHOD__`, `__NAMESPACE__` and `__CLASS__` are removed, along with every other `__Something__` form. `Position` is a standard-library type, imported by default (section 23). It has `file`, `directory`, `line`, `column` and `function`. `function` is the fully qualified dotted name, as in `App.Reports.logSlow`, because a short name is ambiguous across namespaces.
 
@@ -7510,10 +7546,11 @@ A law the checker cannot prove is a compile error that names it (section 27).
 - **A method may call itself, or a method of its class that calls it back, only on a smaller value:** a list's rest from a list pattern, or `n - 1` or `n + 1` towards a bound an `if`, `?:`, `&&`, `||` or `match` comparison tested. The bound is an int literal, tested with `<`, `<=`, `>` or `>=`, or another int parameter the call passes on unchanged, tested with `<` or `>`.
 - **A `for (… of …)` loop over a List, or over a Map's entries,** reaches a law when its body only adds pure int values to int locals with `+=` or `++`, each under an `if` or not, and never reads a local it adds to.
 - **A list pattern takes one rest, anywhere in it,** and each element names a value or only a type. `[...a, x, ...b]` appends the lists.
-- **A law reaches the standard library from its PHP# source, as it reaches the project's code,** so a type such as `Instant` translates from its declaration and each member a law calls, and a member that calls plain PHP is refused where the law reaches it, as the project's would be. `Math.max` and `Math.min` on ints, a List's `count()`, `map` and `filter`, and a Map's literal, `count()`, `isEmpty()`, `get`, `has`, `keys()`, `values()`, index read and loop over its entries, keep the checker's own model of what they give. A law that reaches another member of a Map is refused, naming those it reads.
+- **A law reaches the standard library from its PHP# source, as it reaches the project's code,** so a type such as `Instant` translates from its declaration and each member a law calls, and a member that calls plain PHP is refused where the law reaches it, as the project's would be. `Math.max` and `Math.min` on ints, a List's `count()`, `map` and `filter`, and a Map's literal, `count()`, `isEmpty()`, `isNotEmpty()`, `get`, `has`, `keys()`, `values()`, index read and loop over its entries, keep the checker's own model of what they give, and so does `(string)` of an int, its decimal digits. `Instant.toString()` writes its UTC text in PHP# with no plain PHP, so a law reaches the text it gives. A law that reaches another member of a Map is refused, naming those it reads.
 - **`<`, `<=`, `>`, `>=` and `<=>` on two values of one class run the class's own `operator <=>`,** so a law that orders two `Instant`s proves through `Instant`'s.
-- **`==` and `!=` on two values of a struct that declares no `operator ==` compare each field with that field's own `==`, and on two values of a class that declares `operator ==` run it,** so a law that compares two `Instant`s proves. With a nullable side they compare as section 19 lifts them: null equals only null, and two values run the class's `==`, so `stamp.at == at` on an `Instant?` and an `Instant` proves, and so does `==` on two structs with an `Instant?` field.
+- **`==` and `!=` on two values of a struct that declares no `operator ==` compare each field with that field's own `==`, and on two values of a class that declares `operator ==` run it,** so a law that compares two `Instant`s proves. On two Lists they compare as many elements on each side, and each pair by the element's own `==`, so `marks == marks` on a `List<Mark>` proves, and so does `==` on two structs with a `List<Mark>` field. With a nullable side they compare as section 19 lifts them: null equals only null, and two values run the class's `==`, so `stamp.at == at` on an `Instant?` and an `Instant` proves, and so does `==` on two structs with an `Instant?` field.
 - **A value of a class holds the fields of every PHP# class above it,** so a law reads a field, calls a method and runs `new` through `: super(…)` with what a PHP# parent declares, at any depth. The first plain PHP class above it, and each class above that, is plain PHP: a law carries the value and takes it as a parameter, and a read of a member such a class declares, or a `new` that runs its constructor, is refused where the law reaches it.
+- **A constructor whose body only checks its arguments and throws, as `Instant`'s `if (nanosecond < 0 || nanosecond > 999_999_999) { throw new ValueError(…); }` does, reaches a law, and its checks are a precondition of the value,** so `new Instant(s, n).nanosecond <= 999_999_999` proves, as a throw breaks no law. A constructor body that does anything else is refused where the law reaches it.
 - **Each refusal names what to write instead,** as these do:
 
 ```text

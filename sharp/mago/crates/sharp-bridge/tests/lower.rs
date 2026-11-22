@@ -15676,9 +15676,9 @@ fn a_generic_call_on_a_value_of_a_type_parameter_carries_its_type_arguments() {
 }
 
 /// A test of a class with type arguments or of a type parameter, in `is`, `as` and a `match` arm, and `typeof` of a type
-/// parameter, read the type arguments while the code runs: a `SHARP_IS_TYPE` of the value and the type text, and a
-/// `SHARP_TYPE_OF` of the type text, written as `new` writes its type arguments. None runs as `instanceof` a class named
-/// for a type parameter, which no value is.
+/// parameter, read the type arguments while the code runs: a `SHARP_IS_TYPE` of the value and the type text, which binds
+/// the local a `match` arm tests to itself, and a `SHARP_TYPE_OF` of the type text, written as `new` writes its type
+/// arguments. None runs as `instanceof` a class named for a type parameter, which no value is.
 #[test]
 fn a_test_and_typeof_of_a_type_with_type_arguments_read_them_while_the_code_runs() {
     let entities = (
@@ -15724,7 +15724,7 @@ fn a_test_and_typeof_of_a_type_with_type_arguments_read_them_while_the_code_runs
     );
     assert_eq!(
         lowered.body_of("arm"),
-        "STMT_LIST\n  RETURN\n    MATCH\n      ZVAL true\n      MATCH_ARM_LIST\n        MATCH_ARM\n          EXPR_LIST\n            SHARP_IS_TYPE\n              VAR\n                ZVAL \"value\"\n              ZVAL \"#0\"\n          ZVAL 1\n        MATCH_ARM\n          null\n          ZVAL 0\n"
+        "STMT_LIST\n  RETURN\n    MATCH\n      ZVAL true\n      MATCH_ARM_LIST\n        MATCH_ARM\n          EXPR_LIST\n            SHARP_IS_TYPE\n              ASSIGN\n                VAR\n                  ZVAL \"value\"\n                VAR\n                  ZVAL \"value\"\n              ZVAL \"#0\"\n          ZVAL 1\n        MATCH_ARM\n          null\n          ZVAL 0\n"
     );
     assert_eq!(lowered.body_of("kind"), "STMT_LIST\n  RETURN\n    SHARP_TYPE_OF\n      ZVAL \"#0\"\n");
 }
@@ -30562,7 +30562,7 @@ fn a_match_on_a_list_whose_arms_handle_every_length_lowers_with_no_default() {
 }
 
 /// ```php
-/// $a = $value is List<Any?> && \count($value) === 1 && \is_int($one = $value[0]);
+/// $a = ($value = $value) is List<Any?> && \count($value) === 1 && \is_int($one = $value[0]);
 /// ```
 ///
 /// A value that may be a list or anything else is tested with the engine's test of `List<Any?>` first, where a `List`
@@ -30579,8 +30579,11 @@ fn a_list_pattern_on_any_value_tests_it_is_a_list_first() {
                 AND
                   AND
                     SHARP_IS_TYPE
-                      VAR
-                        ZVAL "value"
+                      ASSIGN
+                        VAR
+                          ZVAL "value"
+                        VAR
+                          ZVAL "value"
                       ZVAL "List<Any?>"
                     BINARY_OP [16]
                       CALL

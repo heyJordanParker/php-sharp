@@ -111,6 +111,7 @@ fn compile_writes_each_accepted_file_into_the_sharp_folder_at_its_source_path() 
         files_under(&root.join(".sharp")),
         [
             Path::new("app/Order.sharpc"),
+            Path::new("autoload.php"),
             Path::new("compiled.bin"),
             Path::new("inputs.json"),
             Path::new("listeners.php"),
@@ -128,10 +129,10 @@ fn compile_writes_each_accepted_file_into_the_sharp_folder_at_its_source_path() 
     assert!(printed(&output).contains("Compiled 2 PHP# files into .sharp/."), "{}", printed(&output));
 }
 
-/// Spec section 27: `.sharp/preload.php`, which `opcache.preload` names, requires the workspace's Composer autoloader
-/// and then each accepted source that declares a type, the package's too, in path order. A refused source, one that
-/// declares no type, as a module's file, and a test in an `autoload-dev` folder stay out, so production never preloads
-/// a test.
+/// Spec section 27: `.sharp/preload.php`, which `opcache.preload` names, requires the workspace's Composer autoloader,
+/// through the `.sharp/autoload.php` a program loads too, and then each accepted source that declares a type, the
+/// package's too, in path order. A refused source, one that declares no type, as a module's file, and a test in an
+/// `autoload-dev` folder stay out, so production never preloads a test.
 #[test]
 fn compile_writes_a_preload_script_that_requires_the_autoloader_and_every_accepted_type() {
     let directory = project(ORDER, MONEY);
@@ -156,7 +157,11 @@ fn compile_writes_a_preload_script_that_requires_the_autoloader_and_every_accept
     assert!(compiled(root, "tests/Shop/CheckoutTest.sharp").exists());
     assert_eq!(
         read(root, ".sharp/preload.php"),
-        "<?php\n\n// mago compile writes this file. It rewrites it on every compile.\n\nrequire_once __DIR__ . '/../vendor/autoload.php';\nrequire_once __DIR__ . '/../app/Order.sharp';\nrequire_once __DIR__ . '/../vendor/acme/money/src/Money.sharp';\n"
+        "<?php\n\n// mago compile writes this file. It rewrites it on every compile.\n\nrequire_once __DIR__ . '/autoload.php';\nrequire_once __DIR__ . '/../app/Order.sharp';\nrequire_once __DIR__ . '/../vendor/acme/money/src/Money.sharp';\n"
+    );
+    assert_eq!(
+        read(root, ".sharp/autoload.php"),
+        "<?php\n\n// mago compile writes this file, the project's Composer autoloader. It rewrites it on every compile.\n\nrequire_once __DIR__ . '/../vendor/autoload.php';\n"
     );
 }
 
@@ -202,7 +207,7 @@ fn compile_writes_a_preload_script_that_loads_what_the_anonymous_classes_it_load
 
     assert_eq!(
         read(root, ".sharp/preload.php"),
-        "<?php\n\n// mago compile writes this file. It rewrites it on every compile.\n\nrequire_once __DIR__ . '/../vendor/autoload.php';\nrequire_once __DIR__ . '/../app/Order.sharp';\nrequire_once __DIR__ . '/../vendor/acme/money/src/Money.sharp';\ninterface_exists('Acme\\\\Model\\\\Contract');\ntrait_exists('Acme\\\\Model\\\\Reflects');\n"
+        "<?php\n\n// mago compile writes this file. It rewrites it on every compile.\n\nrequire_once __DIR__ . '/autoload.php';\nrequire_once __DIR__ . '/../app/Order.sharp';\nrequire_once __DIR__ . '/../vendor/acme/money/src/Money.sharp';\ninterface_exists('Acme\\\\Model\\\\Contract');\ntrait_exists('Acme\\\\Model\\\\Reflects');\n"
     );
 }
 
@@ -2019,6 +2024,7 @@ fn compile_deletes_the_compiled_file_of_a_renamed_or_removed_source() {
     assert_eq!(
         files_under(&root.join(".sharp")),
         [
+            Path::new("autoload.php"),
             Path::new("compiled.bin"),
             Path::new("inputs.json"),
             Path::new("listeners.php"),
@@ -2101,6 +2107,7 @@ fn compile_reports_a_link_to_a_file_outside_the_project_and_writes_no_compiled_f
         files_under(&root.join(".sharp")),
         [
             Path::new("app/Order.sharpc"),
+            Path::new("autoload.php"),
             Path::new("compiled.bin"),
             Path::new("inputs.json"),
             Path::new("listeners.php"),
@@ -3453,6 +3460,30 @@ fn compile_refuses_a_law_an_edit_of_an_operator_it_applies_breaks() {
     assert!(!compiled(root, "app/Shared/Till.sharp").exists());
 }
 
+/// Spec sections 19 and 28: `==` on two Lists runs the elements' `operator ==`, so a law reaches it as it reaches an
+/// operator it applies, and an edit of that operator's body proves again a law in a file that only compares Lists.
+#[test]
+fn compile_refuses_a_law_an_edit_of_the_operator_its_lists_compare_by_breaks() {
+    let shape = "namespace App.Shared;\n\npublic final class Shape\n{\n    public Shape(public int amount { get; }) { }\n\n    public static bool operator ==(Shape a, Shape b) => a.amount == b.amount;\n\n    public int hash() => this.amount;\n}\n";
+    let till = "namespace App.Shared;\n\npublic final class Till\n{\n    law sameListSameAmount(Shape a, Shape b) => !([a] == [b]) || a.amount == b.amount;\n}\n";
+    let directory = lawful_project(&[("app/Shared/Shape.sharp", shape), ("app/Shared/Till.sharp", till)]);
+    let root = directory.path();
+    compile_succeeds(root);
+    assert!(compiled(root, "app/Shared/Till.sharp").exists());
+
+    write(root, "app/Shared/Shape.sharp", &shape.replace("=> a.amount == b.amount;", "=> true;"));
+    let output = compile(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output)
+            .contains("app/Shared/Till.sharp:5:5: error[law-unproven]: law sameListSameAmount is not proven\n"),
+        "{}",
+        printed(&output)
+    );
+    assert!(!compiled(root, "app/Shared/Till.sharp").exists());
+}
+
 /// Spec section 10: a struct states a law as a class does. Mago proves it, and refuses it once a changed method breaks
 /// it.
 #[test]
@@ -3882,6 +3913,7 @@ fn compile_deletes_the_lean_package_once_no_law_remains() {
         files_under(&root.join(".sharp")),
         [
             Path::new("app/Order.sharpc"),
+            Path::new("autoload.php"),
             Path::new("compiled.bin"),
             Path::new("listeners.php"),
             Path::new("preload.php"),
@@ -4725,6 +4757,55 @@ fn compile_proves_a_law_that_orders_two_instants_through_their_own_comparison() 
     );
 }
 
+/// `App.Shared.Stamp`, whose laws build an `Instant`: one reads what it built, and one holds only because the
+/// constructor throws for a nanosecond outside its range.
+const STAMP: &str = "namespace App.Shared;\n\nimport Sharp.Time.Instant;\n\npublic final class Stamp\n{\n    law builds(int unused) => new Instant(1, 0).epochSeconds == 1;\n    law aBuiltNanosecondIsInRange(int s, int n) => new Instant(s, n).nanosecond <= 999_999_999;\n}\n";
+
+/// `App.Shared.Deadline`, a machine whose law orders two `Instant`s, one of them a parameter named `until`.
+const DEADLINE: &str = "namespace App.Shared;\n\nimport Sharp.Time.Instant;\n\npublic machine Deadline\n{\n    case Open(Instant until)\n    {\n        public Deadline.Closed close() => Deadline.Closed;\n    }\n\n    final case Closed;\n\n    public static Deadline.Open open(Instant until) => Deadline.Open(until);\n\n    law laterIsLater(Instant until, Instant now) when now >= until => !(now < until);\n}\n";
+
+/// `App.Shared.SetupStatus`, a machine whose install expires 15 minutes after it starts, through `Instant.plus`.
+const SETUP_STATUS: &str = "namespace App.Shared;\n\nimport Sharp.Time.Duration;\nimport Sharp.Time.Instant;\n\npublic machine SetupStatus\n{\n    case Installing(Instant startedAt)\n    {\n        public SetupStatus.Ready finish() => SetupStatus.Ready;\n    }\n\n    final case Ready;\n\n    public static SetupStatus.Installing start(Instant at) => SetupStatus.Installing(at);\n\n    public Instant? expiresAt() => this is SetupStatus.Installing i ? i.startedAt.plus(Duration.ofMinutes(15)) : null;\n\n    law anInstallExpiresAfterItsWindow(Instant at) => SetupStatus.Installing(at).expiresAt() == at.plus(Duration.ofMinutes(15));\n}\n";
+
+/// Spec section 28: `Instant.toString()` writes its UTC text in PHP#, with no plain PHP and no zone's rules, so a law
+/// reaches the text it gives and is refused only as not proven, never as reaching state or plain PHP.
+#[test]
+fn a_law_formats_an_instant_as_its_utc_text() {
+    let directory = library_project(&[(
+        "app/Shared/Stamp.sharp",
+        "namespace App.Shared;\n\nimport Sharp.Time.Instant;\n\npublic final class Stamp\n{\n    law formats(int s, int n) => new Instant(s, n).toString() != \"\";\n}\n",
+    )]);
+
+    let output = compile(directory.path());
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains("app/Shared/Stamp.sharp:7:5: error[law-unproven]: law formats is not proven\n"),
+        "{}",
+        printed(&output)
+    );
+    assert!(printed(&output).contains("error: found 1 issues"), "{}", printed(&output));
+}
+
+/// Spec section 28: a constructor whose body only checks its arguments and throws is a precondition of the value it
+/// builds, so a law builds an `Instant`, relies on its nanosecond's range, orders two, and moves one with `plus`.
+#[test]
+fn a_law_builds_orders_and_moves_an_instant_through_its_constructor_s_checks() {
+    let directory = library_project(&[
+        ("app/Shared/Stamp.sharp", STAMP),
+        ("app/Shared/Deadline.sharp", DEADLINE),
+        ("app/Shared/SetupStatus.sharp", SETUP_STATUS),
+    ]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    for file in ["app/Shared/Stamp.sharp", "app/Shared/Deadline.sharp", "app/Shared/SetupStatus.sharp"] {
+        assert!(compiled(root, file).exists(), "{file}");
+    }
+}
+
 /// Spec section 19: `<` on two values of a class that declares no `<=>` runs the one the sealed interface it implements
 /// declares, as the checker chose it. A false order is not proven.
 #[test]
@@ -4816,14 +4897,20 @@ fn compile_proves_a_law_whose_calls_leave_out_defaulted_arguments() {
     }
 }
 
-/// Spec section 19: a struct with a field whose `==` a law can't read, as a `List` of a class's values, keeps the class
-/// operator refusal for the `==` it gets with no code.
+/// Spec sections 19 and 28: the `==` a struct gets with no code compares a field that is a `List` of a class's values
+/// element by element, by the class's own `==`, so a law that a struct equals itself proves.
 #[test]
-fn a_law_comparing_structs_whose_field_has_no_equality_a_law_reads_is_refused() {
-    assert_unmodeled(
+fn a_law_comparing_structs_whose_field_is_a_list_of_a_class_s_values_proves() {
+    let directory = library_project(&[(
+        "app/Shared/Shape.sharp",
         "namespace App.Shared;\n\nimport Sharp.Time.Instant;\n\npublic struct Shape\n{\n    public Shape(public List<Instant> closedAt { get; }) { }\n\n    law same(Shape shape) => shape == shape;\n}\n",
-        "Law same reaches the class operator `==` in Shape.operator ==. Compare the values the objects hold, such as their properties.",
-    );
+    )]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Shared/Shape.sharp").exists());
 }
 
 /// Spec section 28: `==` and `!=` with a nullable value of a class run as spec section 19 lifts them: null equals only
@@ -5775,14 +5862,39 @@ fn a_law_testing_the_identity_of_objects_is_refused() {
     );
 }
 
-/// `==` on two Lists runs the elements' class operator `==` on each pair, as the bridge lowers it, so a law over it is
-/// refused: Lean's own `==` on Lists would compare every value the objects hold and prove this law, which is false
-/// when two amounts match and the currencies differ.
+/// Spec section 19: `==` on two Lists runs the elements' class operator `==` on each pair, as the bridge lowers it, so
+/// a law that two equal lists hold equal amounts proves, and one that they hold equal currencies is not proven, since
+/// two amounts match when the currencies differ. Lean's own `==` on Lists would compare every value the objects hold.
 #[test]
-fn a_law_comparing_lists_of_objects_a_class_operator_compares_is_refused() {
-    assert_unmodeled(
-        "namespace App.Shared;\n\npublic class Shape\n{\n    public Shape(public int amount { get; }, public string currency { get; }) { }\n    public static bool operator ==(Shape a, Shape b) => a.amount == b.amount;\n    public int hash() => this.amount;\n\n    law sameListSameCurrency(Shape a, Shape b) => !([a] == [b]) || a.currency == b.currency;\n}\n",
-        "Law sameListSameCurrency reaches the class operator `==` in Shape.sameListSameCurrency. Compare the values the objects hold, such as their properties.",
+fn a_law_comparing_lists_of_objects_runs_the_class_operator_on_each_pair() {
+    let shape = |law: &str| {
+        format!(
+            "namespace App.Shared;\n\npublic class Shape\n{{\n    public Shape(public int amount {{ get; }}, public string currency {{ get; }}) {{ }}\n    public static bool operator ==(Shape a, Shape b) => a.amount == b.amount;\n    public int hash() => this.amount;\n\n    {law}\n}}\n"
+        )
+    };
+    let directory = library_project(&[(
+        "app/Shared/Shape.sharp",
+        &shape("law sameListSameAmount(Shape a, Shape b) => !([a] == [b]) || a.amount == b.amount;"),
+    )]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Shared/Shape.sharp").exists());
+
+    let directory = library_project(&[(
+        "app/Shared/Shape.sharp",
+        &shape("law sameListSameCurrency(Shape a, Shape b) => !([a] == [b]) || a.currency == b.currency;"),
+    )]);
+
+    let output = compile(directory.path());
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains("error[law-unproven]: law sameListSameCurrency is not proven\n"),
+        "{}",
+        printed(&output)
     );
 }
 
@@ -5816,7 +5928,7 @@ fn a_law_reaching_a_member_lean_reserves_is_refused() {
 fn a_law_reading_a_map_member_it_has_no_model_of_is_refused_naming_the_members_it_reads() {
     assert_unmodeled(
         "namespace App.Shared;\n\npublic class Shape\n{\n    law sized(Map<string, int> items) => items.toList().count() == items.count();\n}\n",
-        "Law sized reaches the Map method toList in Shape.sized. Read a Map with `count()`, `isEmpty()`, `get`, `has`, `keys()`, `values()`, an index or a loop over its entries.",
+        "Law sized reaches the Map method toList in Shape.sized. Read a Map with `count()`, `isEmpty()`, `isNotEmpty()`, `get`, `has`, `keys()`, `values()`, an index or a loop over its entries.",
     );
 }
 
@@ -5889,17 +6001,25 @@ const MARK: &str = "namespace App.Runs;\n\npublic struct Mark\n{\n    public Mar
 /// `App.Runs.Cursor`, a struct that holds a `Map` beside an `int?` and a `List<Mark>`.
 const CURSOR: &str = "namespace App.Runs;\n\npublic struct Cursor\n{\n    public Cursor(public int? step { get; }, public Map<string, int> arguments { get; }, public List<Mark> marks { get; }) { }\n}\n";
 
-/// `App.Runs.RunStatus`, whose cases hold a `Cursor`, with laws that build one with `[:]`, take one as a parameter and
-/// read its other properties, and ask its `Map` `isEmpty()`.
-const RUN_STATUS: &str = "namespace App.Runs;\n\npublic machine RunStatus\n{\n    case Running(Cursor cursor, int position)\n    {\n        public RunStatus.Waiting wait() => RunStatus.Waiting(this.cursor, this.position);\n\n        public RunStatus.Running restart(int step) => RunStatus.Running(new Cursor(step, [:], this.cursor.marks), this.position);\n    }\n\n    final case Waiting(Cursor cursor, int position);\n\n    public static RunStatus.Running start() => RunStatus.Running(new Cursor(null, [:], []), 0);\n\n    law waitingKeepsThePosition() => RunStatus.start().wait().position == 0;\n    law aFreshCursorHasNoArguments() => new Cursor(null, [:], []).arguments.isEmpty();\n    law aStepIsItsOwn(Cursor cursor) => cursor.step is int s ? s == s : cursor.marks.count() >= 0;\n    law restartingKeepsThePosition(RunStatus.Running r, int step) => r.restart(step).position == r.position;\n    law restartingSetsTheStep(RunStatus.Running r, int step) => r.restart(step).cursor.step == step;\n}\n";
+/// `App.Runs.Trail`, a struct whose one field is a `List<Mark>`, so its `==` compares the lists.
+const TRAIL: &str =
+    "namespace App.Runs;\n\npublic struct Trail\n{\n    public Trail(public List<Mark> marks { get; }) { }\n}\n";
 
-/// Spec sections 12 and 28: a value that holds a `Map`, built with `[:]` or taken as a parameter, translates to the
-/// model, so a law reads its other properties, and its `Map`'s `isEmpty()`.
+/// `App.Runs.RunStatus`, whose cases hold a `Cursor`, with laws that build one with `[:]`, take one as a parameter and
+/// read its other properties, ask its `Map` `isEmpty()` and `isNotEmpty()`, and compare a `List<Mark>`, and a `Trail`
+/// that holds one, with `==`.
+const RUN_STATUS: &str = "namespace App.Runs;\n\npublic machine RunStatus\n{\n    case Running(Cursor cursor, int position)\n    {\n        public RunStatus.Waiting wait() => RunStatus.Waiting(this.cursor, this.position);\n\n        public RunStatus.Running restart(int step) => RunStatus.Running(new Cursor(step, [:], this.cursor.marks), this.position);\n    }\n\n    final case Waiting(Cursor cursor, int position);\n\n    public static RunStatus.Running start() => RunStatus.Running(new Cursor(null, [:], []), 0);\n\n    law waitingKeepsThePosition() => RunStatus.start().wait().position == 0;\n    law aFreshCursorHasNoArguments() => new Cursor(null, [:], []).arguments.isEmpty();\n    law aStepGivesNoArguments(int step) => !new Cursor(step, [:], []).arguments.isNotEmpty();\n    law marksCompare(List<Mark> marks) => marks == marks;\n    law trailsCompare(Trail trail) => trail == trail;\n    law aStepIsItsOwn(Cursor cursor) => cursor.step is int s ? s == s : cursor.marks.count() >= 0;\n    law restartingKeepsThePosition(RunStatus.Running r, int step) => r.restart(step).position == r.position;\n    law restartingSetsTheStep(RunStatus.Running r, int step) => r.restart(step).cursor.step == step;\n}\n";
+
+/// Spec sections 12, 19 and 28: a value that holds a `Map`, built with `[:]` or taken as a parameter, translates to the
+/// model, so a law reads its other properties, and its `Map`'s `isEmpty()` and `isNotEmpty()`. Two `List`s are `==`
+/// when they hold as many elements and each pair is, by the element's own `==`, and so are two structs whose field is
+/// a `List`.
 #[test]
 fn a_law_builds_takes_and_reads_a_struct_that_holds_a_map() {
     let directory = library_project(&[
         ("app/Runs/Mark.sharp", MARK),
         ("app/Runs/Cursor.sharp", CURSOR),
+        ("app/Runs/Trail.sharp", TRAIL),
         ("app/Runs/RunStatus.sharp", RUN_STATUS),
     ]);
     let root = directory.path();
@@ -7018,7 +7138,17 @@ fn a_law_reading_what_a_plain_php_parent_declares_is_refused_where_it_reads_it()
 fn a_law_reaching_a_named_constructor_is_refused() {
     assert_unmodeled(
         "namespace App.Shared;\n\npublic class Shape\n{\n    public Shape(public int sides { get; }) { }\n    public Shape.triangle() : this(3) { }\n\n    law threeSides(int unused) => new Shape.triangle().sides == 3;\n}\n",
-        "Law threeSides reaches the named constructor Shape.triangle in Shape.threeSides. Write the constructor with promoted properties and no body, and compute the values in a static method that calls `new`.",
+        "Law threeSides reaches the named constructor Shape.triangle in Shape.threeSides. Write the constructor with promoted properties and a body that only checks its arguments and throws, and compute the values in a static method that calls `new`.",
+    );
+}
+
+/// Spec section 28: a constructor body that does more than check its arguments and throw is refused, as one that
+/// declares a local before its check.
+#[test]
+fn a_law_reaching_a_constructor_body_that_does_more_than_check_and_throw_is_refused() {
+    assert_unmodeled(
+        "namespace App.Shared;\n\nimport ValueError;\n\npublic class Shape\n{\n    public Shape(public int sides { get; })\n    {\n        const least = 3;\n        if (sides < least) {\n            throw new ValueError(\"A shape has 3 sides or more.\");\n        }\n    }\n\n    law threeSides(int unused) => new Shape(3).sides == 3;\n}\n",
+        "Law threeSides reaches the body of the constructor of Shape in new Shape. Write the constructor with promoted properties and a body that only checks its arguments and throws, and compute the values in a static method that calls `new`.",
     );
 }
 

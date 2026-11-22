@@ -1,0 +1,66 @@
+namespace TypeTests;
+
+public static class Narrowed
+{
+    public static string keys(Any? value) => value is Map<string, int> ? value.keys().join(",") : "none";
+
+    public static string either(Any? value)
+    {
+        if (value is Map<string, int>) {
+            return `map ${value.keys().join(",")}`;
+        } else if (value is List<string>) {
+            return `list of ${value.count()}`;
+        }
+
+        return "neither";
+    }
+
+    public static bool holdsTwo(Any? value) => value is Set<int> ? value.contains(2) : false;
+
+    public static bool onlyA(Any? value) => value is Map<string, int> && value.keys().join(",") == "a";
+
+    public static List<bool> both(Any? value) => [value is Map<string, int>, value is List<int>];
+
+    public static bool missing(Any? value) => value is not Map<string, int> || value.count() == 0;
+
+    public static string guarded(Any? value)
+    {
+        if (value is not Map<string, int>) {
+            return "none";
+        }
+
+        return value.keys().join(",");
+    }
+
+    public static int counted(Any? value)
+    {
+        if (value is not List<int> || value.count() == 0) {
+            return 0;
+        }
+
+        return value.count();
+    }
+
+    public static string keyed(Any? value)
+    {
+        if (value is not Map<string, int> || value.count() == 0) {
+            return "empty";
+        }
+
+        return value.keys().join(",");
+    }
+
+    public static string matched(Any? value) => match (value) {
+        Map<string, int> => value.keys().join(","),
+        default => "none",
+    };
+
+    public static Any? grown(Any? value)
+    {
+        if (value is List<int>) {
+            value.add(2);
+        }
+
+        return value;
+    }
+}

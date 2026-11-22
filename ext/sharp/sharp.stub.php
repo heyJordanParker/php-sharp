@@ -201,6 +201,10 @@ function startTest(string $class): void {}
 
 function endTest(): void {}
 
+function startProgram(): void {}
+
+function runProgram(string $class): void {}
+
 function runScoped(\Closure $body): mixed {}
 
 function building(object $object): bool {}

@@ -37,6 +37,7 @@ use mago_codex::ttype::takes_array;
 use mago_codex::ttype::takes_bytes;
 use mago_codex::ttype::takes_int_key_as_string;
 use mago_codex::ttype::union::TUnion;
+use mago_names::PROGRAM_ENTRY;
 use mago_names::ResolvedNames;
 use mago_names::binding::Binding;
 use mago_names::binding::LocalKind;
@@ -383,6 +384,13 @@ pub fn lower(checked: &CheckedProgram<'_>) -> Unit {
     Lowering::new(&lines, checked.names(), checked.types()).program(checked)
 }
 
+/// Whether `class` declares `main`, so its file runs as a program, spec section 27.
+fn runs_as_program(class: &Class) -> bool {
+    class.members.iter().any(
+        |member| matches!(member, ClassLikeMember::Method(method) if method.name.value == PROGRAM_ENTRY.as_bytes()),
+    )
+}
+
 /// The offset each line starts at, counted as the Zend scanner counts: `\n`, `\r\n` and a lone `\r` each end a line.
 struct Lines(Vec<u32>);
 
@@ -525,6 +533,12 @@ struct Lowering<'lowering, 'arena> {
     tested_links: Vec<Span>,
     /// The expression of the expression statement being lowered, whose value nothing reads.
     discarded: Option<Span>,
+    /// Whether the expression lowered next is one whose match narrows the reads after it, as [`Self::condition`]
+    /// lowers it: the condition of an `if`, a `while`, a `? :` or a `match` arm, the left side of `&&` and of `||`, and
+    /// inside one of those its parentheses, its pattern form, the operand of its `!` and both sides of its `&&` and its
+    /// `||`.
+    /// [`Self::arriving`] takes it, so no other expression inside it sees it.
+    narrowing: bool,
     /// The nodes [`Self::picked_step`] made, which an expression statement runs as one statement for each step.
     picked_steps: HashSet<u32>,
     /// The declaration offsets of the locals a lambda captures by reference: those code writes.
@@ -595,6 +609,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
             bound_sides: Vec::new(),
             tested_links: Vec::new(),
             discarded: None,
+            narrowing: false,
             picked_steps: HashSet::default(),
             by_reference: HashSet::default(),
             loops: Vec::new(),
@@ -711,7 +726,9 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
             // run time. A module's laws are checked and never run. A module's bindings are the table the file returns
             // last, in `program`.
             Statement::Extern(r#extern) => statements.extend(self.extern_attributes(r#extern)),
-            Statement::Use(_) | Statement::Module(_) => {}
+            // The checker keeps a `#!` line to the file's first line, which only a shell reads.
+            Statement::Use(_) | Statement::Module(_) | Statement::Inline(_) => {}
+            Statement::Class(class) if runs_as_program(class) => self.program_class(class, statements),
             Statement::Class(class) => statements.push(self.class(class)),
             Statement::Interface(interface) => {
                 statements.push(self.interface(interface));
@@ -723,6 +740,19 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
             Statement::Struct(r#struct) => statements.push(self.r#struct(r#struct)),
             _ => unreachable!("check_slice refuses the file statement `{statement}`"),
         }
+    }
+
+    /// Spec section 27: a class that declares `main`, whose file PHP runs as its script, as a program. The file calls
+    /// `\Sharp\Internal\startProgram()` before the class, which loads the project's Composer autoloader, so the parent
+    /// and the interfaces the class names load as PHP declares it, and `\Sharp\Internal\runProgram('App\Console\Import')`
+    /// after it, which builds the class and runs `main`. Each runs only when PHP runs the file as its script, so a file
+    /// `include` or an autoloader loads only declares its class.
+    fn program_class(&mut self, class: &Class, statements: &mut Vec<u32>) {
+        let line = self.line(class);
+        statements.push(self.global_call(line, b"Sharp\\Internal\\startProgram", &[]));
+        statements.push(self.class(class));
+        let name = self.string(0, line, self.names.get(&class.name));
+        statements.push(self.global_call(line, b"Sharp\\Internal\\runProgram", &[name]));
     }
 
     /// Spec section 32: a test file's module, the call `\Sharp\Internal\testModule('App\Shop\CheckoutTest', table)`,
@@ -5302,7 +5332,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                     unreachable!("check_slice refuses a colon-delimited `while`");
                 };
                 let condition_and_body = self.in_loop(PhpLoop::of(statement.span(), r#while.label), |this| {
-                    [this.expression(r#while.condition), this.statement(body)]
+                    [this.condition(r#while.condition), this.statement(body)]
                 });
 
                 self.node(SHARP_AST_WHILE, 0, self.line(r#while), &condition_and_body)
@@ -5649,7 +5679,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
             unreachable!("check_slice refuses a colon-delimited `if`");
         };
 
-        let condition = self.expression(r#if.condition);
+        let condition = self.condition(r#if.condition);
         let statement = self.statement(body.statement);
         let mut branches = vec![self.node(SHARP_AST_IF_ELEM, 0, self.line(r#if.condition), &[condition, statement])];
         if let Some(else_clause) = &body.else_clause {
@@ -5774,9 +5804,18 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
         self.arriving(expression, Arrival::Read)
     }
 
+    /// `expression` where its match narrows the reads after it, so a type test in it that names nothing makes the
+    /// variable it tests the value as the type holds it, as [`Self::unchecked_expression`] lowers it.
+    fn condition(&mut self, expression: &Expression) -> u32 {
+        self.narrowing = true;
+
+        self.expression(expression)
+    }
+
     /// `expression`, as [`Self::expression`] lowers it where PHP# reads it, and as `arrival` says where plain PHP's
     /// array the checker reads as a `List` goes elsewhere.
     fn arriving(&mut self, expression: &Expression, arrival: Arrival) -> u32 {
+        let narrowing = std::mem::take(&mut self.narrowing);
         let line = self.line(expression);
         if let Some((_, name)) = self.held_receivers.iter().find(|(span, _)| *span == expression.span()) {
             let name = name.clone();
@@ -5806,6 +5845,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
             return returned;
         }
 
+        self.narrowing = narrowing;
         let lowered = self.unchecked_expression(line, expression);
         let arrives_as_list = self.arrives_as_list(expression);
         let in_static = self.static_type_parameters.is_some();
@@ -6045,9 +6085,12 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
     }
 
     fn unchecked_expression(&mut self, line: u32, expression: &Expression) -> u32 {
+        let narrowing = std::mem::take(&mut self.narrowing);
+
         ensure_sufficient_stack(|| match expression {
             Expression::Literal(literal) => self.literal(literal),
             Expression::Parenthesized(parenthesized) => {
+                self.narrowing = narrowing;
                 let index = self.expression(parenthesized.expression);
                 if let Expression::Conditional(_) = parenthesized.expression {
                     self.nodes[index as usize].attr = ZEND_PARENTHESIZED_CONDITIONAL;
@@ -6056,7 +6099,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                 index
             }
             Expression::Conditional(Conditional { condition, then: Some(then), r#else, .. }) => {
-                let condition = self.expression(condition);
+                let condition = self.condition(condition);
                 let then = self.expression(then);
                 let r#else = self.expression(r#else);
 
@@ -6064,6 +6107,8 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
             }
             Expression::ConstantAccess(name) => self.name(name, PlaceUse::Read),
             Expression::Is(_) | Expression::As(_) | Expression::PatternMatch(_) => {
+                self.narrowing = narrowing;
+
                 self.pattern(Node::Expression(expression))
             }
             // Only the PHP of a pattern form has a `$` variable: a pattern's name, or a variable PHP# cannot name.
@@ -6085,9 +6130,26 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
 
                     return self.node(SHARP_AST_CALL, 0, line, &[function, arguments]);
                 }
-                // A test of a type parameter or of a class with type arguments reads them while the code runs.
+                // A test of a type parameter or of a class with type arguments reads them while the code runs. One of a
+                // variable that names nothing, a local or the `$` variable a pattern form reads a `match`'s local
+                // through, whose match narrows the reads after it is `($x = $x) instanceof T`, which the engine binds as
+                // it binds a name, so a match makes the variable the value as the type holds it, and a failure leaves it
+                // as it was. A test that is a value, as a list's element, narrows nothing and leaves the variable as it is.
                 if let Some(tested) = self.types.tested_type(class) {
                     let tested = self.type_text(line, &tested);
+                    let bound = match lhs.unparenthesized() {
+                        _ if !narrowing => None,
+                        Expression::ConstantAccess(name)
+                            if matches!(self.names.binding(&name.name), Some(Binding::Local(_))) =>
+                        {
+                            Some(self.variable(name.span(), name.name.value()))
+                        }
+                        Expression::Variable(Variable::Direct(variable)) => Some(
+                            self.variable(variable.span, variable.name.strip_prefix(b"$").unwrap_or(variable.name)),
+                        ),
+                        _ => None,
+                    };
+                    let value = bound.map_or(value, |bound| self.node(SHARP_AST_ASSIGN, 0, line, &[bound, value]));
 
                     return self.node(SHARP_AST_SHARP_IS_TYPE, 0, line, &[value, tested]);
                 }
@@ -6102,7 +6164,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                     let (conditions, value) = match arm {
                         MatchArm::Expression(arm) => {
                             let conditions: Vec<u32> =
-                                arm.conditions.iter().map(|condition| self.expression(condition)).collect();
+                                arm.conditions.iter().map(|condition| self.condition(condition)).collect();
 
                             (self.expression_list(&conditions), arm.expression)
                         }
@@ -6145,7 +6207,18 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                     _ => Operands::Other,
                 };
 
+                // The left side of `&&` and of `||` narrows its right side wherever it sits, as `||` runs its right side
+                // only when its left side failed, and both sides of one that narrows narrow the reads after it.
+                let joins = matches!(
+                    binary.operator,
+                    BinaryOperator::And(_)
+                        | BinaryOperator::LowAnd(_)
+                        | BinaryOperator::Or(_)
+                        | BinaryOperator::LowOr(_)
+                );
+                self.narrowing = joins;
                 let lhs = self.expression(binary.lhs);
+                self.narrowing = joins && narrowing;
                 let rhs = self.expression(binary.rhs);
 
                 match (binary.operator, operands) {
@@ -6198,6 +6271,8 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                 let operand = if unary.operator.is_increment_or_decrement() {
                     self.target(unary.operand, PlaceUse::Read)
                 } else {
+                    // A `!` that narrows narrows through its operand, whose failure narrows the reads after it.
+                    self.narrowing = narrowing && matches!(unary.operator, UnaryPrefixOperator::Not(_));
                     self.expression(unary.operand)
                 };
 
