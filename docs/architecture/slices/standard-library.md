@@ -81,7 +81,7 @@ The standard library covers what modern standard libraries cover (decision 96). 
 
 | Operation | PHP# | Runs on |
 | --- | --- | --- |
-| Now, a clock a test fixes | `Clock.now()`, `new Clock.fixed(instant)` bound in a test module | `DateTimeImmutable` |
+| Now, a clock a test fixes | `Clock.now()` on the `SystemClock` the module binds, `new FakeClock(instant)` from `Sharp.Testing` bound in a test module, moved with `advance(duration)` | `DateTimeImmutable` |
 | Measure elapsed time | `Clock.timestamp()`, `Clock.elapsedSince(start)` | `hrtime` |
 | Sleep | `Clock.sleep(duration)` | `usleep` |
 | A length of time | `Duration.ofSeconds`, `ofMilliseconds`, `ofMinutes`, `ofHours`, `ofDays`, `milliseconds`, `seconds`, `plus`, `minus`, `times`, `negated`, `isNegative` | |
@@ -108,7 +108,7 @@ The standard library covers what modern standard libraries cover (decision 96). 
 | Finite, not a number | `x.isFinite()`, `x.isNaN()` | `is_finite`, `is_nan` |
 | Write and read another base | `n.toHex()`, `Int.parse(text, radix)`, `Int.tryParse(text, radix)` | `dechex`, `intval` |
 | Random numbers, bytes, a shuffle, a pick | `random.nextInt(min, max)`, `nextFloat()`, `nextBytes(length)`, `shuffle(items)`, `pick(items)` | `Random\Randomizer` |
-| A seeded generator | `new Random(seed)` | `Random\Engine\Mt19937` |
+| A seeded generator | `new FakeRandom(seed)`, from `Sharp.Testing` | `Random\Engine\Mt19937` |
 
 ## Encoding and cryptography
 
@@ -186,6 +186,7 @@ The standard library covers what modern standard libraries cover (decision 96). 
 | A result or an error | `Result<T, E>` with `Ok` and `Err`, and exceptions | |
 | Events | `emit` (section 15), `Events.on<TEvent>(listener)`, a `Dispatcher` | |
 | Services | a `Container`, modules (section 16), `Scope.run(body)` | |
+| An effect's real implementation and a test's fake | each effect an `effect abstract` class, its `System<Effect>` the module binds, and `Sharp.Testing`'s `Fake<Effect>`, as `new FakeHttp([response])` with its `sent` (section 29) | |
 
 ## Gaps
 

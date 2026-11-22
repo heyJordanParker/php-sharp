@@ -4,6 +4,14 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Changed
+
+- Every effect is an abstract boundary, spec section 29, so a unit test runs the real class that holds an effect over a fake. A project declares its effect as `public effect abstract class Store` with its members, its real implementation as `public effect class RedisStore : Store`, which only a module binding creates, and a fake as `public class FakeStore : Store`, which any code creates with `new`. Code has the effect by the type it holds, so a class takes a `Store`. 0.6.49 accepted a concrete `effect class` with no boundary, and `public effect class RedisStore` alone now fails with "`RedisStore` is an effect class, so it extends an abstract effect class that declares its members." Each of the standard library's twelve effects is abstract, with its real implementation beside it as `SystemHttp`, `SystemClock` and the rest, which `Sharp/Module.sharp` binds, so plain PHP that wrote `new Sharp\Net\Http()` writes `new Sharp\Net\SystemHttp()`. `Sharp.Testing` holds a fake of each, as `new FakeHttp([response])`, which keeps each request in `sent`. `Clock.fixed(instant)` is `new FakeClock(instant)`, which `advance(duration)` and `sleep` move on, and `new Random(seed)` is `new FakeRandom(seed)`.
+
+### Fixed
+
+- A module binding's expression and a class constant's value are checked for effects as a method's body is, spec section 29. So beside `extern Remote.fetch uses Http;` and a `Holder` that takes a `Function<int(int) uses Clock>`, `singleton Holder = new Holder((int id) => Remote.fetch(id));` fails with "This lambda calls `Remote.fetch`, which has the effect `Http`, so a `Function<int(int) uses Clock>` cannot hold it.", as the same expression in a method does, and so do `new Holder(Remote.fetch)`, a constant `Function<int(int) uses Clock> RATE = (int id) => Remote.fetch(id)`, and plain PHP a binding reaches with no `extern` line. 0.6.49 compiled each of them. A lambda a binding or a constant builds also answers `is Function<…>` at run time as a method's lambda does, where 0.6.49 gave it no function type, so it failed every one.
+
 ## [0.6.49] - 2026-11-22
 
 ### Upgrading from 0.6.48

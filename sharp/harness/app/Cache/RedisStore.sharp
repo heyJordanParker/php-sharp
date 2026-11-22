@@ -1,6 +1,6 @@
 namespace App.Cache;
 
-public class RedisStore
+public effect class RedisStore : SessionStore
 {
     public RedisStore(private string url) { }
 }

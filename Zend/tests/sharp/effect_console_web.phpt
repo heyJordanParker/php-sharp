@@ -7,7 +7,7 @@ require __DIR__ . '/../../../sapi/cli/tests/php_cli_server.inc';
 $classes = var_export(__DIR__ . '/effect_classes.inc', true);
 php_cli_server_start(<<<PHP
     require $classes;
-    \$console = new Sharp\\IO\\Console();
+    \$console = new Sharp\\IO\\SystemConsole();
     \$console->write('served ');
     \$console->writeLine('by Console');
     \$console->writeError('to the error log');

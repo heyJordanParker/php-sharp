@@ -10,6 +10,7 @@ $root = container_project('container-framework-object', [
     'src/Framework/Request.php' => "<?php\n\nnamespace Framework;\n\nfinal class Request\n{\n}\n",
     'src/Lib/request.php' => "<?php\n\nnamespace Lib;\n\nfunction request(): \\Framework\\Request\n{\n"
         . "    \$request = new \\Framework\\Request();\n    \$GLOBALS['returned'][] = \$request;\n\n    return \$request;\n}\n",
+    'app/Stubs/Lib.sharp' => "namespace App.Stubs;\n\nimport Lib;\n\nextern Lib.request uses any;\n",
     'app/Front/Module.sharp' => "namespace App.Front;\n\nimport Lib;\nimport Framework.Request;\n\nmodule\n{\n"
         . "    scoped Request = Lib.request();\n    transient Page = Page;\n}\n",
     'app/Front/Page.sharp' => "namespace App.Front;\n\nimport Framework.Request;\n\npublic class Page\n{\n"

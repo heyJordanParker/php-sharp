@@ -5,7 +5,7 @@ serialize throws an Error that names a PHP# type with no stored form: a construc
 require __DIR__ . '/vendor/autoload.php';
 
 $rows = [
-    'a class whose constructor takes a service' => fn () => serialize(new Queued\Stamper(new Sharp\Time\Clock())),
+    'a class whose constructor takes a service' => fn () => serialize(new Queued\Stamper(new Sharp\Time\SystemClock())),
     'a struct with a function field' => fn () => serialize(new Queued\Hook(static fn (int $step): int => $step + 1)),
     'a struct with a Map keyed by a struct' => fn () => serialize(new Queued\Route(Queued\Payloads::byParcel())),
     'data for a struct with a function field' => fn () => unserialize('O:11:"Queued\Hook":0:{}'),

@@ -1,5 +1,5 @@
 --TEST--
-A test module binds Clock to new Clock.fixed(…) where the standard library's module binds the real one, so a class that takes a Clock reads the fixed instant from now() while a test of the test file's class runs, and the real time before and after it
+A test module binds Clock to new FakeClock(…) where the standard library's module binds SystemClock, so a class that takes a Clock reads the fake's instant from now() while a test of the test file's class runs, and the real time before and after it
 --FILE--
 <?php
 require __DIR__ . '/Container.inc';
@@ -28,12 +28,13 @@ SHARP,
     'tests/Billing/InvoiceTest.sharp' => <<<'SHARP'
 namespace App.Billing;
 
+import Sharp.Testing.FakeClock;
 import Sharp.Time.Clock;
 import Sharp.Time.Instant;
 
 module : App.Billing
 {
-    singleton Clock = new Clock.fixed(Instant.parse("2026-10-22T18:30:00Z"));
+    singleton Clock = new FakeClock(Instant.parse("2026-10-22T18:30:00Z"));
 }
 
 public class InvoiceTest

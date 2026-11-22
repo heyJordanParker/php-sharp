@@ -4,8 +4,8 @@ Method.createDelegate makes a value of a function type that calls the method, an
 <?php
 require __DIR__ . '/vendor/autoload.php';
 
-use App\Delegates\Database;
-use App\Delegates\Mailer;
+use App\Delegates\FakeDatabase;
+use App\Delegates\FakeMailer;
 use App\Delegates\Order;
 use App\Delegates\Rush;
 use App\Delegates\Walk;
@@ -21,17 +21,17 @@ function attempt(string $label, Closure $body): void
     }
 }
 
-$order = new Order(new Database(), new Mailer());
+$order = new Order(new FakeDatabase(), new FakeMailer());
 
 attempt('rows', fn () => Walk::rows()($order));
 attempt('rows is its type', fn () => Walk::rowsIsItsType());
-attempt('count of a rush on a rush', fn () => Walk::rushCount()(new Rush(new Database(), new Mailer())));
+attempt('count of a rush on a rush', fn () => Walk::rushCount()(new Rush(new FakeDatabase(), new FakeMailer())));
 attempt('count of a rush on an order', fn () => Walk::rushCount()($order));
 attempt('add', fn () => Walk::add()($order, 2));
 attempt('add "2"', fn () => Walk::add()($order, '2'));
 attempt('unit', fn () => Walk::unit()());
 attempt('count on an order', fn () => Walk::count()($order));
-attempt('count on a rush', fn () => Walk::count()(new Rush(new Database(), new Mailer())));
+attempt('count on a rush', fn () => Walk::count()(new Rush(new FakeDatabase(), new FakeMailer())));
 attempt('doubled', fn () => Walk::doubled()($order));
 attempt('total 5', fn () => Walk::total()($order, 5));
 attempt('doubled after', fn () => Walk::doubled()($order));

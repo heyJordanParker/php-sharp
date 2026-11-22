@@ -1,0 +1,5 @@
+namespace App.Cache;
+
+public effect abstract class SessionStore
+{
+}

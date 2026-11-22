@@ -4,7 +4,7 @@ PHP# Dns gives the addresses the system resolver finds for a host, each an IpAdd
 <?php
 require __DIR__ . '/effect_classes.inc';
 
-$dns = new Sharp\Net\Dns();
+$dns = new Sharp\Net\SystemDns();
 $addresses = $dns->addresses('localhost');
 var_dump($addresses !== [] && array_filter($addresses, fn ($address) => !$address instanceof Sharp\Net\IpAddress) === []);
 $local = array_map(fn (Sharp\Net\IpAddress $address) => $address->toString(), $addresses);

@@ -1,10 +1,16 @@
 <?php
 
-// The standard library's module, each class it binds, the classes and types their members take, return and call, the
-// `extern` lines of the PHP built-ins they call, and the effect classes those lines name, by their paths under the
-// library's Sharp folder. A project that holds the library's module holds these.
+// The standard library's module, each effect it binds and the class it binds the effect to, the fake of each effect a
+// test module binds, the classes and types their members take, return and call, the `extern` lines of the PHP built-ins
+// they call, and the effects those lines name, by their paths under the library's Sharp folder. A project that holds
+// the library's module holds these.
 const LIBRARY_MODULE = [
     'Module', 'Dispatcher', 'ImmediateDispatcher', 'System/Environment', 'Time/Clock', 'Random', 'IO/Console',
+    'System/SystemEnvironment', 'Time/SystemClock', 'SystemRandom', 'IO/SystemConsole', 'System/SystemProcess', 'IO/SystemFiles',
+    'Net/SystemHttp', 'Net/SystemMail', 'Net/SystemDns', 'Interop/SystemPhpGlobals', 'Data/SystemDatabase', 'Data/SystemCache',
+    'Testing/FakeEnvironment', 'Testing/FakeClock', 'Testing/FakeRandom', 'Testing/FakeConsole', 'Testing/FakeProcess',
+    'Testing/FakeFiles', 'Testing/FakeHttp', 'Testing/FakeMail', 'Testing/FakeDns', 'Testing/FakePhpGlobals',
+    'Testing/FakeDatabase', 'Testing/FakeCache',
     'System/Process', 'System/ProcessResult', 'System/ChildProcess', 'IO/Files', 'Net/Http', 'Net/Mail', 'Net/Dns', 'Net/IpAddress',
     'Net/IpFamily', 'Interop/PhpGlobals', 'Interop/Superglobal', 'Time/Duration', 'Time/Instant',
     'Time/DateTime', 'Time/Date', 'Time/TimeOfDay', 'Time/TimeZone', 'Time/DateTimeInterfaceMembers', 'Time/Weekday', 'Time/Month', 'Int', 'ByteOrder', 'Bytes', 'Math', 'Net/HttpMethod', 'Net/HttpRequest',

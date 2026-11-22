@@ -6,7 +6,7 @@ require __DIR__ . '/effect_classes.inc';
 require __DIR__ . '/vendor/autoload.php';
 
 use Demo\TimeAndPaths;
-use Sharp\IO\Files;
+use Sharp\IO\SystemFiles;
 
 echo TimeAndPaths::written(21, 30, 0, 0), ' ', TimeAndPaths::written(9, 5, 7, 250000000), ' ', TimeAndPaths::written(23, 59, 59, 1), ' ', TimeAndPaths::shortTime(7, 0), "\n";
 foreach ([fn () => TimeAndPaths::written(24, 0, 0, 0), fn () => TimeAndPaths::written(1, 0, 0, 1000000000), fn () => TimeAndPaths::ordered('x', '08:00')] as $refused) {
@@ -26,7 +26,7 @@ echo TimeAndPaths::joined('', ['b']), ' ', TimeAndPaths::joined('a', []), "\n";
 chdir('/');
 echo TimeAndPaths::absolute('/x/./y/../z'), ' ', TimeAndPaths::absolute('/..'), ' ', TimeAndPaths::absolute('var/./log/..'), ' ', TimeAndPaths::absolute('missing/file.txt'), "\n";
 
-$files = new Files();
+$files = new SystemFiles();
 var_dump(TimeAndPaths::temporary($files) === sys_get_temp_dir());
 $root = sys_get_temp_dir() . '/sharp-walk-' . getmypid();
 mkdir("$root/a/y", 0777, true);

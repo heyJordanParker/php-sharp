@@ -94,8 +94,10 @@ pub(crate) type Roots = BTreeSet<Changed>;
 /// A PHP# body: a method by its lowercase class and method names, an accessor by its lowercase class, its
 /// property's PHP name (`$total`) and `get` or `set`, a lambda by the name its function value's `source` gives it, an
 /// initial value that is not constant, which runs in the constructor, or a static's on the first use of its class's
-/// statics, by its lowercase class and its property's PHP name, or a parameter's default that is not constant, which
-/// runs each time a call leaves the argument out, by its method's lowercase class and method names and its PHP name.
+/// statics, by its lowercase class and its property's PHP name, a parameter's default that is not constant, which
+/// runs each time a call leaves the argument out, by its method's lowercase class and method names and its PHP name, a
+/// module binding's expression, by the name of the lambda it is scanned as, or a class constant's value, by its
+/// lowercase class and its name. No call reaches a binding or a constant: the container runs one, and a read the other.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) enum Body {
     Method(Word, Word),
@@ -103,6 +105,8 @@ pub(crate) enum Body {
     Lambda(Word),
     InitialValue(Word, Word),
     Default(Word, Word, Word),
+    Binding(Word),
+    Constant(Word, Word),
 }
 
 /// What a function value runs.
@@ -423,8 +427,9 @@ impl Effects {
                     Body::Method(class, _)
                     | Body::Accessor(class, _, _)
                     | Body::InitialValue(class, _)
-                    | Body::Default(class, _, _) => (class, summary.member),
-                    Body::Lambda(_) => (empty_word(), summary.member),
+                    | Body::Default(class, _, _)
+                    | Body::Constant(class, _) => (class, summary.member),
+                    Body::Lambda(_) | Body::Binding(_) => (empty_word(), summary.member),
                 })
                 .collect(),
             standard_library: summaries
@@ -433,10 +438,11 @@ impl Effects {
                     Body::Method(class, _)
                     | Body::Accessor(class, _, _)
                     | Body::InitialValue(class, _)
-                    | Body::Default(class, _, _) => codebase
+                    | Body::Default(class, _, _)
+                    | Body::Constant(class, _) => codebase
                         .get_class_like(class)
                         .is_some_and(|metadata| codebase.is_standard_library_file(metadata.span.file_id)),
-                    Body::Lambda(_) => false,
+                    Body::Lambda(_) | Body::Binding(_) => false,
                 })
                 .collect(),
             imports: summaries.iter().map(|summary| Arc::clone(&summary.imports)).collect(),
@@ -478,7 +484,9 @@ impl Effects {
             Body::Accessor(class, _, _) | Body::InitialValue(class, _) => {
                 codebase.get_class_like(class).map(|class| class.span.file_id)
             }
-            Body::Lambda(_) => unreachable!("a call reaches a method, an accessor, an initial value or a default"),
+            Body::Lambda(_) | Body::Binding(_) | Body::Constant(..) => {
+                unreachable!("a call reaches a method, an accessor, an initial value or a default")
+            }
         };
 
         let mut files: HashMap<FileId, HashSet<FileId>> = HashMap::default();
@@ -717,8 +725,10 @@ impl Effects {
         })
     }
 
-    /// Each PHP# method, or default of one, with the first method without a body it implements whose `uses` does not
-    /// list one of its effects, since a call of the declaration runs the defaults of the implementation it reaches:
+    /// Each PHP# method, or default of one, with the first method without a body it implements whose `uses`, with the
+    /// effect of the abstract effect class that declares it, does not list one of its effects, since a call of the
+    /// declaration runs the defaults of the implementation it reaches. An effect class's implementation of its
+    /// abstract effect is that effect, spec section 29, so it is held to nothing, and a fake is held to the effect:
     /// its class and member as messages name them, the declaration's class and metadata, the imports and the
     /// scope of its file, and the call that has the effect. An implementation of `Sharp\Dispatcher::dispatch` is held
     /// to nothing, spec section 15: it runs the listeners of every event, which may reach any effect.
@@ -744,7 +754,15 @@ impl Effects {
 
                 metadata.all_parent_classes.iter().chain(&metadata.all_parent_interfaces).find_map(|ancestor| {
                     let declaration = holding_declaration(codebase, *ancestor, method)?;
-                    let impurity = self.effect_outside(codebase, *body, &declaration.uses)?;
+                    let boundary = codebase
+                        .get_class_like(*ancestor)
+                        .filter(|ancestor| ancestor.flags.is_abstract_effect())
+                        .map(|ancestor| ancestor.original_name);
+                    if boundary.is_some() && metadata.flags.is_effect_class() {
+                        return None;
+                    }
+                    let allowed: Vec<Word> = declaration.uses.iter().copied().chain(boundary).collect();
+                    let impurity = self.effect_outside(codebase, *body, &allowed)?;
 
                     Some((
                         self.names[position],
@@ -833,11 +851,11 @@ pub(crate) fn holding_declaration(
     })
 }
 
-/// Whether `name`, a class name as the binder resolves it, is an effect, spec section 29: an effect class, the
+/// Whether `name`, a class name as the binder resolves it, is an effect, spec section 29: an abstract effect class, the
 /// standard library's among them, or `Events`.
 fn is_effect(codebase: &CodebaseMetadata, name: Word) -> bool {
     codebase.class_key(name) == codebase.class_key(events())
-        || codebase.get_class_like(name).is_some_and(|class| class.flags.is_effect_class())
+        || codebase.get_class_like(name).is_some_and(|class| class.flags.is_abstract_effect())
 }
 
 /// Each use of plain PHP no `extern` line declares, spec section 29, once, with the line it needs and the position of

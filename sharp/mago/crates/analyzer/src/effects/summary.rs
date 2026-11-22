@@ -79,9 +79,10 @@ use crate::utils::names::display_function_holder;
 use crate::utils::names::display_sharp_type;
 use crate::utils::names::is_prelude_stub;
 
-/// Records the summary of the method, accessor, initial value or default `body`, which messages name by `member`, and
-/// whose parameters are declared at `parameters`, into `artifacts`, with the summary of each lambda written in it, and
-/// with the function values the analysis gave places since the last body. A constructor's `initializer` runs before `code`.
+/// Records the summary of the method, accessor, initial value, default, binding or constant `body`, which messages name
+/// by `member`, and whose parameters are declared at `parameters`, into `artifacts`, with the summary of each lambda
+/// written in it, and with the function values the analysis gave places since the last body. A constructor's
+/// `initializer` runs before `code`.
 pub(crate) fn record<'ast, 'arena, A>(
     context: &Context<'_, 'arena, A>,
     artifacts: &mut AnalysisArtifacts,
@@ -97,8 +98,9 @@ pub(crate) fn record<'ast, 'arena, A>(
         Body::Method(class, _)
         | Body::Accessor(class, _, _)
         | Body::InitialValue(class, _)
-        | Body::Default(class, _, _) => class,
-        Body::Lambda(_) => empty_word(),
+        | Body::Default(class, _, _)
+        | Body::Constant(class, _) => class,
+        Body::Lambda(_) | Body::Binding(_) => empty_word(),
     };
 
     let function_values = std::mem::take(&mut artifacts.function_values);
@@ -106,9 +108,9 @@ pub(crate) fn record<'ast, 'arena, A>(
     let (mut summary, mut lambdas) = summarize(context, artifacts, class, body, member, parameters, initializer, code);
     summary.function_values = function_values;
     summary.readonly_calls = readonly_calls;
-    // Code that reaches an effect object has its class's effect, whatever its members do (spec section 29), so each
-    // member has it too. A pure declaration then refuses an effect class's implementation, and a call through an
-    // interface or a base class has the effect of the effect class's override it reaches.
+    // Code that reaches an object of an abstract effect class, the real one or a fake, has that effect, whatever its
+    // members do (spec section 29), so each member has it too. A pure declaration then refuses such an implementation,
+    // and a call through an interface or a base class has the effect of the override it reaches.
     if let Some(effect) = effect_class(context.codebase, class) {
         summary.effects.insert(0, (Effect::Class(effect), code.span(), member_of_effect_class()));
     }
@@ -1771,14 +1773,15 @@ fn class_line(codebase: &CodebaseMetadata, class: Word) -> (Word, Word) {
     (codebase.get_class_like(class).map_or(class, |metadata| metadata.original_name), empty_word())
 }
 
-/// The effect class an object of `class` is, spec section 29: `class` itself or a parent marked `effect`, by its
-/// original name. Code that reaches such an object has that class's effect, whatever its members do.
+/// The effect an object of `class` has, spec section 29: the abstract effect class it is or extends, nearest first, by
+/// its original name. Code that reaches such an object has that effect, whatever its members do and whichever class,
+/// the real one or a fake, is behind it.
 fn effect_class(codebase: &CodebaseMetadata, class: Word) -> Option<Word> {
     let metadata = codebase.get_class_like(class)?;
 
     std::iter::once(metadata)
         .chain(metadata.all_parent_classes.iter().filter_map(|parent| codebase.get_class_like(*parent)))
-        .find(|metadata| metadata.flags.is_effect_class())
+        .find(|metadata| metadata.flags.is_abstract_effect())
         .map(|metadata| metadata.original_name)
 }
 

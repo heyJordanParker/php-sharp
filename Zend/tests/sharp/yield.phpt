@@ -9,7 +9,7 @@ require __DIR__ . '/vendor/autoload.php';
 
 $path = tempnam(sys_get_temp_dir(), 'sharp_yield');
 file_put_contents($path, "A1,tea,3\n\nA2,cake,5\n");
-$files = new Sharp\IO\Files();
+$files = new Sharp\IO\SystemFiles();
 
 foreach (Demo\Import::rows($files, $path) as $row) {
     echo implode('|', $row), "\n";

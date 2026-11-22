@@ -15,7 +15,7 @@ $rendered = "page for $tenant";
 PHP);
 
 $counter = 1;
-$globals = new Sharp\Interop\PhpGlobals();
+$globals = new Sharp\Interop\SystemPhpGlobals();
 echo implode("\n", Demo\GlobalQueries::page($globals, $page)), "\n";
 var_dump($tenant, $counter, $rendered, $_SERVER['HTTP_HOST']);
 

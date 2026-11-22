@@ -10952,9 +10952,9 @@ zend_result sharp_type_arguments_unserialize(
 	return SUCCESS;
 }
 
-/* The native body of `Sharp.System.Environment.commandLine`: the command-line arguments as PHP's `$argv` holds them, starting
- * with the script's name. Only the SAPI holds them, so this body is C behind the prototype sharp/bin/native writes. */
-void sharp_native_System_Environment_commandLine(zval *result)
+/* The native body of `Sharp.System.SystemEnvironment.commandLine`: the command-line arguments as PHP's `$argv` holds them,
+ * starting with the script's name. Only the SAPI holds them, so this body is C behind the prototype sharp/bin/native writes. */
+void sharp_native_System_SystemEnvironment_commandLine(zval *result)
 {
 	ZVAL_COPY(result, &SHARP_G(arguments));
 }
