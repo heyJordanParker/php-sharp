@@ -350,11 +350,26 @@ fi
 # autoloader and the PHP# package's, from the packages its composer.lock pins, and mago compile checks the project with
 # its vendor folder. The PHP# package is a copy of sharp/composer, as an application installs it, since a compile
 # refuses a link outside the project. Composer keeps the copy an earlier run installed while the lock is unchanged, so
-# a copy that differs from sharp/composer is reinstalled first, and the install then dumps the autoloader, which runs
-# the package's plugin: composer reinstall runs no plugin.
+# a copy that differs from sharp/composer in a file git tracks there is reinstalled first, and the install then dumps
+# the autoloader, which runs the package's plugin: composer reinstall runs no plugin. Build output in either folder,
+# such as the .sharp folder a compile writes, never counts: a local check that left sharp/composer/.sharp made every
+# later run in every lane reinstall the copy with it, and the tests then refused their fixtures.
 part "composer install in Zend/tests/sharp"
 package="$root/Zend/tests/sharp/vendor/heyjordanparker/php-sharp-composer"
-if [[ -d $package ]] && ! diff -rq "$root/sharp/composer" "$package" > /dev/null \
+differs_from_library() {
+  local files file
+  if ! files="$(git -C "$root/sharp/composer" ls-files)"; then
+    echo "git couldn't list the files it tracks in sharp/composer." >&2
+    exit 1
+  fi
+  while IFS= read -r file; do
+    if ! cmp -s "$root/sharp/composer/$file" "$package/$file"; then
+      return 0
+    fi
+  done <<< "$files"
+  return 1
+}
+if [[ -d $package ]] && differs_from_library \
   && ! composer reinstall --no-interaction --no-progress --quiet --no-autoloader \
     --working-dir="$root/Zend/tests/sharp" heyjordanparker/php-sharp-composer; then
   echo "composer reinstall of heyjordanparker/php-sharp-composer failed in Zend/tests/sharp." >&2

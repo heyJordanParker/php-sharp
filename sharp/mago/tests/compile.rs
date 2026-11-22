@@ -5681,7 +5681,8 @@ fn a_law_reads_the_classes_of_a_machine_s_cases() {
     assert!(compiled(root, "app/Classes/ClassOfRepro.sharp").exists());
 }
 
-/// A false law over the classes of a machine's cases is refused as not proven, with its claim still to show.
+/// A false law over the classes of a machine's cases is refused as not proven, with its claim still to show, and with
+/// each counterexample in PHP#, as the `typeof` of the case each class is.
 #[test]
 fn a_false_law_over_the_classes_of_a_machine_s_cases_is_not_proven() {
     let directory = lawful_project(&[(
@@ -5703,36 +5704,74 @@ fn a_false_law_over_the_classes_of_a_machine_s_cases_is_not_proven() {
         printed(&output)
     );
     assert!(
-        printed(&output).contains("error[law-unproven]: law everyPairCloses is not proven\n"),
+        printed(&output).contains(
+            "error[law-unproven]: law everyPairCloses is not proven\n = when from == typeof(ClassOfRepro.Open) && to == typeof(ClassOfRepro.Open), still to show: ClassOfRepro.closes(from, to)\n"
+        ),
         "{}",
         printed(&output)
     );
     assert!(!printed(&output).contains("translated the code it reaches wrongly"), "{}", printed(&output));
 }
 
+/// `App.Classes.Status`, a sealed interface whose implementers are `App.Classes.Waiting` and `App.Classes.Served`, each
+/// file by its path.
+const STATUSES: [(&str, &str); 3] = [
+    ("app/Classes/Status.sharp", "namespace App.Classes;\n\npublic sealed interface Status\n{\n}\n"),
+    (
+        "app/Classes/Waiting.sharp",
+        "namespace App.Classes;\n\npublic final class Waiting : Status\n{\n    public Waiting(public int ticket { get; }) { }\n}\n",
+    ),
+    (
+        "app/Classes/Served.sharp",
+        "namespace App.Classes;\n\npublic final class Served : Status\n{\n    public Served(public int ticket { get; }) { }\n}\n",
+    ),
+];
+
+/// A false law over a sealed interface's values and classes names each counterexample in PHP#: a value as the
+/// implementer it is, and a class as the `typeof` of that implementer.
+#[test]
+fn a_false_law_over_a_sealed_interface_names_each_implementer_as_php_sharp_writes_it() {
+    let laws = (
+        "app/Classes/Families.sharp",
+        "namespace App.Classes;\n\npublic final class Families\n{\n    law everyStatusIsServed(Status status) => Class.of(status) == typeof(Served);\n    law everyStatusClassIsServed(Class<Status> kind) => kind == typeof(Served);\n}\n",
+    );
+    let directory = lawful_project(&[STATUSES.as_slice(), &[laws]].concat());
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "error[law-unproven]: law everyStatusIsServed is not proven\n = when status is Waiting, still to show: "
+        ),
+        "{}",
+        printed(&output)
+    );
+    assert!(
+        printed(&output).contains(
+            "error[law-unproven]: law everyStatusClassIsServed is not proven\n = when kind == typeof(Waiting), still to show: "
+        ),
+        "{}",
+        printed(&output)
+    );
+}
+
 /// Spec section 25: the classes of an enum whose cases carry data are its cases, and the classes of a sealed
 /// interface are its implementers, so a law reads `Class.of` of their values as it does a machine's.
 #[test]
 fn a_law_reads_the_classes_of_a_data_enum_and_of_a_sealed_interface() {
-    let directory = lawful_project(&[
+    let families = [
         (
             "app/Classes/Shape.sharp",
             "namespace App.Classes;\n\npublic enum Shape\n{\n    case Dot;\n    case Circle(int radius);\n}\n",
-        ),
-        ("app/Classes/Status.sharp", "namespace App.Classes;\n\npublic sealed interface Status\n{\n}\n"),
-        (
-            "app/Classes/Waiting.sharp",
-            "namespace App.Classes;\n\npublic final class Waiting : Status\n{\n    public Waiting(public int ticket { get; }) { }\n}\n",
-        ),
-        (
-            "app/Classes/Served.sharp",
-            "namespace App.Classes;\n\npublic final class Served : Status\n{\n    public Served(public int ticket { get; }) { }\n}\n",
         ),
         (
             "app/Classes/Families.sharp",
             "namespace App.Classes;\n\npublic final class Families\n{\n    law aCircleIsACircle(int r) => Class.of(Shape.Circle(r)) == typeof(Shape.Circle);\n    law aDotIsNoCircle(int unused) => Class.of(Shape.Dot) != typeof(Shape.Circle);\n    law waitingIsWaiting(int t) => Class.of(new Waiting(t)) == typeof(Waiting);\n    law aStatusIsWaitingOrServed(Status status) => Class.of(status) == typeof(Waiting) || Class.of(status) == typeof(Served);\n}\n",
         ),
-    ]);
+    ];
+    let directory = lawful_project(&[STATUSES.as_slice(), families.as_slice()].concat());
     let root = directory.path();
 
     let output = compile(root);
@@ -5916,6 +5955,59 @@ fn a_law_reaching_a_template_with_a_float_part_is_refused() {
     assert_unmodeled(
         "namespace App.Shared;\n\npublic class Shape\n{\n    public static string show(int n) => `${n} of ${1.5}`;\n\n    law showsTheSame(int n) => Shape.show(n) == Shape.show(n);\n}\n",
         "Law showsTheSame reaches a string template in Shape.show. Join the strings with `+`.",
+    );
+}
+
+/// `App.Setup.Requirement`, a class that declares its own `==`, by its name and whether it is met.
+const REQUIREMENT: &str = "namespace App.Setup;\n\npublic final class Requirement\n{\n    public Requirement(public string name { get; }, public bool met { get; }) { }\n\n    public static bool operator ==(Requirement a, Requirement b) => a.name == b.name && a.met == b.met;\n\n    public int hash() => 0;\n}\n";
+
+/// `App.Setup.Readiness`, which holds a `Map` of `Requirement`s that `active` keeps, and `laws`.
+fn requirements(laws: &str) -> String {
+    format!(
+        "namespace App.Setup;\n\npublic final class Readiness\n{{\n    public Readiness(public Map<string, Requirement> requirements {{ get; }}) {{ }}\n\n    public static Readiness active(Map<string, Requirement> requirements) => new Readiness(requirements);\n\n    {laws}\n}}\n"
+    )
+}
+
+/// Spec section 19: two `Map`s are `==` when they hold as many entries and each key of one is a key of the other with
+/// an equal value, by the value's own `==`, so a law reads that a map a value keeps is the map it was given.
+#[test]
+fn a_law_compares_two_maps_by_their_values_own_equality() {
+    let directory = library_project(&[
+        ("app/Setup/Requirement.sharp", REQUIREMENT),
+        (
+            "app/Setup/Readiness.sharp",
+            &requirements(
+                "law keepsItsRequirements(Map<string, Requirement> requirements) => Readiness.active(requirements).requirements == requirements;",
+            ),
+        ),
+    ]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Setup/Readiness.sharp").exists());
+}
+
+/// A false law over two `Map`s' `==` is refused as not proven, with its claim still to show.
+#[test]
+fn a_false_law_over_two_maps_equality_is_not_proven() {
+    let directory = library_project(&[
+        ("app/Setup/Requirement.sharp", REQUIREMENT),
+        (
+            "app/Setup/Readiness.sharp",
+            &requirements("law anyTwoAgree(Map<string, Requirement> a, Map<string, Requirement> b) => a == b;"),
+        ),
+    ]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains("error[law-unproven]: law anyTwoAgree is not proven\n = still to show: a == b\n"),
+        "{}",
+        printed(&output)
     );
 }
 
@@ -8103,7 +8195,7 @@ fn a_law_body_s_match_on_a_value_that_runs_code_is_refused() {
 fn a_law_reaching_another_list_method_is_refused_by_name() {
     assert_unmodeled(
         "namespace App.Shared;\n\npublic class Shape\n{\n    public static bool known(List<int> items) => items.contains(3);\n\n    law knows(List<int> items) => Shape.known(items);\n}\n",
-        "Law knows reaches the List method contains in Shape.known. Hold the values in a List, and read it with `count()`, an index, `map`, `filter`, a list pattern or a spread.",
+        "Law knows reaches the List method contains in Shape.known. Hold the values in a List, and read it with `count()`, `isEmpty()`, `isNotEmpty()`, an index, `map`, `filter`, a list pattern or a spread.",
     );
 }
 

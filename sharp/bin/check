@@ -267,8 +267,12 @@ gate_mago_checks() {
   # logs at DEBUG and reports a missing code that release never prints, so this builds the profile itself, as
   # sharp/mago/Cargo.toml explains.
   if rustup run "$rust" cargo build --locked --profile test-run --bin mago; then
-    # The PHP# standard library, with the sharp/harness interfaces its mago.toml includes, analyzes with no note.
-    step "$mago" --colors never --workspace "$root/sharp/composer" analyze --minimum-fail-level note
+    # The PHP# standard library, with the sharp/harness interfaces its mago.toml includes, analyzes with no note. mago
+    # writes what it compiles into the workspace's .sharp folder, and sharp/bin/test reinstalls Zend/tests/sharp's copy of
+    # the library when it differs from sharp/composer, so the analysis runs on a copy in the run's folder, beside a copy
+    # of the harness its includes name, and leaves the source tree as it found it.
+    tar -C "$root/sharp" --exclude=.sharp -cf - composer harness | tar -C "$TMPDIR" -xf -
+    step "$mago" --colors never --workspace "$TMPDIR/composer" analyze --minimum-fail-level note
     step "$mago" format --dry-run
     step "$mago" lint
     step "$mago" analyze
