@@ -949,6 +949,8 @@ jobs:
     env:
       # Every extension the image holds beside the ones PHP builds by default, as sharp/README.md lists them.
       EXTENSIONS: bcmath calendar exif ftp gd igbinary imagick intl pcntl pdo_mysql pdo_pgsql pgsql redis shmop sockets sysvmsg sysvsem sysvshm zip
+      # The extensions the -dev image adds to those.
+      DEV_EXTENSIONS: excimer
     steps:
       # For .github/actions/boot-image and sharp/bin/php-extensions. The build fetches its own context.
       - name: git checkout
@@ -1039,6 +1041,12 @@ jobs:
         run: |
           # shellcheck disable=SC2086 # EXTENSIONS is a list of extensions.
           docker run --rm --volume "$PWD:/src" --workdir /src "$IMAGE" frankenphp php-cli sharp/bin/php-extensions $EXTENSIONS
+      - name: Check that the -dev image's php -m lists each extension and the ones it adds, and call into each one
+        env:
+          IMAGE: ghcr.io/heyjordanparker/php-sharp@${{ steps.dev.outputs.digest }}
+        run: |
+          # shellcheck disable=SC2086 # EXTENSIONS and DEV_EXTENSIONS are lists of extensions.
+          docker run --rm --volume "$PWD:/src" --workdir /src "$IMAGE" frankenphp php-cli sharp/bin/php-extensions $EXTENSIONS $DEV_EXTENSIONS
       # Each file is named by its image's digest and holds the commit the image was built from.
       - name: Keep the digests for RELEASE
         env:

@@ -31,6 +31,17 @@ $closed = 'host=127.0.0.1 port=1 connect_timeout=5';
 $calls = [
     'bcmath' => fn () => expect(bcadd('0.1', '0.2', 1), '0.3', "bcadd('0.1', '0.2', 1)"),
     'calendar' => fn () => expect(cal_days_in_month(CAL_GREGORIAN, 2, 2024), 29, 'cal_days_in_month(CAL_GREGORIAN, 2, 2024)'),
+    'excimer' => function () {
+        $profiler = new ExcimerProfiler();
+        $profiler->setEventType(EXCIMER_REAL);
+        $profiler->setPeriod(0.001);
+        $profiler->start();
+        $until = microtime(true) + 1;
+        while (count($profiler->getLog()) === 0 && microtime(true) < $until) {
+        }
+        $profiler->stop();
+        return expect(count($profiler->getLog()) > 0, true, 'count() of the log ExcimerProfiler took of a busy loop every 1 ms, > 0');
+    },
     'exif' => fn () => expect(exif_tagname(0x010F), 'Make', 'exif_tagname(0x010F)'),
     'ftp' => function () {
         $present = present([FTP\Connection::class], ['ftp_connect', 'ftp_ssl_connect']);

@@ -231,6 +231,11 @@ ADD https://github.com/Imagick/imagick.git#70087bab33eab913e99ac77d64d04d1a2fd0b
 FROM scratch AS phpredis-source
 ADD https://github.com/phpredis/phpredis.git#df4fab2de7fc327c54c94a13af2b9542e4fbd720 /
 
+# The -dev image's. excimer 1.2.6 is its first release that runs on a thread-safe engine, as FrankenPHP's, and its last
+# with the package.xml install-php-extensions builds a source folder from: 1.2.7 removed it for PIE and changed no code.
+FROM scratch AS excimer-source
+ADD https://github.com/wikimedia/mediawiki-php-excimer.git#cc87c1e297cc39398ca786c41a486a3c1f17c8c3 /
+
 FROM ${GOLANG_IMAGE} AS golang-base
 
 #
@@ -417,8 +422,15 @@ RUN set -eux; \
 	chmod -R a+rwX /cache/mago
 
 # ghcr.io/heyjordanparker/php-sharp:<version>-dev: the runtime image with the law checker's Lean installed, so a compile
-# with laws in it downloads nothing. Mago's cache folder is /var/cache/mago for every user.
+# with laws in it downloads nothing, and excimer, the sampling profiler a framework app's development image installs.
+# Mago's cache folder is /var/cache/mago for every user.
 FROM runner AS dev
+
+# PHP#: excimer, built as common builds imagick, so an app's development image builds it again on no release.
+RUN --mount=type=bind,from=excimer-source,target=/usr/src/excimer,rw \
+	install-php-extensions /usr/src/excimer && \
+	# Remove files with non-deterministic content (embedded timestamps and mtimes) to keep image digests reproducible
+	rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache
 
 ENV XDG_CACHE_HOME=/var/cache
 # The folder's contents, so the copy keeps the mode of mago/ too.
