@@ -21,6 +21,33 @@ public static class Narrowed
 
     public static List<bool> both(Any? value) => [value is Map<string, int>, value is List<int>];
 
+    public static string guarded(Any? value)
+    {
+        if (value is not Map<string, int>) {
+            return "none";
+        }
+
+        return value.keys().join(",");
+    }
+
+    public static int counted(Any? value)
+    {
+        if (value is not List<int> || value.count() == 0) {
+            return 0;
+        }
+
+        return value.count();
+    }
+
+    public static string keyed(Any? value)
+    {
+        if (value is not Map<string, int> || value.count() == 0) {
+            return "empty";
+        }
+
+        return value.keys().join(",");
+    }
+
     public static string matched(Any? value) => match (value) {
         Map<string, int> => value.keys().join(","),
         default => "none",

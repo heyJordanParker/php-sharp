@@ -14,6 +14,10 @@ var_dump(Narrowed::holdsTwo([1, 2]), Narrowed::holdsTwo([1]));
 var_dump(Narrowed::onlyA(['a' => 1]), Narrowed::onlyA(['b' => 1]));
 // Each test in the list is a value, which narrows nothing, so the Map test leaves the empty array a plain array the List test passes.
 echo 'both: ', json_encode(Narrowed::both([])), "\n";
+// A test under `!` or `||` in a condition narrows the reads after a failed test, as a guard clause's return leaves them.
+echo 'counted: ', Narrowed::counted([1, 2]), ', ', Narrowed::counted([]), "\n";
+echo 'keyed: ', Narrowed::keyed(['a' => 1]), ', ', Narrowed::keyed([]), ', ', Narrowed::keyed('x'), "\n";
+echo 'guarded: ', Narrowed::guarded(['a' => 1]), ', ', Narrowed::guarded('x'), "\n";
 // A change made through a narrowed read reaches the local.
 var_dump(Narrowed::grown([1]));
 ?>
@@ -26,6 +30,9 @@ bool(false)
 bool(true)
 bool(false)
 both: [true,true]
+counted: 2, 0
+keyed: a, empty, empty
+guarded: a, none
 array(2) {
   [0]=>
   int(1)
