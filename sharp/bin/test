@@ -181,6 +181,20 @@ if $mago && ! $cargo_built; then
   # alone leaves out.
   mkdir -p "$build_dir/mago/tmp"
 
+  # Each binary's tests, as its --list prints them, by the binary's index. A binary that can't list them fails the run:
+  # its --list ran in a pipe whose failure nothing read, so its empty list read as a binary with no tests, and the run
+  # ran none of them and passed.
+  declare -A listed=()
+  for ((b = 0; b < ${#binaries[@]}; b++)); do
+    IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
+    if ! names="$(cd "$folder" && "$executable" --list --format terse)"; then
+      echo "${executable##*/}, from ${folder#"$root"/}, couldn't list its tests, so none of them runs." >&2
+      failed+=("the list of ${executable##*/}'s tests")
+      continue
+    fi
+    listed[$b]="$(sed -n 's/: test$//p' <<< "$names")"
+  done
+
   # With --shard, each test weighs the seconds sharp/baseline/seconds lists under its binary's source file and its
   # name, as sharp/mago/tests/main.rs::compile::<name>, and a test the file doesn't list ran under 1.5 s, so it weighs
   # 1. A binary runs its tests on as many threads as the run's jobs, so it takes the longer of its longest test and its
@@ -191,11 +205,13 @@ if $mago && ! $cargo_built; then
   declare -A chosen=()
   if [[ -n $shard ]]; then
     read_seconds
-    for ((b = 0; b < ${#binaries[@]}; b++)); do
+    for b in "${!listed[@]}"; do
       IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
       while IFS= read -r name; do
-        printf '%s\t%s\t%s\n' "${seconds[$source::$name]:-1}" "$b" "$name"
-      done < <(cd "$folder" && "$executable" --list --format terse | sed -n 's/: test$//p')
+        if [[ -n $name ]]; then
+          printf '%s\t%s\t%s\n' "${seconds[$source::$name]:-1}" "$b" "$name"
+        fi
+      done <<< "${listed[$b]}"
     done > "$TMPDIR/mago-tests"
     while IFS= read -r test; do
       chosen[$test]=1
@@ -231,16 +247,21 @@ if $mago && ! $cargo_built; then
   fi
 
   for ((b = 0; b < ${#binaries[@]}; b++)); do
+    if [[ -z ${listed[$b]+listed} ]]; then
+      continue
+    fi
     IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
     skips=()
     selected=0
     while IFS= read -r name; do
-      if [[ -z $shard || -n ${chosen[$b$'\t'$name]:-} ]]; then
+      if [[ -z $name ]]; then
+        continue
+      elif [[ -z $shard || -n ${chosen[$b$'\t'$name]:-} ]]; then
         selected=$((selected + 1))
       else
         skips+=(--skip "$name")
       fi
-    done < <(cd "$folder" && "$executable" --list --format terse | sed -n 's/: test$//p')
+    done <<< "${listed[$b]}"
     if (( selected > 0 )); then
       # libtest prints each test's own wall time after its result with --report-time, which stable Rust's libtest
       # takes only under RUSTC_BOOTSTRAP. libtest-mimic's harness, which the binaries with harness = false use, has no
