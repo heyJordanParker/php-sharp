@@ -273,8 +273,20 @@ jobs:
         with:
           toolchain: ${{ needs.CHANGES.outputs.rust }}
 
-      # Into the target folder sharp/bin/check plain-php reads the test-run mago from.
+      # Into the target folder sharp/bin/check plain-php reads the test-run mago from. A download that stalls holds its
+      # job until the job's timeout, as one in sharp.yml held run 44989865954 for 28 minutes, where a download takes 1 to
+      # 38 s. So it stops after 5 minutes, and one that failed or stopped runs once more.
       - name: Download the binary the job before built
+        id: download
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mago-${{ runner.os }}
+          path: ${{ runner.temp }}/target/test-run
+      - name: Download the binary the job before built, the second try
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 5
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-${{ runner.os }}

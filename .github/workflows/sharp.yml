@@ -252,7 +252,22 @@ jobs:
         env:
           TOKEN: ${{ github.token }}
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      - name: Download BUILD_LINUX's engine and mago
+      # A download that stalls holds its job until the job's timeout: MAGO (2/5) of run 44989865954 waited 28 minutes on
+      # one, where a download takes 1 to 38 s. So each download stops after 5 minutes, and one that failed or stopped
+      # runs once more. UPSTREAM, SPEC and HOSTS repeat these two steps by their anchors.
+      - &download-build-linux
+        name: Download BUILD_LINUX's engine and mago
+        id: download
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-linux
+          path: ${{ runner.temp }}
+      - &download-build-linux-again
+        name: Download BUILD_LINUX's engine and mago, the second try
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 5
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build-linux
@@ -296,7 +311,18 @@ jobs:
         env:
           TOKEN: ${{ github.token }}
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      # Each download stops after 5 minutes and runs once more, as LINUX's explain.
       - name: Download BUILD_LINUX's test binaries
+        id: download
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tests-linux
+          path: ${{ runner.temp }}
+      - name: Download BUILD_LINUX's test binaries, the second try
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 5
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: tests-linux
@@ -333,11 +359,8 @@ jobs:
         env:
           TOKEN: ${{ github.token }}
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      - name: Download BUILD_LINUX's engine and mago
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: build-linux
-          path: ${{ runner.temp }}
+      - *download-build-linux
+      - *download-build-linux-again
       - name: Unpack BUILD_LINUX's engine and mago
         run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
       - name: Test upstream
@@ -381,11 +404,8 @@ jobs:
         env:
           TOKEN: ${{ github.token }}
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      - name: Download BUILD_LINUX's engine and mago
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: build-linux
-          path: ${{ runner.temp }}
+      - *download-build-linux
+      - *download-build-linux-again
       - name: Unpack BUILD_LINUX's engine and mago
         run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
       - name: Check the examples of docs/spec.md and README.md
@@ -421,11 +441,8 @@ jobs:
         env:
           TOKEN: ${{ github.token }}
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      - name: Download BUILD_LINUX's engine and mago
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: build-linux
-          path: ${{ runner.temp }}
+      - *download-build-linux
+      - *download-build-linux-again
       - name: Unpack BUILD_LINUX's engine and mago
         run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
       # sharp/bin/hosts keeps Go's build cache in the build's folder, because the cache never reads the PHP headers
@@ -699,8 +716,21 @@ jobs:
       # A release's heyjordanparker/mago-sharp version is the split plus a commit that adds the release's SHA-256s as
       # composer/sha256sums.txt. The Composer wrapper refuses an archive whose SHA-256 differs, so the package version
       # pins the exact binary, as esbuild's and Biome's npm packages do.
+      # Each download stops after 5 minutes and runs once more, as LINUX's explain.
       - name: Download the release's SHA-256s
         if: env.VERSION
+        id: download
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sha256sums
+          path: ${{ runner.temp }}
+          run-id: ${{ env.RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Download the release's SHA-256s, the second try
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 5
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: sha256sums
@@ -952,7 +982,21 @@ jobs:
             exit 1
           fi
           gh run watch "$run" --compact --exit-status --interval 15
+      # Each download stops after 5 minutes and runs once more, as LINUX's explain.
       - name: Download the assets
+        id: assets
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mago-${{ env.VERSION }}-*
+          path: assets
+          merge-multiple: true
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+      - name: Download the assets, the second try
+        if: steps.assets.outcome == 'failure'
+        timeout-minutes: 5
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: mago-${{ env.VERSION }}-*
@@ -961,6 +1005,18 @@ jobs:
           run-id: ${{ steps.run.outputs.id }}
           github-token: ${{ github.token }}
       - name: Download the SHA-256s
+        id: sha256sums
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sha256sums
+          path: assets
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+      - name: Download the SHA-256s, the second try
+        if: steps.sha256sums.outcome == 'failure'
+        timeout-minutes: 5
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: sha256sums
@@ -968,6 +1024,18 @@ jobs:
           run-id: ${{ steps.run.outputs.id }}
           github-token: ${{ github.token }}
       - name: Download the release notes
+        id: notes
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+      - name: Download the release notes, the second try
+        if: steps.notes.outcome == 'failure'
+        timeout-minutes: 5
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-notes
@@ -1035,6 +1103,19 @@ jobs:
           }
           gh release edit "$tag" --notes-file "$NOTES" --draft=false
       - name: Download the platforms' digests
+        id: digests
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-frankenphp-*
+          path: ${{ runner.temp }}/digests/runtime
+          merge-multiple: true
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+      - name: Download the platforms' digests, the second try
+        if: steps.digests.outcome == 'failure'
+        timeout-minutes: 5
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-frankenphp-*
@@ -1043,6 +1124,19 @@ jobs:
           run-id: ${{ steps.run.outputs.id }}
           github-token: ${{ github.token }}
       - name: Download the platforms' -dev digests
+        id: dev-digests
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-dev-*
+          path: ${{ runner.temp }}/digests/dev
+          merge-multiple: true
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+      - name: Download the platforms' -dev digests, the second try
+        if: steps.dev-digests.outcome == 'failure'
+        timeout-minutes: 5
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-dev-*
