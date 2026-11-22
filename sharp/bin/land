@@ -59,9 +59,27 @@ passed() {
     "[.workflow_runs[] | select(.conclusion == \"success\" and .head_branch == \"next\" and .head_repository.full_name == \"$repo\")][0].html_url // empty"
 }
 
-# The newest commit of next that master lacks and whose PHP# and Mago runs both passed, newest first, as GitHub lists
-# runs, or none, with the reason it lands nothing.
+# A commit's merge into master, as git merge-tree writes it without a working tree, which merges as GitHub does: it
+# prints the files that conflict and fails when any does. Landing #680 waited 3 hours on 251bc152c52, which predated
+# next's merge of the 0.6.51 bump, 19e34833038: GitHub reported it CONFLICTING in sharp/CHANGELOG.md, it had no merge
+# ref, so SPEC_GUARD and COMPLETES failed on checkout, and each later call found it already landing and waited.
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+git -C "$root" fetch --quiet origin master next
+# Succeeds, with the files in $files, when the commit conflicts with master.
+conflicts() {
+  local status=0 output
+  output=$(git -C "$root" merge-tree --write-tree --name-only --no-messages origin/master "$1") || status=$?
+  case "$status" in
+    0) return 1 ;;
+    1) files=$(sed 1d <<< "$output" | paste -sd ' ' -) ;;
+    *) echo "git merge-tree couldn't merge $1 into master: it exited $status." >&2; exit 1 ;;
+  esac
+}
+
+# The newest commit of next that master lacks, whose PHP# and Mago runs both passed and which merges into master
+# cleanly, newest first, as GitHub lists runs, or none, with the reason it lands nothing.
 newest=
+conflicting=false
 reason="No commit of next that master lacks has passed both PHP# and Mago yet."
 shas=$(api "actions/workflows/sharp.yml/runs?branch=next&event=pull_request&per_page=100" \
   ".workflow_runs[] | select(.conclusion == \"success\" and .head_repository.full_name == \"$repo\") | .head_sha")
@@ -72,13 +90,21 @@ for sha in $shas; do
   fi
   master=$(api "compare/master...$sha" .status)
   if [[ $master == behind || $master == identical ]]; then
-    reason="master holds next up to $sha, the newest commit whose PHP# run passed, so nothing lands."
+    if ! $conflicting; then
+      reason="master holds next up to $sha, the newest commit whose PHP# run passed, so nothing lands."
+    fi
     break
   fi
   php_sharp=$(passed sharp.yml "$sha")
   mago=$(passed mago.yml "$sha")
   if [[ -z $mago ]]; then
     echo "$sha passed PHP# in $php_sharp, and Mago has passed no run of it yet."
+    continue
+  fi
+  if conflicts "$sha"; then
+    echo "$sha passed PHP# and Mago, and conflicts with master in $files."
+    conflicting=true
+    reason="No commit of next that passed both PHP# and Mago merges into master cleanly yet."
     continue
   fi
   newest=$sha
@@ -105,8 +131,12 @@ while IFS=$'\t' read -r url head; do
     open=$url
     continue
   fi
-  gh pr close "$url" --repo "$repo" --delete-branch --comment "$superseded"
-  echo "$url closed: $superseded"
+  comment=$superseded
+  if conflicts "$head"; then
+    comment="GitHub reports it CONFLICTING: $head conflicts with master in $files.${newest:+ $newest of next lands in its place.}"
+  fi
+  gh pr close "$url" --repo "$repo" --delete-branch --comment "$comment"
+  echo "$url closed: $comment"
 done <<< "$landing"
 if [[ -z $newest ]]; then
   echo "$reason"
