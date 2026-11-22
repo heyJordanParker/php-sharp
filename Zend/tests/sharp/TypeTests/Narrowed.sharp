@@ -21,6 +21,8 @@ public static class Narrowed
 
     public static List<bool> both(Any? value) => [value is Map<string, int>, value is List<int>];
 
+    public static bool missing(Any? value) => value is not Map<string, int> || value.count() == 0;
+
     public static string guarded(Any? value)
     {
         if (value is not Map<string, int>) {

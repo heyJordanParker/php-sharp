@@ -17,6 +17,8 @@ echo 'both: ', json_encode(Narrowed::both([])), "\n";
 // A test under `!` or `||` in a condition narrows the reads after a failed test, as a guard clause's return leaves them.
 echo 'counted: ', Narrowed::counted([1, 2]), ', ', Narrowed::counted([]), "\n";
 echo 'keyed: ', Narrowed::keyed(['a' => 1]), ', ', Narrowed::keyed([]), ', ', Narrowed::keyed('x'), "\n";
+// The left side of `||` narrows its right side wherever the `||` sits, a returned one too.
+var_dump(Narrowed::missing(['a' => 1]), Narrowed::missing('x'));
 echo 'guarded: ', Narrowed::guarded(['a' => 1]), ', ', Narrowed::guarded('x'), "\n";
 // A change made through a narrowed read reaches the local.
 var_dump(Narrowed::grown([1]));
@@ -32,6 +34,8 @@ bool(false)
 both: [true,true]
 counted: 2, 0
 keyed: a, empty, empty
+bool(false)
+bool(true)
 guarded: a, none
 array(2) {
   [0]=>
