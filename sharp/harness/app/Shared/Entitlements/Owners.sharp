@@ -1,0 +1,6 @@
+namespace App.Shared.Entitlements;
+
+internal class Owners
+{
+    public List<int> of(int account) => [account];
+}

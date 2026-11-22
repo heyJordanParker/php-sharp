@@ -380,7 +380,6 @@ Checkout.maximum;
 | `public` | everyone |
 
 - **A namespace's inside is its folder.** A file's namespace must match its path, so no file can declare its way into a namespace. Each folder below the project's namespace root names a part of the namespace, so a folder whose name a namespace can't take, such as `it's`, is a compile error that asks to rename it.
-- **Tests:** test folders may declare the namespace they test, which gives them `internal` access.
 - **A member is never more visible than its class.**
 - **Visibility is checked both ways.**
   - Too narrow is a compile error at the caller.
@@ -391,6 +390,21 @@ Checkout.maximum;
 - **A class of an application that nothing uses is a compile error,** as a plugin nothing wires in never runs: "Nothing uses `Ghost`, so it never runs." A class is used when code outside it creates it, binds it in a module, names it as a type, extends or implements it, or names it in `typeof` or an attribute, and a use from plain PHP counts. It runs in a project, as the too-wide error does, so a library's classes are exempt. A class that carries an attribute whose class is marked `[DynamicallyAccessed]`, or has a member that carries one, counts as used, as does a class with a listener, a method written with `on` (section 15), which runs when its event is emitted with nothing wired by hand, and a class with an `[Export]` method, which plain PHP calls through the global function it declares (section 23). A class in a test folder counts as used, since its test runner creates it, as PHPUnit creates a test class. A class a framework finds by scanning folders does not: the application binds it or names it. A module and an enum's case are exempt.
 - **A public member of an application names its types.** In a project, the types of a `public` member's property, parameters and result hold no `Any`, `Any?` or `Object` at any depth, so an app's API states every type it takes and gives: `public Map<string, Any> checkoutPayload()` is a compile error, "`Store.checkoutPayload` is public, and a public member of an application names its types: `Any` in `Map<string, Any>`." A type parameter is a named type, so `public T first<T>(List<T> items)` compiles. An interface's members count. An `internal` or private member, an `internal` class's members and a library's are exempt, and an override keeps its parent's types, so an override of a plain PHP method that takes `mixed` takes `Any?`. A value of an unknown shape is named by a struct that parses it (section 10).
 - **There is no named reach,** such as `internal(App\Tenant)`. A helper shared by sibling namespaces moves to their parent namespace.
+
+**A test file, in a folder `composer.json` lists under `autoload-dev`, may declare the namespace it tests and reaches its `internal` members.**
+
+<!-- example test-file-internal-access -->
+```csharp
+// tests/Feature/Entitlements/OwnersTest.sharp
+namespace App.Shared.Entitlements;               // a test may declare what it tests
+
+import PHPUnit.Framework.TestCase;
+
+public class OwnersTest : TestCase
+{
+    public void testItListsTheOwners() { new Owners().of(7); }   // compiles: internal reachable
+}
+```
 
 **An interface member is always public, so it takes no access modifier.** Writing one, `public` included, is a compile error:
 
@@ -5298,6 +5312,21 @@ import App.Tenant.Store.CartService;      // compile error: `App.Tenant.Store.En
 public class Cart { … }
 ```
 
+A test file's imports are no edges of the namespace graph.
+
+<!-- example test-file-imports -->
+```csharp
+// tests/A/ThingTest.sharp
+namespace App.A;
+
+import App.B.User;   // compiles, though App.B imports App.A: App.A's edges are its production files' imports
+
+public class ThingTest
+{
+    public int testIt() => User.of(new Account());
+}
+```
+
 **A plain PHP library's function is called through its namespace, as a member.** After `import Vendor.Pdf;`, the call is `Pdf.render(html)`. Importing a single function, or calling a function by its bare name, is a compile error, so every call outside the current class reads `Name.member(…)`:
 
 <!-- example library-functions -->
@@ -8629,6 +8658,50 @@ namespace App.Shop.Records;
 module
 {
     imports App.Tenant.Store, App.Shared.Ledgr;        // compile error: App.Shared.Ledgr names no namespace
+}
+```
+
+A module's `imports` line limits its namespaces' production files. Production code can't use a class a test file declares.
+
+<!-- example test-file-reach -->
+```csharp
+// app/Shared/Entitlements/Module.sharp
+namespace App.Shared.Entitlements;
+
+module
+{
+    imports App.Shared.Ledger;
+}
+```
+
+<!-- example test-file-reach -->
+```csharp
+// tests/Feature/Entitlements/InheritedActionOwnersTest.sharp
+namespace App.Shared.Entitlements;
+
+import Tests.Lib.TenantTestCase;   // compiles: the list limits production files
+
+public class InheritedActionOwnersTest : TenantTestCase { … }
+```
+
+<!-- example test-file-reach -->
+```csharp
+// app/Shared/Billing/Invoice.sharp
+namespace App.Shared.Billing;
+
+import Tests.Lib.TenantTestCase;   // compile error: Production code can't use `TenantTestCase`, a test file's class.
+
+public class Invoice { … }
+```
+
+<!-- example test-file-reach -->
+```csharp
+// app/A/Billing.sharp
+namespace App.A;
+
+public class Billing
+{
+    public int total() => new FakeOwners().count();   // compile error: the same error
 }
 ```
 

@@ -1,0 +1,6 @@
+namespace App.A;
+
+internal class FakeOwners
+{
+    public int count() => 2;
+}

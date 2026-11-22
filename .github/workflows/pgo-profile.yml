@@ -66,10 +66,11 @@ jobs:
           fi
 
       # The corpus's packages, as release.yml's macOS job kept them, under the lock's hash, with the job's token, so
-      # GitHub's rate limit for anonymous downloads never stops the training.
+      # GitHub's rate limit for anonymous downloads never stops the training. The token goes as a bearer token, as
+      # release.yml's corpus step explains.
       - name: The corpus's packages
         env:
-          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.GITHUB_TOKEN }}"}}'
+          COMPOSER_AUTH: '{"bearer": {"github.com": "${{ secrets.GITHUB_TOKEN }}"}}'
         run: |
           kept="$GITHUB_WORKSPACE/sharp/build/corpus"
           installed="$kept/$(shasum -a 256 corpus/composer.lock | cut -c1-16)"

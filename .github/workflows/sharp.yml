@@ -13,9 +13,10 @@ on:
 permissions:
   contents: read
 # A pull request, and master, runs one push at a time, and only the newest push waits, since its tree holds every
-# commit before it. A run in progress always finishes, so a pull request whose pushes come faster than a run still
-# gets results: when each push cancelled the run before it, 69 of the last 150 runs were cancelled. A schedule or a
-# dispatch runs in a group of its own.
+# commit before it. A run in progress finishes, so a pull request whose pushes come faster than a run still gets
+# results: when each push cancelled the run before it, 69 of the last 150 runs were cancelled. Only a failed job
+# cancels a pull request's run, which can no longer pass, as .github/actions/cancel-failed-run explains. A schedule or
+# a dispatch runs in a group of its own.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: false
@@ -130,6 +131,7 @@ jobs:
     # inputs an earlier run built.
     timeout-minutes: 50
     permissions:
+      actions: write
       contents: read
       packages: read
     env:
@@ -212,6 +214,11 @@ jobs:
       - name: Test the last fifth of Mago's workspace tests, the doc tests and the property tests
         if: ${{ !needs.CHANGES.outputs.passed }}
         run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/test --mago --shard 5/5
+      # As .github/actions/cancel-failed-run explains.
+      - &cancel-failed-run
+        name: Cancel the run, which can no longer pass
+        if: failure() && github.event_name == 'pull_request'
+        uses: ./.github/actions/cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -229,6 +236,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
+      actions: write
       contents: read
       packages: read
     strategy:
@@ -274,6 +282,7 @@ jobs:
         run: >-
           sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/2
           ${{ matrix.shard == 2 && '--census --differential --phpunit' || '' }}
+      - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -289,6 +298,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
+      actions: write
       contents: read
       packages: read
     strategy:
@@ -327,6 +337,7 @@ jobs:
         run: tar --zstd -xf "$RUNNER_TEMP/tests.tar.zst"
       - name: Test every fifth test of the workspace
         run: sharp/bin/test --linux --mago --no-build --shard ${{ matrix.shard }}/5
+      - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -341,6 +352,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
+      actions: write
       contents: read
       packages: read
     env:
@@ -367,6 +379,7 @@ jobs:
         run: |
           build="sharp/build/linux-$(uname -m)"
           sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --self-test
+      - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -382,6 +395,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
+      actions: write
       contents: read
       packages: read
     strategy:
@@ -408,6 +422,7 @@ jobs:
         run: |
           build="sharp/build/linux-$(uname -m)"
           sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/4
+      - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -423,6 +438,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
+      actions: write
       contents: read
       packages: read
     env:
@@ -462,6 +478,7 @@ jobs:
             sharp/build/go/pkg/mod
             sharp/build/linux-x86_64/frankenphp/go-build
           key: SHARP_HOSTS_GO-${{ runner.arch }}-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile', 'sharp/build/linux-x86_64/install/include/**') }}-${{ github.sha }}
+      - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -538,6 +555,7 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
+      actions: write
       contents: read
     steps:
       - name: git checkout
@@ -554,6 +572,7 @@ jobs:
           echo "$RUNNER_TEMP/actionlint" >> "$GITHUB_PATH"
       - name: The actions are pinned, no Dockerfile names a syntax frontend, and actionlint passes
         run: sharp/bin/check workflows
+      - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -570,9 +589,10 @@ jobs:
     if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: macos-arm64-local
     permissions:
+      actions: write
       contents: read
     steps:
-      # actions/checkout's clean deletes sharp/build. The Mac's runners keep it instead, as
+      # actions/checkout's clean deletes sharp/build. The Mac's runner keeps it instead, as
       # .github/actions/clean-kept-build explains, so the engines and mago rebuild only what changed since the runner's
       # last build.
       - name: git checkout
@@ -651,6 +671,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/target/test-run"
           cp sharp/build/darwin-arm64/mago/debug/mago "$RUNNER_TEMP/target/test-run/mago"
           CARGO_TARGET_DIR="$RUNNER_TEMP/target" sharp/bin/check plain-php
+      - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -879,6 +900,7 @@ jobs:
     runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 45
     permissions:
+      actions: write
       contents: read
       packages: write
     strategy:
@@ -1019,6 +1041,7 @@ jobs:
           name: digest-dev-${{ strategy.job-index }}
           path: ${{ runner.temp }}/dev-digests/*
           if-no-files-found: error
+      - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
