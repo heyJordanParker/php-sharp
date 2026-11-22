@@ -19,7 +19,8 @@ const LIBRARY_MODULE = [
 ];
 
 // A library unless $files holds a composer.json of its own, so spec section 5's strict rules, which an application's
-// code meets, leave alone a test's classes, which only the test itself calls.
+// code meets, leave alone a test's classes, which only the test itself calls. Its `autoload-dev` folder is tests/, as a
+// Composer project's is, so a test module there belongs to a test file.
 function compile_project(string $name, array $files): string
 {
     // The process ID keeps two test runs on one machine out of each other's projects.
@@ -28,7 +29,7 @@ function compile_project(string $name, array $files): string
     mkdir($root);
     $root = realpath($root);
     file_put_contents("$root/mago.toml", "[source]\npaths = [\".\"]\nextensions = [\"sharp\"]\n");
-    file_put_contents("$root/composer.json", "{\"type\": \"library\"}\n");
+    file_put_contents("$root/composer.json", '{"type": "library", "autoload-dev": {"psr-4": {"Tests\\\\": "tests/"}}}' . "\n");
     foreach ($files as $path => $contents) {
         is_dir(dirname("$root/$path")) || mkdir(dirname("$root/$path"), recursive: true);
         file_put_contents("$root/$path", $contents);
