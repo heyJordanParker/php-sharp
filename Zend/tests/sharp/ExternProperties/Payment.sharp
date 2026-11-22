@@ -1,0 +1,11 @@
+namespace ExternProperties;
+
+import Lib.Columns;
+
+public class Payment : Columns
+{
+    [Key("total_cents")]
+    public extern int totalCents { get; set; }
+
+    public static Property property(string name) => typeof(Payment).properties().filter(property => property.name == name)[0];
+}

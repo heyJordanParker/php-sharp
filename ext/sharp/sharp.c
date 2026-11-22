@@ -5897,21 +5897,35 @@ static bool sharp_extern_line(const zend_property_info *carrier, zend_string **n
 	return found;
 }
 
+/* The type of the `extern` property whose hidden static is `carrier`, read on a class value of `ce` whose type arguments
+ * are `arguments`, as sharp_declared_types reads it, with its line in `line` and its name in `name`, which the caller
+ * releases, see sharp_extern_line. NULL with an Error when no type reads. */
+static const sharp_type *sharp_extern_type(const zend_property_info *carrier, const zend_class_entry *ce,
+	const sharp_type *arguments, zend_string **name, sharp_declared_member *line)
+{
+	const sharp_type *types = sharp_extern_line(carrier, name, line)
+		? sharp_declared_types(line->type, line->type_length, carrier->ce, ce, arguments)
+		: NULL;
+	if (!types) {
+		zend_throw_error(NULL, "PHP# reads no type for %s::$%s. This is a bug in PHP#", ZSTR_VAL(carrier->ce->name),
+			ZSTR_VAL(*name));
+		return NULL;
+	}
+
+	return types->members[0];
+}
+
 /* Adds to `properties` the row reflection reads of the `extern` property whose hidden static is `carrier`, read on a class
  * value of `ce` whose type arguments are `arguments`, as Sharp_Internal_properties makes a row: its access and its
- * attributes are its hidden static's, and its type and what writes it its line, see sharp_extern_line. False with an
+ * attributes are its hidden static's, and its type and what writes it its line, see sharp_extern_type. False with an
  * Error when no type reads. */
 static bool sharp_add_extern_row(
 	zval *properties, const zend_property_info *carrier, const zend_class_entry *ce, const sharp_type *arguments)
 {
 	zend_string *name;
 	sharp_declared_member line;
-	const sharp_type *types = sharp_extern_line(carrier, &name, &line)
-		? sharp_declared_types(line.type, line.type_length, carrier->ce, ce, arguments)
-		: NULL;
-	if (!types) {
-		zend_throw_error(NULL, "PHP# reads no type for %s::$%s. This is a bug in PHP#", ZSTR_VAL(carrier->ce->name),
-			ZSTR_VAL(name));
+	const sharp_type *type = sharp_extern_type(carrier, ce, arguments, &name, &line);
+	if (!type) {
 		zend_string_release_ex(name, false);
 		return false;
 	}
@@ -5919,7 +5933,7 @@ static bool sharp_add_extern_row(
 	array_init_size(&property, 5);
 	add_next_index_str(&property, zend_string_copy(carrier->ce->name));
 	add_next_index_str(&property, name);
-	sharp_add_declared_type(&property, types->members[0]);
+	sharp_add_declared_type(&property, type);
 	sharp_add_visibility(&property, carrier->flags, carrier->attributes);
 	add_next_index_stringl(&property, line.words, line.words_length);
 	zend_hash_next_index_insert_new(Z_ARRVAL_P(properties), &property);
@@ -6443,21 +6457,29 @@ static uint32_t sharp_extern_set_flags(const char *reach, size_t length, bool *i
 	return ZEND_ACC_PUBLIC;
 }
 
+static bool sharp_property_value_fits(
+	const sharp_type *type, zval *value, const zend_class_entry *ce, const char *name, bool reference);
+
 /* The call by `caller`'s code of the plain PHP parent's `__get` on `receiver`, or of its `__set` with `value`, with the
  * key of the `extern` property `name` whose hidden static is `carrier`, spec section 14.3, into `return_value`. The
  * code reaches it as a direct use of the property would: a read by the property's access, and a write by the access
- * its line gives its `set`, with the Error PHP gives a property it can't reach, and a get-only one is read-only. */
+ * its line gives its `set`, with the Error PHP gives a property it can't reach, and a get-only one is read-only. A
+ * written value is checked against the property's type as any property's write is, see sharp_property_value_fits. */
 static void sharp_extern_call(const zend_execute_data *caller, zend_object *receiver, const zend_property_info *carrier,
 	zend_string *name, zval *value, zval *return_value)
 {
 	const zend_class_entry *scope = caller ? caller->func->common.scope : NULL;
 	uint32_t flags = carrier->flags;
+	const sharp_type *type = NULL;
 	if (value) {
 		zend_string *property;
 		sharp_declared_member line;
-		bool found = sharp_extern_line(carrier, &property, &line);
+		type = sharp_extern_type(carrier, receiver->ce, sharp_type_arguments(receiver), &property, &line);
 		zend_string_release_ex(property, false);
-		if (!found || line.words_length < strlen("set ") || memcmp(line.words, "set ", strlen("set ")) != 0) {
+		if (!type) {
+			return;
+		}
+		if (line.words_length < strlen("set ") || memcmp(line.words, "set ", strlen("set ")) != 0) {
 			zend_throw_error(NULL, "Property %s::$%s is read-only", ZSTR_VAL(carrier->ce->name), ZSTR_VAL(name));
 			return;
 		}
@@ -6490,6 +6512,9 @@ static void sharp_extern_call(const zend_execute_data *caller, zend_object *rece
 	ZVAL_STR(&key, Z_STR_P(held));
 	if (!value) {
 		zend_call_method_with_1_params(receiver, receiver->ce, NULL, "__get", return_value, &key);
+		return;
+	}
+	if (!sharp_property_value_fits(type, value, carrier->ce, ZSTR_VAL(name), false)) {
 		return;
 	}
 	zval written;
@@ -9826,9 +9851,21 @@ bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_ob
 	}
 
 	const sharp_type *type = sharp_property_type(info, object);
-	if (!type) {
+	const char *name = zend_get_unmangled_property_name(info->name);
+	if (!type || !sharp_property_value_fits(type, value, info->ce, name, reference)) {
 		return false;
 	}
+
+	return Z_TYPE_P(value) != IS_ARRAY || (reference && (info->flags & ZEND_ACC_SHARP_CROSSING))
+		|| !sharp_crosses_property(info) || sharp_cross_property(info, value);
+}
+
+/* Whether `value`, renumbered where `type` is a List, is of `type`, the type of the property `name` that `ce` declares,
+ * or of the reference a property holds for `reference`. A value of another type throws the TypeError PHP gives a typed
+ * property's write, which names the type the class wrote. */
+static bool sharp_property_value_fits(
+	const sharp_type *type, zval *value, const zend_class_entry *ce, const char *name, bool reference)
+{
 	sharp_type_renumber(type, value);
 	if (sharp_type_accepts(type, value, NULL)) {
 		const sharp_type *iterable = sharp_type_lazily_checked(type, value);
@@ -9836,21 +9873,18 @@ bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_ob
 			smart_str given = {0};
 			sharp_value_type_text(&given, value);
 			zend_string *head = zend_strpprintf(0, "Cannot assign %s to %sproperty %s::$%s of type %s: ", ZSTR_VAL(given.s),
-				reference ? "reference held by " : "", ZSTR_VAL(info->ce->name),
-				zend_get_unmangled_property_name(info->name), ZSTR_VAL(type->text));
+				reference ? "reference held by " : "", ZSTR_VAL(ce->name), name, ZSTR_VAL(type->text));
 			smart_str_free(&given);
 			sharp_sequence_check(value, iterable, head);
 		}
-		return Z_TYPE_P(value) != IS_ARRAY || (reference && (info->flags & ZEND_ACC_SHARP_CROSSING))
-			|| !sharp_crosses_property(info) || sharp_cross_property(info, value);
+		return true;
 	}
 	if (!EG(exception)) {
 		smart_str given = {0};
 		sharp_value_type_text(&given, value);
 		zend_string *problem = sharp_first_problem(type, value);
 		zend_type_error("Cannot assign %s to %sproperty %s::$%s of type %s%s", ZSTR_VAL(given.s),
-			reference ? "reference held by " : "", ZSTR_VAL(info->ce->name), zend_get_unmangled_property_name(info->name),
-			ZSTR_VAL(type->text), ZSTR_VAL(problem));
+			reference ? "reference held by " : "", ZSTR_VAL(ce->name), name, ZSTR_VAL(type->text), ZSTR_VAL(problem));
 		zend_string_release(problem);
 		smart_str_free(&given);
 	}
