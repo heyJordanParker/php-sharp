@@ -4,6 +4,16 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Changed
+
+- An effect class is declared `effect class`. 0.6.48 spelled it `foreign class`. `effect` is a modifier only among a class's modifiers, spec section 29, so a parameter, a local or a property may be named `effect`, and `foreign` is a name like any other, so `public foreign class Store` fails as any unknown word before `class` does. The codes `foreign-in-static` and `foreign-outside-module` are `effect-object-in-static` and `effect-object-outside-module`.
+
+### Fixed
+
+- A machine's invariant proves from every invariant of the case a move or an entry point starts from, spec section 20.2, whichever case it gives. So `public Trail.Done finish() => Trail.Done(this.ids);` in `case Open(List<int> ids)`, beside `law openHoldsOne(Trail.Open o) => o.ids.count() > 0;` and `law doneHoldsOne(Trail.Done d) => d.ids.count() > 0;`, proves, where 0.6.48 refused it with "`doneHoldsOne` breaks after `finish()`". 0.6.48 assumed those invariants, but read what one computes only when it was the invariant it proved. A move that breaks an invariant is still refused with the moves that break it.
+- A law reads a nullable `int` with `??` and `==` as the integer it holds, whichever branch built it. So beside `final case Open(int? left)`, which `public static Spots of(int? cap, int claims)` builds as `Spots.Open(cap - claims)` when `claims < cap`, `law leftIsNeverNegative(Spots.Open open) => (open.left ?? 0) >= 0;` and `law openCountsItsSpots(int cap, int claims) when claims < cap && claims >= 0 => Spots.of(cap, claims) is Spots.Open open ? open.left == cap - claims : false;` prove, where 0.6.48 refused them with "`leftIsNeverNegative` breaks after `of(cap, claims)`" and "law openCountsItsSpots is not proven".
+- A law reads the fields of a machine with one case as it reads those of a machine with more, so every law that proves for a machine with two cases proves for the same machine with one. So beside `final case Open(int? left)` alone, which `public static Spaces of(int n) => n >= 0 ? Spaces.Open(n) : Spaces.Open(null);` builds, `law ofLeavesNoneNegative(int n) => Spaces.of(n) is Spaces.Open open ? (open.left is int left ? left >= 0 : true) : true;` proves, where 0.6.48 refused it with "law ofLeavesNoneNegative is not proven", and so do a `??` and an `==` on the field.
+
 ## [0.6.48] - 2026-11-22
 
 ### Added

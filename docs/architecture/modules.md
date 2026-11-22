@@ -137,7 +137,7 @@ public static T run<T>(Function<T()> body) => Internal.runScoped(body);
 
 **PSR-11.** `Sharp\Psr\Container` implements `Psr\Container\ContainerInterface` over `Sharp\Container`. It throws `Sharp\Psr\NotFoundException` for an id no module binds, and `Sharp\Psr\ContainerException`, with the engine's `Sharp\ContainerError` as its previous, for a service the container can't build. A constructor's own exception passes through unchanged. The engine can't implement an interface Composer loads after it starts, so the adapter is PHP, and the Composer package requires `psr/container`.
 
-`environment.require(name)`, a method of the standard library's `foreign` class `Sharp\System\Environment`, gives a variable a binding needs, and throws `ValueError` when it is not set.
+`environment.require(name)`, a method of the standard library's effect class `Sharp\System\Environment`, gives a variable a binding needs, and throws `ValueError` when it is not set.
 
 ## Files
 

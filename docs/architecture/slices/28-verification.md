@@ -336,7 +336,7 @@ The Slice also refuses what giving `Module.sharp` a meaning requires, with error
 - `module { }` in any file but `Module.sharp`: "A module is declared in its folder's Module.sharp."
 - `Module.sharp` declaring a class, function or anything else besides its namespace, imports and one module: "Module.sharp holds only its folder's module." Today `compile p6` accepts `app/Other/Module.sharp` declaring `class Module` (`Compiled 1 PHP# file into .sharp/.`).
 
-Section 32 rules that no syntax marks, so nothing exists to refuse until the container exists: a missing or mistyped service as a compile error, `Factory<T>`, PSR-11, scoped lifetimes, and `foreign` objects created in a module.
+Section 32 rules that no syntax marks, so nothing exists to refuse until the container exists: a missing or mistyped service as a compile error, `Factory<T>`, PSR-11, scoped lifetimes, and effect objects created in a module.
 
 # Open questions for the language owner
 

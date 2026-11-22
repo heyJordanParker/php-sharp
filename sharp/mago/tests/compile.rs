@@ -3007,7 +3007,7 @@ fn compile_lists_the_files_whose_extern_lines_give_a_declaration_attributes() {
 fn compile_lists_the_effects_each_extern_line_declares_for_a_class_and_a_method() {
     let mailer = "<?php\n\nnamespace Lib;\n\nfinal class Mailer\n{\n    public function send(): void {}\n\n    public function count(): int\n    {\n        return 0;\n    }\n}\n";
     let functions = "<?php\n\nnamespace Lib;\n\nfunction sentAt(): int\n{\n    return 1;\n}\n";
-    let smtp = "namespace App.Mail;\n\npublic foreign class Smtp\n{\n}\n";
+    let smtp = "namespace App.Mail;\n\npublic effect class Smtp\n{\n}\n";
     let stubs = "namespace App.Stubs;\n\nimport App.Mail.Smtp;\nimport Lib;\nimport Lib.Mailer;\n\nextern Mailer uses none;\nextern Mailer.send uses Smtp;\nextern Lib.sentAt uses Smtp;\n\npublic class Stubs\n{\n}\n";
     let directory = lawful_project(&[
         ("vendor/acme/lib/Mailer.php", mailer),
@@ -4367,6 +4367,100 @@ fn a_trace_takes_only_values_of_a_machine_that_keep_its_invariants() {
         "{}",
         printed(&output)
     );
+}
+
+/// `App.Trail`, a machine whose `Open` case holds ids its invariant keeps non-empty, and whose move `finish` gives the
+/// `Done` that `finish` builds.
+fn trail(finish: &str) -> String {
+    format!(
+        "namespace App;\n\npublic machine Trail\n{{\n    case Open(List<int> ids)\n    {{\n        public Trail.Done finish() => {finish};\n    }}\n\n    final case Done(List<int> ids);\n\n    public static Trail.Open start(int id) => Trail.Open([id]);\n\n    law openHoldsOne(Trail.Open o) => o.ids.count() > 0;\n\n    law doneHoldsOne(Trail.Done d) => d.ids.count() > 0;\n}}\n"
+    )
+}
+
+/// Spec section 20.2: a move or an entry point that gives a case keeps its invariant from every invariant of the case
+/// it starts from, whichever case it gives and whichever invariant of its own case it needs. A move that breaks the
+/// invariant of the case it gives is still refused with the moves that break it.
+#[test]
+fn a_machine_s_invariant_holds_from_every_invariant_of_the_case_a_move_starts_from() {
+    let directory = library_project(&[
+        ("app/Trail.sharp", &trail("Trail.Done(this.ids)")),
+        (
+            "app/Tally.sharp",
+            "namespace App;\n\npublic machine Tally\n{\n    case Open(int n)\n    {\n        public Tally.Done finish() => Tally.Done(this.n);\n    }\n\n    final case Done(int n);\n\n    public static Tally.Open start() => Tally.Open(1);\n\n    law openIsPositive(Tally.Open o) => o.n > 0;\n\n    law doneIsPositive(Tally.Done d) => d.n > 0;\n}\n",
+        ),
+        (
+            "app/Ledger.sharp",
+            "namespace App;\n\npublic machine Ledger\n{\n    final case Open(List<int> ids);\n\n    final case Closed(List<int> ids);\n\n    public static Ledger.Open start(int id) => Ledger.Open([id]);\n\n    public static Ledger close(Ledger ledger) => ledger is Ledger.Open open ? Ledger.Closed(open.ids) : ledger;\n\n    law openHoldsOne(Ledger.Open open) => open.ids.count() > 0;\n\n    law closedHoldsOne(Ledger.Closed closed) => closed.ids.count() > 0;\n}\n",
+        ),
+        (
+            "app/Climb.sharp",
+            "namespace App;\n\npublic machine Climb\n{\n    case Counting(int n)\n    {\n        public Climb.Counting up() => Climb.Counting(this.n + 1);\n\n        public Climb.Done stop() => Climb.Done;\n    }\n\n    final case Done;\n\n    public static Climb.Counting start() => Climb.Counting(1);\n\n    law positive(Climb.Counting counting) => counting.n > 0;\n\n    law nonZero(Climb.Counting counting) => counting.n != 0;\n}\n",
+        ),
+    ]);
+
+    let output = compile(directory.path());
+
+    assert!(output.status.success(), "{}", printed(&output));
+    for file in ["app/Trail.sharp", "app/Tally.sharp", "app/Ledger.sharp", "app/Climb.sharp"] {
+        assert!(compiled(directory.path(), file).exists(), "{file}");
+    }
+
+    let directory = library_project(&[("app/Trail.sharp", &trail("Trail.Done([])"))]);
+
+    let output = compile(directory.path());
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "error[law-unproven]: `doneHoldsOne` breaks after `start(id: 0) → Open(ids: …)`, `finish() → Done(ids: …)`\n"
+        ),
+        "{}",
+        printed(&output)
+    );
+}
+
+/// A law reads a nullable `int` with `??` and `==` as the integer it holds, whichever branch built it, so a claim over
+/// a case field `int?` proves as one over an `int` does.
+#[test]
+fn a_law_reads_a_nullable_int_with_coalesce_and_equality_as_the_integer_it_holds() {
+    let directory = lawful_project(&[
+        (
+            "app/Spots.sharp",
+            "namespace App;\n\npublic machine Spots\n{\n    final case Sold;\n    final case Open(int? left);\n\n    public static Spots of(int? cap, int claims)\n        => cap != null && claims >= cap ? Spots.Sold : (cap == null ? Spots.Open(null) : Spots.Open(cap - claims));\n\n    law leftIsNeverNegative(Spots.Open open) => (open.left ?? 0) >= 0;\n\n    law openCountsItsSpots(int cap, int claims) when claims < cap && claims >= 0 => Spots.of(cap, claims) is Spots.Open open ? open.left == cap - claims : false;\n}\n",
+        ),
+        (
+            "app/Seats.sharp",
+            "namespace App;\n\npublic machine Seats\n{\n    final case Full;\n    final case Open(int? left);\n\n    public static Seats of(int n) => n > 0 ? Seats.Open(n - 1) : (n == 0 ? Seats.Open(null) : Seats.Full);\n\n    law leftIsNeverNegative(Seats.Open open) => (open.left ?? 0) >= 0;\n\n    law ofLeavesOneLess(int n) => n <= 0 || (Seats.of(n) is Seats.Open open ? open.left == n - 1 : false);\n}\n",
+        ),
+    ]);
+
+    let output = compile(directory.path());
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(directory.path(), "app/Spots.sharp").exists());
+    assert!(compiled(directory.path(), "app/Seats.sharp").exists());
+}
+
+/// A law reads a field of a machine with one case as it reads a field of a machine with more, so the laws that prove
+/// for a machine with two cases prove for the same machine with one.
+#[test]
+fn a_law_reads_the_fields_of_a_machine_with_one_case() {
+    let directory = lawful_project(&[
+        (
+            "app/Seats.sharp",
+            "namespace App;\n\npublic machine Seats\n{\n    final case Open(int? left);\n\n    public static Seats.Open of(int n) => n > 0 ? Seats.Open(n - 1) : Seats.Open(null);\n\n    law leftIsNeverNegative(Seats.Open open) => (open.left ?? 0) >= 0;\n\n    law ofLeavesOneLess(int n) => n <= 0 || Seats.of(n).left == n - 1;\n}\n",
+        ),
+        (
+            "app/Spaces.sharp",
+            "namespace App;\n\npublic machine Spaces\n{\n    final case Open(int? left);\n\n    public static Spaces of(int n) => n >= 0 ? Spaces.Open(n) : Spaces.Open(null);\n\n    law leftIsNeverNegative(Spaces.Open open) => open.left is int left ? left >= 0 : true;\n\n    law ofLeavesNoneNegative(int n) => Spaces.of(n) is Spaces.Open open ? (open.left is int left ? left >= 0 : true) : true;\n}\n",
+        ),
+    ]);
+
+    let output = compile(directory.path());
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(directory.path(), "app/Seats.sharp").exists());
+    assert!(compiled(directory.path(), "app/Spaces.sharp").exists());
 }
 
 /// A machine whose second law names a parameter `until` and whose `Going` case holds a field `while`, two of Lean's

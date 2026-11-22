@@ -638,7 +638,7 @@ foreach (['BackedEnum', 'UnitEnum'] as $class) {
 // standard library's Sharp.IO.ZipArchive, which runs on it.
 $imports[] = 'import ZipArchive;';
 $externs[] = 'extern ZipArchive uses Files;';
-// The standard library's foreign classes run on PHP's own: Sharp.Data.Database and Sharp.Data.Cache on PDO, which has
+// The standard library's effect classes run on PHP's own: Sharp.Data.Database and Sharp.Data.Cache on PDO, which has
 // `Database`, Sharp.Random on a Randomizer, which has `Random`, and Sharp.IO.Console on an SplFileObject over a
 // handle, which has `Console` and `Files`, as the functions on a handle have. A WeakMap holds entries in memory, so
 // Sharp.WeakMap, which runs on it, is pure, and `WeakMap` names Sharp.WeakMap, so PHP's takes an alias.

@@ -93,7 +93,7 @@ $gate->pass("x");    // accepted: PHP refuses the string first
 the run threw TypeError: …
 -->
 
-Run lines reach a `foreign` object the way PHP# code does: a constructor on a run line takes the services a module binds, and the run gets them from the container. Without that rule the run reads a field the constructor never set:
+Run lines reach an effect object the way PHP# code does: a constructor on a run line takes the services a module binds, and the run gets them from the container. Without that rule the run reads a field the constructor never set:
 
 <!-- example run-takes-services -->
 ```csharp

@@ -1,6 +1,6 @@
 namespace App.Delegates;
 
-public foreign class Database
+public effect class Database
 {
     public int rows() => 3;
 }

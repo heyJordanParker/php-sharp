@@ -2,11 +2,11 @@
 
 Dated design record of this slice. `docs/spec.md` holds the current rules.
 
-The standard library ships one `foreign` class per effect: `Clock`, `Random`, `Console`, `Process`, `Files`, `Http`, `Cache`, `Mail`, `Database` and `Environment`. Each lives in namespace `Sharp`, one file each, beside `sharp/composer/library/Sharp/Environment.sharp`. A module creates the object and passes it down through constructors. Each member calls the plain PHP it stands for.
+The standard library ships one `effect` class per effect: `Clock`, `Random`, `Console`, `Process`, `Files`, `Http`, `Cache`, `Mail`, `Database` and `Environment`. Each lives in namespace `Sharp`, one file each, beside `sharp/composer/library/Sharp/Environment.sharp`. A module creates the object and passes it down through constructors. Each member calls the plain PHP it stands for.
 
 **Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
 
-`Environment` ships with foreign classes. The other nine ship in their own PR, after the structs and generic methods PRs merge, because six of them need structs and `Random` needs generic methods.
+`Environment` ships with effect classes. The other nine ship in their own PR, after the structs and generic methods PRs merge, because six of them need structs and `Random` needs generic methods.
 
 ## How a plain PHP function maps to a member
 
@@ -14,7 +14,7 @@ Every bare call to a plain PHP function is a compile error. A User who still wan
 
 The bare-call message names the library member that does the same work, as in "write `files.read(path)` on the `Files` your constructor takes". The checker holds that mapping in one table. The comment on each member below lists the PHP functions its row maps to it. A function with no member gets the message without a suggestion.
 
-The library declares no attribute. A member's effect comes from its class, as for every `foreign` class.
+The library declares no attribute. A member's effect comes from its class, as for every effect class.
 
 ## Failures
 
@@ -29,7 +29,7 @@ Both exceptions carry the message shape `"Class.method: …"`.
 `currentDirectory()` reads the directory on every call, so it follows `changeDirectory`.
 
 ```csharp
-public foreign class Environment
+public effect class Environment
 {
     public List<string> arguments { get; }           // the command line, as PHP's $argv holds it. Read once, in the constructor.
 
@@ -54,7 +54,7 @@ PHP's other environment functions, such as `gethostname`, `php_uname` and the `i
 A moment stays an `int` of Unix seconds, as `Date.format` and `Date.parse` take it.
 
 ```csharp
-public foreign class Clock
+public effect class Clock
 {
     public int now();                                // maps time, gettimeofday. Unix seconds now. Never fails.
 
@@ -73,7 +73,7 @@ public foreign class Clock
 `nextInt(min, max)` excludes `max`. The backend is PHP's `Random\Randomizer`.
 
 ```csharp
-public foreign class Random
+public effect class Random
 {
     public Random(int? seed = null);                 // maps mt_srand, srand, written `new Random(…)` in a module binding. Seeded for a fake in tests, secure without a seed.
 
@@ -96,7 +96,7 @@ public foreign class Random
 PHP# strings interpolate with `${}`, so no member takes a format string.
 
 ```csharp
-public foreign class Console
+public effect class Console
 {
     public void write(string text);                  // maps printf, vprintf, print_r, var_dump, fwrite, fputs, fprintf. To standard output. RuntimeException when the stream is closed.
 
@@ -115,7 +115,7 @@ public foreign class Console
 A run returns the exit code as data. The backend is `proc_open` with an argument list, so no shell string is involved.
 
 ```csharp
-public foreign class Process
+public effect class Process
 {
     public never exit(int code);                     // maps exit. Ends the run, skipping every finally.
 
@@ -139,7 +139,7 @@ Mago parses `exit` as a construct, not as a function call, so the bare-call chec
 A file is read and written whole. A missing file is a returned `null`, the library's convention for a missing value.
 
 ```csharp
-public foreign class Files
+public effect class Files
 {
     public string? read(string path);                // maps file_get_contents, readfile. null when the file doesn't exist. ValueError for a URL. RuntimeException when unreadable.
 
@@ -182,7 +182,7 @@ public foreign class Files
 A 404 or a 500 is a returned response. The backend is curl.
 
 ```csharp
-public foreign class Http
+public effect class Http
 {
     public HttpResponse get(string url);             // a GET. ValueError when Url.isValid refuses the URL. RuntimeException when the connection fails or times out.
 
@@ -215,7 +215,7 @@ A JSON request body needs `Json.encode`, which the library doesn't have yet.
 The APCu functions map to it, each to the member that does its work and the rest of the family to `get`, `set` and `remove`. APCu is no PHP built-in, so `Builtins.sharp` declares none of them, while PHP's own `opcache_*` functions carry `Cache`. The store is a SQLite file through PDO SQLite, which the runtime image ships, with the entries in a table. Values are strings, which in PHP# also cover bytes, so a User encodes a structured value with `Json`.
 
 ```csharp
-public foreign class Cache
+public effect class Cache
 {
     public Cache(string path);                       // the SQLite file. A module sets it.
 
@@ -235,7 +235,7 @@ public foreign class Cache
 The backend is PHP's `mail()`, which hands the message to the local sendmail.
 
 ```csharp
-public foreign class Mail
+public effect class Mail
 {
     public void send(MailMessage message);           // maps mail, mb_send_mail. RuntimeException when the local mail program refuses it.
 }
@@ -259,7 +259,7 @@ public struct MailMessage(
 The backend is PDO, and the runtime image ships its SQLite, PostgreSQL and MySQL drivers. A row is a `Map<string, Any?>`, which a struct's `parse` turns into a typed value.
 
 ```csharp
-public foreign class Database
+public effect class Database
 {
     public Database(string connection, string? user = null, string? password = null);
                                                      // maps pg_connect, mysqli_connect, sqlite_open. A PDO connection string. RuntimeException when it can't connect.
