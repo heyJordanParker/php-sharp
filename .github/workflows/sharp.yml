@@ -633,7 +633,13 @@ jobs:
         run: |
           # shellcheck disable=SC2086 # FORMULAE is a list of formulae.
           brew list --versions $FORMULAE
+      # Through ccache, as release.yml's macOS build builds the same engine, so a file that differs between the trees of
+      # the two jobs, master's for a release and next's, compiles from the cache when it changes back: the run after a
+      # release spent 314 s rebuilding it on run 45025617782, where it took 31 s on run 45016081891.
       - name: Build the engine mago links
+        env:
+          CC: ccache cc
+          CXX: ccache c++
         run: sharp/bin/build-mago --engine
       # The engine the PHP# suite runs on, with --enable-debug, since only a debug engine runs ZEND_ASSERT and reports
       # a leak. It builds through ccache, as BUILD_LINUX's does, so a file that changes back, as a run of another branch
