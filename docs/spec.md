@@ -380,7 +380,6 @@ Checkout.maximum;
 | `public` | everyone |
 
 - **A namespace's inside is its folder.** A file's namespace must match its path, so no file can declare its way into a namespace. Each folder below the project's namespace root names a part of the namespace, so a folder whose name a namespace can't take, such as `it's`, is a compile error that asks to rename it.
-- **Tests:** test folders may declare the namespace they test, which gives them `internal` access.
 - **A member is never more visible than its class.**
 - **Visibility is checked both ways.**
   - Too narrow is a compile error at the caller.
