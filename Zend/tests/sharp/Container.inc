@@ -4,8 +4,8 @@ require __DIR__ . '/project.inc';
 
 // An app whose modules bind each lifetime and each kind of value, with an environment module and a nested namespace's
 // module that overrides its parent's, beside the standard library's module, the classes it binds, Events and Scope, as
-// a Composer project holds them. container_project compiles it with $files, loads it with container_load, and returns
-// the project's folder.
+// a Composer project holds them, and a stub of PHPUnit's TestCase, which a test file's class extends, in phpunit/.
+// container_project compiles it with $files, loads it with container_load, and returns the project's folder.
 function container_project(string $name, array $files = []): string
 {
     $library = 'vendor/heyjordanparker/php-sharp-composer';
@@ -16,6 +16,7 @@ function container_project(string $name, array $files = []): string
     }
     $root = compile_project($name, CONTAINER_APP + $files + $classes + [
         "$library/composer.json" => '{"name": "heyjordanparker/php-sharp-composer"}',
+        'phpunit/Framework/TestCase.sharp' => "namespace PHPUnit.Framework;\n\npublic abstract class TestCase\n{\n}\n",
     ]);
     container_load($root);
 
@@ -23,14 +24,18 @@ function container_project(string $name, array $files = []): string
 }
 
 // Reads the library's module of the project at $root as the library's autoloader does, and loads each class from its
-// folder, a class of Sharp from the library's.
+// folder, a class of Sharp from the library's, and a class of PHPUnit from phpunit/.
 function container_load(string $root): void
 {
     $library = "$root/vendor/heyjordanparker/php-sharp-composer/library";
     Sharp\Internal\readModule("$library/Sharp/Module.sharp");
     spl_autoload_register(function (string $class) use ($root, $library): void {
         $file = str_replace('\\', '/', $class) . '.sharp';
-        $path = str_starts_with($class, 'Sharp\\') ? "$library/$file" : "$root/" . lcfirst($file);
+        $path = match (true) {
+            str_starts_with($class, 'Sharp\\') => "$library/$file",
+            str_starts_with($class, 'PHPUnit\\') => "$root/phpunit/" . substr($file, strlen('PHPUnit/')),
+            default => "$root/" . lcfirst($file),
+        };
         if (is_file($path)) {
             require $path;
         }

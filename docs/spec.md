@@ -8380,7 +8380,7 @@ public enum PaymentError : Error
 
 ## 32. Modules
 
-A module says how the app builds its objects. Each namespace folder may hold `Module.sharp`, a `module { … }` declaration with no name, because the folder names it. `Module` is a reserved file name.
+A module says how the app builds its objects. Each namespace folder may hold `Module.sharp`, a `module { … }` declaration with no name, because its namespace names it. `Module` is a reserved file name.
 
 **A module declares services** with `singleton`, `scoped` and `transient`:
 
@@ -8550,7 +8550,7 @@ module
 }
 ```
 
-**A nested folder's module overrides its parent's services.** A test or environment module overrides with `module : App.Shop { … }`, and the compiler checks every environment's set of services: the base modules under all of that environment's modules at once.
+**A nested namespace's module overrides its parent's services.** A test or environment module overrides with `module : App.Shop { … }`, and the compiler checks every environment's set of services: the base modules under all of that environment's modules at once.
 
 - **An environment module is `Module.<Environment>.sharp`** beside the `Module.sharp` it overrides, such as `Module.Production.sharp`. `SHARP_ENV` picks it.
 - **A test module is declared in the test file that uses it,** with the same header. While a test of that file runs, its services are the test module's over the base modules, with no environment module, which is the set the compiler checks.
@@ -8575,6 +8575,7 @@ module : App.Shop
 namespace App.Shop;
 
 import App.Mail.Mailer;
+import PHPUnit.Framework.TestCase;
 import Tests.Fakes.FakeMailer;
 
 module : App.Shop
@@ -8582,7 +8583,7 @@ module : App.Shop
     singleton Mailer = FakeMailer;                                             // the tests in this file get a FakeMailer
 }
 
-public class CheckoutTest { … }
+public class CheckoutTest : TestCase { … }
 ```
 
 **A missing or mistyped service is a compile error.** PHP# creates the classes a module binds and the classes that declare an `on` method (section 15), each through its main constructor (section 9.1). Every parameter of their constructors, and every binding parameter, needs a binding in the module of its namespace or of a namespace above it. The compiler checks every such class, whether or not another class takes it. A class no module binds is ordinary code, created with `new`, such as `Money`.

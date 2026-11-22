@@ -10,13 +10,14 @@ namespace App.Shop;
 
 import App.Mail.Mailer;
 import App.Mail.LogMailer;
+import PHPUnit.Framework.TestCase;
 
 module : App.Shop
 {
     singleton Mailer = LogMailer;
 }
 
-public class CheckoutTest
+public class CheckoutTest : TestCase
 {
 }
 SHARP,

@@ -4,9 +4,17 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.51
+
+- Move each test module whose file's class is abstract or doesn't extend PHPUnit's `TestCase` into the file of a test that does: such a module never ran, and it is refused now.
+
 ### Changed
 
 - A whole `mago analyze` with extension hosts reports from its compile's own analysis, which the hosts take over, where 0.6.50 loaded, scanned, populated and analyzed every file a second time with them. The hosts start beside the compile, which records each return-type request a host's provider targets. The hosts answer them, and only the files an answer types are analyzed again. Each file a codebase-scan hook selects is scanned again with the hosts, and a declaration a hook refines reaches every file that reads it. A stub a host declares reaches every file that reads it. Hosts with any other provider, an issue filter, an analysis hook, a before-analysis hook, an entry point or a worker reducer analyze every file again from the compile's scans. A one-file edit of a 2,128-file project whose host answers return types takes 4.78 CPU-seconds where it took 6.61, and peaks at 647 MiB where it peaked at 729. With a codebase-scan hook as well, it takes 4.84 CPU-seconds where it took 6.77, and peaks at 666 MiB where it peaked at 747. Each is lower in each of 16 alternating rounds, with the same issues and `.sharp` folder.
+
+### Fixed
+
+- The container finds a class's services in the modules of its namespace and of each namespace above it, wherever the class's file is, spec section 32, as the checker does. So a program under `tests/lib` that declares `namespace App.Testing.Lib` and takes a `Runtime` that `App`'s module binds runs with that `Runtime`, where 0.6.51 compiled it and then threw "No module binds App\Shared\Runtime for App\Testing\Lib\Link", because it read only the modules in the file's folder and the folders above it. A module in that folder that declares `namespace Tests.Lib` serves the classes of `Tests.Lib` alone. A test module in a file that holds no test is refused with the file named, "`tests/lib/Link.sharp` holds no test, so its test module would never run.", where 0.6.51 compiled a program's `module : App { … }` under `tests/` and ran the program with `App`'s own services. A file holds a test when its class isn't abstract and extends `PHPUnit.Framework.TestCase`, directly or through a parent.
 
 ## [0.6.51] - 2026-11-22
 

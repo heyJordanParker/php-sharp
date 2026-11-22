@@ -11590,35 +11590,61 @@ static void sharp_container_read_library(void)
 	}
 }
 
-/* Reads the modules of file's folder and of each folder above it up to its project's root: a folder's
- * Module.<SHARP_ENV>.sharp among the environment modules, and its Module.sharp among the base modules. It stops at
- * the first module that throws. */
-static void sharp_container_read_folders(const zend_string *file)
+/* Reads into bindings each module of listed, the list of workspace-relative paths of the listener table's modules
+ * under one key, or NULL, under the root, the first root_length bytes of path. It stops at the first that throws. */
+static void sharp_container_read_listed(const char *path, size_t root_length, const zval *listed, HashTable *bindings)
+{
+	const zval *module;
+	if (!listed) {
+		return;
+	}
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(listed), module) {
+		if (EG(exception)) {
+			break;
+		}
+		zend_string *module_path = zend_string_concat3(path, root_length, "/", 1, Z_STRVAL_P(module), Z_STRLEN_P(module));
+		sharp_container_read(ZSTR_VAL(module_path), bindings);
+		zend_string_release(module_path);
+	} ZEND_HASH_FOREACH_END();
+}
+
+static HashTable *sharp_listener_table(const char *path, size_t root_length);
+
+/* Reads the modules that serve namespace, spec section 32: of namespace and of each namespace above it, wherever their
+ * files are, as mago compile records them in the listener table of the project that holds file, each namespace's
+ * Module.<SHARP_ENV>.sharp files among the environment modules and its Module.sharp files among the base modules. It
+ * stops at the first module that throws. */
+static void sharp_container_read_modules(const zend_string *file, zend_string *namespace)
 {
 	sharp_container_read_library();
 	size_t root;
 	if (EG(exception) || !sharp_find_root(file, &root)) {
 		return;
 	}
-
-	zend_string *environment = sharp_environment_variable("SHARP_ENV", sizeof("SHARP_ENV") - 1);
-	const char *path = ZSTR_VAL(file);
-	for (size_t folder = sharp_parent(path, ZSTR_LEN(file)); folder >= root && !EG(exception);
-			folder = sharp_parent(path, folder)) {
-		char module[MAXPATHLEN];
-		if (environment && ZSTR_LEN(environment) > 0) {
-			snprintf(module, sizeof(module), "%.*s/Module.%s.sharp", (int) folder, path, ZSTR_VAL(environment));
-			sharp_container_read(module, &SHARP_G(container_environment));
-		}
-		snprintf(module, sizeof(module), "%.*s/Module.sharp", (int) folder, path);
-		if (!EG(exception)) {
-			sharp_container_read(module, &SHARP_G(container_bindings));
-		}
-		if (folder == root) {
-			break;
-		}
+	HashTable *table = sharp_listener_table(ZSTR_VAL(file), root);
+	const zval *modules = table ? zend_hash_str_find(table, "modules", sizeof("modules") - 1) : NULL;
+	if (!modules) {
+		return;
 	}
 
+	zend_string *environment = sharp_environment_variable("SHARP_ENV", sizeof("SHARP_ENV") - 1);
+	zend_string *lowercase = zend_string_tolower(namespace);
+	for (size_t length = ZSTR_LEN(lowercase); length > 0 && !EG(exception);) {
+		if (environment && ZSTR_LEN(environment) > 0) {
+			zend_string *key = zend_strpprintf(0, "%.*s %s", (int) length, ZSTR_VAL(lowercase), ZSTR_VAL(environment));
+			sharp_container_read_listed(ZSTR_VAL(file), root, zend_hash_find(Z_ARRVAL_P(modules), key),
+				&SHARP_G(container_environment));
+			zend_string_release(key);
+		}
+		if (!EG(exception)) {
+			sharp_container_read_listed(ZSTR_VAL(file), root,
+				zend_hash_str_find(Z_ARRVAL_P(modules), ZSTR_VAL(lowercase), length), &SHARP_G(container_bindings));
+		}
+		const char *end = zend_memrchr(ZSTR_VAL(lowercase), '\\', length);
+		length = end ? (size_t) (end - ZSTR_VAL(lowercase)) : 0;
+	}
+
+	zend_string_release(lowercase);
 	if (environment) {
 		zend_string_release(environment);
 	}
@@ -11758,18 +11784,18 @@ static bool sharp_container_build(zend_class_entry *ce, zval *object)
 		zend_throw_error(sharp_ce_container_error, "%s needs itself, so the container can't build it", ZSTR_VAL(ce->name));
 		return false;
 	}
+	zend_string *namespace = sharp_container_namespace(ce->name);
 	if (ce->type == ZEND_USER_CLASS) {
-		sharp_container_read_folders(ce->info.user.filename);
+		sharp_container_read_modules(ce->info.user.filename, namespace);
 	}
 
 	zval arguments;
 	ZVAL_UNDEF(&arguments);
 	bool built = true;
 	if (ce->constructor) {
-		zend_string *namespace = sharp_container_namespace(ce->name);
 		built = sharp_container_arguments(ce->constructor, namespace, ce, &arguments);
-		zend_string_release(namespace);
 	}
+	zend_string_release(namespace);
 	if (built && object_init_to_build(object, ce) == SUCCESS) {
 		if (ce->constructor) {
 			zend_call_known_instance_method(ce->constructor, Z_OBJ_P(object), NULL,
@@ -11905,18 +11931,18 @@ static bool sharp_container_service(zend_string *id, const zend_string *written,
 	return false;
 }
 
-/* The service named name as written, without a leading `\`, its id and its namespace, after reading the modules of
- * its class's folders. */
+/* The service named name as written, without a leading `\`, its id and its namespace, after reading the modules that
+ * serve its class's namespace. */
 static zend_string *sharp_container_requested(zend_string *name, zend_string **id, zend_string **namespace)
 {
 	zend_string *written = ZSTR_LEN(name) > 0 && ZSTR_VAL(name)[0] == '\\'
 		? zend_string_init(ZSTR_VAL(name) + 1, ZSTR_LEN(name) - 1, 0)
 		: zend_string_copy(name);
 	zend_class_entry *ce = memchr(ZSTR_VAL(written), '<', ZSTR_LEN(written)) ? NULL : zend_lookup_class(written);
-	if (ce && ce->type == ZEND_USER_CLASS) {
-		sharp_container_read_folders(ce->info.user.filename);
-	}
 	*namespace = sharp_container_namespace(written);
+	if (ce && ce->type == ZEND_USER_CLASS) {
+		sharp_container_read_modules(ce->info.user.filename, *namespace);
+	}
 	*id = sharp_container_id(written);
 
 	return written;
@@ -12315,13 +12341,14 @@ static bool sharp_listener_lists_fit(const zval *lists, bool nullable)
 }
 
 /* Whether table is a table mago compile wrote: ['inputs' => [input, ...], 'listeners' => [row, ...], 'dispatcher' =>
- * null or [the workspace-relative path of the app's module that binds the dispatcher, its namespace in lowercase],
- * 'attributes' => [the lowercase name of a plain PHP class an `extern` line gives attributes => [the workspace-relative
- * path of each .sharp file whose line does, ...], ...], 'effects' => [the lowercase name of a plain PHP class or method
- * an `extern` line declares => [the dotted full name of each effect it declares, ...], or null for `uses any`, ...],
- * 'tags' => [a family's full
- * name => [the key its `[Tag]` names, or '' for a machine that stores as its value, [a variant's name => its class's
- * full name, ...]], ...]]. A name of digits, as an int-backed machine's case's, is PHP's integer key. */
+ * null or the lowercase namespace of the app's modules that bind the dispatcher, 'attributes' => [the lowercase name
+ * of a plain PHP class an `extern` line gives attributes => [the workspace-relative path of each .sharp file whose line
+ * does, ...], ...], 'effects' => [the lowercase name of a plain PHP class or method an `extern` line declares => [the
+ * dotted full name of each effect it declares, ...], or null for `uses any`, ...], 'tags' => [a family's full name =>
+ * [the key its `[Tag]` names, or '' for a machine that stores as its value, [a variant's name => its class's full
+ * name, ...]], ...], 'modules' => [a lowercase namespace, or one, a space and an environment's name => [the
+ * workspace-relative path of each of its base or environment modules, ...], ...]]. A name of digits, as an
+ * int-backed machine's case's, is PHP's integer key. */
 static bool sharp_listener_table_fits(const zval *table)
 {
 	const zval *inputs = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "inputs", sizeof("inputs") - 1) : NULL;
@@ -12330,13 +12357,14 @@ static bool sharp_listener_table_fits(const zval *table)
 	const zval *attributes = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "attributes", sizeof("attributes") - 1) : NULL;
 	const zval *effects = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "effects", sizeof("effects") - 1) : NULL;
 	const zval *tags = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "tags", sizeof("tags") - 1) : NULL;
+	const zval *modules = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "modules", sizeof("modules") - 1) : NULL;
 	const zval *element, *file;
 	zend_string *class;
 
 	if (!inputs || Z_TYPE_P(inputs) != IS_ARRAY || !listeners || Z_TYPE_P(listeners) != IS_ARRAY || !dispatcher
-			|| (Z_TYPE_P(dispatcher) != IS_NULL && (!sharp_element(dispatcher, 0, IS_STRING) || !sharp_element(dispatcher, 1, IS_STRING)))
+			|| (Z_TYPE_P(dispatcher) != IS_NULL && Z_TYPE_P(dispatcher) != IS_STRING)
 			|| !sharp_listener_lists_fit(attributes, false) || !sharp_listener_lists_fit(effects, true) || !tags
-			|| Z_TYPE_P(tags) != IS_ARRAY) {
+			|| Z_TYPE_P(tags) != IS_ARRAY || !sharp_listener_lists_fit(modules, false)) {
 		return false;
 	}
 	ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(tags), class, element) {
@@ -14540,9 +14568,9 @@ ZEND_METHOD(Sharp_Internal_Listener, __construct)
 
 /* The namespace whose binding of the dispatcher, the service of the id dispatcher names, serves the whole app, as spec
  * section 15's "An app replaces the dispatcher once at startup" says: the running test module's, whatever namespace its
- * header names; else that of the app's top module that binds it, which mago compile writes in the listener table of the
- * event's project, read here with the modules above it; else the root namespace, which the standard library's module
- * serves. Returns NULL and throws when the table is damaged. */
+ * header names; else that of the app's top modules that bind it, which mago compile writes in the listener table of the
+ * event's project, whose modules are read here; else the root namespace, which the standard library's module serves.
+ * Returns NULL and throws when the table is damaged. */
 static zend_string *sharp_dispatcher_namespace(zend_class_entry *event, const zend_string *dispatcher)
 {
 	zend_string *key;
@@ -14563,21 +14591,16 @@ static zend_string *sharp_dispatcher_namespace(zend_class_entry *event, const ze
 	}
 	if (event->type == ZEND_USER_CLASS && sharp_find_root(event->info.user.filename, &root_length)) {
 		HashTable *table = sharp_listener_table(ZSTR_VAL(event->info.user.filename), root_length);
-		zval *module;
+		zval *namespace;
 
 		if (!table) {
 			return NULL;
 		}
-		module = zend_hash_str_find(table, "dispatcher", sizeof("dispatcher") - 1);
-		if (Z_TYPE_P(module) == IS_ARRAY) {
-			zend_string *path = Z_STR_P(sharp_element(module, 0, IS_STRING));
-			zend_string *file = zend_string_concat3(ZSTR_VAL(event->info.user.filename), root_length, "/", 1,
-				ZSTR_VAL(path), ZSTR_LEN(path));
+		namespace = zend_hash_str_find(table, "dispatcher", sizeof("dispatcher") - 1);
+		if (Z_TYPE_P(namespace) == IS_STRING) {
+			sharp_container_read_modules(event->info.user.filename, Z_STR_P(namespace));
 
-			sharp_container_read_folders(file);
-			zend_string_release(file);
-
-			return EG(exception) ? NULL : zend_string_copy(Z_STR_P(sharp_element(module, 1, IS_STRING)));
+			return EG(exception) ? NULL : zend_string_copy(Z_STR_P(namespace));
 		}
 	}
 
