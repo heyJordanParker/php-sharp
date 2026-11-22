@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A computed property whose type is a machine compiles at any visibility, spec section 20.2, since it stores nothing a write could change, so `public OrderStatus progress => this.status;` beside `public OrderStatus status { get; private set; }` compiles. 0.6.47 refused it with "`Order.progress` holds the machine `OrderStatus`, so its `set` is `private`." A property that stores a machine still has a `private set`.
+
 ## [0.6.47] - 2026-11-22
 
 ### Upgrading from 0.6.46
