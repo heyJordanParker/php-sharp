@@ -29,6 +29,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 - A member's name never hides a name the law checker writes for a class's own code, whatever the member is named, so `null` stays `null` beside a static `none()`. A machine with `case Held(int id)`, `public static OptionalCaseFieldRepro.Empty none()` and a method that returns a bound case's id or `null`, with an `if` or with `? :`, proves `law noneHoldsNoId(int unused) => OptionalCaseFieldRepro.none().heldId() == null;` and `law heldHoldsItsId(int id) => OptionalCaseFieldRepro.Held(id).heldId() == id;`, where 0.6.50 refused every law of the class with "the checker translated the code it reaches wrongly". A false law, as `OptionalCaseFieldRepro.none().heldId() == 1`, is not proven, with its claim still to show.
 
+- A method a plain PHP trait gives a PHP# class that breaks the signature of an abstract method of the class's parent is reported at the class's name with "Declared in `Greeting` here." beside the trait's method, as one that breaks an interface's method is, where 0.6.50 named no trait. A report at the class's name no longer repeats its place in an "In class `Greeter`" note.
+
 ## [0.6.50] - 2026-11-22
 
 ### Upgrading from 0.6.49
