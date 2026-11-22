@@ -8629,6 +8629,196 @@ ZEND_FUNCTION(Sharp_Internal_equals)
 	RETURN_BOOL(equal);
 }
 
+/* Throws the JsonException json_encode throws for `code` with JSON_THROW_ON_ERROR. */
+static ZEND_COLD bool sharp_refuse_json(php_json_error_code code)
+{
+	zend_throw_exception(php_json_exception_ce, php_json_get_error_msg(code), code);
+
+	return false;
+}
+
+static bool sharp_stored_value(zval *value, zval *stored);
+
+/* Appends the stored form of `value` to the List `stored`, or sets it in the Map `stored` under the text of `key`, or
+ * of `index` for an int key, as JSON writes an object's key. */
+static bool sharp_stored_put(zval *stored, zend_string *key, zend_ulong index, zval *value)
+{
+	zval held;
+	if (sharp_out_of_memory() || !sharp_stored_value(value, &held)) {
+		return false;
+	}
+	if (Z_TYPE_P(stored) == IS_ARRAY) {
+		zend_hash_next_index_insert_new(Z_ARRVAL_P(stored), &held);
+		return true;
+	}
+	zval text;
+	ZVAL_STR(&text, key ? zend_string_copy(key) : zend_long_to_str((zend_long) index));
+	bool put = sharp_table_put(sharp_table_of(Z_OBJ_P(stored)), &text, &held);
+	zval_ptr_dtor(&text);
+	zval_ptr_dtor(&held);
+
+	return put;
+}
+
+/* The stored form of the PHP array `array`: a List for a list, which JSON writes as an array, and a Map for any other,
+ * which it writes as an object. */
+static bool sharp_stored_array(zval *array, zval *stored)
+{
+	HashTable *entries = Z_ARRVAL_P(array);
+	if (GC_IS_RECURSIVE(entries)) {
+		return sharp_refuse_json(PHP_JSON_ERROR_RECURSION);
+	}
+	if (zend_array_is_list(entries)) {
+		array_init_size(stored, zend_hash_num_elements(entries));
+	} else {
+		object_init_ex(stored, sharp_ce_map);
+	}
+	bool kept = true;
+	zend_string *key;
+	zend_ulong index;
+	zval *element;
+	GC_TRY_PROTECT_RECURSION(entries);
+	ZEND_HASH_FOREACH_KEY_VAL_IND(entries, index, key, element) {
+		if (!sharp_stored_put(stored, key, index, element)) {
+			kept = false;
+			break;
+		}
+	} ZEND_HASH_FOREACH_END();
+	GC_TRY_UNPROTECT_RECURSION(entries);
+	if (!kept) {
+		zval_ptr_dtor(stored);
+		ZVAL_UNDEF(stored);
+	}
+
+	return kept;
+}
+
+/* The stored form of `object` that nothing stands in for, as JSON writes one: the Map of its public properties, each
+ * under its name, a hooked one read through its get hook, and a virtual one without one left out. */
+static bool sharp_stored_properties(zval *object, zval *stored)
+{
+	HashTable *properties = zend_get_properties_for(object, ZEND_PROP_PURPOSE_JSON);
+	object_init_ex(stored, sharp_ce_map);
+	if (!properties) {
+		return true;
+	}
+	bool kept = true;
+	zend_string *key;
+	zend_ulong index;
+	zval *property;
+	ZEND_HASH_FOREACH_KEY_VAL_IND(properties, index, key, property) {
+		if (key && ZSTR_VAL(key)[0] == '\0' && ZSTR_LEN(key) > 0) {
+			continue;
+		}
+		zval read;
+		ZVAL_UNDEF(&read);
+		if (Z_TYPE_P(property) == IS_PTR) {
+			const zend_property_info *info = Z_PTR_P(property);
+			if ((info->flags & ZEND_ACC_VIRTUAL) && !info->hooks[ZEND_PROPERTY_HOOK_GET]) {
+				continue;
+			}
+			property = zend_read_property_ex(info->ce, Z_OBJ_P(object), info->name, true, &read);
+		}
+		kept = !EG(exception) && sharp_stored_put(stored, key, index, property);
+		zval_ptr_dtor(&read);
+		if (!kept) {
+			break;
+		}
+	} ZEND_HASH_FOREACH_END();
+	zend_release_properties(properties);
+	if (!kept) {
+		zval_ptr_dtor(stored);
+		ZVAL_UNDEF(stored);
+	}
+
+	return kept;
+}
+
+/* The stored form of `object`, as the JSON encoder writes it: the stored form of what stands in for it, which is what
+ * its jsonSerialize() gives, as a Map's entries keyed by their text and a Set's elements, a backed enum case's value, or
+ * what the `#json` the compile gives its class gives, spec section 10, and else its public properties'. */
+static bool sharp_stored_object(zval *object, zval *stored)
+{
+	zend_object *found = Z_OBJ_P(object);
+	zend_class_entry *ce = found->ce;
+	if (GC_IS_RECURSIVE(found)) {
+		return sharp_refuse_json(PHP_JSON_ERROR_RECURSION);
+	}
+	zval stand_in;
+	ZVAL_UNDEF(&stand_in);
+	if (instanceof_function(ce, php_json_serializable_ce)) {
+		zend_call_method_with_0_params(found, ce, NULL, "jsonserialize", &stand_in);
+	} else if (ce->ce_flags & ZEND_ACC_ENUM) {
+		if (ce->enum_backing_type == IS_UNDEF) {
+			return sharp_refuse_json(PHP_JSON_ERROR_NON_BACKED_ENUM);
+		}
+		ZVAL_COPY(stored, zend_enum_fetch_case_value(found));
+		return true;
+	} else {
+		zend_function *json = zend_hash_str_find_ptr(&ce->function_table, "#json", sizeof("#json") - 1);
+		if (json) {
+			zend_call_known_function(json, found, ce, &stand_in, 0, NULL, NULL);
+		}
+	}
+	if (EG(exception)) {
+		zval_ptr_dtor(&stand_in);
+		return false;
+	}
+	GC_PROTECT_RECURSION(found);
+	bool kept = Z_ISUNDEF(stand_in) || (Z_TYPE(stand_in) == IS_OBJECT && Z_OBJ(stand_in) == found)
+		? sharp_stored_properties(object, stored)
+		: sharp_stored_value(&stand_in, stored);
+	GC_UNPROTECT_RECURSION(found);
+	zval_ptr_dtor(&stand_in);
+
+	return kept;
+}
+
+/* Spec section 10: the stored form of `value` as a value, what `Json.encode` writes as text: each JSON object a Map,
+ * each JSON array a List, and each scalar itself. False with the exception it threw, the JsonException json_encode
+ * throws for a value JSON can't hold, as one that holds itself. */
+static bool sharp_stored_value(zval *value, zval *stored)
+{
+	ZVAL_UNDEF(stored);
+#ifdef ZEND_CHECK_STACK_LIMIT
+	if (UNEXPECTED(zend_call_stack_overflowed(EG(stack_limit)))) {
+		return sharp_refuse_json(PHP_JSON_ERROR_DEPTH);
+	}
+#endif
+	ZVAL_DEREF(value);
+	switch (Z_TYPE_P(value)) {
+		case IS_NULL:
+		case IS_FALSE:
+		case IS_TRUE:
+		case IS_LONG:
+		case IS_DOUBLE:
+		case IS_STRING:
+			ZVAL_COPY(stored, value);
+			return true;
+		case IS_ARRAY:
+			return sharp_stored_array(value, stored);
+		case IS_OBJECT:
+			return sharp_stored_object(value, stored);
+		default:
+			return sharp_refuse_json(PHP_JSON_ERROR_UNSUPPORTED_TYPE);
+	}
+}
+
+/* Spec section 10: `Class<T>.encode(value)`, the stored form of `value` that `Class<T>.decode` reads back, as
+ * sharp_stored_value gives it. */
+ZEND_FUNCTION(Sharp_Internal_storedValue)
+{
+	zval *value;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_stored_value(value, return_value)) {
+		RETURN_THROWS();
+	}
+}
+
 /* Spec section 24: the JSON text Sharp.Encoding.Json.encode writes, json_encode's with `$flags`, or with
  * JSON_PRETTY_PRINT's layout at `$indent` spaces a level when `$indent` is above 0. A NaN or infinite float is null,
  * which JSON has no number for. It throws JsonException as json_encode does with JSON_THROW_ON_ERROR. */
@@ -13111,6 +13301,44 @@ static void sharp_read_elements(const sharp_type *element, zval *value, sharp_re
 	} ZEND_HASH_FOREACH_END();
 }
 
+/* Replaces the Map `value` with the PHP array of its entries, each value as it is, which a Map field reads as it reads
+ * a JSON object, so the Map `Class<T>.encode` gives, keyed by text as JSON keys an object, reads back: an int key is the
+ * int, a string is the key PHP makes of it, "7" the int 7, and a backed enum case is its value. A Map with any other
+ * key, or with two keys that are one PHP array key, as 5 and "5" are, stays, and its type is checked as it is. */
+static void sharp_read_map_entries(zval *value)
+{
+	sharp_table *table = sharp_table_entries(Z_OBJ_P(value));
+	if (!table) {
+		return;
+	}
+	zval entries;
+	array_init_size(&entries, table->size);
+	SHARP_TABLE_FOREACH(table, bucket) {
+		zval *key = &bucket->key;
+		if (Z_TYPE_P(key) == IS_OBJECT && (Z_OBJCE_P(key)->ce_flags & ZEND_ACC_ENUM)
+				&& Z_OBJCE_P(key)->enum_backing_type != IS_UNDEF) {
+			key = zend_enum_fetch_case_value(Z_OBJ_P(key));
+		}
+		if (Z_TYPE_P(key) != IS_LONG && Z_TYPE_P(key) != IS_STRING) {
+			zval_ptr_dtor(&entries);
+			return;
+		}
+		zval element;
+		ZVAL_COPY_DEREF(&element, &bucket->value);
+		if (Z_TYPE_P(key) == IS_LONG) {
+			zend_hash_index_update(Z_ARRVAL(entries), Z_LVAL_P(key), &element);
+		} else {
+			zend_symtable_update(Z_ARRVAL(entries), Z_STR_P(key), &element);
+		}
+	} SHARP_TABLE_FOREACH_END();
+	if (zend_hash_num_elements(Z_ARRVAL(entries)) < table->size) {
+		zval_ptr_dtor(&entries);
+		return;
+	}
+	zval_ptr_dtor(value);
+	ZVAL_COPY_VALUE(value, &entries);
+}
+
 /* The collection class `ce` makes of the array `value`, through its static `from`, as a struct's parse crosses a PHP
  * array into a Map or a Set. */
 static void sharp_read_collection(zend_class_entry *ce, zval *value)
@@ -13526,6 +13754,12 @@ static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *re
 			return;
 		case SHARP_BUILT_IN_SET:
 		case SHARP_BUILT_IN_MAP:
+			if (type->built_in == SHARP_BUILT_IN_MAP && Z_TYPE_P(value) == IS_OBJECT && Z_OBJCE_P(value) == sharp_ce_map) {
+				sharp_read_map_entries(value);
+				if (EG(exception)) {
+					return;
+				}
+			}
 			if (Z_TYPE_P(value) == IS_ARRAY) {
 				bool keyed = type->built_in == SHARP_BUILT_IN_MAP;
 				sharp_read_elements(type->members[keyed ? 1 : 0], value, read, keyed);
