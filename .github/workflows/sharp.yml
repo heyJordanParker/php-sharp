@@ -646,7 +646,8 @@ jobs:
       # The engine the PHP# suite runs on, with --enable-debug, since only a debug engine runs ZEND_ASSERT and reports
       # a leak. It builds through ccache, as BUILD_LINUX's does, so a file that changes back, as a run of another branch
       # makes it, compiles from the cache, and sharp/bin/build configures again only when what configure reads changed.
-      # Only this step's CC and CXX, so mago's crates that compile C build as the job's other builds build them in the
+      # On macOS sharp/bin/build builds only sapi/cli/php and sapi/phpdbg/phpdbg, so a commit relinks no libphp and
+      # installs nothing, which took 376 of this step's 392 s on run 45051337556. Only this step's CC and CXX, so mago's crates that compile C build as the job's other builds build them in the
       # same target, where another CC rebuilds them and every crate above them.
       - name: Build the engine the PHP# suite runs on
         env:
