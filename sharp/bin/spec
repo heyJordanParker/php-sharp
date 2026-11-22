@@ -1305,8 +1305,8 @@ function build_folder(string $root): string
 }
 
 /**
- * Compiles every example that isn't ignored in a project folder under $work, with the harness, and runs those whose
- * lines claim a value or a throw. Returns the problems found for each example, by id.
+ * Compiles every example that isn't ignored in a project folder under $work-<process ID>, with the harness, and runs
+ * those whose lines claim a value or a throw. Returns the problems found for each example, by id.
  *
  * @return array<string, list<string>>
  */
@@ -1316,8 +1316,22 @@ function measure(string $root, string $work, array $examples): array
     if ($mago === false || !is_executable($mago)) {
         fail('TEST_MAGO_EXECUTABLE names no mago. Run sharp/bin/test --spec, which provides it.');
     }
+    // The process ID keeps two runs on one machine out of each other's projects, as compile_project's does: a second
+    // run that shared the first's folder deleted its files, and six examples failed on "listeners.php is damaged". A
+    // folder holds gigabytes, so the run removes its own when it exits, and those whose process is gone, which a
+    // killed run leaves. posix_kill fails with error 3, ESRCH, only when no process has the ID. Two runs can find the
+    // same folder, so each moves it into its own first, which only one rename can, and removes it only then.
+    $name = $work;
+    $work = "$name-" . getmypid();
     remove($work);
     mkdir($work, 0777, true);
+    register_shutdown_function(remove(...), $work);
+    foreach (glob("$name-[0-9]*", GLOB_ONLYDIR) as $left) {
+        $claimed = "$work/" . basename($left);
+        if (!posix_kill((int) substr($left, strlen("$name-")), 0) && posix_get_last_error() === 3 && @rename($left, $claimed)) {
+            remove($claimed);
+        }
+    }
     $harness = harness_files($root);
     $compile = static fn (string $folder): array => [[$mago, '--no-version-check', '--colors', 'never', '--workspace', $folder, 'compile'], ['MAGO_REPORTING_FORMAT' => 'json', 'MAGO_THREADS' => '1']];
 
