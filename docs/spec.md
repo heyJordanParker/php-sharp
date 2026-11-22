@@ -7199,7 +7199,7 @@ public static class Pairs
 
 A file's extension marks it as PHP#. The engine, Composer's autoloader, editors and the checker all choose the grammar from the filename.
 
-A PHP# file has no PHP tags, so `<?php`, `<?`, `<?=` and `?>` are compile errors. Its first line is code, after the byte order mark an editor may save:
+A PHP# file has no PHP tags, so `<?php`, `<?`, `<?=` and `?>` are compile errors. Its first line is code, after the byte order mark an editor may save, or a program's `#!` line:
 
 <!-- example file-header -->
 ```csharp
@@ -7222,6 +7222,42 @@ public class StoreHelper { … }        // compile error: move StoreHelper to St
 ```
 
 Plain PHP files keep `.php` and `<?php`, and the two call each other freely. Composer's autoloader tries `.sharp` after `.php`.
+
+**A `.sharp` file whose class declares `main` runs as a program.** PHP runs it by its path, as in `php app/Console/Import.sharp data.csv`, or through its `#!` line, as in `./app/Console/Import.sharp data.csv`:
+
+<!-- example program -->
+```csharp
+#!/usr/bin/env php
+namespace App.Console;
+
+import Sharp.System.Environment;
+
+public class Import
+{
+    private Environment environment;
+
+    public Import(Environment environment)
+    {
+        this.environment = environment;
+    }
+
+    public int main()
+    {
+        if (this.environment.arguments.count() < 2) {
+            return 64;
+        }
+
+        return 0;
+    }
+}
+```
+
+- `main` is `public int main()` or `public void main()`. It takes no parameters, and any other `main` is a compile error.
+- When PHP runs the file as its script, the CLI's script, a server's script or `auto_prepend_file`, the engine builds the class through the container, as it builds a class that declares an `on` method, with no module binding, and calls `main`. Before it builds the class, the engine loads the project's Composer autoloader.
+- An `int` result is the process's exit code. A `void` `main` returns to PHP, as a web front controller that names the `.sharp` file as the server's script does, and as a prepend does.
+- A file that `include` or the autoloader loads only declares its class.
+- A `#!` line is allowed as a `.sharp` file's first line only, and is skipped. A `#!` anywhere else is a compile error.
+- The program reads its arguments from `Environment.arguments`, and exits from elsewhere with `Process.exit`.
 
 **`Position` says where code sits in its source.** PHP's magic constants `__DIR__`, `__FILE__`, `__LINE__`, `__FUNCTION__`, `__METHOD__`, `__NAMESPACE__` and `__CLASS__` are removed, along with every other `__Something__` form. `Position` is a standard-library type, imported by default (section 23). It has `file`, `directory`, `line`, `column` and `function`. `function` is the fully qualified dotted name, as in `App.Reports.logSlow`, because a short name is ambiguous across namespaces.
 

@@ -60,6 +60,8 @@ extern PHP_JSON_API zend_class_entry *php_json_exception_ce;
 #define SHARP_SOURCE_LISTING "/*.sharp"
 #define SHARP_LISTENERS "listeners.php"
 #define SHARP_LISTENER_TABLE SHARP_COMPILED_FOLDER "/" SHARP_LISTENERS
+/* The script mago compile writes that requires the project's Composer autoloader, spec section 27. */
+#define SHARP_AUTOLOAD SHARP_COMPILED_FOLDER "/autoload.php"
 
 #define SHARP_KIND_IS_ZEND_KIND(kind) \
 	ZEND_STATIC_ASSERT((zend_ast_kind) SHARP_AST_##kind == ZEND_AST_##kind, "SHARP_AST_" #kind " differs from ZEND_AST_" #kind);
@@ -11690,6 +11692,93 @@ ZEND_FUNCTION(Sharp_Internal_endTest)
 
 	sharp_container_forget();
 	SHARP_G(container_test) = NULL;
+}
+
+/* Spec section 27: whether the .sharp file whose code calls the running function, execute_data's, runs as PHP's
+ * script, the CLI's script, a server's script or auto_prepend_file, which PHP runs from no other code. include and an
+ * autoloader run a file from the code that loads it, so it only declares its class. */
+static bool sharp_runs_as_program(const zend_execute_data *execute_data)
+{
+	const zend_execute_data *file = EX(prev_execute_data);
+
+	return file && !file->prev_execute_data;
+}
+
+/* Spec section 27: a .sharp file whose class declares main, run as PHP's script, first loads its project's Composer
+ * autoloader through the .sharp/autoload.php mago compile writes, so the parent and the interfaces the class names
+ * load as PHP declares it, and the container finds the classes the constructor takes. It runs in a symbol table of its
+ * own, as a module does, since the program's own code holds no variable. */
+ZEND_FUNCTION(Sharp_Internal_startProgram)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	if (!sharp_runs_as_program(execute_data)) {
+		return;
+	}
+	zend_string *file = EX(prev_execute_data)->func->op_array.filename;
+	size_t root_length = 0;
+	bool rooted = sharp_find_root(file, &root_length);
+	zend_string *autoload = rooted
+		? zend_string_concat3(ZSTR_VAL(file), root_length, "/", 1, SHARP_AUTOLOAD, sizeof(SHARP_AUTOLOAD) - 1)
+		: NULL;
+	zend_stat_t status = {0};
+	if (!autoload || VCWD_STAT(ZSTR_VAL(autoload), &status) != 0) {
+		zend_throw_exception_ex(zend_ce_compile_error, 0, "%s runs as a program, and " SHARP_AUTOLOAD
+			", which loads the project's Composer autoloader, is missing. Run vendor/bin/mago compile.",
+			ZSTR_VAL(file) + (rooted ? root_length + 1 : 0));
+		if (autoload) {
+			zend_string_release(autoload);
+		}
+		RETURN_THROWS();
+	}
+
+	zend_op_array *op_array = compile_filename(ZEND_REQUIRE, autoload);
+	zend_string_release(autoload);
+	if (!op_array) {
+		RETURN_THROWS();
+	}
+	HashTable symbols;
+	zend_hash_init(&symbols, 8, NULL, ZVAL_PTR_DTOR, false);
+	zval returned;
+	ZVAL_UNDEF(&returned);
+	sharp_execute_file(op_array, &symbols, &returned);
+	zval_ptr_dtor(&returned);
+	zend_hash_destroy(&symbols);
+	zend_destroy_static_vars(op_array);
+	destroy_op_array(op_array);
+	efree_size(op_array, sizeof(zend_op_array));
+}
+
+/* Spec section 27: a .sharp file whose class, the one name names, declares main, run as PHP's script, builds the
+ * class through the container, as it builds a listener's, and calls main. An int main returns ends the run with that
+ * exit code, as PHP's exit does, and a void main returns to PHP, as a front controller or auto_prepend_file does. */
+ZEND_FUNCTION(Sharp_Internal_runProgram)
+{
+	zend_string *name;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(name)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_runs_as_program(execute_data)) {
+		return;
+	}
+	zval program, returned;
+	if (!sharp_container_build_named(name, &program)) {
+		RETURN_THROWS();
+	}
+	ZVAL_UNDEF(&returned);
+	zend_call_method_with_0_params(Z_OBJ(program), Z_OBJCE(program), NULL, "main", &returned);
+	zval_ptr_dtor(&program);
+	if (EG(exception)) {
+		zval_ptr_dtor(&returned);
+		RETURN_THROWS();
+	}
+	if (Z_TYPE(returned) == IS_LONG) {
+		EG(exit_status) = (int) Z_LVAL(returned);
+		zend_throw_unwind_exit();
+	}
+	zval_ptr_dtor(&returned);
 }
 
 /* Spec section 6.2: a property's observers run only once its object is fully built. The object is still being built
