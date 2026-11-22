@@ -17,8 +17,9 @@ permissions:
 # next whose runs passed, and next takes pushes faster than a run ends: when each push cancelled the run before it, 69
 # of the last 150 runs were cancelled. Any other pull request merges only its newest commit, so a push cancels its run
 # in progress, where release #675's run on 75c9837da5a waited 38 minutes behind the run on a commit it replaced. A push
-# to master lets its run finish, since the run publishes. A failed job cancels a pull request's run, which can no
-# longer pass, as .github/actions/cancel-failed-run explains. A schedule or a dispatch runs in a group of its own.
+# to master lets its run finish, since the run publishes. A failed job cancels any other pull request's run, which can
+# no longer pass, and next's run ends failed, as .github/actions/cancel-failed-run explains. A schedule or a dispatch
+# runs in a group of its own.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' && github.head_ref != 'next' }}
@@ -238,7 +239,7 @@ jobs:
       # As .github/actions/cancel-failed-run explains.
       - &cancel-failed-run
         name: Cancel the run, which can no longer pass
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && github.head_ref != 'next'
         uses: ./.github/actions/cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()

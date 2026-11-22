@@ -5,7 +5,10 @@ description: >-
   that went on held the newest push's run pending: run 45007969043 failed SPEC (2/4) at 09:59Z, then its Mac job ran
   48 more minutes, and the next run waited 36 minutes until it was cancelled by hand. A job that needs every other job
   starts only once they all ended, so the cancel is a step of each job. Steps that run always, as the usage notice and
-  the Mac's cleanup, still run in a cancelled job. The calling job needs actions: write.
+  the Mac's cleanup, still run in a cancelled job. The calling job needs actions: write. next's own pull request skips
+  it, so its run ends failed, naming the job that failed: a cancel ends the run cancelled, and the failed job with it.
+  sharp/bin/land lands a commit of next only once its runs passed, and from 18:52 to 22:23 UTC on 2026-11-22 every run of
+  next ended cancelled with no job failed, as run 45073478244, whose SPEC (2/4) failed, so nothing showed next was red.
 
 runs:
   using: composite

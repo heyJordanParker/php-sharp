@@ -237,7 +237,7 @@ jobs:
       # As .github/actions/cancel-failed-run explains.
       - &cancel-failed-run
         name: Cancel the run, which can no longer pass
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && github.head_ref != 'next'
         uses: ./.github/actions/cancel-failed-run
 
       - name: Write the job's CPU-seconds and peak memory
