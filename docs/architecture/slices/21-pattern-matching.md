@@ -500,7 +500,7 @@ team-lead approves these. Everything not here is tactical.
 - **`EnumCaseItem::Data(EnumCaseDataItem { name, parameter_list })`**, beside `EnumCaseItem::Unit` and `EnumCaseItem::Backed`, with `Node::EnumCaseDataItem` and `Enum::has_data_case()`, which the codex, the semantic check and the bridge share.
 - **`MetadataFlags::ENUM_CASE_CLASS`**, beside `EVENT`: the class a case of an enum with data runs as, which the bridge and the analyzer's clash and namespace checks read.
 - **`Interface.sealed: Option<Keyword>`** and **`TypePattern.fields`**, fields on existing nodes.
-- **`MetadataFlags::SEALED`** (bit 53, `is_sealed()`), beside `ENUM_CASE_CLASS` (bit 52) and #118's `FOREIGN` (bit 51).
+- **`MetadataFlags::SEALED`** (bit 53, `is_sealed()`), beside `ENUM_CASE_CLASS` (bit 52) and #118's `EFFECT_CLASS` (bit 51).
 - **`AnalysisArtifacts::listings`**, the sets of names a file's analysis read whole.
 - **`App\PaymentResult\Paid` and `CheckoutState\Open::instance()`**, what plain PHP sees of a case (question 6).
 - **`sharp/harness/app/PaymentResult.sharp`**, a new harness file.

@@ -7888,23 +7888,23 @@ public class FileFormatter : Formatter
 }
 ```
 
-**A `foreign` class turns an effect into an object** that code holds and passes on, such as a fake in tests. It is optional. Its methods call plain PHP, like any other code. Code that holds a `foreign` object has that effect by name, which `uses` can declare.
+**An `effect` class turns an effect into an object** that code holds and passes on, such as a fake in tests. It is optional. Its methods call plain PHP, like any other code. Code that holds an effect object has that effect by name, which `uses` can declare. `effect` is a modifier only among a class's modifiers, so a parameter, a local or a property may be named `effect`.
 
-<!-- example foreign-class -->
+<!-- example effect-class -->
 ```csharp
 import Illuminate.Support.Facades.Redis;
 
-public foreign class RedisStore
+public effect class RedisStore
 {
     public string? get(string key) => Redis.get(key);
 }
 ```
 
-The standard library's twelve effect classes, listed above, are `foreign` classes. A project declares its own `foreign` classes the same way.
+The standard library's twelve effect classes, listed above, are `effect` classes. A project declares its own effect classes the same way.
 
-**`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it. A listener runs inside the `emit` that raised its event, under the standard library's dispatcher, so an exception it throws leaves that `emit`, and the listeners after it don't run, as with Symfony's dispatcher. Code that must keep going catches it around the `emit`.
+**`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not an effect class: a method has it when its body emits, and no object carries it. A listener runs inside the `emit` that raised its event, under the standard library's dispatcher, so an exception it throws leaves that `emit`, and the listeners after it don't run, as with Symfony's dispatcher. Code that must keep going catches it around the `emit`.
 
-**PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS`, with or without `$`, fail as a typo does. Request data arrives as a parameter, such as a framework's `Request`. The process environment and the command-line arguments arrive as `Environment`, a standard `foreign` class like `Clock` and `Random`:
+**PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS`, with or without `$`, fail as a typo does. Request data arrives as a parameter, such as a framework's `Request`. The process environment and the command-line arguments arrive as `Environment`, a standard effect class like `Clock` and `Random`:
 
 - `string? variable(string name)` reads an environment variable, or gives null when it is not set.
 - `Map<string, string> variables()` reads every environment variable, by name, on every call.
@@ -7963,7 +7963,7 @@ this.deploy.target();   // throws OutOfRangeException
 
 `Deploy` holds an `Environment`, so it has that effect (see the rule on a class's effects below).
 
-**Plain PHP that reads globals, such as a legacy page, shares them through `PhpGlobals`,** a standard `foreign` class in `Sharp.Interop`, since PHP# has no `global` statement. Each member reads or writes the globals of the running request:
+**Plain PHP that reads globals, such as a legacy page, shares them through `PhpGlobals`,** a standard effect class in `Sharp.Interop`, since PHP# has no `global` statement. Each member reads or writes the globals of the running request:
 
 - `Any? get(string name)` reads the PHP global `name`, or gives null when it is not set.
 - `void set(string name, Any? value)` writes the PHP global `name`.
@@ -7996,9 +7996,9 @@ public class LegacyPage
 
 `LegacyPage` holds a `PhpGlobals`, so it has that effect.
 
-**A `foreign` object is an ordinary type in a constructor, a method parameter and a return value:**
+**An effect object is an ordinary type in a constructor, a method parameter and a return value:**
 
-<!-- example foreign-constructor -->
+<!-- example effect-constructor -->
 ```csharp
 public class TenantCache
 {
@@ -8006,7 +8006,7 @@ public class TenantCache
 }
 ```
 
-<!-- example foreign-parameter -->
+<!-- example effect-parameter -->
 ```csharp
 // app/Shop/Stamp.sharp
 namespace App.Shop;
@@ -8019,12 +8019,12 @@ public class Stamp
 }
 ```
 
-- **A class's effects** are the `foreign` classes it holds, directly or through its fields, or that its methods take, the effects of the plain PHP its methods call, and the events its methods emit. A method that calls a `foreign` object it takes has that effect, as when it calls one it holds, and a caller that uses one a method returns has the effect at that call. The checker works them out from field, constructor and parameter types and from method bodies. Nothing is written down.
-- **A `foreign` object** is created in a module binding (section 32), as often as its binding's lifetime decides, and passed on through constructors, method parameters and return values. Creating one anywhere else in PHP# code, or storing one in a static, is a compile error. Plain PHP creates one as it creates any object.
+- **A class's effects** are the effect classes it holds, directly or through its fields, or that its methods take, the effects of the plain PHP its methods call, and the events its methods emit. A method that calls an effect object it takes has that effect, as when it calls one it holds, and a caller that uses one a method returns has the effect at that call. The checker works them out from field, constructor and parameter types and from method bodies. Nothing is written down.
+- **An effect object** is created in a module binding (section 32), as often as its binding's lifetime decides, and passed on through constructors, method parameters and return values. Creating one anywhere else in PHP# code, or storing one in a static, is a compile error. Plain PHP creates one as it creates any object.
 
-**Pure code** reaches no `foreign` object, emits no event, and calls no plain PHP but what an `extern` line declares `uses none`. Pure limits only what code reaches outside the program, so a pure method may change its own object and its arguments. `readonly` after the parameters is what promises a method changes nothing, as in `T peek() readonly;`, and it holds every implementation to that (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code that changes nothing it was given, so a law that reaches a change is a compile error naming the method, and a law cannot see inside `foreign` classes or plain PHP.
+**Pure code** reaches no effect object, emits no event, and calls no plain PHP but what an `extern` line declares `uses none`. Pure limits only what code reaches outside the program, so a pure method may change its own object and its arguments. `readonly` after the parameters is what promises a method changes nothing, as in `T peek() readonly;`, and it holds every implementation to that (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code that changes nothing it was given, so a law that reaches a change is a compile error naming the method, and a law cannot see inside effect classes or plain PHP.
 
-**A struct and an enum are pure** (sections 10 and 20). Each method, `get` body and operator of one, a data case's included, has no effects, as a value is the same wherever code reads it. A struct or an enum calls only plain PHP its `extern` line declares `uses none`. A struct method that calls a `foreign` parameter, or a plain PHP method whose line names an effect or says `uses any`, and an enum method that emits, is a compile error that names the member and the effect: "`Money.inEuros` has the effect `Http`, and a struct has no effects.", or "`Money.check` may have any effect, and a struct has no effects.". The work goes in a class that takes the value. Creating and throwing an exception is no effect, so a struct may validate its fields with a plain PHP validator declared `uses none`, and throw a `ValueError`:
+**A struct and an enum are pure** (sections 10 and 20). Each method, `get` body and operator of one, a data case's included, has no effects, as a value is the same wherever code reads it. A struct or an enum calls only plain PHP its `extern` line declares `uses none`. A struct method that calls an effect object parameter, or a plain PHP method whose line names an effect or says `uses any`, and an enum method that emits, is a compile error that names the member and the effect: "`Money.inEuros` has the effect `Http`, and a struct has no effects.", or "`Money.check` may have any effect, and a struct has no effects.". The work goes in a class that takes the value. Creating and throwing an exception is no effect, so a struct may validate its fields with a plain PHP validator declared `uses none`, and throw a `ValueError`:
 
 <!-- example struct-plain-php -->
 ```php
@@ -8357,7 +8357,7 @@ module
     singleton Mailer = SmtpMailer;                                             // every class that takes a Mailer gets the SmtpMailer
     singleton Mailer for SendReceipt = QueueMailer;                            // SendReceipt gets a QueueMailer instead
     singleton List<PriceRule> = [TaxRule, DiscountRule];                       // a class that takes a List<PriceRule> gets both
-    singleton RedisStore(Environment environment) = new RedisStore(environment.require("REDIS_URL"));   // a foreign object, created here as its singleton lifetime decides
+    singleton RedisStore(Environment environment) = new RedisStore(environment.require("REDIS_URL"));   // an effect object, created here as its singleton lifetime decides
     transient SendReceipt = SendReceipt;                                       // a class binds to itself, so PHP# creates it
 }
 ```
@@ -8365,7 +8365,7 @@ module
 - **A binding's value is a class or one expression.** A class, such as `SmtpMailer`, is built through its main constructor (section 9.1). A class binds to itself to be created, as `SendReceipt` does.
 - **A binding names the services it needs as parameters, and its value is one expression over them.** The container passes each parameter the service bound to its type, so `RedisStore` above gets the app's `Environment`, which the standard library's module binds for every namespace. An expression is for a value no binding gives, such as `RedisStore`'s URL.
 - **A module stays declarative:** one expression per binding, and no statements, loops or methods.
-- **A `foreign` object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and the container passes it to classes through their constructors.
+- **An effect object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and the container passes it to classes through their constructors.
 - **A module also states the laws that span its classes** (section 28), **and lists the namespaces its code imports from** (below).
 - **A class a module binds reaches code only through injection,** a constructor or a method parameter, or a value PHP# code returns. A plain PHP call, a function or a method of a plain PHP class, whose result is such a class, or whose result PHP# code narrows to one with `as` or `is`, is a compile error: "`StoreService` is bound in `App.Shop`'s module, so it reaches code through a constructor or a parameter." So a service locator, as Laravel's `app(StoreService::class)`, never hands PHP# code a bound class, and every one the code holds is the container's. The one exception is the expression of the binding that binds a plain PHP class, where a framework's object enters the container: `scoped Request = Foundation.request();` compiles, and the same call anywhere else stays an error.
 - **A namespace whose `Module.sharp` binds its children's classes is the app's composition root, so code its children share lives in a child namespace, never in the root,** because the root imports every child and no namespace may import it back. The root's module imports each class it binds, and no two namespaces import each other (section 23). So `Flags`, which `App.Mail.FlaggedMailer` takes and `App`'s module binds, is `App.Features.Flags`, never `App.Flags`:

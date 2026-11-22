@@ -385,7 +385,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 ### Section 29. Effects
 
 - `getenv()`, `echo` and `exit` → refuses. PHP# reaches them through `Environment`, `Console` and `Process`, which a class receives through its constructor, and adding a constructor parameter changes every caller.
-- A call in an enum's method with an effect the checker names → refuses, since an enum has no effects (line 6511): a call of plain PHP whose `extern` declares one, by the member's, then the class's, for the class the call names and each parent, nearest first, or a call on an object of a `foreign` class. A plain PHP call no `extern` covers, and creating or throwing an exception, have no such effect, so an enum that makes one converts. PHP has no `emit`, and the proof's analysis reads the effects of a PHP# method the enum calls. Type.
+- A call in an enum's method with an effect the checker names → refuses, since an enum has no effects (line 6511): a call of plain PHP whose `extern` declares one, by the member's, then the class's, for the class the call names and each parent, nearest first, or a call on an object of an effect class. A plain PHP call no `extern` covers, and creating or throwing an exception, have no such effect, so an enum that makes one converts. PHP has no `emit`, and the proof's analysis reads the effects of a PHP# method the enum calls. Type.
 
 ### Section 30. Tuples
 

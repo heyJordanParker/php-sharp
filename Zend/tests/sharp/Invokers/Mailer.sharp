@@ -1,6 +1,6 @@
 namespace App.Invokers;
 
-public foreign class Mailer
+public effect class Mailer
 {
     public int sent() => 1;
 }

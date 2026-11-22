@@ -15,7 +15,7 @@ The effect checker works on master. `crates/analyzer/src/effects/` records each 
 - **Nine of the ten effect classes do not exist.** Only `Sharp.Environment` ships. `Files`, `Clock`, `Random`, `Console`, `Process`, `Http`, `Cache`, `Mail` and `Database` are bare names the checker accepts after `uses`, with no class behind them. So `pure-interface` fails with "Cannot find type `Files`", and so does section 8's `output-and-exit` with `Console`.
 - **An object a declared call returns carries nothing (line 3741).** With `extern DB uses Database;`, a real Laravel facade's `DB.table("orders").where(…).count()` is refused: "`App.Probe.Report.open` calls `Builder.count`, which has no `extern` declaration". Laravel's query builder is such an object, so every chain that reaches it from a facade or a model is refused. The harness hides it, because its `DB.table` returns `DB` itself.
 - **Three rules are silently accepted:**
-  - creating a `foreign` object outside a module binding (line 3871): `new Store()` and `new Environment()` compile in a method
+  - creating an effect object outside a module binding (line 3871): `new Store()` and `new Environment()` compile in a method
   - importing a PHP built-in class the standard library replaces (line 3759): `import DateTime;` with `new DateTime().format("Y")`, and `import PDO;` with a `PDO?` result, compile
   - storing a `uses f` parameter, on `feat/hosts` (waiting for the language owner)
 - **Two messages say the wrong thing:**
@@ -30,7 +30,7 @@ The Slice builds all of section 29 in one php-sharp PR, after #136 merges and af
 ## Decisions team-lead approves
 
 1. **The nine effect classes ship in this PR,** as `docs/architecture/slices/29-effect-classes.md` on master already designs them, member by member, with `Duration`, `HttpMethod`, `HttpRequest`, `HttpResponse`, `ProcessResult`, `MailAddress` and `MailMessage`. That note says they "ship in their own PR". No branch or PR holds them (`git log --all -S "class Duration" -- sharp/composer` finds nothing), and the language owner's definition of done puts lines 3746 to 3757 and 3815 in this PR. Two follow-ups:
-   - `NAMED_EFFECTS` in `effects/mod.rs` is deleted, because each name becomes a `foreign` class and `is_effect` already accepts every `foreign` class.
+   - `NAMED_EFFECTS` in `effects/mod.rs` is deleted, because each name becomes an effect class and `is_effect` already accepts every effect class.
    - The standard library's `Module.sharp` binds the seven classes whose constructors take nothing (`Clock`, `Random`, `Console`, `Process`, `Files`, `Http`, `Mail`) beside `Environment`. `Database` and `Cache` take a connection string and a path, so the app's module binds them, as `29-effect-classes.md` says ("A module sets it").
 2. **`Http` keeps the curl backend `29-effect-classes.md` names,** so `sharp/bin/build` gains `--with-curl`, and `sharp/docker/Dockerfile` and `sharp/docker/runtime/Dockerfile` carry `libcurl4-openssl-dev`. The built engine has no curl today (`php -n -m` lists none). Approved: real PHP apps and their HTTP clients depend on curl.
 3. **Line 3741 is a type-level carry, decided in `Effects::solve`.** A plain PHP class with no `extern` of its own takes the effects of every declared call that returns it, as the spec's "inherited effect" says. `solve` builds one map per run, from each `extern`'d class's and method's return types, closed over chains such as `Builder.where(): static`. It then reads an `Effect::Unknown` whose class is in the map as those effects. No codex field and no incremental input are added, because `solve` already runs over every summary on each compile. The cost is that a class two libraries return gets both effects. The spec's own way out holds for that case: an `extern` on the returned class wins. Approved, with a row where one plain PHP class is returned by two declared calls with different effects and takes both.
@@ -42,7 +42,7 @@ The Slice builds all of section 29 in one php-sharp PR, after #136 merges and af
    - `CurlHandle`, `CurlMultiHandle` to `Http`
    - `SplFileObject`, `SplFileInfo`, `DirectoryIterator`, `FilesystemIterator`, `RecursiveDirectoryIterator` to `Files`
    - `Random\Randomizer` to `Random`
-5. **Line 3871 is the code `foreign-outside-module`,** reported by `expression/instantiation.rs` for a `new` of a `foreign` class in a `.sharp` file, except inside a module binding's expression, which `statement/module.rs` marks. A test module is a module, so a fake still works. Question 2 must be answered first, because `environment`'s run line breaks this rule.
+5. **Line 3871 is the code `effect-object-outside-module`,** reported by `expression/instantiation.rs` for a `new` of an effect class in a `.sharp` file, except inside a module binding's expression, which `statement/module.rs` marks. A test module is a module, so a fake still works. Question 2 must be answered first, because `environment`'s run line breaks this rule.
 6. **The collection methods take `uses f` from #136's mechanism (line 3993).** Their effects already hold: `carts.map(c => this.gateway.charge(c))` is refused naming `Http`, and `this.carts.map(c => c.orders.count())` fits a pure method. But `prelude_stub_call` in `effects/summary.rs` does that through a second path, beside #136's `uses_arguments`. The scanner will flag each `\Closure` parameter of a `Sharp\ListMethods`, `MapMethods`, `SetMethods` and `IterableMethods` stub `USES_PARAMETER`, as #136 flags `uses f`. `prelude_stub_call` then keeps only its change of the receiver.
 
    Built on #136 as it landed, where `uses f` became `TAKES_ON_EFFECTS`: a function parameter whose type states no effects. `runs_inside_collection_method` in `scanner/function_like.rs` sets that flag on each `\Closure` parameter of the four stubs, so `passed_functions` takes on what a collection method is given, as it does for a PHP# method. `prelude_stub_call` keeps only its change of the receiver, and `callbacks` runs only for plain PHP. `function-effects` passes.
@@ -58,7 +58,7 @@ The Slice builds all of section 29 in one php-sharp PR, after #136 merges and af
 
    Approved: A, so a law over list code proves. Built: a `List` is Lean's `List`, a list literal a Lean list, `count()` is `List.length`, and `map` and `filter` of a lambda whose body cannot throw are `List.map` and `List.filter`. Any other `List` method is refused by name, as are a `Map`, a `Set` and any other lambda.
 
-Decisions 4, 5, 6 and 8 are approved as written, with the codes `wrapped-class` and `foreign-outside-module`. Decision 6 builds on #136's mechanism. If the language owner's open answer drops the `uses f` syntax for an inferred one, the declarations change and the mechanism stays.
+Decisions 4, 5, 6 and 8 are approved as written, with the codes `wrapped-class` and `effect-object-outside-module`. Decision 6 builds on #136's mechanism. If the language owner's open answer drops the `uses f` syntax for an inferred one, the declarations change and the mechanism stays.
 
 10. **Every built-in exception class comes declared pure** (team-lead's answer to question 4). `Builtins.sharp` declares each class by name, as it declares each function, and a row has pure code throw `new ValueError("empty")`.
 
@@ -68,18 +68,18 @@ Each one decides what users write. The note recommends, and decides none.
 
 - **Answered:** question 2, the plain PHP block, built first in `fix/spec-plain-php-run`. Question 4 went to team-lead, as decision 10.
 - **Question 1, answered Option B.** Pure limits only what a method reaches outside the program, so a pure method may change its own object and its arguments, and `readonly` after the parameters promises it changes nothing. The checker already holds this: `effect_outside` skips a change, and section 13 holds every implementation of a `readonly` method to it. Laws keep refusing a change, naming the method, because Lean sees an object as its values and cannot see two names that share one, so modeling a change as a new value would prove laws aliasing breaks. Line 3927 says so.
-- **Question 3, answered Option B.** A `foreign` object is an ordinary type in a parameter and a return value, as the checker already treats it: a call on one a method takes or a call returns has its class's effect. `DateTimeImmutable` and `DateTimeZone` come declared pure, so `Date.format` no longer carries the `Clock` and `Environment` of every call that returns one. Line 3901 and its bullets say so, with the `foreign-parameter` example, and `foreign-in-static` and `foreign-outside-module` no longer say a `foreign` object reaches code only through constructors.
+- **Question 3, answered Option B.** An effect object is an ordinary type in a parameter and a return value, as the checker already treats it: a call on one a method takes or a call returns has its class's effect. `DateTimeImmutable` and `DateTimeZone` come declared pure, so `Date.format` no longer carries the `Clock` and `Environment` of every call that returns one. Line 3901 and its bullets say so, with the `effect-parameter` example, and `effect-object-in-static` and `effect-object-outside-module` no longer say an effect object reaches code only through constructors.
 - **Problem 1, answered Option A:** decision 4.
 - **Problem 2, answered Option A.** The exception classes in PHP's root namespace that `Builtins.sharp` declares are default names, as `Sharp`'s are, in `STANDARD_EXCEPTIONS` in the names crate, and a test holds the two lists equal.
 
 1. **Lines 3873 and 3875: does a pure declaration also forbid changes?** Line 3873 says pure code "changes nothing it was given", and line 3768 says a `Formatter`'s implementations "must be pure". On master, an implementation of `void touch(Box box);` that writes `box.count = 1`, and one of `void keep(int n);` that writes `this.kept = n`, both compile. Refusing them would leave no way to declare an interface method whose implementations change their object. Recommended: a declaration without `uses` limits effects only, and section 13's `readonly` states what it may change, as `Money quote(Cart cart) uses Http readonly;` (line 1411) already does. Laws keep the full rule. Line 3875 would then read "Code without a body has no effect unless it says `uses`".
-2. **Line 3871 against lines 3854 to 3856: where does the `environment` example get its `Environment`?** Its run line, `new Deploy(new Environment()).target();`, creates a `foreign` object outside a module, which line 3871 makes a compile error. The options:
+2. **Line 3871 against lines 3854 to 3856: where does the `environment` example get its `Environment`?** Its run line, `new Deploy(new Environment()).target();`, creates an effect object outside a module, which line 3871 makes a compile error. The options:
    - the run line moves to a plain PHP block of the same example, which needs a `sharp/bin/spec` change in its own PR first, because a run line is the only line that may restate a `throws`
    - run lines are exempt, which no user code could be
-   - line 3871 allows `new` of a `foreign` class in a test file too
+   - line 3871 allows `new` of an effect class in a test file too
 
    Recommended: the plain PHP block, because the rule then holds for all PHP# code.
-3. **Line 3860: may a method take or return a `foreign` object?** "A `foreign` object reaches other code only through constructors." On master, `public Store make()`, `public Environment environment()` and `public string home(Environment environment)` all compile. Recommended: refuse a `foreign` type as a method's parameter or result, outside constructors and module bindings, so a class's effects stay visible from its constructor. The alternative keeps line 3860 as advice.
+3. **Line 3860: may a method take or return an effect object?** "An effect object reaches other code only through constructors." On master, `public Store make()`, `public Environment environment()` and `public string home(Environment environment)` all compile. Recommended: refuse an effect class's type as a method's parameter or result, outside constructors and module bindings, so a class's effects stay visible from its constructor. The alternative keeps line 3860 as advice.
 4. **Line 3744: do PHP's built-in exception classes come declared?** Pure code that throws one is refused: `public int parse(string text) => text == "" ? throw new ValueError("empty") : 1;` gets "calls `Error`, which has no `extern` declaration". Line 3744 promises built-in functions only. Recommended: the Composer package also ships `extern Exception;` and `extern Error;`, which cover every built-in exception through `extern_of`'s walk up the parents, and line 3744 says so.
 
 **Waiting for the language owner, from #136:** whether a `uses f` parameter can be stored. On `feat/hosts`, `public void keep(Function<int()> body) uses body { this.kept = body; }` compiles, so the function's effects leave through the field. This Slice keeps #136's behaviour.
@@ -101,12 +101,12 @@ FAIL §29 function-effects (docs/spec.md:3982)
 ```
 
 - **Probes:** seven copies of `sharp/bin/spec`'s harness project, each compiled with `mago --workspace <probe> compile`. Every message quoted in this note is that output. The sources are in `~/.claude/jobs/6affb5f6/tmp/slice-effects/probes/`:
-  - `a/`: crossings (plain PHP with and without `extern`, a getter, a lambda and a method value passed to plain PHP, overrides, `foreign` classes, laws, superglobals, replaced functions and classes)
+  - `a/`: crossings (plain PHP with and without `extern`, a getter, a lambda and a method value passed to plain PHP, overrides, effect classes, laws, superglobals, replaced functions and classes)
   - `b/`: `extern` rules, an `extern` on a returned class, `uses` on a body, `emit`
   - `c/`: Laravel facades and models with `extern`, a function value passed to plain PHP, a built-in exception, `uses f` and collection methods
   - `d/`: a declaration file's namespace, code in a declaration, `uses` on an import
   - `e/`: a real Laravel facade through `__callStatic`, returning a builder
-  - `f/`: a law over list code, a `foreign` method parameter, a `virtual` override that adds an effect, and a root-namespace class without an import
+  - `f/`: a law over list code, an effect object method parameter, a `virtual` override that adds an effect, and a root-namespace class without an import
   - `h/`: `uses f` and a stored `uses f` parameter, on `feat/hosts`
 
 # Every rule of section 29, its state and its mechanism
@@ -138,13 +138,13 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 
 | Line | Rule | State on master | Mechanism | Reuses |
 |---|---|---|---|---|
-| 3746 to 3757 | Ten effect classes replace PHP's built-ins | Missing for nine: only `Environment.sharp` declares a `foreign class`. `uses Files` resolves to a name in `NAMED_EFFECTS` with no class | Nine `foreign` classes and seven types in `sharp/composer/library/Sharp/`, decision 1 | `29-effect-classes.md`, `Environment.sharp` |
+| 3746 to 3757 | Ten effect classes replace PHP's built-ins | Missing for nine: only `Environment.sharp` declares an `effect class`. `uses Files` resolves to a name in `NAMED_EFFECTS` with no class | Nine effect classes and seven types in `sharp/composer/library/Sharp/`, decision 1 | `29-effect-classes.md`, `Environment.sharp` |
 | 3759 | A replaced function called directly names the method | Wrong: `time()` gets "write `global.time(…)`", which is the plain PHP call | `REPLACEMENTS` rows, decision 8 | `report_bare_function_call`, `member_form` |
 | 3759 | Creating a built-in class the library replaces is refused, naming the member to use | Silently accepted: `new DateTime().format("Y")` compiles | `wrapped-class` at `new` and a static factory, decision 4 | `member_form`, `wrapped-function`'s shape |
 | 3761 to 3801 | `pure-interface`: `greet` is pure, `remember` has `Files`, `FileFormatter.format` is refused | Fails: "Cannot find type `Files`" | `Sharp.Files`. The refusal itself already holds: `ClockShape.area` and `Loud.name` show it | `implementations_must_fit_their_declarations` |
-| 3803, 3805 | A `foreign` class turns an effect into an object; holding one has that effect by name; `foreign-class` | Works: the example passes. `read(string key) uses Store` accepts `this.store.get(key)`, and `Pure.run` refuses it with "has the effect `Store`" | None new | `foreign_class` |
-| 3815 | The ten are `foreign` classes; a project declares its own the same way | Missing for nine (above). A project's own works | Decision 1 | |
-| 3817 | `Events` is `emit`'s effect and no `foreign` class | Works: `emit-effect` passes, and `Pure.run` refuses `emit new OrderPaid(id, 0)` with "has the effect `Events`" | None new | `Effect::Emit` |
+| 3803, 3805 | An effect class turns an effect into an object; holding one has that effect by name; `effect-class` | Works: the example passes. `read(string key) uses Store` accepts `this.store.get(key)`, and `Pure.run` refuses it with "has the effect `Store`" | None new | `effect_class` |
+| 3815 | The ten are effect classes; a project declares its own the same way | Missing for nine (above). A project's own works | Decision 1 | |
+| 3817 | `Events` is `emit`'s effect and no effect class | Works: `emit-effect` passes, and `Pure.run` refuses `emit new OrderPaid(id, 0)` with "has the effect `Events`" | None new | `Effect::Emit` |
 
 ## The environment and superglobals
 
@@ -155,20 +155,20 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 | 3827 to 3856 | `environment`: `region`, `target`, the `throws`, and `_SERVER` refused | Works: the example passes, run line included | None new. Question 2 | |
 | 3858 | `Deploy` holds an `Environment`, so it has that effect | Works: a method that reads it, directly or through a getter, gets "reaches `Getter.region`, which calls `Environment.variable` with the effect `Environment`" | None new | |
 
-## Where a `foreign` object lives
+## Where an effect object lives
 
 | Line | Rule | State on master | Mechanism | Reuses |
 |---|---|---|---|---|
-| 3860, 3862 | A `foreign` object reaches other code only through constructors; `foreign-constructor` | The example passes. A method that returns one or takes one compiles (question 3) | After question 3 | |
-| 3870 | A class's effects are the `foreign` classes it holds, directly or through fields, its plain PHP and its events, inferred | Works, per method: `Outer.run`, which calls `this.inner.region()`, gets "reaches `Inner.region`, which calls `Environment.variable`", and `Outer.name`, which calls `this.inner.plain()`, fits a pure declaration | None new | `Effects::solve` |
-| 3871 | A `foreign` object is created in a module binding, and nowhere else | Silently accepted: `public Store make() => new Store();` and `public Environment environment() => new Environment();` compile | `foreign-outside-module`, decision 5, after question 2 | `foreign_class` |
-| 3871 | No static stores one | Works: `private static Environment? shared = null;` gets `foreign-in-static` | None new | `check_foreign_statics` |
+| 3860, 3862 | An effect object reaches other code only through constructors; `effect-constructor` | The example passes. A method that returns one or takes one compiles (question 3) | After question 3 | |
+| 3870 | A class's effects are the effect classes it holds, directly or through fields, its plain PHP and its events, inferred | Works, per method: `Outer.run`, which calls `this.inner.region()`, gets "reaches `Inner.region`, which calls `Environment.variable`", and `Outer.name`, which calls `this.inner.plain()`, fits a pure declaration | None new | `Effects::solve` |
+| 3871 | An effect object is created in a module binding, and nowhere else | Silently accepted: `public Store make() => new Store();` and `public Environment environment() => new Environment();` compile | `effect-object-outside-module`, decision 5, after question 2 | `effect_class` |
+| 3871 | No static stores one | Works: `private static Environment? shared = null;` gets `effect-object-in-static` | None new | `check_effect_statics` |
 
 ## Pure code and declarations
 
 | Line | Rule | State on master | Mechanism | Reuses |
 |---|---|---|---|---|
-| 3873 | Pure code reaches no `foreign` object, emits nothing, and calls no undeclared plain PHP | Works (rows above) | None new | |
+| 3873 | Pure code reaches no effect object, emits nothing, and calls no undeclared plain PHP | Works (rows above) | None new | |
 | 3873 | Pure code changes nothing it was given | Works for laws. A pure declaration's implementation may change its argument or `this` (question 1) | After question 1 | `body_impurity` |
 | 3873 | A `get` body's effects ride on each read | Works: `Pure.run` returning `this.region` is refused, reaching `Getter.region` | None new | `read_property` |
 | 3873 | Laws reason only about pure code | Works: `pokedKeeps`, over a method that calls `Thing.poke()`, gets `impure-law` | None new | `laws_must_be_pure` |
@@ -211,7 +211,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 - **mago-sharp #99 and #177 (merged).** Effect names in messages, and a file that imports a class named like an effect. `sharp_effect_name` keeps both after `NAMED_EFFECTS` goes.
 - **mago-sharp #170 and #162, php-sharp #127 (merged).** `emit` and `Events`, `extern event`, and `Dispatcher.dispatch` held to nothing. Kept.
 - **mago-sharp #150, #83 and #77, php-sharp #113 (merged).** Laws, and the rule that a law is pure. Kept.
-- **mago-sharp #180 closed, moved to php-sharp #118 (merged).** `foreign` classes, `foreign-in-static`, effects on interfaces, and `Environment`. Its design note, `29-effect-classes.md`, is the design decision 1 builds.
+- **mago-sharp #180 closed, moved to php-sharp #118 (merged).** effect classes, `effect-object-in-static`, effects on interfaces, and `Environment`. Its design note, `29-effect-classes.md`, is the design decision 1 builds.
 - **php-sharp #124 (merged).** Calls into plain PHP through their namespace, and the bare-call refusal. `REPLACEMENTS` gains the effect-class rows.
 - **php-sharp #136, `feat/hosts` (open).** `uses f`: `USES_PARAMETER` in the scanner, `effect_free_parameter_type` in `invocation/analyzer.rs`, and `uses_arguments`, `passed_function` and `method_value_runs` in `effects/summary.rs`. It removes `§29/function-effects`. The Slice merges after it, reuses `uses_arguments` for decision 6, and changes none of it.
 - **Issue #60 (open).** The first statement of section 29's work. Its "Done when" list is this Slice's rows, except `Php` for unclassified built-ins, which line 3744 replaced with `Builtins.sharp`. The PR closes it.
@@ -232,18 +232,18 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 |---|---|---|
 | `Clock`, `Random`, `Console`, `Process`, `Files`, `Http`, `Cache`, `Mail`, `Database` | `sharp/composer/library/Sharp/` | The spec's names. Members as `29-effect-classes.md` lists them |
 | `Duration`, `HttpMethod`, `HttpRequest`, `HttpResponse`, `ProcessResult`, `MailAddress`, `MailMessage` | `Sharp.Time`, `Sharp.Net`, `Sharp` | As `29-effect-classes.md` lists them |
-| `foreign-outside-module` | `IssueCode::ForeignOutsideModule` | Line 3871 |
+| `effect-object-outside-module` | `IssueCode::EffectObjectOutsideModule` | Line 3871 |
 | `wrapped-class` | `IssueCode::WrappedClass` | Line 3759 |
 
-`foreign-outside-module` candidates, read at the callsite `IssueCode::ForeignOutsideModule` in "`new Store()` is `foreign-outside-module`":
+`effect-object-outside-module` candidates, read at the callsite `IssueCode::EffectObjectOutsideModule` in "`new Store()` is `effect-object-outside-module`":
 
-- `foreign-outside-module` names where the object was made, and pairs with `foreign-in-static`, the other half of line 3871. The reader adds "created".
-- `foreign-created-outside-module` adds that word. It is long.
-- `new-foreign` names the act. It does not say what is wrong with it.
-- `foreign-construction` names the act too, and says no more.
-- `foreign-not-bound` says no binding made it. `Missing::Unbound` already means a missing service in `statement/module.rs`.
+- `effect-object-outside-module` names where the object was made, and pairs with `effect-object-in-static`, the other half of line 3871. The reader adds "created".
+- `effect-object-created-outside-module` adds that word. It is long.
+- `new-effect-object` names the act. It does not say what is wrong with it.
+- `effect-object-construction` names the act too, and says no more.
+- `effect-object-not-bound` says no binding made it. `Missing::Unbound` already means a missing service in `statement/module.rs`.
 
-Recommended: `foreign-outside-module`, the sibling of `foreign-in-static`. Runner-up: `foreign-created-outside-module`.
+Recommended: `effect-object-outside-module`, the sibling of `effect-object-in-static`. Runner-up: `effect-object-created-outside-module`.
 
 `wrapped-class` candidates, read at "`new DateTime()` is `wrapped-class`: write `clock.now()`":
 
@@ -265,12 +265,12 @@ sharp/mago/
 │   ├── effects/summary.rs              <- prelude_stub_call keeps only its change of the receiver (decision 6);
 │   │                                      instantiate names the class `new` names
 │   ├── effects/check.rs                <- the undeclared-call help names the class and the declaration's effects
-│   ├── expression/instantiation.rs     <- foreign-outside-module (decision 5); wrapped-class at `new` (decision 4)
-│   ├── statement/module.rs             <- marks a binding's expression, where a foreign object may be created
+│   ├── expression/instantiation.rs     <- effect-object-outside-module (decision 5); wrapped-class at `new` (decision 4)
+│   ├── statement/module.rs             <- marks a binding's expression, where an effect object may be created
 │   ├── expression/call/static_method_call.rs  <- wrapped-class at a static factory (decision 4)
 │   ├── expression/call/function_call.rs  <- REPLACEMENTS rows for the nine classes; member_form writes an
 │   │                                        instance member on the constructor's object; WRAPPED_CLASSES
-│   ├── code.rs                         <- ForeignOutsideModule, WrappedClass
+│   ├── code.rs                         <- EffectObjectOutsideModule, WrappedClass
 │   └── tests/sharp.rs                  <- one test per rule below
 ├── crates/codex/src/scanner/function_like.rs  <- TAKES_ON_EFFECTS on the collection stubs' \Closure parameters
 ├── crates/semantics/src/internal/checker/sharp.rs  <- every superglobal fails as a typo does
@@ -307,7 +307,7 @@ Each rule gets one test, with each form as a row, watched failing before its cod
 - **`crates/analyzer/tests/sharp.rs`:**
   - line 3741: a chain, a local, a field, a `static` return, a facade through `__callStatic`, and an `extern` on the returned class that wins
   - line 3759: each replaced function's message, and each `wrapped-class` row, with the standard library exempt
-  - line 3871: `new` of a `foreign` class in a method, a property's initial value and a lambda, against a module binding and a test module
+  - line 3871: `new` of an effect class in a method, a property's initial value and a lambda, against a module binding and a test module
   - line 3993: a collection method with an effectful lambda, a method value and a function value, through `passed_functions`
   - the four messages of decision 8
   - line 3741's class returned by two declared calls with different effects, which takes both
