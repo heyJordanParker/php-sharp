@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   echo "usage: sharp/bin/test [--linux] [--no-build] [--census] [--spec] [--differential] [--phpunit] [--shard <i>/<n> | paths...]" >&2
   echo "       sharp/bin/test [--linux] [--no-build] --upstream" >&2
-  echo "       sharp/bin/test [--linux] [--no-build] --mago [--shard <i>/<n>]" >&2
+  echo "       sharp/bin/test [--linux] [--no-build] --mago [--shard <i>/<n>] [--skip-binary <crate root>]..." >&2
   echo "       sharp/bin/test [--linux] --mago --cargo-built" >&2
   exit 2
 }
@@ -22,6 +22,7 @@ upstream=false
 mago=false
 cargo_built=false
 shard=
+skipped_binaries=()
 tests=()
 container_command=(sharp/bin/test)
 args=("$@")
@@ -31,6 +32,12 @@ for ((a = 0; a < ${#args[@]}; a++)); do
     --linux) linux=true; continue ;;
     --no-build) build=false ;;
     --shard) a=$((a + 1)); shard="${args[a]:-}"; container_command+=(--shard "$shard"); continue ;;
+    --skip-binary)
+      a=$((a + 1))
+      skipped_binaries+=("${args[a]:-}")
+      container_command+=(--skip-binary "${args[a]:-}")
+      continue
+      ;;
     --census) census=true ;;
     --spec) spec=true ;;
     --differential) differential=true ;;
@@ -53,6 +60,14 @@ fi
 if $cargo_built && { ! $mago || ! $build || [[ -n $shard ]]; }; then
   usage
 fi
+if [[ ${#skipped_binaries[@]} -gt 0 ]] && { ! $mago || $cargo_built; }; then
+  usage
+fi
+for binary in "${skipped_binaries[@]}"; do
+  if [[ -z $binary ]]; then
+    usage
+  fi
+done
 # --shard <i>/<n> runs the i-th of n slices, so n jobs that run the same modes together run each test once.
 if [[ -n $shard ]]; then
   if $upstream || [[ ${#tests[@]} -gt 0 || ! $shard =~ ^([1-9][0-9]*)/([1-9][0-9]*)$ ]] || (( BASH_REMATCH[1] > BASH_REMATCH[2] )); then
@@ -166,7 +181,10 @@ if $mago && ! $cargo_built; then
     echo "$messages is missing. Run sharp/bin/build-mago first." >&2
     exit 1
   fi
+  # --skip-binary leaves out each test binary whose crate root it names, as sharp/mago/tests/laws.rs, whose tests MACOS
+  # leaves to Linux's MAGO slices. A name that matches no binary fails the run, so a misspelled one runs nothing extra.
   binaries=()
+  declare -A skipped=()
   while read -r line; do
     if [[ $line == *'"reason":"compiler-artifact"'* && $line =~ \"profile\":\{[^}]*\"test\":true &&
       $line =~ \"executable\":\"([^\"]+)\" ]]; then
@@ -174,9 +192,20 @@ if $mago && ! $cargo_built; then
       [[ $line =~ \"manifest_path\":\"([^\"]+)\" ]]
       folder="$(dirname "${BASH_REMATCH[1]}")"
       [[ $line =~ \"src_path\":\"([^\"]+)\" ]]
-      binaries+=("$executable"$'\t'"$folder"$'\t'"${BASH_REMATCH[1]#"$root"/}")
+      source="${BASH_REMATCH[1]#"$root"/}"
+      if [[ " ${skipped_binaries[*]} " == *" $source "* ]]; then
+        skipped[$source]=1
+        continue
+      fi
+      binaries+=("$executable"$'\t'"$folder"$'\t'"$source")
     fi
   done < "$messages"
+  for source in "${skipped_binaries[@]}"; do
+    if [[ -z ${skipped[$source]:-} ]]; then
+      echo "--skip-binary $source names no test binary of $messages." >&2
+      exit 2
+    fi
+  done
   mapfile -t binaries < <(printf '%s\n' "${binaries[@]}" | LC_ALL=C sort -u)
   # The tests write below the folder cargo names CARGO_TARGET_TMPDIR, which a build makes and a copy of the binaries
   # alone leaves out.

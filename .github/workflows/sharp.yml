@@ -616,6 +616,11 @@ jobs:
   # the dev build, which keeps the debug assertions and overflow checks the release profile turns off, and plain-php.
   # As four jobs, MACOS, tests (macOS), release-build and the release's macOS build, they queued one after another on
   # the Mac, and three of them ran the engine step: 700, 1,443 and 940 s on 0.6.40's green run 44740612180.
+  # It leaves two checks to Linux, since neither reads anything that differs by platform: the law-proof tests of
+  # sharp/mago/tests/laws.rs, since a law's outcome is Lean's kernel judging a theorem under a deterministic heartbeat
+  # budget, and the whole-project proof of mago convert, the same computation. They held 2,812 test-seconds of the
+  # workspace tests' 376.9 s binary and 242.3 s of the suite on run 45051101012. What can fail only on macOS stays:
+  # Lean's install, the runner, its process handling and its paths, in sharp/mago/tests/compile.rs.
   MACOS:
     needs: CHANGES
     if: ${{ !needs.CHANGES.outputs.passed }}
@@ -679,19 +684,22 @@ jobs:
         uses: ./.github/actions/setup-lean
       # The suite and the workspace's tests share no output, and each sharp/bin/test keeps its files in a temporary
       # folder of its own, so they run at once, where one after the other they took 410 and 654 s of job 137009338505.
-      # The suite's output prints once it ends, so the logs don't mix.
+      # The suite's output prints once it ends, so the logs don't mix. The suite runs by its folder, so sharp/bin/test
+      # runs no proof of mago convert, which only a run of the whole suite or of its slice runs, and the workspace's
+      # tests leave out sharp/mago/tests/laws.rs, as the job's comment explains. The step took 707 s on run
+      # 45051101012 with both.
       - name: Test PHP# and mago's workspace
         run: |
           suite_log="$RUNNER_TEMP/php-sharp-suite.log"
           (
             status=0
-            sharp/bin/test --no-build --census --differential || status=$?
+            sharp/bin/test --no-build --census --differential Zend/tests/sharp || status=$?
             echo "The PHP# suite took $SECONDS s."
             exit "$status"
           ) > "$suite_log" 2>&1 &
           suite=$!
           workspace=0
-          sharp/bin/test --mago --no-build || workspace=$?
+          sharp/bin/test --mago --no-build --skip-binary sharp/mago/tests/laws.rs || workspace=$?
           echo "mago's workspace tests took $SECONDS s."
           suite_status=0
           wait "$suite" || suite_status=$?
