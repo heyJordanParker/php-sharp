@@ -214,10 +214,9 @@ if $mago; then
     fi
     echo "== $heading"
     cat "$log.out"
-    read -r wall user_seconds system_seconds < "$log.time"
-    # mawk, the awk of the sharp/docker image, refuses a variable named system, its builtin.
-    awk -v heading="$heading" -v wall="$wall" -v user_seconds="$user_seconds" -v system_seconds="$system_seconds" \
-      'BEGIN { printf "%s took %.1f s and %.1f CPU-seconds.\n", heading, wall, user_seconds + system_seconds }'
+    read -r wall user system < "$log.time"
+    awk -v heading="$heading" -v wall="$wall" -v user="$user" -v system="$system" \
+      'BEGIN { printf "%s took %.1f s and %.1f CPU-seconds.\n", heading, wall, user + system }'
   done
   tests_groups=()
   part
