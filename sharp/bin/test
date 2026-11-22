@@ -329,19 +329,34 @@ if $spec; then
   run_step "the code examples of docs/spec.md and README.md" "$root" "$php" sharp/bin/spec
 fi
 
+# One php -l lints every fixture, each file in a request of its own, and ends each file's output with the line that
+# says whether it compiled. A file passes when that line is all it printed, as when a php -l of its own linted it, where
+# a process per fixture took 44 s on the Mac.
 check_differential() {
   echo "== every file mago compile accepted against php -l, through its .sharpc file"
-  local file name linted mismatch=false
-  for file in "$root"/Zend/tests/sharp/*/*.sharp; do
-    name="${file#"$root"/}"
-    linted="$("$php" -l "$file" 2>&1)" || true
-    if [[ "$linted" == "No syntax errors detected in $file" ]]; then
-      echo "COMPILES $name"
-    else
-      printf 'FAIL %s: mago compile accepts it and php -l does not.\n%s\n' "$name" "$linted"
-      mismatch=true
+  local files=("$root"/Zend/tests/sharp/*/*.sharp) output line file linted='' index=0 mismatch=false
+  output="$("$php" -l "${files[@]}" 2>&1)" || true
+  while IFS= read -r line; do
+    linted+="$line"$'\n'
+    if ((index == ${#files[@]})); then
+      continue
     fi
-  done
+    file="${files[index]}"
+    if [[ $line == "No syntax errors detected in $file" || $line == "Errors parsing $file" ]]; then
+      if [[ $linted == "No syntax errors detected in $file"$'\n' ]]; then
+        echo "COMPILES ${file#"$root"/}"
+      else
+        printf 'FAIL %s: mago compile accepts it and php -l does not.\n%s' "${file#"$root"/}" "$linted"
+        mismatch=true
+      fi
+      linted=''
+      index=$((index + 1))
+    fi
+  done <<< "$output"
+  if [[ -n $linted ]] || ((index < ${#files[@]})); then
+    printf 'FAIL php -l reported on %d of the %d files, then printed this.\n%s' "$index" "${#files[@]}" "$linted"
+    mismatch=true
+  fi
   if $mismatch; then
     failed+=("every file mago compile accepted against php -l")
   fi
