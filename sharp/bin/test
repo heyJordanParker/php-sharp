@@ -178,8 +178,15 @@ if $mago; then
       index=$((index + 1))
     done < <(cd "$folder" && "$executable" --list --format terse | sed -n 's/: test$//p')
     if (( selected > 0 )); then
+      # libtest prints each test's own wall time after its result with --report-time, which stable Rust's libtest
+      # takes only under RUSTC_BOOTSTRAP. libtest-mimic's harness, which the binaries with harness = false use, has no
+      # such option, and its --help doesn't name it.
+      command=("$executable")
+      if [[ $("$executable" --help) == *--report-time* ]]; then
+        command=(env RUSTC_BOOTSTRAP=1 "$executable" -Z unstable-options --report-time)
+      fi
       part "$selected tests of ${executable##*/}, from ${folder#"$root"/}"
-      run_step "${executable##*/}" "$folder" "$executable" --exact --test-threads "$jobs" "${skips[@]}"
+      run_step "${executable##*/}" "$folder" "${command[@]}" --exact --test-threads "$jobs" "${skips[@]}"
       part
     fi
   done
