@@ -4,6 +4,7 @@ set -euo pipefail
 usage() {
   echo "usage: sharp/bin/test [--linux] [--no-build] [--census] [--spec] [--differential] [--phpunit] [--upstream | --mago | --shard <i>/<n> | paths...]" >&2
   echo "       sharp/bin/test [--linux] [--no-build] --mago [--shard <i>/<n>]" >&2
+  echo "       sharp/bin/test [--linux] --mago --cargo-built" >&2
   exit 2
 }
 
@@ -18,6 +19,7 @@ differential=false
 phpunit=false
 upstream=false
 mago=false
+cargo_built=false
 shard=
 tests=()
 container_command=(sharp/bin/test)
@@ -34,6 +36,7 @@ for ((a = 0; a < ${#args[@]}; a++)); do
     --phpunit) phpunit=true ;;
     --upstream) upstream=true ;;
     --mago) mago=true ;;
+    --cargo-built) cargo_built=true ;;
     -*) usage ;;
     *) tests+=("$arg") ;;
   esac
@@ -44,6 +47,9 @@ if { $upstream || $mago; } && [[ ${#tests[@]} -gt 0 ]] || { $upstream && $mago; 
   usage
 fi
 if $mago && { $census || $spec || $differential || $phpunit; }; then
+  usage
+fi
+if $cargo_built && { ! $mago || ! $build || [[ -n $shard ]]; }; then
   usage
 fi
 # --shard <i>/<n> runs the i-th of n slices, so n jobs that run the same modes together run each test once.
@@ -136,13 +142,14 @@ finish() {
 }
 
 # sharp/mago's workspace tests: every test binary the build.json of sharp/bin/build-mago names, run from its package's
-# folder as cargo test runs it, then the doc tests and the property tests of mago-codex, which builds with a
-# feature of its own. With --shard, the i-th of n slices of all the binaries' tests, which balance by the seconds
-# sharp/baseline/seconds lists, as the split below explains, and the last slice also runs the doc and the property
-# tests. A test binary runs the tests of its slice by skipping the others by exact name,
-# which both libtest and libtest-mimic's harnesses take as often as needed. With --no-build, cargo runs nothing, so the
-# doc and the property tests, which cargo builds, are left to a run that builds.
-if $mago; then
+# folder as cargo test runs it, then the tests cargo builds as it runs them: the doc tests, and the property tests of
+# mago-codex, which builds with a feature of its own. With --shard, the i-th of n slices of all the binaries' tests,
+# which balance by the seconds sharp/baseline/seconds lists, as the split below explains. A test binary runs the tests
+# of its slice by skipping the others by exact name, which both libtest and libtest-mimic's harnesses take as often as
+# needed. --cargo-built runs only the tests cargo builds, which need neither the test binaries nor the Composer packages
+# and the Lean they run, so CI's build job runs them on its own target while other jobs run the binaries' slices. With
+# --no-build or --shard, cargo runs nothing, so those tests are left to a run with --cargo-built, or with neither.
+if $mago && ! $cargo_built; then
   # The tests run a PHP SDK worker from sharp/mago's vendor folder, and lake, which mago compile proves laws with:
   # installing the pinned Lean first keeps the tests that run lake at once from each installing it.
   part "composer install in sharp/mago, and the pinned Lean"
@@ -247,7 +254,9 @@ if $mago; then
       part
     fi
   done
-  if $build && { [[ -z $shard ]] || (( shard_index == shard_count )); }; then
+fi
+if $mago; then
+  if $build && [[ -z $shard ]]; then
     cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
     part "the doc tests"
     run_step "the doc tests" "$root" env PATH="$(dirname "$cargo"):$PATH" "$cargo" test --workspace --locked --doc \

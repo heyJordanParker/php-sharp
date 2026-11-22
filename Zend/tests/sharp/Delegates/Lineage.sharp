@@ -1,10 +1,14 @@
 namespace App.Delegates;
 
 import Lib.Lineage.Base;
+import Lib.Lineage.Courier;
+import Lib.Lineage.Delivers;
 import Lib.Lineage.Leaf;
 import Lib.Lineage.Sub;
 
 extern Base uses none;
+extern Courier uses none;
+extern Delivers uses Http;
 extern Sub uses Http;
 extern Sub.later uses any;
 
@@ -22,4 +26,10 @@ public static class Lineage
     public static Any? anyEffect() => Lineage.method(typeof(Sub), "later").createDelegate<Function<int(Sub) uses Http>>();
 
     public static Any? undeclared() => Lineage.method(typeof(Leaf), "own").createDelegate<Function<int(Leaf)>>();
+
+    public static Any? fromTraitAsPure()
+        => Lineage.method(typeof(Courier), "deliver").createDelegate<Function<int(Courier)>>();
+
+    public static Function<int(Courier) uses Http> fromTrait()
+        => Lineage.method(typeof(Courier), "deliver").createDelegate<Function<int(Courier) uses Http>>();
 }

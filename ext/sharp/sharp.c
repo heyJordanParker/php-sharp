@@ -4732,25 +4732,36 @@ typedef struct {
 	bool unresolved;
 } sharp_type_spelling;
 
+/* The method of the trait `func` came from, when `func` is a method `scope` takes from a trait, which PHP copies into
+ * the class with its opcodes, and NULL for a method `scope` declares itself. A trait that takes the method from
+ * another trait holds a copy of its own, so a caller follows the copies to the trait that declares it. */
+static const zend_function *sharp_trait_method(const zend_class_entry *scope, const zend_function *func)
+{
+	if (!scope || !func || func->type != ZEND_USER_FUNCTION || !(func->common.fn_flags & ZEND_ACC_TRAIT_CLONE)) {
+		return NULL;
+	}
+	/* A loaded class has loaded each trait it uses. */
+	for (uint32_t i = 0; i < scope->num_traits; i++) {
+		const zend_class_entry *trait = zend_lookup_class_ex(
+			scope->trait_names[i].name, scope->trait_names[i].lc_name, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+		const zend_function *original;
+
+		ZEND_ASSERT(trait != NULL);
+		ZEND_HASH_MAP_FOREACH_PTR(&trait->function_table, original) {
+			if (original->type == ZEND_USER_FUNCTION && original->op_array.opcodes == func->op_array.opcodes) {
+				return original;
+			}
+		} ZEND_HASH_FOREACH_END();
+	}
+
+	return NULL;
+}
+
 const zend_class_entry *sharp_type_scope(const zend_class_entry *scope, const zend_function *func)
 {
-	if (scope && func && func->type == ZEND_USER_FUNCTION && (func->common.fn_flags & ZEND_ACC_TRAIT_CLONE)) {
-		const zend_class_entry *user = scope;
-
-		/* A loaded class has loaded each trait it uses. */
-		for (uint32_t i = 0; scope == user && i < user->num_traits; i++) {
-			const zend_class_entry *trait = zend_lookup_class_ex(
-				user->trait_names[i].name, user->trait_names[i].lc_name, ZEND_FETCH_CLASS_NO_AUTOLOAD);
-			const zend_function *original;
-
-			ZEND_ASSERT(trait != NULL);
-			ZEND_HASH_MAP_FOREACH_PTR(&trait->function_table, original) {
-				if (original->type == ZEND_USER_FUNCTION && original->op_array.opcodes == func->op_array.opcodes) {
-					scope = trait;
-					break;
-				}
-			} ZEND_HASH_FOREACH_END();
-		}
+	const zend_function *original = sharp_trait_method(scope, func);
+	if (original) {
+		scope = original->common.scope;
 	}
 	if (scope && (scope->ce_flags & ZEND_ACC_TRAIT) && sharp_class_is_sharp(scope) && scope->info.user.sharp_header) {
 		const zend_string *header = scope->info.user.sharp_header;
@@ -12472,15 +12483,19 @@ static zend_string *sharp_extern_key(zend_string *name, uint32_t target)
 }
 
 /* The effects, each a dotted full name, the `extern` lines give the plain PHP method `func`, spec section 29, as the
- * listener table of the root above `file` lists them: the method's own line, else the line of the class that declares
- * it, as the checker reads them. Nothing passes from a parent class, so a method of a subclass no line declares may
- * have every effect, as the checker holds a call of it. NULL when no line or a line that says `uses any` declares them,
- * so the method may have every effect, and after an exception reading the table threw. */
+ * listener table of the root above `file` lists them: the method's own line, else the line of the class or trait that
+ * declares it, as the checker reads them, so a method a class takes from a trait takes the trait's lines under the
+ * name the trait gives it. Nothing passes from a parent class, so a method of a subclass no line declares may have
+ * every effect, as the checker holds a call of it. NULL when no line or a line that says `uses any` declares them, so
+ * the method may have every effect, and after an exception reading the table threw. */
 static HashTable *sharp_extern_effects(const zend_function *func, const zend_string *file)
 {
 	size_t root_length;
 	if (!file || !func->common.scope || !sharp_find_root(file, &root_length)) {
 		return NULL;
+	}
+	for (const zend_function *original; (original = sharp_trait_method(func->common.scope, func));) {
+		func = original;
 	}
 	HashTable *table = sharp_listener_table(ZSTR_VAL(file), root_length);
 	/* A missing table, which sharp_listener_table gives as one without effects, declares none. */

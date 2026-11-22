@@ -9,10 +9,17 @@ on:
       - master
 permissions:
   contents: read
+# Neither job runs on next's own pull request into master, which shows next's CI and never merges: next lands on master
+# through land/<sha> pull requests, which these jobs check. On next's, a push failed both for nothing, against a base
+# older than master's tip: on fd89f9f422c's, SPEC_GUARD reported a change to sharp/bin/spec, and COMPLETES died of exit
+# 141 when that base's sharp/bin/spec, which read BODY, read none of the 128 commit messages piped to it. A job its `if`
+# skips passes a required check, so they skip only this repository's next, and every other pull request, a fork's among
+# them, still runs them.
 jobs:
   # Compares sharp/baseline/spec and the examples with the base: sharp/bin/spec --base. It runs on `edited` too, where
   # it finds what it found before.
   SPEC_GUARD:
+    if: &not-next ${{ github.head_ref != 'next' || github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-24.04
     steps:
       - name: git checkout
@@ -39,6 +46,7 @@ jobs:
   # next's own pull request #576, 109 commits, stopped with "/usr/bin/php: Argument list too long" when they went in
   # BODY. The step runs in bash with pipefail, so a failed API call fails it.
   COMPLETES:
+    if: *not-next
     runs-on: ubuntu-24.04
     permissions:
       contents: read

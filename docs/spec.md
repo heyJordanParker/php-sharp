@@ -7719,7 +7719,7 @@ import Vendor.Pdf;
 extern namespace Illuminate.Foundation for now;
 extern Pdf.render uses Files;        // compiles: Pdf.render(html) has the effect Files
 extern Foundation.now uses Clock;    // compiles: Foundation.now() has the effect Clock
-extern now uses Clock;               // compile error: no function now exists
+extern now uses Clock;               // compile error: a bare name names a class, and no class now exists
 ```
 
 - **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
