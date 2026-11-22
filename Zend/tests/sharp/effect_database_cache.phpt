@@ -9,7 +9,7 @@ require __DIR__ . '/vendor/autoload.php';
 
 use Sharp\Time\Duration;
 
-$database = new Sharp\Data\Database('sqlite::memory:');
+$database = new Sharp\Data\SystemDatabase('sqlite::memory:');
 var_dump($database->execute('CREATE TABLE orders (id INTEGER PRIMARY KEY, sku TEXT, cents INTEGER)'));
 var_dump($database->execute('INSERT INTO orders (sku, cents) VALUES (?, ?), (?, ?)', ['tea', 450, 'cake', 300]));
 $rows = $database->query('SELECT sku, cents FROM orders ORDER BY id');
@@ -35,18 +35,18 @@ try {
     echo $e::class, "\n";
 }
 try {
-    new Sharp\Data\Database('nosuchdriver:x');
+    new Sharp\Data\SystemDatabase('nosuchdriver:x');
 } catch (RuntimeException $e) {
     echo $e::class, ': ', strtok($e->getMessage(), ':'), "\n";
 }
 
 $path = sys_get_temp_dir() . '/sharp-effect-cache-' . getmypid() . '.sqlite';
-$cache = new Sharp\Data\Cache($path);
+$cache = new Sharp\Data\SystemCache($path);
 var_dump($cache->get('rate'));
 $cache->set('rate', '1.25');
 var_dump($cache->get('rate'));
 $cache->set('rate', '1.30', Duration::ofSeconds(60));
-var_dump((new Sharp\Data\Cache($path))->get('rate'));
+var_dump((new Sharp\Data\SystemCache($path))->get('rate'));
 $cache->set('stale', 'old', new Duration(-1_000_000_000));
 var_dump($cache->get('stale'));
 $cache->remove('rate');

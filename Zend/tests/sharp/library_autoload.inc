@@ -100,6 +100,7 @@ namespace {
     @mkdir("$package/library/Sharp/Text", 0777, true);
     @mkdir("$package/library/Sharp/IO", 0777, true);
     @mkdir("$package/library/Sharp/System", 0777, true);
+    @mkdir("$package/library/Sharp/Testing", 0777, true);
     @mkdir("$package/library/Sharp/Interop", 0777, true);
     @mkdir("$package/library/Sharp/Internal", 0777, true);
     @mkdir("$package/library/Sharp/Data", 0777, true);

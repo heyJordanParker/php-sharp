@@ -10,11 +10,11 @@ production --force
 require __DIR__ . '/effect_classes.inc';
 require __DIR__ . '/vendor/autoload.php';
 
-$forms = new Demo\PhpForms(new Sharp\System\Environment(), new Sharp\IO\Console(), new Sharp\System\Process());
+$forms = new Demo\PhpForms(new Sharp\System\SystemEnvironment(), new Sharp\IO\SystemConsole(), new Sharp\System\SystemProcess());
 $forms->report(3);
 $code = 'require ' . var_export(__DIR__ . '/effect_classes.inc', true) . ';'
     . ' require ' . var_export(__DIR__ . '/vendor/autoload.php', true) . ';'
-    . ' (new Demo\PhpForms(new Sharp\System\Environment(), new Sharp\IO\Console(), new Sharp\System\Process()))->warn("Prune failed");';
+    . ' (new Demo\PhpForms(new Sharp\System\SystemEnvironment(), new Sharp\IO\SystemConsole(), new Sharp\System\SystemProcess()))->warn("Prune failed");';
 echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' ' . getenv('TEST_PHP_EXTRA_ARGS') . ' -r ' . escapeshellarg($code) . ' 2>&1 1>/dev/null');
 
 echo $forms->setting('SHARP_REGION'), ' ', $forms->setting('SHARP_UNSET_REGION'), "\n";

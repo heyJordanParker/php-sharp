@@ -7,8 +7,8 @@ require __DIR__ . '/vendor/autoload.php';
 use Sharp\Encoding\Compression;
 use Sharp\Encoding\Hex;
 use Sharp\Encoding\Serialized;
-use Sharp\IO\Files;
-use Sharp\System\Environment;
+use Sharp\IO\SystemFiles;
+use Sharp\System\SystemEnvironment;
 use Sharp\Text\Regex;
 
 set_error_handler(function (int $level, string $message) {
@@ -28,7 +28,7 @@ $folder = sys_get_temp_dir() . '/sharp-quiet-' . getmypid();
 $file = "$folder/file";
 mkdir($folder);
 touch($file);
-$files = new Files();
+$files = new SystemFiles();
 
 outcome(fn () => Regex::tryParse('(['));
 outcome(fn () => Regex::parse('(['));
@@ -40,7 +40,7 @@ outcome(fn () => $files->move("$folder/missing", "$folder/moved"));
 outcome(fn () => $files->createDirectory("$file/below"));
 outcome(fn () => $files->deleteDirectory("$folder/missing"));
 outcome(fn () => $files->write("$folder/missing/file", 'text'));
-outcome(fn () => (new Environment())->changeDirectory("$folder/missing"));
+outcome(fn () => (new SystemEnvironment())->changeDirectory("$folder/missing"));
 outcome(fn () => @hex2bin('abc'));
 
 unlink($file);

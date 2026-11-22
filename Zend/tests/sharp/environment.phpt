@@ -9,12 +9,12 @@ production --force
 
 require __DIR__ . '/vendor/autoload.php';
 
-$deploy = new Demo\Deploy(new Sharp\System\Environment());
+$deploy = new Demo\Deploy(new Sharp\System\SystemEnvironment());
 var_dump($deploy->variable('SHARP_REGION'), $deploy->variable('SHARP_UNSET_REGION'));
 var_dump($deploy->arguments() === $argv);
 echo implode(' ', array_slice($deploy->arguments(), 1)), ' ', $deploy->target(), "\n";
 
-$environment = new Sharp\System\Environment();
+$environment = new Sharp\System\SystemEnvironment();
 $start = $deploy->folder();
 var_dump($start === getcwd());
 $environment->changeDirectory(__DIR__ . '/harness');
@@ -45,7 +45,7 @@ try {
 }
 
 $code = 'require ' . var_export(__DIR__ . '/vendor/autoload.php', true) . ';'
-    . ' try { (new Demo\Deploy(new Sharp\System\Environment()))->target(); } catch (OutOfRangeException $e) { echo get_class($e), "\n"; }';
+    . ' try { (new Demo\Deploy(new Sharp\System\SystemEnvironment()))->target(); } catch (OutOfRangeException $e) { echo get_class($e), "\n"; }';
 echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' ' . getenv('TEST_PHP_EXTRA_ARGS') . ' -r ' . escapeshellarg($code) . ' 2>&1');
 
 try {
@@ -84,6 +84,6 @@ bool(true)
 Environment.setVariable: the name "SHARP=BROKEN" holds "=" or is empty
 Environment.require: the environment variable "SHARP_UNSET_REGION" is not set
 OutOfRangeException
-Cannot modify readonly property Sharp\System\Environment::$arguments
-Cannot indirectly modify readonly property Sharp\System\Environment::$arguments
-Cannot unset readonly property Sharp\System\Environment::$arguments
+Property Sharp\System\SystemEnvironment::$arguments is read-only
+Indirect modification of Sharp\System\SystemEnvironment::$arguments is not allowed
+Cannot unset hooked property Sharp\System\SystemEnvironment::$arguments

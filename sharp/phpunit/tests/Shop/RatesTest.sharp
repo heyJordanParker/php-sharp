@@ -1,0 +1,24 @@
+namespace Tests.Shop;
+
+import App.Shop.Rates;
+import PHPUnit.Framework.TestCase;
+import PHPUnit.Framework.Attributes.Test;
+import Sharp.Net.HttpMethod;
+import Sharp.Net.HttpResponse;
+import Sharp.Testing.FakeHttp;
+
+// A unit test runs the real `Rates` over a `FakeHttp`, so no request reaches the network, and reads the request it
+// sent from the fake.
+public class RatesTest : TestCase
+{
+    [Test]
+    public void testReadsTheRateTheServiceSends()
+    {
+        const http = new FakeHttp([new HttpResponse(200, [:], "1.08".toBytes())]);
+
+        TestCase.assertSame("1.08", new Rates(http).rate("EUR"));
+        TestCase.assertSame(1, http.sent.count());
+        TestCase.assertSame(HttpMethod.Get, http.sent[0].method);
+        TestCase.assertSame("https://rates.example/EUR", http.sent[0].url);
+    }
+}

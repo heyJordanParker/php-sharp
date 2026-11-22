@@ -6021,7 +6021,7 @@ Instant.tryParse("yesterday");                            // null
 new Date(2026, 2, 29);                                    // throws ValueError
 ```
 
-Two `Date`s, `Instant`s, `Duration`s or `DateTime`s order with `<`, `<=`, `>` and `>=`. A `DateTime` orders by its instant and then by its zone's name, so its `<=>` is 0 exactly when `==` is true. A zone's name is spelled exactly as the time zone database spells it, so `EEST` and `europe/sofia` name no zone. A name of the database names a zone only when PHP runs it with the database's rules, so `CET`, `GMT` and `EST`, which PHP reads as a fixed abbreviation, name no zone, and `TimeZone.names()` leaves them out: name the region, as `Europe/Brussels`. A fixed offset from `-18:00` to `+18:00`, written as `+03:00`, names a zone. A test module binds `new Clock.fixed(instant)` in place of the real `Clock`, and its `now()` is always that instant. After `import Sharp.Time.DateTimeInterfaceMembers;`, a plain PHP date, such as a Carbon, becomes an `Instant` with `toInstant()` or a `DateTime` with `toDateTime()`. `toPhpDateTime()` turns an `Instant` or a `DateTime` back into a plain PHP date. None of these four reads the clock.
+Two `Date`s, `Instant`s, `Duration`s or `DateTime`s order with `<`, `<=`, `>` and `>=`. A `DateTime` orders by its instant and then by its zone's name, so its `<=>` is 0 exactly when `==` is true. A zone's name is spelled exactly as the time zone database spells it, so `EEST` and `europe/sofia` name no zone. A name of the database names a zone only when PHP runs it with the database's rules, so `CET`, `GMT` and `EST`, which PHP reads as a fixed abbreviation, name no zone, and `TimeZone.names()` leaves them out: name the region, as `Europe/Brussels`. A fixed offset from `-18:00` to `+18:00`, written as `+03:00`, names a zone. A test module binds `new FakeClock(instant)`, from `Sharp.Testing`, in place of the `SystemClock` the standard library's module binds, and its `now()` is that instant until the test moves it with `advance(duration)` (section 29). After `import Sharp.Time.DateTimeInterfaceMembers;`, a plain PHP date, such as a Carbon, becomes an `Instant` with `toInstant()` or a `DateTime` with `toDateTime()`. `toPhpDateTime()` turns an `Instant` or a `DateTime` back into a plain PHP date. None of these four reads the clock.
 
 A zone's `fixedOffset` is the offset of a zone whose clocks never change, read from the zone's rules and never from its name: a fixed offset, as `+03:00`, `UTC` and `Etc/GMT-3` each have one. A zone the database gives any change of offset, as `Europe/Sofia`, has none. A type that takes only a zone whose clocks follow a region's daylight saving refuses any zone that never changes its clocks in its constructor:
 
@@ -7888,19 +7888,36 @@ public class FileFormatter : Formatter
 }
 ```
 
-**An `effect` class turns an effect into an object** that code holds and passes on, such as a fake in tests. It is optional. Its methods call plain PHP, like any other code. Code that holds an effect object has that effect by name, which `uses` can declare. `effect` is a modifier only among a class's modifiers, so a parameter, a local or a property may be named `effect`.
+**An effect is an `effect abstract` class, which turns the effect into an object** that code holds and passes on. It is optional. It declares the members every object of the effect gives, and code that holds one has that effect by the type it holds, whatever object is behind it, which `uses` can declare by the class's name:
+
+- **The real implementation is an `effect class` that extends it.** Its methods call plain PHP, like any other code, and only a module binding creates it (section 32). An `effect class` that isn't abstract extends an `effect abstract` class, so every effect has a boundary a test can fake.
+- **A fake is a class that extends it without `effect`.** It is ordinary code that any code creates with `new`, as a unit test does to run the real class that holds the effect without reaching outside the program.
+
+`effect` is a modifier only among a class's modifiers, so a parameter, a local or a property may be named `effect`.
 
 <!-- example effect-class -->
 ```csharp
 import Illuminate.Support.Facades.Redis;
 
-public effect class RedisStore
+public effect class MemoryStore { … }       // compile error: MemoryStore is an effect class, so it extends an abstract effect class that declares its members
+
+public effect abstract class SessionStore
 {
-    public string? get(string key) => Redis.get(key);
+    public abstract string? get(string key);
+}
+
+public effect class RedisStore : SessionStore
+{
+    public override string? get(string key) => Redis.get(key);
+}
+
+public class FakeStore : SessionStore
+{
+    public override string? get(string key) => "cart";
 }
 ```
 
-The standard library's twelve effect classes, listed above, are `effect` classes. A project declares its own effect classes the same way.
+The standard library's twelve effects, listed above, are `effect abstract` classes, each in its file and namespace. Each real implementation is the `effect class` `System<Effect>` beside it, as `SystemHttp`, which the standard library's module binds (section 32), and `Sharp.Testing` holds a fake of each, `Fake<Effect>`. A fake's constructor takes the results its methods return, in call order, or the state it reads, and it keeps each call in a public `List` a test reads: `new FakeHttp([response])` answers each request with the next response and keeps it in `sent`, `new FakeClock(instant)` reads the instant until `advance` or a `sleep` moves it, and `new FakeRandom(seed)` gives the same values on every run. A fake's member with no result left throws a `LogicException` that names the fake and the member. A project declares its own effects the same way.
 
 **`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not an effect class: a method has it when its body emits, and no object carries it. A listener runs inside the `emit` that raised its event, under the standard library's dispatcher, so an exception it throws leaves that `emit`, and the listeners after it don't run, as with Symfony's dispatcher. Code that must keep going catches it around the `emit`.
 
@@ -8002,7 +8019,7 @@ public class LegacyPage
 ```csharp
 public class TenantCache
 {
-    public TenantCache(private RedisStore store) { }
+    public TenantCache(private SessionStore store) { }
 }
 ```
 
@@ -8019,8 +8036,8 @@ public class Stamp
 }
 ```
 
-- **A class's effects** are the effect classes it holds, directly or through its fields, or that its methods take, the effects of the plain PHP its methods call, and the events its methods emit. A method that calls an effect object it takes has that effect, as when it calls one it holds, and a caller that uses one a method returns has the effect at that call. The checker works them out from field, constructor and parameter types and from method bodies. Nothing is written down.
-- **An effect object** is created in a module binding (section 32), as often as its binding's lifetime decides, and passed on through constructors, method parameters and return values. Creating one anywhere else in PHP# code, or storing one in a static, is a compile error. Plain PHP creates one as it creates any object.
+- **A class's effects** are the effects it holds, directly or through its fields, or that its methods take, the effects of the plain PHP its methods call, and the events its methods emit. A method that calls an effect object it takes has that effect, as when it calls one it holds, and a caller that uses one a method returns has the effect at that call. The checker works them out from field, constructor and parameter types and from method bodies. Nothing is written down.
+- **An effect object**, an object of an `effect class`, is created in a module binding (section 32), as often as its binding's lifetime decides, and passed on through constructors, method parameters and return values. Creating one anywhere else in PHP# code, or storing one in a static, is a compile error. Plain PHP creates one as it creates any object. A fake is created anywhere.
 
 **Pure code** reaches no effect object, emits no event, and calls no plain PHP but what an `extern` line declares `uses none`. Pure limits only what code reaches outside the program, so a pure method may change its own object and its arguments. `readonly` after the parameters is what promises a method changes nothing, as in `T peek() readonly;`, and it holds every implementation to that (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code that changes nothing it was given, so a law that reaches a change is a compile error naming the method, and a law cannot see inside effect classes or plain PHP.
 
@@ -8350,6 +8367,7 @@ import App.Pricing.PriceRule;
 import App.Pricing.TaxRule;
 import App.Pricing.DiscountRule;
 import App.Cache.RedisStore;
+import App.Cache.SessionStore;
 import Sharp.System.Environment;
 
 module
@@ -8357,15 +8375,15 @@ module
     singleton Mailer = SmtpMailer;                                             // every class that takes a Mailer gets the SmtpMailer
     singleton Mailer for SendReceipt = QueueMailer;                            // SendReceipt gets a QueueMailer instead
     singleton List<PriceRule> = [TaxRule, DiscountRule];                       // a class that takes a List<PriceRule> gets both
-    singleton RedisStore(Environment environment) = new RedisStore(environment.require("REDIS_URL"));   // an effect object, created here as its singleton lifetime decides
+    singleton SessionStore(Environment environment) = new RedisStore(environment.require("REDIS_URL"));   // an effect object, created here as its singleton lifetime decides
     transient SendReceipt = SendReceipt;                                       // a class binds to itself, so PHP# creates it
 }
 ```
 
 - **A binding's value is a class or one expression.** A class, such as `SmtpMailer`, is built through its main constructor (section 9.1). A class binds to itself to be created, as `SendReceipt` does.
-- **A binding names the services it needs as parameters, and its value is one expression over them.** The container passes each parameter the service bound to its type, so `RedisStore` above gets the app's `Environment`, which the standard library's module binds for every namespace. An expression is for a value no binding gives, such as `RedisStore`'s URL.
+- **A binding names the services it needs as parameters, and its value is one expression over them.** The container passes each parameter the service bound to its type, so the `SessionStore` above gets the app's `Environment`, which the standard library's module binds to `SystemEnvironment` for every namespace. An expression is for a value no binding gives, such as `RedisStore`'s URL.
 - **A module stays declarative:** one expression per binding, and no statements, loops or methods.
-- **An effect object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and the container passes it to classes through their constructors.
+- **An effect object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and the container passes it to classes through their constructors. A module binds an effect to its real implementation, as the standard library's binds `Http` to `SystemHttp`, and a test module binds a fake in its place, as `singleton Clock = new FakeClock(instant);`.
 - **A module also states the laws that span its classes** (section 28), **and lists the namespaces its code imports from** (below).
 - **A class a module binds reaches code only through injection,** a constructor or a method parameter, or a value PHP# code returns. A plain PHP call, a function or a method of a plain PHP class, whose result is such a class, or whose result PHP# code narrows to one with `as` or `is`, is a compile error: "`StoreService` is bound in `App.Shop`'s module, so it reaches code through a constructor or a parameter." So a service locator, as Laravel's `app(StoreService::class)`, never hands PHP# code a bound class, and every one the code holds is the container's. The one exception is the expression of the binding that binds a plain PHP class, where a framework's object enters the container: `scoped Request = Foundation.request();` compiles, and the same call anywhere else stays an error.
 - **A namespace whose `Module.sharp` binds its children's classes is the app's composition root, so code its children share lives in a child namespace, never in the root,** because the root imports every child and no namespace may import it back. The root's module imports each class it binds, and no two namespaces import each other (section 23). So `Flags`, which `App.Mail.FlaggedMailer` takes and `App`'s module binds, is `App.Features.Flags`, never `App.Flags`:

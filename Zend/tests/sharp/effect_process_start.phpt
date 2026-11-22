@@ -4,7 +4,7 @@ PHP# Process.start runs a program while the code goes on, as .NET's Process.Star
 <?php
 require __DIR__ . '/effect_classes.inc';
 
-$process = new Sharp\System\Process();
+$process = new Sharp\System\SystemProcess();
 
 $cat = $process->start('cat');
 $cat->writeInput("one line\n");
@@ -29,7 +29,7 @@ $sleeper->kill();
 var_dump($sleeper->wait(), (hrtime(true) - $started) < 5_000_000_000);
 $sleeper->kill();
 
-$environment = new Sharp\System\Environment();
+$environment = new Sharp\System\SystemEnvironment();
 var_dump(is_int($environment->processorCount()) && $environment->processorCount() >= 1, $environment->machineName() === gethostname());
 ?>
 --EXPECT--

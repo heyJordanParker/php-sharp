@@ -18,27 +18,27 @@ var_dump(class_exists(Sharp\Data\Database::class, false));
 require __DIR__ . '/effect_classes.inc';
 
 $before = (new DateTimeImmutable())->getTimestamp();
-$now = (new Sharp\Time\Clock())->now()->epochSeconds;
+$now = (new Sharp\Time\SystemClock())->now()->epochSeconds;
 var_dump($before <= $now && $now <= (new DateTimeImmutable())->getTimestamp());
-var_dump((new Sharp\Random(7))->nextInt(0, 100) === (new Sharp\Random(7))->nextInt(0, 100));
-(new Sharp\IO\Console())->writeLine('written');
-$result = (new Sharp\System\Process())->run(getenv('TEST_PHP_EXECUTABLE'), ['-n', '-r', 'echo "ran";']);
+var_dump((new Sharp\Testing\FakeRandom(7))->nextInt(0, 100) === (new Sharp\Testing\FakeRandom(7))->nextInt(0, 100));
+(new Sharp\IO\SystemConsole())->writeLine('written');
+$result = (new Sharp\System\SystemProcess())->run(getenv('TEST_PHP_EXECUTABLE'), ['-n', '-r', 'echo "ran";']);
 var_dump($result->output, $result->successful);
-$files = new Sharp\IO\Files();
+$files = new Sharp\IO\SystemFiles();
 $temporary = $files->temporaryFile();
 $files->write($temporary, 'kept');
 var_dump($files->read($temporary));
 $files->delete($temporary);
-$database = new Sharp\Data\Database('sqlite::memory:');
+$database = new Sharp\Data\SystemDatabase('sqlite::memory:');
 var_dump($database->scalar('SELECT 6 * 7'));
 $path = sys_get_temp_dir() . '/sharp-effect-preload-' . getmypid() . '.sqlite';
-$cache = new Sharp\Data\Cache($path);
+$cache = new Sharp\Data\SystemCache($path);
 $cache->set('k', 'v');
 var_dump($cache->get('k'));
 unset($cache);
 unlink($path);
 try {
-    (new Sharp\Net\Http())->get('not a url');
+    (new Sharp\Net\SystemHttp())->get('not a url');
 } catch (ValueError $e) {
     echo $e->getMessage(), "\n";
 }

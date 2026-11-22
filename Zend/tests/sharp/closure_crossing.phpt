@@ -11,7 +11,7 @@ use Demo\Library;
 // its bytes, as an argument does, and a closure kept for `() => string` is checked for `() => Bytes` where it crosses
 // again.
 $path = sys_get_temp_dir() . '/sharp-closure-crossing-' . getmypid() . '.sqlite';
-$cache = new Sharp\Data\Cache($path);
+$cache = new Sharp\Data\SystemCache($path);
 foreach (['int' => fn () => 42, 'kept' => Library::kept(fn () => 42)] as $key => $make) {
     try {
         $cache->getOrCreate($key, $make);

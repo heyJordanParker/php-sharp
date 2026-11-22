@@ -1,12 +1,12 @@
 --TEST--
-PHP# Clock reads the time and sleeps for a Duration, Clock.fixed always reads one instant, returns from sleep at once and measures no time, and Random gives seeded or secure values in the ranges it names
+PHP# SystemClock reads the time and sleeps for a Duration, a FakeClock reads its instant until sleep or advance moves it and returns from sleep at once, and SystemRandom and a seeded FakeRandom give values in the ranges Random names
 --FILE--
 <?php
 require __DIR__ . '/effect_classes.inc';
 
 use Sharp\Time\Duration;
 
-$clock = new Sharp\Time\Clock();
+$clock = new Sharp\Time\SystemClock();
 // The clock reads a second between the one before the read and the one after, however long the read takes. Both come
 // from DateTimeImmutable, as now() does.
 $before = (new DateTimeImmutable())->getTimestamp();
@@ -25,29 +25,30 @@ foreach ([fn () => $clock->sleep(new Duration(-1)), fn () => $clock->elapsedSinc
     }
 }
 
-// A fixed clock always reads its instant, returns from sleep at once, and measures no time.
-$fixed = Sharp\Time\Clock::fixed(new Sharp\Time\Instant(1792693800, 250));
+// A fake clock reads its instant, and a sleep returns at once and moves it on, as an advance does.
+$fixed = new Sharp\Testing\FakeClock(new Sharp\Time\Instant(1792693800, 250));
 $start = $fixed->timestamp();
 // A real sleep of five seconds takes five seconds at the least, so one that took less did not sleep.
 $before = hrtime(true);
 $fixed->sleep(Duration::ofSeconds(5));
 var_dump(hrtime(true) - $before < 5_000_000_000, $fixed->now()->epochSeconds, $fixed->now()->nanosecond);
-var_dump($fixed->timestamp() === $start, $fixed->elapsedSince($start)->nanoseconds);
+$fixed->advance(Duration::ofMilliseconds(1));
+var_dump($fixed->elapsedSince($start)->nanoseconds, count($fixed->slept), $fixed->slept[0]->seconds);
 try {
     $fixed->sleep(new Duration(-1));
 } catch (ValueError $e) {
     echo $e::class, ': ', $e->getMessage(), "\n";
 }
 
-$first = new Sharp\Random(42);
-$second = new Sharp\Random(42);
+$first = new Sharp\Testing\FakeRandom(42);
+$second = new Sharp\Testing\FakeRandom(42);
 $draws = [];
 for ($i = 0; $i < 20; $i++) {
     $draws[] = $first->nextInt(1, 7);
 }
 var_dump($draws === array_map(fn () => $second->nextInt(1, 7), range(1, 20)));
 var_dump(min($draws) >= 1 && max($draws) <= 6, $first->nextInt(5, 5));
-$secure = new Sharp\Random();
+$secure = new Sharp\SystemRandom();
 $float = $secure->nextFloat();
 var_dump($float >= 0.0 && $float < 1.0, strlen($secure->nextBytes(4)));
 $shuffled = $secure->shuffle([1, 2, 3, 4]);
@@ -71,11 +72,12 @@ int(2)
 ValueError: Clock.sleep: the duration is negative
 ValueError: Clock.elapsedSince: the start is later than now
 bool(true)
-int(1792693800)
+int(1792693805)
 int(250)
-bool(true)
-int(0)
-ValueError: Clock.sleep: the duration is negative
+int(5001000000)
+int(1)
+int(5)
+ValueError: FakeClock.sleep: the duration is negative
 bool(true)
 bool(true)
 int(5)

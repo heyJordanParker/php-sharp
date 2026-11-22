@@ -7,4 +7,5 @@ module
 {
     singleton Mailer = SmtpMailer;
     transient Checkout = Checkout;
+    transient Rates = Rates;
 }

@@ -1,0 +1,6 @@
+namespace App.Invokers;
+
+public class FakeMailer : Mailer
+{
+    public override int sent() => 1;
+}

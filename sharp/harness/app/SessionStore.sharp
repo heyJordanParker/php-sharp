@@ -1,0 +1,6 @@
+namespace App;
+
+public effect abstract class SessionStore
+{
+    public abstract string? get(string key);
+}

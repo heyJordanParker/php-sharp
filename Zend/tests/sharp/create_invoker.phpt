@@ -5,9 +5,9 @@ Method.createInvoker makes a value of a function type that calls the method with
 require __DIR__ . '/vendor/autoload.php';
 
 use App\Invokers\Billing;
-use App\Invokers\Database;
 use App\Invokers\Dispatch;
-use App\Invokers\Mailer;
+use App\Invokers\FakeDatabase;
+use App\Invokers\FakeMailer;
 use App\Invokers\Plan;
 use App\Invokers\Stamp;
 use App\Invokers\Subscription;
@@ -24,7 +24,7 @@ function attempt(string $label, Closure $body): void
     }
 }
 
-$billing = new Billing(new Database(), new Mailer());
+$billing = new Billing(new FakeDatabase(), new FakeMailer());
 $dispatch = new Dispatch();
 $subscription = new Subscription('Gold');
 $user = new VerifiedUser('Ann');
