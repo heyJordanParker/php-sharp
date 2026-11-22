@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A machine's invariant proves from every invariant of the case a move or an entry point starts from, spec section 20.2, whichever case it gives. So `public Trail.Done finish() => Trail.Done(this.ids);` in `case Open(List<int> ids)`, beside `law openHoldsOne(Trail.Open o) => o.ids.count() > 0;` and `law doneHoldsOne(Trail.Done d) => d.ids.count() > 0;`, proves, where 0.6.48 refused it with "`doneHoldsOne` breaks after `finish()`". 0.6.48 assumed those invariants, but read what one computes only when it was the invariant it proved. A move that breaks an invariant is still refused with the moves that break it.
+
 ## [0.6.48] - 2026-11-22
 
 ### Added
