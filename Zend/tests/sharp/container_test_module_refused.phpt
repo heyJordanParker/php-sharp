@@ -4,6 +4,8 @@ mago compile refuses a test module in a file that holds no test, naming the file
 <?php
 require __DIR__ . '/program.inc';
 
+// One issue to a line wherever the test runs: mago prints GitHub's annotations under GitHub Actions.
+putenv('MAGO_REPORTING_FORMAT=emacs');
 try {
     program_project('container-test-module-refused', 'vendor', [
         'composer.json' => '{"type": "project", "autoload": {"psr-4": {"App\\\\": "app/"}}, "autoload-dev": {"psr-4": {"Tests\\\\": "tests/"}}}' . "\n",
