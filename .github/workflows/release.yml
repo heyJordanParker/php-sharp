@@ -364,16 +364,35 @@ jobs:
 
       # A commit's run builds no release binary, so the Mac runs its checks alone: mago compile and the PHP# suite on a
       # disk that ignores case, without opcache and in shared memory, since Apple silicon has no thread-safe JIT, with
-      # the census and the differential, then the workspace's tests.
+      # the census and the differential, and beside it the workspace's tests. The two share no output, and each
+      # sharp/bin/test keeps its files in a temporary folder of its own, so they run at once, where one after the other
+      # they took 410 and 654 s of job 137009338505. The suite's output prints once it ends, so the logs don't mix.
       - name: Test PHP# and mago's workspace
         if: matrix.job.checks && !inputs.publish
         shell: bash
         working-directory: ${{ github.workspace }}
         run: |
-          sharp/bin/test --no-build --census --differential
-          echo "The PHP# suite took $SECONDS s."
-          sharp/bin/test --mago --no-build
+          suite_log="$RUNNER_TEMP/php-sharp-suite.log"
+          (
+            status=0
+            sharp/bin/test --no-build --census --differential || status=$?
+            echo "The PHP# suite took $SECONDS s."
+            exit "$status"
+          ) > "$suite_log" 2>&1 &
+          suite=$!
+          workspace=0
+          sharp/bin/test --mago --no-build || workspace=$?
+          echo "mago's workspace tests took $SECONDS s."
+          suite_status=0
+          wait "$suite" || suite_status=$?
+          echo "::group::The PHP# suite, which ran beside mago's workspace tests"
+          cat "$suite_log"
+          echo "::endgroup::"
           echo "The PHP# suite and mago's workspace tests took $SECONDS s."
+          if ((suite_status != 0 || workspace != 0)); then
+            echo "::error::The PHP# suite exited $suite_status and mago's workspace tests $workspace."
+            exit 1
+          fi
 
       # The release build compiles the crates on every core for about a minute, then links mago with fat LTO and one
       # codegen unit on one core: 12 min 45 s of its 13 min 34 s on run 44866980687. So on the Mac it runs beside the
