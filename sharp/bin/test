@@ -71,8 +71,8 @@ export TMPDIR
 # Each `mago` a test starts runs on one thread, so a run's load is its test threads. A test about threads passes
 # --threads, which wins over MAGO_THREADS.
 export MAGO_THREADS=1
-tests_groups=()
-trap 'if ((${#tests_groups[@]})); then kill -KILL -- "${tests_groups[@]/#/-}" || true; wait "${tests_groups[@]}" || true; fi; rm -rf "$TMPDIR"' EXIT
+tests_group=
+trap 'if [[ -n $tests_group ]]; then kill -KILL -- "-$tests_group" || true; wait "$tests_group" || true; fi; rm -rf "$TMPDIR"' EXIT
 
 # Every step runs, and the script fails at the end if any step failed.
 failed=()
@@ -83,12 +83,12 @@ run_step() {
   shift 2
   set -m
   (cd "$folder" && exec "$@") &
-  tests_groups=("$!")
+  tests_group=$!
   set +m
-  if ! wait "${tests_groups[0]}"; then
+  if ! wait "$tests_group"; then
     failed+=("$step")
   fi
-  tests_groups=()
+  tests_group=
 }
 
 # Ends the part of the run under way with its wall seconds and the CPU-seconds the shell and the processes it waited
@@ -126,8 +126,8 @@ finish() {
   exit 0
 }
 
-# sharp/mago's workspace tests: every test binary the build.json of sharp/bin/build-mago names, all at once, each run
-# from its package's folder as cargo test runs it, then the doc tests and the property tests of mago-codex, which builds with a
+# sharp/mago's workspace tests: every test binary the build.json of sharp/bin/build-mago names, run from its package's
+# folder as cargo test runs it, then the doc tests and the property tests of mago-codex, which builds with a
 # feature of its own. With --shard, every n-th test of all the binaries' tests, in binary and name order, from the i-th,
 # so a set of slow tests, such as the compile:: tests of tests/main.rs, spreads over the slices, and the last slice also
 # runs the doc and the property tests. A test binary runs the tests of its slice by skipping the others by exact name,
@@ -163,13 +163,6 @@ if $mago; then
   # alone leaves out.
   mkdir -p "$build_dir/mago/tmp"
 
-  # Every test binary starts at once, each in a process group of its own, so the cores a binary leaves while its last
-  # long tests run go to the others: one after another they took 656 s of MACOS job 137183706579, 348 s of them
-  # sharp/mago's main, whose law proofs held about 4 of the Mac's 12 cores for 1,437.5 CPU-seconds. Only that binary
-  # writes below CARGO_TARGET_TMPDIR. Each binary's output and its wall and CPU-seconds print once it ends, in binary
-  # order, so the logs don't mix.
-  part "the workspace's test binaries, all at once"
-  started=()
   index=0
   for binary in "${binaries[@]}"; do
     executable="${binary%%$'\t'*}"
@@ -192,34 +185,11 @@ if $mago; then
       if [[ $("$executable" --help) == *--report-time* ]]; then
         command=(env RUSTC_BOOTSTRAP=1 "$executable" -Z unstable-options --report-time)
       fi
-      log="$TMPDIR/test-binary-${#started[@]}"
-      set -m
-      # Without errexit, time reports on a binary that fails too, and the subshell exits with the binary's status. time
-      # reports nothing on a subshell that execs its command, so the binary runs as the subshell's child.
-      (
-        set +e
-        TIMEFORMAT='%3R %3U %3S'
-        { time (cd "$folder" && "${command[@]}" --exact --test-threads "$jobs" "${skips[@]}" > "$log.out" 2>&1); } \
-          2> "$log.time"
-      ) &
-      tests_groups+=("$!")
-      set +m
-      started+=("$!"$'\t'"${executable##*/}"$'\t'"$selected tests of ${executable##*/}, from ${folder#"$root"/}"$'\t'"$log")
+      part "$selected tests of ${executable##*/}, from ${folder#"$root"/}"
+      run_step "${executable##*/}" "$folder" "${command[@]}" --exact --test-threads "$jobs" "${skips[@]}"
+      part
     fi
   done
-  for entry in "${started[@]}"; do
-    IFS=$'\t' read -r pid step heading log <<< "$entry"
-    if ! wait "$pid"; then
-      failed+=("$step")
-    fi
-    echo "== $heading"
-    cat "$log.out"
-    read -r wall user system < "$log.time"
-    awk -v heading="$heading" -v wall="$wall" -v user="$user" -v system="$system" \
-      'BEGIN { printf "%s took %.1f s and %.1f CPU-seconds.\n", heading, wall, user + system }'
-  done
-  tests_groups=()
-  part
   if $build && { [[ -z $shard ]] || (( shard_index == shard_count )); }; then
     cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
     part "the doc tests"
