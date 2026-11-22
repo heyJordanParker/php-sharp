@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.51] - 2026-11-22
+
 ### Upgrading from 0.6.50
 
 - Count `missing-extern` where a baseline or a script counted `incompatible-effects` for plain PHP no `extern` line declares: that refusal has its own code now.
@@ -1764,7 +1766,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.50...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.51...HEAD
+[0.6.51]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.50...v0.6.51
 [0.6.50]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.49...v0.6.50
 [0.6.49]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.48...v0.6.49
 [0.6.48]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.47...v0.6.48
