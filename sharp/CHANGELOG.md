@@ -6,6 +6,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Changed
 
+- A whole `mago analyze` whose extension hosts register return-type providers and nothing else reports from its compile's own analysis: the compile records each return-type request a host's provider targets, the hosts answer them, and only the files an answer types are analyzed again with the hosts, where 0.6.50 loaded, scanned, populated and analyzed every file a second time with them. The hosts start beside the compile, which reads what they register before it analyzes. A one-file edit of a 2,128-file project whose host answers return types takes 4.78 CPU-seconds where it took 6.61, and peaks at 647 MiB where it peaked at 729, lower in each of 16 alternating rounds, with the same issues and `.sharp` folder. A project whose host also registers a codebase scan hook records nothing and runs as before, at 35.57 G instructions where it took 35.62 and 7.35 CPU-seconds where it took 7.37.
 - A watch round after an edit that deletes, renames or moves a class analyzes again only the files that name the class, read a class it extended or implemented, or declare a class named like its namespace, where 0.6.50 analyzed the whole project again. Renaming one class of a 2,128-file project under `mago analyze --watch` takes 0.82 CPU-seconds a round where it took 7.44, with the same issues.
 
 ### Fixed
