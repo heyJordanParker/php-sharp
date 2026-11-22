@@ -4,8 +4,6 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
-## [0.6.47] - 2026-11-22
-
 ### Upgrading from 0.6.46
 
 - A class's method named `main` makes the class a program, spec section 27, so a `main` that isn't `public int main()` or `public void main()` stops compiling with "A class's `main` runs it as a program: declare it `public int main()` or `public void main()`." Rename such a method. A `#!` line anywhere but a `.sharp` file's first line stops compiling too, where 0.6.46 read it as a `#` comment.
@@ -1670,8 +1668,7 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.47...HEAD
-[0.6.47]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.46...v0.6.47
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.46...HEAD
 [0.6.46]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.45...v0.6.46
 [0.6.45]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.44...v0.6.45
 [0.6.44]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.43...v0.6.44
