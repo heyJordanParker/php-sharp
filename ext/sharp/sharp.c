@@ -10240,16 +10240,16 @@ static ZEND_COLD void sharp_delegate_refuse(const zend_function *func, const cha
 	smart_str_free(&name);
 }
 
-static HashTable *sharp_extern_effects(const zend_class_entry *ce, zend_string *method, const zend_string *file);
+static HashTable *sharp_extern_effects(const zend_function *func, const zend_string *file);
 
-/* Whether the function `func`, run on `ce`, has only effects the function type `type`, a node of `reader`'s, lists in
- * its `uses`, spec section 29: a PHP# function's are those its compile carries in its own function type, see
+/* Whether the function `func` has only effects the function type `type`, a node of `reader`'s, lists in its `uses`,
+ * spec section 29: a PHP# function's are those its compile carries in its own function type, see
  * sharp_function_carried, and a plain PHP one's those its `extern` lines declare, as the listener table of the root
  * above `file` lists them, see sharp_extern_effects. A PHP# function that carries its result alone, as one that calls
- * plain PHP no `extern` declares, and a plain PHP one no `extern` line declares, may have every effect. False with a
- * ValueError naming the first effect `type` doesn't allow. */
-static bool sharp_delegate_effects_fit(const zend_function *func, const zend_class_entry *ce, const zend_string *file,
-	sharp_type_node *type, sharp_type_reader *reader)
+ * plain PHP no `extern` declares, and a plain PHP one no `extern` line declares or whose line says `uses any`, may have
+ * every effect. False with a ValueError naming the first effect `type` doesn't allow. */
+static bool sharp_delegate_effects_fit(const zend_function *func, const zend_string *file, sharp_type_node *type,
+	sharp_type_reader *reader)
 {
 	sharp_type_node *allowed = type->first;
 	for (uint32_t i = type->effects; i < type->count; i++) {
@@ -10274,7 +10274,7 @@ static bool sharp_delegate_effects_fit(const zend_function *func, const zend_cla
 		reader->arena = carried.arena;
 		own = list && list->first->kind == SHARP_TYPE_FUNCTION ? list->first : NULL;
 	} else {
-		declared = sharp_extern_effects(ce, func->common.function_name, file);
+		declared = sharp_extern_effects(func, file);
 	}
 	bool fits = !EG(exception);
 	if (fits && !own && !declared) {
@@ -10323,11 +10323,11 @@ static sharp_type_node *sharp_type_text_read(const char *text, size_t length, sh
  * one, whose receiver is of the class value `receiver`, takes it as `type`'s first parameter, of that class, of a
  * class below it, or of a class it extends, whose value each call checks, `type` passes each parameter `func` needs,
  * each parameter type of `type` is within the one at its place, `func`'s result is within `type`'s unless that is
- * `void` or `Any?`, and `type` lists each effect `func` has run on `ce`, see sharp_delegate_effects_fit, whose `file`
- * it passes. One that `spreads` passes one `List<Any?>` after the receiver in place of the parameters, whose values each
- * call checks. False with a ValueError naming the first that doesn't. */
-static bool sharp_delegate_fits(const zend_function *func, const zend_class_entry *ce, const zend_string *file,
-	const zend_string *declared, const zend_string *receiver, const sharp_type *type, bool spreads)
+ * `void` or `Any?`, and `type` lists each effect `func` has, see sharp_delegate_effects_fit, whose `file` it passes.
+ * One that `spreads` passes one `List<Any?>` after the receiver in place of the parameters, whose values each call
+ * checks. False with a ValueError naming the first that doesn't. */
+static bool sharp_delegate_fits(const zend_function *func, const zend_string *file, const zend_string *declared,
+	const zend_string *receiver, const sharp_type *type, bool spreads)
 {
 	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
 	sharp_type_node *wanted = sharp_type_text_read(ZSTR_VAL(type->text), ZSTR_LEN(type->text), &reader);
@@ -10385,7 +10385,7 @@ static bool sharp_delegate_fits(const zend_function *func, const zend_class_entr
 			own->first->text, length, wanted->text, (int) wanted->first->length, wanted->first->text);
 		fits = false;
 	}
-	fits = fits && sharp_delegate_effects_fit(func, ce, file, wanted, &reader);
+	fits = fits && sharp_delegate_effects_fit(func, file, wanted, &reader);
 	zend_arena_destroy(reader.arena);
 
 	return fits;
@@ -10499,7 +10499,7 @@ static void sharp_delegate_make(INTERNAL_FUNCTION_PARAMETERS, const char *member
 	zend_function *func = accessor >= 0 ? sharp_delegate_accessor(caller, ce, arguments, property, accessor, &declared)
 		: sharp_delegate_method(caller, ce, arguments, class_name, name, &declared);
 	bool is_static = func && (func->common.fn_flags & ZEND_ACC_STATIC);
-	if (!func || !sharp_delegate_fits(func, ce, file, declared, is_static ? NULL : read_on, type, spreads)) {
+	if (!func || !sharp_delegate_fits(func, file, declared, is_static ? NULL : read_on, type, spreads)) {
 		if (property) {
 			zend_string_release_ex(property, false);
 		}
@@ -10553,7 +10553,7 @@ static zend_function *sharp_delegate_runs(const sharp_delegate *delegate, const 
 	}
 	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
 	sharp_type_node *type = sharp_type_text_read(ZSTR_VAL(delegate->type->text), ZSTR_LEN(delegate->type->text), &reader);
-	bool fits = sharp_delegate_effects_fit(own, receiver->ce, delegate->file, type, &reader);
+	bool fits = sharp_delegate_effects_fit(own, delegate->file, type, &reader);
 	zend_arena_destroy(reader.arena);
 
 	return fits ? own : NULL;
@@ -12242,8 +12242,9 @@ static bool sharp_listener_input_fits(const zval *input)
 		&& hash && Z_STRLEN_P(hash) == 32 && strspn(Z_STRVAL_P(hash), "0123456789abcdef") == 32;
 }
 
-/* Whether lists, a part of a listener table, is [a name => [a string, ...], ...]. */
-static bool sharp_listener_lists_fit(const zval *lists)
+/* Whether lists, a part of a listener table, is [a name => [a string, ...], ...], where a name may also hold null when
+ * nullable. */
+static bool sharp_listener_lists_fit(const zval *lists, bool nullable)
 {
 	const zval *list, *element;
 	zend_string *name;
@@ -12252,6 +12253,9 @@ static bool sharp_listener_lists_fit(const zval *lists)
 		return false;
 	}
 	ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(lists), name, list) {
+		if (name && nullable && Z_TYPE_P(list) == IS_NULL) {
+			continue;
+		}
 		if (!name || Z_TYPE_P(list) != IS_ARRAY) {
 			return false;
 		}
@@ -12269,7 +12273,8 @@ static bool sharp_listener_lists_fit(const zval *lists)
  * null or [the workspace-relative path of the app's module that binds the dispatcher, its namespace in lowercase],
  * 'attributes' => [the lowercase name of a plain PHP class an `extern` line gives attributes => [the workspace-relative
  * path of each .sharp file whose line does, ...], ...], 'effects' => [the lowercase name of a plain PHP class or method
- * an `extern` line declares => [the dotted full name of each effect it declares, ...], ...], 'tags' => [a family's full
+ * an `extern` line declares => [the dotted full name of each effect it declares, ...], or null for `uses any`, ...],
+ * 'tags' => [a family's full
  * name => [the key its `[Tag]` names, or '' for a machine that stores as its value, [a variant's name => its class's
  * full name, ...]], ...]]. A name of digits, as an int-backed machine's case's, is PHP's integer key. */
 static bool sharp_listener_table_fits(const zval *table)
@@ -12285,7 +12290,8 @@ static bool sharp_listener_table_fits(const zval *table)
 
 	if (!inputs || Z_TYPE_P(inputs) != IS_ARRAY || !listeners || Z_TYPE_P(listeners) != IS_ARRAY || !dispatcher
 			|| (Z_TYPE_P(dispatcher) != IS_NULL && (!sharp_element(dispatcher, 0, IS_STRING) || !sharp_element(dispatcher, 1, IS_STRING)))
-			|| !sharp_listener_lists_fit(attributes) || !sharp_listener_lists_fit(effects) || !tags || Z_TYPE_P(tags) != IS_ARRAY) {
+			|| !sharp_listener_lists_fit(attributes, false) || !sharp_listener_lists_fit(effects, true) || !tags
+			|| Z_TYPE_P(tags) != IS_ARRAY) {
 		return false;
 	}
 	ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL_P(tags), class, element) {
@@ -12465,32 +12471,33 @@ static zend_string *sharp_extern_key(zend_string *name, uint32_t target)
 	return key;
 }
 
-/* The effects, each a dotted full name, the `extern` lines give the plain PHP method `method` run on `ce`, spec section
- * 29, as the listener table of the root above `file` lists them: the method's own line, then its class's, then the
- * same for each parent class, nearest first, as the checker reads them. NULL when no line declares them, so the method
- * may have every effect, and after an exception reading the table threw. */
-static HashTable *sharp_extern_effects(const zend_class_entry *ce, zend_string *method, const zend_string *file)
+/* The effects, each a dotted full name, the `extern` lines give the plain PHP method `func`, spec section 29, as the
+ * listener table of the root above `file` lists them: the method's own line, else the line of the class that declares
+ * it, as the checker reads them. Nothing passes from a parent class, so a method of a subclass no line declares may
+ * have every effect, as the checker holds a call of it. NULL when no line or a line that says `uses any` declares them,
+ * so the method may have every effect, and after an exception reading the table threw. */
+static HashTable *sharp_extern_effects(const zend_function *func, const zend_string *file)
 {
 	size_t root_length;
-	if (!file || !sharp_find_root(file, &root_length)) {
+	if (!file || !func->common.scope || !sharp_find_root(file, &root_length)) {
 		return NULL;
 	}
 	HashTable *table = sharp_listener_table(ZSTR_VAL(file), root_length);
 	/* A missing table, which sharp_listener_table gives as one without effects, declares none. */
 	zval *effects = table ? zend_hash_str_find(table, "effects", sizeof("effects") - 1) : NULL;
-	zend_string *member = zend_string_tolower(method);
-	zval *declared = NULL;
-	for (; effects && ce && !declared; ce = ce->parent) {
-		zend_string *class = zend_string_tolower(ce->name);
-		zend_string *key = zend_string_concat3(ZSTR_VAL(class), ZSTR_LEN(class), "::", 2, ZSTR_VAL(member), ZSTR_LEN(member));
-		declared = zend_hash_find(Z_ARRVAL_P(effects), key);
-		declared = declared ? declared : zend_hash_find(Z_ARRVAL_P(effects), class);
-		zend_string_release(key);
-		zend_string_release(class);
+	if (!effects) {
+		return NULL;
 	}
+	zend_string *class = zend_string_tolower(func->common.scope->name);
+	zend_string *member = zend_string_tolower(func->common.function_name);
+	zend_string *key = zend_string_concat3(ZSTR_VAL(class), ZSTR_LEN(class), "::", 2, ZSTR_VAL(member), ZSTR_LEN(member));
+	zval *declared = zend_hash_find(Z_ARRVAL_P(effects), key);
+	declared = declared ? declared : zend_hash_find(Z_ARRVAL_P(effects), class);
+	zend_string_release(key);
 	zend_string_release(member);
+	zend_string_release(class);
 
-	return declared ? Z_ARRVAL_P(declared) : NULL;
+	return declared && Z_TYPE_P(declared) == IS_ARRAY ? Z_ARRVAL_P(declared) : NULL;
 }
 
 /* The name of the method of an anonymous class that holds a method's or a function's `extern` attributes. */

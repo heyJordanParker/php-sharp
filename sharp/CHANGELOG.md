@@ -4,7 +4,14 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Changed
+
+- Plain PHP no `extern` line declares fails with its own code, `missing-extern`, spec section 29, so a project counts the lines it still has to write apart from real effect conflicts. "`Mailchimp` has no `extern` line." keeps its message and its help, where 0.6.50 reported it as `incompatible-effects`.
+- A one-part `extern` target names a class, as any name where a class goes does, spec section 29. So `extern Printer uses none;` in `App.Shop` declares the plain PHP `App.Shop.Printer` with no import, and the help for a call of it gives that line, where 0.6.50 read the bare name as a function and its help asked for `import App.Shop.Printer as ShopPrinter;`. A bare name that names no class, as `extern now uses Clock;`, fails with "Cannot find class, interface, enum, or type alias `now`.", where 0.6.50 said "Function `now` does not exist.".
+
 ### Fixed
+
+- `Method.createDelegate` holds a plain PHP method to the `extern` lines the checker holds a call of it to, spec sections 25 and 29: the method's own line, else the line of the class that declares it, and never a parent's. So beside `extern Base uses none;`, `extern Sub uses Http;` and `extern Sub.later uses any;`, the inherited `run` of a `Sub` fits a pure `Function<int(Sub)>`, `later` fails a `Function<int(Sub) uses Http>` with "may have every effect", and the `own` method of a `Leaf extends Base` that no line declares fails a pure function type the same way. 0.6.50 read `Sub`'s line for `run`, `Sub`'s `uses Http` for `later`, and `Base`'s line for `own`.
 
 - A law follows an enum's case through a test that names one case, as it follows the other cases where the test fails, since each test of an enum, a machine and a sealed interface names every case and every implementer, and leaves no value to a catch-all. So beside `public enum Phase { case Idle; case Busy(int job); case Failed(string reason); }`, a `struct Slot` that holds a `Phase`, and a machine case whose `advance()` builds `new Slot(this.slot.phase, this.slot.count)`, `law advancingKeepsThePhase(Slot slot, int position) => Worker.Running(slot, position).advance().slot.phase is Phase.Busy(int at) ? (slot.phase is Phase.Busy(int was) ? at == was : false) : slot.phase is Phase.Idle || (slot.phase is Phase.Failed(string reason) ? true : false);` proves, and so does the same law after a move that copies the slot, where 0.6.50 refused both with "law advancingKeepsThePhase is not proven" and the whole claim still to show. `slot.phase is Phase.Idle` tests a case that carries no data beside cases that do, where 0.6.50 refused it with "a match on this subject". A law that claims the job grows by one is still not proven, with its claim still to show, and so is a law whose claim Lean computes to `false`, such as `Pending.start() is Paid` for a move that gives `Pending`.
 
