@@ -25,6 +25,21 @@ class Sub extends Base
     }
 }
 
+/** A plain PHP trait whose `deliver` each class that uses it takes as its own. */
+trait Delivers
+{
+    public function deliver(): int
+    {
+        return 5;
+    }
+}
+
+/** A plain PHP class that takes `deliver` from a trait. */
+class Courier
+{
+    use Delivers;
+}
+
 /** A plain PHP subclass that no `extern` line declares. */
 class Leaf extends Base
 {
