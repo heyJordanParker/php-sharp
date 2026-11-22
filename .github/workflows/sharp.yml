@@ -115,8 +115,8 @@ jobs:
   # sharp/bin/build-mago then builds only what changed since master's build, with every test binary, which MAGO's slices
   # run, so Linux builds Mago's dev target once per run, where mago.yml's build job built it a second time for 122
   # seconds on dfa6e7e2941's run. It also runs the checks of generated files, since one of them reads the header the
-  # build generates, and the last fifth of Mago's tests with the doc tests and the property tests, which cargo builds,
-  # so they need this target: a job starts once every job it needs has ended, so the suites wait for them too.
+  # build generates, and the doc tests and the property tests, which cargo builds, so they need this target: a job
+  # starts once every job it needs has ended, so the suites wait for them too. MAGO's slices run every test binary.
   #
   # On each push to master it saves the ccache, the Rust toolchain and crates, and the target, which every pull
   # request's run restores, as .github/actions/mago-cache explains. A cache only its own ref's runs would restore is no
@@ -208,12 +208,13 @@ jobs:
         env:
           MAGO_ENGINE: /src/sharp/build/linux-x86_64-engine/install
         run: sharp/bin/check generated
-      # With the engine the build of mago linked, as the check of the generated files takes it, so sharp/bin/test's
-      # build builds nothing: mago.yml's build job ran this slice with no MAGO_ENGINE, and built the engine from nothing
-      # first, for 4.5 of its 8.7 minutes on dfa6e7e2941's run.
-      - name: Test the last fifth of Mago's workspace tests, the doc tests and the property tests
+      # With the engine the build of mago linked, as the check of the generated files takes it, so cargo's build of the
+      # tests rebuilds no crate that links it: mago.yml's build job ran these with no MAGO_ENGINE, and built the engine
+      # from nothing first, for 4.5 of its 8.7 minutes on dfa6e7e2941's run. They run after the uploads, which the
+      # suites download, and the job ends about a minute after them.
+      - name: Test the doc tests and the property tests
         if: ${{ !needs.CHANGES.outputs.passed }}
-        run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/test --mago --shard 5/5
+        run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/test --mago --cargo-built
       # As .github/actions/cancel-failed-run explains.
       - &cancel-failed-run
         name: Cancel the run, which can no longer pass
@@ -289,8 +290,9 @@ jobs:
         with:
           end: true
   # sharp/mago's workspace tests on Linux, a fifth of the tests each, which sharp/bin/test --mago --shard balances by
-  # the seconds sharp/baseline/seconds lists, by exact name, on BUILD_LINUX's test binaries. BUILD_LINUX runs the fifth
-  # slice, with the doc tests and the property tests, which need its target.
+  # the seconds sharp/baseline/seconds lists, by exact name, on BUILD_LINUX's test binaries. BUILD_LINUX runs the doc
+  # tests and the property tests, which need its target. When BUILD_LINUX ran the fifth slice itself, the suites
+  # started 376 s after its last upload, on run 45016081891.
   MAGO:
     name: MAGO (${{ matrix.shard }}/5)
     needs: [CHANGES, BUILD_LINUX]
@@ -304,7 +306,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
