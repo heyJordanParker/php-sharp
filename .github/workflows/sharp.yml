@@ -574,13 +574,16 @@ jobs:
   # The checks that keep the release pipeline on pinned code, which sharp/bin/check workflows runs: an action that is not
   # ours runs only at a full commit SHA, so a moved tag can't change what runs, no Dockerfile under sharp/docker names a
   # `# syntax=` frontend, which BuildKit pulls from Docker Hub with no login (#86), and actionlint, at the version this
-  # job installs, passes over every workflow, with the runner labels .github/actionlint.yaml sets.
+  # job installs, passes over every workflow, with the runner labels .github/actionlint.yaml sets. It also checks that
+  # each released version in sharp/CHANGELOG.md keeps the lines its release published, so a commit of next that edits
+  # them fails before it lands.
   WORKFLOWS:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       actions: write
       contents: read
+      pull-requests: read
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -596,6 +599,11 @@ jobs:
           echo "$RUNNER_TEMP/actionlint" >> "$GITHUB_PATH"
       - name: The actions are pinned, no Dockerfile names a syntax frontend, and actionlint passes
         run: sharp/bin/check workflows
+      # sharp/bin/check changelog reads master's sharp/CHANGELOG.md and an open release pull request's through the API.
+      - name: Every released version in sharp/CHANGELOG.md keeps the lines its release published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sharp/bin/check changelog
       - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()

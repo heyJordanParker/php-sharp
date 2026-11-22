@@ -11,7 +11,7 @@ set -euo pipefail
 # version; tagged, the commit tag v<version> names on origin, empty until sharp/bin/land creates it; missing, each part
 # of the release not published yet; and bump, whether any is, so a push to master publishes what is missing.
 usage() {
-  echo "usage: sharp/bin/check [workflows | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php]..." >&2
+  echo "usage: sharp/bin/check [workflows | changelog | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php]..." >&2
   echo "       sharp/bin/check --release" >&2
   exit 2
 }
@@ -104,7 +104,7 @@ if [[ ${1:-} == --release ]]; then
   exit 0
 fi
 
-all=(workflows spec-guard mago-checks linux upstream hosts generated mago-tests plain-php)
+all=(workflows changelog spec-guard mago-checks linux upstream hosts generated mago-tests plain-php)
 for gate in "$@"; do
   if [[ " ${all[*]} " != *" $gate "* ]]; then
     usage
@@ -194,6 +194,43 @@ gate_workflows() {
   step unpinned
   step syntax_frontend
   step lint_workflows
+}
+
+# A released version's lines in sharp/CHANGELOG.md are the ones its release publishes: master's for each version master
+# holds, and those of the branch release/<version> of the open pull request that releases a version master doesn't hold
+# yet. Two lanes added lines under [0.6.51] after it was cut, b0fb4166be0 and 82720c8c872, where [Unreleased] had no
+# "### Added" heading and the first one in the file was 0.6.51's, and next then conflicted with master. So each such
+# version keeps its lines, from its heading to the next one, without the compare links under the oldest, which a bump
+# rewrites. A release bump passes: its version's lines are on its own branch alone.
+notes_of() {
+  awk -v heading="## [$1]" '/^## / {on = index($0, heading) == 1} on && !/^\[[^]]+\]: /'
+}
+released_notes() {
+  local repo ref published version versions lines changed=false
+  repo="$(cd "$root" && gh repo view --json nameWithOwner --jq .nameWithOwner)"
+  for ref in master $(gh api "repos/$repo/pulls?base=master&state=open&per_page=100" \
+    --jq '.[].head.ref | select(startswith("release/"))'); do
+    published="$(gh api -H 'Accept: application/vnd.github.raw+json' "repos/$repo/contents/sharp/CHANGELOG.md?ref=$ref")"
+    if [[ $ref == master ]]; then
+      versions="$(sed -n 's/^## \[\([0-9][^]]*\)\].*/\1/p' <<< "$published")"
+    else
+      versions="${ref#release/}"
+    fi
+    for version in $versions; do
+      if ! lines="$(diff <(notes_of "$version" <<< "$published") <(notes_of "$version" < "$root/sharp/CHANGELOG.md"))"; then
+        echo "sharp/CHANGELOG.md changes the lines of [$version], which $ref releases:" >&2
+        sed -n 's/^< /  removes: /p; s/^> /  adds: /p' <<< "$lines" >&2
+        changed=true
+      fi
+    done
+  done
+  if $changed; then
+    echo "A released version keeps the lines its release published. Write each change under [Unreleased]." >&2
+    return 1
+  fi
+}
+gate_changelog() {
+  step released_notes
 }
 
 # SPEC_GUARD and COMPLETES, with the merge base's sharp/bin/spec, as completes.yml runs them. COMPLETES reads the pull
