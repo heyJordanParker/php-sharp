@@ -11,8 +11,8 @@
 // judge it. It fails when an example whose fingerprint the base has joins the list, and when a pull request that
 // changes anything outside the documents, the list and other Markdown also changes a GUARDED file.
 //
-// With --completes, it reads the pull request body from BODY and fails unless every section its `Completes:` line names
-// has a checked example and no entry in sharp/baseline/spec. Neither mode needs a build.
+// With --completes, it reads the pull request body on its standard input and fails unless every section its
+// `Completes:` line names has a checked example and no entry in sharp/baseline/spec. Neither mode needs a build.
 //
 // With --self-test, it checks the examples of sharp/spec-self-test.md, one for each rule the check applies, and fails
 // unless each gives exactly the problems its `<!-- expect <id>` comment lists.
@@ -58,7 +58,7 @@ $root = rtrim($status === 0 ? $top : git((string) getcwd(), 'rev-parse', '--show
 
 exit(match (true) {
     count($argv) === 3 && $argv[1] === '--base' => compare_with_base($root, $argv[2]),
-    count($argv) === 2 && $argv[1] === '--completes' => completes($root, (string) getenv('BODY')),
+    count($argv) === 2 && $argv[1] === '--completes' => completes($root, (string) stream_get_contents(STDIN)),
     count($argv) === 2 && $argv[1] === '--self-test' => self_test($root),
     count($argv) === 3 && $argv[1] === '--shard' && preg_match('~^([1-9]\d*)/([1-9]\d*)$~', $argv[2], $shard) === 1
         && (int) $shard[1] <= (int) $shard[2] => check($root, (int) $shard[1], (int) $shard[2]),
