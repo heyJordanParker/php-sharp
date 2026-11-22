@@ -129,21 +129,27 @@ A server whose PHP comes from its distribution, such as Ubuntu's packages, can't
 
 ### Extensions
 
-The image ships the extensions its release's `php -m` lists. For 0.6.27:
+The image ships the extensions its release's `php -m` lists. For 0.6.51:
 
 ```text
-$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.27 php -m
+$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.51 php -m
 [PHP Modules]
 bcmath
+calendar
 Core
 ctype
 curl
 date
 dom
+exif
 fileinfo
 filter
+ftp
+gd
 hash
 iconv
+igbinary
+imagick
 intl
 json
 lexbor
@@ -151,21 +157,31 @@ libxml
 mbstring
 mysqlnd
 openssl
+pcntl
 pcre
 PDO
+pdo_mysql
+pdo_pgsql
 pdo_sqlite
+pgsql
 Phar
 posix
 random
 readline
+redis
 Reflection
 session
 sharp
+shmop
 SimpleXML
+sockets
 sodium
 SPL
 sqlite3
 standard
+sysvmsg
+sysvsem
+sysvshm
 tokenizer
 uri
 xml
@@ -179,15 +195,21 @@ zlib
 Zend OPcache
 ```
 
-The list has no `pcntl`, which Laravel's queue worker needs to stop between jobs when `docker restart` signals it, and no driver for a database but SQLite. The app's image builds every other extension it needs with [`install-php-extensions`](https://github.com/mlocati/docker-php-extension-installer), which the image ships, as `pgsql`, `redis`, `imagick`, `gd`, `exif` and `pcntl` build on 0.6.27.
+Beside the extensions PHP builds by default, the image holds the ones an app's image would otherwise build again on every release:
+
+- every extension of PHP's own source that links no outside library: `bcmath`, `calendar`, `exif`, `ftp`, `pcntl`, `shmop`, `sockets`, `sysvmsg`, `sysvsem` and `sysvshm`, with `intl` and `zip`, which the standard library runs on
+- the database drivers `pdo_mysql`, `pdo_pgsql` and `pgsql`
+- `gd`, `imagick`, and `redis` with `igbinary` as its serializer, which Laravel Sail's and serversideup's images ship
+
+The app's image installs every other extension it needs with [`install-php-extensions`](https://github.com/mlocati/docker-php-extension-installer), which the image ships, such as `xsl`, `gettext`, `ffi`, or a development extension such as `xdebug`, `pcov` or `excimer`. A line that installs an extension the image holds builds nothing: `install-php-extensions` says "Module already installed" for it.
 
 ### The app's image
 
 The app builds its own image on the release, with its extensions, the production `php.ini` and its own ini settings:
 
 ```dockerfile
-FROM ghcr.io/heyjordanparker/php-sharp:0.6.27
-RUN install-php-extensions pcntl redis
+FROM ghcr.io/heyjordanparker/php-sharp:0.6.51
+RUN install-php-extensions xsl
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 COPY app.ini "$PHP_INI_DIR/conf.d/"
 COPY Caddyfile /etc/frankenphp/Caddyfile
@@ -349,7 +371,7 @@ Every macOS job in `.github/workflows/sharp.yml`, `.github/workflows/mago.yml` a
 
 Every pull request's run also runs what needs the Mac and the runtime image: `MACOS` and `IMAGE`. No pull request's run builds the release. A tree runs the checks once: a run runs none of them when a pull request's run passed `CI_PASSED` on the same tree, the pull request merged with `master`, and links that run. A pull request's run then runs nothing else, so the pull request that lands a commit of `next` passes in about a minute. A push to `master` then runs only `BUILD_LINUX` and `HOSTS`, to save the caches every pull request's run restores. A push to `master` whose `sharp/mago/Cargo.toml` version has no tag on `origin` yet, as `sharp/bin/check --release` prints it, also builds the release in `RELEASE_ASSETS`, and `RELEASE` and `COMPOSER` publish what it built. A push whose tree no pull request's run passed runs every check, the Mac's among them, as the check of the merge. A failed push opens an issue, or comments on the one still open. The Mac job runs what only macOS can fail: the builds, `mago compile` and the suite on the debug engine without opcache and in shared memory on a disk that ignores case, `--census` and `--differential`, `sharp/mago/`'s workspace tests on the dev build, which keeps the debug assertions and overflow checks the release profile turns off, and `plain-php` on the dev build, which `release.yml`'s macOS build runs again on the release binary. No job runs the suite on arm64 Linux: `IMAGE`'s arm64 image shows that its engine starts and lists the `sharp` extension. `ASAN` runs alone, nightly on `master`'s tip, or on the branch `gh workflow run sharp.yml --ref <branch>` names: it builds the engine in the `sharp/docker/` image, as every Linux suite does, with AddressSanitizer, through the `CFLAGS` and `LDFLAGS` php-src's own CI sets, and runs `sharp/bin/test` with the environment `run-tests.php --asan` sets, so a memory error of the engine fails a test, and a failed run opens its own issue.
 
-`IMAGE` builds the runtime image at `-O2` with `--enable-werror`, on an amd64 runner and on an arm64 one, pushes it by digest, scans it, and starts it on its own default command, as an app's container does, with a page where the app's code goes, which FrankenPHP must answer to `curl` on its default Caddyfile's `https://localhost`. It then installs the extensions a typical Laravel app installs on top with `install-php-extensions`, as such an app's Dockerfile does, building `imagick` and `redis` from their release tags' git sources on GitHub so a pecl.php.net outage can't fail it, and runs `sharp/bin/php-extensions` on them from `frankenphp php-cli`. The list sits in the job's `EXTENSIONS`, and `sharp/bin/php-extensions` holds a call for each. The job's `INSTALL` names the same extensions as `install-php-extensions` takes them, but `bcmath`, `intl` and `zip`, which the image builds, so an extension added to one list goes in the other too. `LINUX (2/2)` also fails when a generated file differs from the committed one, when `ext/sharp/sharp_unit.h` differs from the header `sharp/mago/` generates from `Zend/zend_ast.h`, or when `ext/sharp/Cargo.lock` or `sharp/mago/Cargo.lock` names a local `path+file://` or `git+file://` source.
+`IMAGE` builds the runtime image at `-O2` with `--enable-werror`, on an amd64 runner and on an arm64 one, pushes it by digest, scans it, and starts it on its own default command, as an app's container does, with a page where the app's code goes, which FrankenPHP must answer to `curl` on its default Caddyfile's `https://localhost`. It then runs `sharp/bin/php-extensions` from the pushed image's `frankenphp php-cli` on every extension the image ships beside PHP's defaults, which the job's `EXTENSIONS` lists, as [Extensions](#extensions) does, and `sharp/bin/php-extensions` holds a call for each, so an extension added to the image goes in both. `LINUX (2/2)` also fails when a generated file differs from the committed one, when `ext/sharp/sharp_unit.h` differs from the header `sharp/mago/` generates from `Zend/zend_ast.h`, or when `ext/sharp/Cargo.lock` or `sharp/mago/Cargo.lock` names a local `path+file://` or `git+file://` source.
 
 `.github/workflows/mago.yml` runs Mago's own gates in `sharp/mago/` on every pull request, and every push run on `master` as `sharp.yml` runs them, whatever it changed, with the toolchain `sharp/mago/Cargo.toml`'s `rust-version` names, which `release.yml` builds the binaries with. Its `checks` job runs `sharp/bin/check mago-checks`: `typos`, the PHP SDK's tests, formatting, clippy, and that the fuzz crate's `Cargo.lock` is current, and builds the Linux `mago`, in the `test-run` profile `sharp/mago/Cargo.toml` explains, then analyzes the standard library in `sharp/composer/` with it and fails on any note. The workspace's tests run on Linux in `sharp.yml`, on the one build of Mago's dev target that `BUILD_LINUX` makes in the `sharp/docker/` image, which keeps the test binaries, `mago` and `build-mago`'s `build.json` as an artifact: `MAGO (1/5)` to `(5/5)` run them with `sharp/bin/test --mago --no-build --shard`, a fifth of the tests each, balanced by their seconds, and `BUILD_LINUX` runs the doc tests and the property tests, which cargo builds, with `sharp/bin/test --mago --cargo-built` after its uploads, so `CI_PASSED` covers them and the suites start about a minute after the uploads. The Mac job runs them on macOS. A run runs no test when a pull request's run passed `ci-passed` on the same tree, and a push to `master` runs `checks` again to save its target. A failed push to `master` opens an issue, or comments on the one still open. Each job that builds Mago restores the Rust crates and its target folder with `.github/actions/mago-cache`, which only a push to `master` saves: `sharp.yml`'s `BUILD_LINUX` for the dev target in the image, and `checks` here for its own. Every other run restores what `master` saved and saves nothing, because only its own ref's runs would restore it. That run's last job, `ci-passed` or `CI_PASSED`, then deletes with `.github/actions/mago-cache-prune` each target, ccache and Go cache a newer one of its kind replaced, so the caches hold one of each. The self-hosted Mac keeps its dev Mago target instead, and `.github/actions/clean-kept-build` removes it above 8 GB. When a pull request from this repository closes, `.github/workflows/closed-pull-request.yml` cancels each of its runs that hasn't ended, which would hold the Mac for a tree nothing lands, and deletes every cache its runs saved, which only its own runs could restore. A pull request from another repository gets a token that can do neither. Its `plain-php` job runs `sharp/bin/check plain-php` on Linux with the runner's own PHP, and the Mac job runs it on macOS. It installs `heyjordanparker/php-sharp-composer` from `sharp/composer/` and `heyjordanparker/mago-sharp` from `sharp/mago/`, with the `test-run` `mago` that the `checks` job built on Linux, or the dev `mago` on macOS, and the release `mago` in a release's macOS build, then runs `mago analyze` and `mago compile` on a one-class `.sharp` project. Last it installs `sharp/phpunit/` and runs its tests, which must stop with "This project needs the PHP# engine" and print none of `tests/Shop/CheckoutTest.sharp`. Its `ci-passed` job passes when all of them pass, or skipped a tree a pull request's run passed.
 

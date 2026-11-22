@@ -891,8 +891,8 @@ jobs:
   # attestations, and RELEASE tags the two as one.
   # BuildKit, its SBOM scanner and the bases are base-images.yml's copies in ghcr.io at pinned digests, pulled after the
   # login, so no pull is an anonymous Docker Hub pull (#86). The engine changes PHP's internal structures, so an
-  # extension can stop building or loading: each pushed image then installs the extensions a typical Laravel app
-  # installs on top, the way such an app's Dockerfile does. Every pull request's push runs it, and a push to master
+  # extension can stop building or loading: the image builds every extension it ships, and the job calls into each one
+  # from the pushed image, as an app runs them. Every pull request's push runs it, and a push to master
   # whose tree no pull request's run passed. The two platforms build at once, since a run ends with its slowest job:
   # each took 12 to 13 minutes on the pushes of pull requests #351 and #352.
   IMAGE:
@@ -910,11 +910,8 @@ jobs:
       matrix:
         platform: [linux/amd64, linux/arm64]
     env:
-      EXTENSIONS: bcmath exif gd imagick intl pcntl pdo_pgsql pgsql redis zip
-      # The same extensions but bcmath, intl and zip, which the image builds, so sharp/bin/php-extensions checks the
-      # image's own. imagick and redis build from the release tags the image adds from GitHub, because pecl.php.net
-      # outages failed this job.
-      INSTALL: exif gd /usr/src/imagick pcntl pdo_pgsql pgsql /usr/src/phpredis
+      # Every extension the image holds beside the ones PHP builds by default, as sharp/README.md lists them.
+      EXTENSIONS: bcmath calendar exif ftp gd igbinary imagick intl pcntl pdo_mysql pdo_pgsql pgsql redis shmop sockets sysvmsg sysvsem sysvshm zip
     steps:
       # For .github/actions/boot-image and sharp/bin/php-extensions. The build fetches its own context.
       - name: git checkout
@@ -999,27 +996,12 @@ jobs:
           fi
           docker run --rm --user 1000:1000 --env ARCHIVE="$archive" "$IMAGE" \
             sh -c '"$XDG_CACHE_HOME/mago/lean/$ARCHIVE/bin/lake" --version && touch "$XDG_CACHE_HOME/mago/install.lock"'
-      # rustup comes after the extensions, so they build as in the app's image. The builder is Docker's own, which reads
-      # the pulled image, where Buildx's would not.
-      - name: Install the extensions
+      - name: Check that php -m lists each extension, and call into each one from FrankenPHP's php-cli
         env:
           IMAGE: ghcr.io/heyjordanparker/php-sharp@${{ steps.build.outputs.digest }}
         run: |
-          docker pull "$IMAGE"
-          docker tag "$IMAGE" php-sharp
-          docker buildx build --builder default --load --build-arg INSTALL --tag php-sharp-extensions - <<'DOCKERFILE'
-          FROM php-sharp
-          COPY --from=ghcr.io/mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
-          # A git source brings phpredis's liblzf submodule, which GitHub's tag archive leaves out.
-          ADD https://github.com/Imagick/imagick.git#3.8.1 /usr/src/imagick
-          ADD https://github.com/phpredis/phpredis.git#6.3.0 /usr/src/phpredis
-          ARG INSTALL
-          RUN install-php-extensions $INSTALL
-          DOCKERFILE
-      - name: Check that php -m lists each extension, and call into each one from FrankenPHP's php-cli
-        run: |
           # shellcheck disable=SC2086 # EXTENSIONS is a list of extensions.
-          docker run --rm --volume "$PWD:/src" --workdir /src php-sharp-extensions frankenphp php-cli sharp/bin/php-extensions $EXTENSIONS
+          docker run --rm --volume "$PWD:/src" --workdir /src "$IMAGE" frankenphp php-cli sharp/bin/php-extensions $EXTENSIONS
       # Each file is named by its image's digest and holds the commit the image was built from.
       - name: Keep the digests for RELEASE
         env:
