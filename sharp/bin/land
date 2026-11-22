@@ -41,6 +41,18 @@ if ! gh api "repos/$repo/git/ref/tags/v$version" --silent 2> /dev/null; then
   echo "Tag v$version names $first, the first merge commit on master that holds version $version."
 fi
 
+# A release's bump lands on master in a pull request from branch release/<version>, and its changelog lists what master
+# holds then. A landing that merged first would put commits of next inside the release with their changelog lines still
+# under Unreleased, as landing #676 would have put 1280982ae31 inside 0.6.51, whose release #675 was open beside it. So
+# no landing opens or arms while a release's pull request is open, and the first call after it merges tags the version
+# above and lands again.
+release=$(api "pulls?base=master&state=open&per_page=100" \
+  '[.[] | select(.head.ref | startswith("release/"))][0] | if . then "\(.html_url) \(.head.ref)" else "" end')
+if [[ -n $release ]]; then
+  echo "${release% *} releases ${release##*/}, so nothing lands until it merges."
+  exit 0
+fi
+
 # The runs list's status filter finds a run minutes after it ends, so a run counts by its own conclusion.
 passed() {
   api "actions/workflows/$1/runs?head_sha=$2&event=pull_request&per_page=100" \
