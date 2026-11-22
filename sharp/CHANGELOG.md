@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.48] - 2026-11-22
+
 ### Added
 
 - `typeof(T).encode(value)` gives the stored form of `value` as a value, spec section 10, what `Json.encode` writes as text: each JSON object a `Map`, each JSON array a `List` and each scalar itself, with every field `parse` reads at any visibility. `typeof(T).decode` reads it back, so `typeof(T).decode(typeof(T).encode(x)) == x`, and a storage layer in another namespace stores a class's `internal` fields, which its own `Field.get` can't read. A `Map` field that `decode` reads from a `Map` reads each key by its text, as it reads a JSON object's, so `["7": "top"]` gives a `Map<int, string>` the key `7`, which 0.6.47 refused with "shelves[\"7\"]: key expected int, got string '7'".
@@ -1685,7 +1687,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.47...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.48...HEAD
+[0.6.48]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.47...v0.6.48
 [0.6.47]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.46...v0.6.47
 [0.6.46]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.45...v0.6.46
 [0.6.45]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.44...v0.6.45
