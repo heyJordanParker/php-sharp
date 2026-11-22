@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 3f58e89e0ed4ddc11c62a331520e26cbfc23537e */
+ * Stub hash: 79d73da06669b3e69bbf6606ba590363cbdd2064 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
@@ -15,6 +15,10 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_equals, 0, 2, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 	ZEND_ARG_TYPE_INFO(0, other, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_storedValue, 0, 1, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_jsonEncode, 0, 3, IS_STRING, 0)
@@ -503,6 +507,7 @@ ZEND_END_ARG_INFO()
 ZEND_FUNCTION(Sharp_Internal_statics);
 ZEND_FUNCTION(Sharp_Internal_keep);
 ZEND_FUNCTION(Sharp_Internal_equals);
+ZEND_FUNCTION(Sharp_Internal_storedValue);
 ZEND_FUNCTION(Sharp_Internal_jsonEncode);
 ZEND_FUNCTION(Sharp_Internal_jsonDecode);
 ZEND_FUNCTION(Sharp_Internal_parseAs);
@@ -622,6 +627,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "statics"), zif_Sharp_Internal_statics, arginfo_Sharp_Internal_statics, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "keep"), zif_Sharp_Internal_keep, arginfo_Sharp_Internal_keep, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "equals"), zif_Sharp_Internal_equals, arginfo_Sharp_Internal_equals, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "storedValue"), zif_Sharp_Internal_storedValue, arginfo_Sharp_Internal_storedValue, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "jsonEncode"), zif_Sharp_Internal_jsonEncode, arginfo_Sharp_Internal_jsonEncode, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "jsonDecode"), zif_Sharp_Internal_jsonDecode, arginfo_Sharp_Internal_jsonDecode, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "parseAs"), zif_Sharp_Internal_parseAs, arginfo_Sharp_Internal_parseAs, 0, NULL, NULL)

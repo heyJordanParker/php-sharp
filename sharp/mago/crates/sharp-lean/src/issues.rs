@@ -41,6 +41,7 @@ pub(crate) const CONSTRUCTOR_BODY: &str = "Write the constructor with promoted p
 pub(crate) const TYPE: &str = "Give it a type a law reasons about: int, bool, string, a List, a Map, or a PHP# class, enum or interface, with or without `?`.";
 pub(crate) const MISSING_TYPE: &str = "Write its type.";
 pub(crate) const TUPLE: &str = "Hold the values in a class with one property for each, in place of a tuple.";
+pub(crate) const ELSE_IF: &str = "Write `else if`.";
 pub(crate) const STATEMENT: &str = "Write the method with the statements a law reaches: `let` and `const`, assignments to locals, `if`, `match`, `return`, and loops that only count or sum.";
 pub(crate) const LOCAL_ASSIGNMENT: &str = "Assign the value to a local declared with `let`.";
 pub(crate) const UPDATE: &str = "Update an int with `+=`, `-=`, `*=`, `/=` or `%=`, or a string with `+=`.";
@@ -149,9 +150,18 @@ pub(crate) fn unproven_case(law: &Law, case: &Case, split: &[String], goal: Opti
 }
 
 /// The invariant `law` of a machine, spec section 20.2, which breaks `after` the moves written there: the trace the search
-/// found, "`open() → Draft`, `pay(cents: 0) → Paid(cents: 0)`", or the entry point or move whose proof stays open.
+/// found, "`open() → Draft`, `pay(cents: 0) → Paid(cents: 0)`".
 pub(crate) fn broken_invariant(law: &Law, after: &str) -> Issue {
     unproven(law, format!("`{}` breaks after {after}", law.name))
+}
+
+/// The invariant `law` of a machine, spec section 20.2, whose proof after the entry point or move `after`, as written,
+/// `pay(cents)`, stays open: the case of each enum value the proof split it on, `split`, and the goal still to show in
+/// PHP#, or the invariant's claim as written when the goal holds a part PHP# writes no other way.
+pub(crate) fn unproven_invariant(law: &Law, after: &str, split: &[String], goal: Option<&str>) -> Issue {
+    let goal = goal.unwrap_or(&law.proof.claim);
+
+    broken_invariant(law, &format!("`{after}`")).with_note(format!("{}still to show: {goal}", when(split)))
 }
 
 /// A call in `law`'s body of a law whose `when` condition the case of the call does not show, with the part of the

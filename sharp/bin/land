@@ -83,21 +83,28 @@ fi
 
 # The ruleset turns auto-merge off when it goes on before the pull request's Spec guard run reports: #551's went off a
 # second after it went on, "Repository rule violations found", and stayed on once Spec guard had passed. So a pull
-# request opens without it, and the first run that finds its Spec guard run ended turns it on. Spec guard runs on
-# pull_request_target, so its run of this pull request is the one of branch land/<sha>, never next's of the same commit.
+# request opens without it, and the first run that finds its SPEC_GUARD check ended turns it on. The commit carries two
+# SPEC_GUARD checks, since next's own pull request ran Spec guard on it first, and the ruleset reads the newest. So it
+# waits while either runs, and takes the one that started after the pull request opened. It reads the commit's check
+# runs, which show a check the moment it ends, where the workflow runs list showed no ended run for #624 a minute after
+# it opened at 01:52:06 on 2026-11-22, though its Spec guard run had ended at 01:52:33.
 if [[ -n $open ]]; then
-  if [[ $(gh pr view "$open" --repo "$repo" --json autoMergeRequest --jq '.autoMergeRequest != null') == true ]]; then
+  read -r armed opened < <(gh pr view "$open" --repo "$repo" --json autoMergeRequest,createdAt \
+    --jq '"\(.autoMergeRequest != null) \(.createdAt)"')
+  if [[ $armed == true ]]; then
     echo "$open already lands $newest."
     exit 0
   fi
-  guard=$(api "actions/workflows/completes.yml/runs?head_sha=$newest&event=pull_request_target&per_page=100" \
-    "[.workflow_runs[] | select(.head_branch == \"land/$newest\" and .status == \"completed\")][0].html_url // empty")
+  guard=$(api "commits/$newest/check-runs?check_name=SPEC_GUARD&per_page=100" \
+    "if any(.check_runs[]; .status != \"completed\") then \"\" else
+      ([.check_runs[] | select(.started_at >= \"$opened\")][0] | if . then \"\(.html_url) \(.conclusion)\" else \"\" end)
+    end")
   if [[ -z $guard ]]; then
-    echo "$open lands $newest once its Spec guard run has reported, which a later run finds."
+    echo "$open lands $newest once its SPEC_GUARD check has ended, which a later run finds."
     exit 0
   fi
   gh pr merge "$open" --repo "$repo" --auto --merge --match-head-commit "$newest"
-  echo "$open lands $newest: its Spec guard run $guard reported, so its auto-merge is on."
+  echo "$open lands $newest: its SPEC_GUARD check ${guard% *} ended with ${guard##* }, so its auto-merge is on."
   exit 0
 fi
 branch=land/$newest

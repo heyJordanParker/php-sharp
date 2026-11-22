@@ -4272,6 +4272,103 @@ fn a_move_that_breaks_a_machine_s_invariant_on_no_small_value_is_refused_by_name
     );
 }
 
+/// `App.Runs.Run`, a machine whose `Open` case holds ids and the instant it goes idle at, which its entry point `open`
+/// starts with one id, beside the static `extra`.
+fn run(extra: &str) -> String {
+    format!(
+        "namespace App.Runs;\n\nimport Sharp.Key;\nimport Sharp.Tag;\nimport Sharp.Time.Instant;\n\n[Tag(\"type\")]\npublic machine Run\n{{\n    [Key(\"open\")] case Open(List<int> ids, Instant idleAt)\n    {{\n        public Run.Idle idle() => Run.Idle(this.ids);\n    }}\n\n    [Key(\"idle\")] final case Idle(List<int> ids);\n\n    public static Run.Open open(int id, Instant idleAt) => Run.Open([id], idleAt);\n\n    {extra}\n\n    law anOpenRunHoldsAnId(Run.Open open) => open.ids.count() > 0;\n}}\n"
+    )
+}
+
+/// Spec sections 20.2 and 28: only entry points and moves build a case, so every value of a machine a program holds
+/// keeps its invariants, and an entry point that takes one, as `at`, keeps them from the value it takes. An entry
+/// point that builds a case breaking one is refused with the goal still to show, and so is a static that takes no
+/// value of the machine.
+#[test]
+fn an_entry_point_keeps_a_machine_s_invariant_from_the_value_it_takes() {
+    let directory = library_project(&[(
+        "app/Runs/Run.sharp",
+        &run(
+            "public static Run at(Run status, Instant now) => status is Run.Open open ? (now >= open.idleAt ? Run.Idle(open.ids) : open) : status;",
+        ),
+    )]);
+
+    let output = compile(directory.path());
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(directory.path(), "app/Runs/Run.sharp").exists());
+
+    let directory = library_project(&[(
+        "app/Runs/Run.sharp",
+        &run(
+            "public static Run at(Run status, Instant now) => status is Run.Open open ? (now >= open.idleAt ? Run.Idle(open.ids) : Run.Open([], now)) : status;",
+        ),
+    )]);
+
+    let output = compile(directory.path());
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "error[law-unproven]: `anOpenRunHoldsAnId` breaks after `at(status, now)`\n = when status is Run.Open, still to show: open.ids.count() > 0\n"
+        ),
+        "{}",
+        printed(&output)
+    );
+
+    let directory =
+        library_project(&[("app/Runs/Run.sharp", &run("public static Run.Open empty(Instant t) => Run.Open([], t);"))]);
+
+    let output = compile(directory.path());
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "error[law-unproven]: `anOpenRunHoldsAnId` breaks after `empty(t)`\n = still to show: open.ids.count() > 0\n"
+        ),
+        "{}",
+        printed(&output)
+    );
+}
+
+/// `App.Count`, a machine whose `Counting` case holds a count its invariant keeps positive, which `start` builds as
+/// `Counting(1)` and `at` takes and gives back, with the moves `moves` in `Counting`'s block beside `stop`.
+fn count(moves: &str) -> String {
+    format!(
+        "namespace App;\n\npublic machine Count\n{{\n    case Counting(int n)\n    {{\n        public Count.Done stop() => Count.Done;\n{moves}    }}\n\n    final case Done;\n\n    public static Count.Counting start() => Count.Counting(1);\n\n    public static Count at(Count c) => c;\n\n    law positive(Count.Counting counting) => counting.n > 0;\n}}\n"
+    )
+}
+
+/// Spec section 20.2: a program holds only values of a machine that keep its invariants, so the search for the moves
+/// that break one starts an entry point or a move that takes a value of the machine only from such a value, as `at`
+/// here never from `Counting(n: 0)`. A move that breaks the invariant from a value that keeps it is still refused with
+/// the moves that break it.
+#[test]
+fn a_trace_takes_only_values_of_a_machine_that_keep_its_invariants() {
+    let directory = lawful_project(&[("app/Count.sharp", &count(""))]);
+
+    let output = compile(directory.path());
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(directory.path(), "app/Count.sharp").exists());
+
+    let directory = lawful_project(&[(
+        "app/Count.sharp",
+        &count("        public Count.Counting down() => Count.Counting(this.n - 1);\n"),
+    )]);
+
+    let output = compile(directory.path());
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "error[law-unproven]: `positive` breaks after `start() → Counting(n: 1)`, `down() → Counting(n: 0)`\n"
+        ),
+        "{}",
+        printed(&output)
+    );
+}
+
 /// A machine whose second law names a parameter `until` and whose `Going` case holds a field `while`, two of Lean's
 /// own words.
 const SUBSCRIPTION_STATUS: &str = "namespace App.Repro;\n\nimport Sharp.Time.Instant;\n\npublic machine SubscriptionStatus\n{\n    case Waiting\n    {\n        public SubscriptionStatus.Going go(Instant at) => SubscriptionStatus.Going(at, 0);\n    }\n\n    case Going(Instant at, int @while)\n    {\n        public SubscriptionStatus.Paused pause() => SubscriptionStatus.Paused;\n        public SubscriptionStatus.Done finish() => SubscriptionStatus.Done;\n    }\n\n    case Paused\n    {\n        public SubscriptionStatus.Done end() => SubscriptionStatus.Done;\n    }\n\n    final case Done;\n\n    public static SubscriptionStatus.Waiting enter() => SubscriptionStatus.Waiting;\n\n    law goingHoldsTheTime(Instant at) => SubscriptionStatus.enter().go(at).at == at;\n    law pausingHoldsTheResume(Instant at, Instant until) => SubscriptionStatus.enter().go(at).pause() is SubscriptionStatus.Paused;\n}\n";

@@ -4,6 +4,21 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Added
+
+- `typeof(T).encode(value)` gives the stored form of `value` as a value, spec section 10, what `Json.encode` writes as text: each JSON object a `Map`, each JSON array a `List` and each scalar itself, with every field `parse` reads at any visibility. `typeof(T).decode` reads it back, so `typeof(T).decode(typeof(T).encode(x)) == x`, and a storage layer in another namespace stores a class's `internal` fields, which its own `Field.get` can't read. A `Map` field that `decode` reads from a `Map` reads each key by its text, as it reads a JSON object's, so `["7": "top"]` gives a `Map<int, string>` the key `7`, which 0.6.47 refused with "shelves[\"7\"]: key expected int, got string '7'".
+
+### Changed
+
+- The law checker that proves a law with its fixed steps imports no more of Lean's own library than `Init`, where 0.6.47 also imported 111 modules of `Std` and `Lean` into every such check, which only the attribute that marked a law's statement read. A law's statement is the one definition of the project's code whose type is a `Prop`, so the generated code marks it with nothing. The check of the law a one-file edit adds to a 2,128-file project retires 2.41 G instructions where it retired 2.69 G, in 0.41 s of CPU where it took 0.46 s, and peaks at 410 MiB where it peaked at 473 MiB, medians of 20 alternating rounds, with the same answer. Every law of that project proves as before.
+
+### Fixed
+
+- A computed property whose type is a machine compiles at any visibility, spec section 20.2, since it stores nothing a write could change, so `public OrderStatus progress => this.status;` beside `public OrderStatus status { get; private set; }` compiles. 0.6.47 refused it with "`Order.progress` holds the machine `OrderStatus`, so its `set` is `private`." A property that stores a machine still has a `private set`.
+- An entry point of a machine that takes a value of the machine keeps the machine's invariants from that value, spec sections 20.2 and 28, as a move keeps them from the case it moves from, since only entry points and moves build a case. So `public static Run at(Run status, Instant now) => status is Run.Open open ? (now >= open.idleAt ? Run.Idle(open.ids) : open) : status;` beside `law anOpenRunHoldsAnId(Run.Open open) => open.ids.count() > 0;` proves, where 0.6.47 refused it with "`anOpenRunHoldsAnId` breaks after `at(status, now)`". An invariant an entry point or a move leaves unproven names the goal still to show, as "= when status is Run.Open, still to show: open.ids.count() > 0".
+- The search for the moves that break a machine's invariant passes an entry point or a move a value of the machine only when the value keeps the invariants of its case, spec section 20.2, since a program holds no other. So `public static Count at(Count c) => c;` beside `law positive(Count.Counting counting) => counting.n > 0;` proves, where 0.6.47 refused it with "`positive` breaks after `at(c: Count.Counting(n: 0)) → Counting(n: 0)`". A move that breaks the invariant from a value that keeps it is still refused with the moves that break it.
+- PHP's `elseif` in a `.sharp` file, which fails as a typo does with "Unexpected `elseif`", gets the help "Write `else if`.", the one way PHP# writes an else-if, where 0.6.47 gave no help. A law's translation refuses an `if` with an else-if clause as a construct it doesn't model, where it would have translated the `if` without the clause's branch.
+
 ## [0.6.47] - 2026-11-22
 
 ### Upgrading from 0.6.46
