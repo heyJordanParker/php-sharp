@@ -486,18 +486,22 @@ jobs:
           mkdir -p sharp/build/cache
           tar -xf "$RUNNER_TEMP/lean-layer.tar" -C sharp/build/cache --strip-components 2 var/cache/mago
           rm "$RUNNER_TEMP/lean-layer.tar"
+          sharp/docker/run sh -c 'sharp/build/cache/mago/lean/lean-*/bin/lake --version'
+          stat -c %i sharp/build/cache/mago/lean/lean-* > "$RUNNER_TEMP/lean-folder"
       - name: Check the examples of docs/spec.md and README.md
         run: |
           build="sharp/build/linux-$(uname -m)"
           sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/4
-      # mago downloads Lean into lean/lean-<version>-<platform> of its cache folder only when it finds no pinned Lean,
-      # beside the law checker's builds, which lean/ holds under their hashes.
+      # mago downloads Lean only when lean/lean-<version>-<platform>/bin/lake is missing, through a staging folder it
+      # renames into place, beside the law checker's builds, which lean/ holds under their hashes. So the exported
+      # folder is the one lean/lean-* matches after the examples, unless mago downloaded Lean.
       - name: mago downloaded no Lean
         run: |
-          if compgen -G 'sharp/build/cache/mago/lean/lean-*' > /dev/null; then
-            echo "::error::mago downloaded Lean into sharp/build/cache/mago/lean, so the restored Lean was missing."
+          if [[ "$(stat -c %i sharp/build/cache/mago/lean/lean-*)" != "$(< "$RUNNER_TEMP/lean-folder")" ]]; then
+            echo "::error::mago downloaded Lean into sharp/build/cache/mago/lean, in place of the exported one."
             exit 1
           fi
+          echo "mago ran the examples' laws on the exported Lean, $(basename sharp/build/cache/mago/lean/lean-*), and downloaded none."
       - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
