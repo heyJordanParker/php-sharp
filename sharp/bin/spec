@@ -16,6 +16,10 @@
 //
 // With --self-test, it checks the examples of sharp/spec-self-test.md, one for each rule the check applies, and fails
 // unless each gives exactly the problems its `<!-- expect <id>` comment lists.
+//
+// With --projects <folder>, it writes the project of each checked example that holds a PHP# block into a folder of
+// <folder> named by the example's id, the first variant the check compiles, and compiles none. benchmark/speed.php
+// compiles each once to count what proving and compiling the examples cost.
 
 declare(strict_types=1);
 
@@ -60,10 +64,11 @@ exit(match (true) {
     count($argv) === 3 && $argv[1] === '--base' => compare_with_base($root, $argv[2]),
     count($argv) === 2 && $argv[1] === '--completes' => completes($root, (string) stream_get_contents(STDIN)),
     count($argv) === 2 && $argv[1] === '--self-test' => self_test($root),
+    count($argv) === 3 && $argv[1] === '--projects' => projects($root, $argv[2]),
     count($argv) === 3 && $argv[1] === '--shard' && preg_match('~^([1-9]\d*)/([1-9]\d*)$~', $argv[2], $shard) === 1
         && (int) $shard[1] <= (int) $shard[2] => check($root, (int) $shard[1], (int) $shard[2]),
     count($argv) === 1 => check($root),
-    default => fail('usage: sharp/bin/spec [--base <commit> | --completes | --self-test | --shard <i>/<n>]'),
+    default => fail('usage: sharp/bin/spec [--base <commit> | --completes | --self-test | --shard <i>/<n> | --projects <folder>]'),
 });
 
 function fail(string $message): never
@@ -1296,6 +1301,27 @@ function expectations(string $text): array
     }
 
     return $expected;
+}
+
+/**
+ * Writes into $folder, which must not exist, a folder for each checked example that holds a PHP# block, named by its
+ * id, with the project measure() compiles for the example's first variant.
+ */
+function projects(string $root, string $folder): int
+{
+    if (file_exists($folder)) {
+        fail("$folder exists.");
+    }
+    $harness = harness_files($root);
+    foreach (examples($root) as $id => $example) {
+        if ($example['ignore'] !== null || array_filter($example['blocks'], static fn (array $block): bool => $block['language'] === 'sharp') === []) {
+            continue;
+        }
+        $reads = array_map('read_block', $example['blocks']);
+        write_project($root, "$folder/$id", $harness, variant_files($example, $reads, variants($example, $reads)[0]));
+    }
+
+    return 0;
 }
 
 /** The folder this machine's build writes to. */
