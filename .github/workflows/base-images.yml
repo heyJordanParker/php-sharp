@@ -22,12 +22,14 @@ on:
     paths:
       - .github/workflows/base-images.yml
       - sharp/docker/Dockerfile
+      - sharp/docker/tools/Dockerfile
   pull_request:
     branches:
       - master
     paths:
       - .github/workflows/base-images.yml
       - sharp/docker/Dockerfile
+      - sharp/docker/tools/Dockerfile
 permissions:
   contents: read
 concurrency:
@@ -72,10 +74,15 @@ jobs:
           echo "::error::No source gave $IMAGE, so $copy keeps the previous copy."
           exit 1
   # The development image, sharp/docker's Dockerfile built from the copies, as CI builds it through BASE_IMAGE and
-  # GOLANG_IMAGE. It is pushed under the Dockerfile's blob hash, which sharp/docker/run pulls before it builds the image
+  # GOLANG_IMAGE. It is pushed under a blob hash, which sharp/docker/run pulls before it builds the image
   # itself: every hosted job that ran sharp/docker/run built it, 26 to 55 seconds of each on pull requests #337 and #338,
   # after 10 to 21 seconds of pulling the copies it builds from. It builds each day after the copies, so it takes their
   # security updates, and on each change to the Dockerfile. A pull request's run builds it and pushes nothing.
+  #
+  # The same job first builds the tools image, sharp/docker/tools/Dockerfile, the pinned PHP-Parser and Lean the
+  # development image and sharp.yml's IMAGE copy, for linux/amd64 and linux/arm64, and pushes it under its
+  # Dockerfile's blob hash, where IMAGE pulls it. The development image copies the tools image this job built, so its
+  # tag is the blob hash of both Dockerfiles, as sharp/docker/run computes it.
   DEVELOPMENT:
     needs: MIRROR
     if: ${{ !cancelled() }}
@@ -86,17 +93,43 @@ jobs:
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build sharp/docker's image from the copies, and push it under the Dockerfile's blob hash
+      - name: Log in to ghcr.io
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Docker's own builder makes an image of one platform, so the tools image of both builds in BuildKit's container,
+      # from the copy MIRROR made.
+      - name: Set up Buildx with BuildKit from ghcr.io
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=ghcr.io/heyjordanparker/buildkit:v0.34.1
+          cleanup: false
+      # Its layer is zstd, 767 MB for amd64 where gzip's was 815, and compressed in 103 s where gzip took 539. The push
+      # is a build of its own, which takes the folder's build and compressed layers from the builder: one build with both
+      # outputs wrote an index.json that names an image index the folder lacks.
+      - name: Build the tools image from the copies, and push it under its Dockerfile's blob hash
         env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ACTOR: ${{ github.actor }}
           PUSH: ${{ github.event_name != 'pull_request' }}
         run: |
-          echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
-          image="ghcr.io/heyjordanparker/php-sharp-linux:$(git hash-object sharp/docker/Dockerfile)"
-          docker build --pull \
+          tools=(--platform 'linux/amd64,linux/arm64' --build-arg BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie sharp/docker/tools)
+          docker buildx build --pull --output "type=oci,dest=$RUNNER_TEMP/tools,tar=false,compression=zstd,force-compression=true" "${tools[@]}"
+          if [[ $PUSH == true ]]; then
+            docker buildx build \
+              --output "type=image,name=ghcr.io/heyjordanparker/php-sharp-tools:$(git hash-object sharp/docker/tools/Dockerfile),push=true,compression=zstd,force-compression=true" \
+              "${tools[@]}"
+          fi
+      - name: Build sharp/docker's image from the copies and the tools image, and push it under both Dockerfiles' blob hash
+        env:
+          PUSH: ${{ github.event_name != 'pull_request' }}
+        run: |
+          image="ghcr.io/heyjordanparker/php-sharp-linux:$(cat sharp/docker/tools/Dockerfile sharp/docker/Dockerfile | git hash-object --stdin)"
+          docker buildx build --pull --load \
+            --platform linux/amd64 \
             --build-arg BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie \
             --build-arg GOLANG_IMAGE=ghcr.io/heyjordanparker/golang:1.27-trixie \
+            --build-context "tools=oci-layout://$RUNNER_TEMP/tools" \
             --tag "$image" sharp/docker
           if [[ $PUSH == true ]]; then
             docker push "$image"

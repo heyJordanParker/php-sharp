@@ -9,20 +9,22 @@ if [[ -f "$root/.git" ]]; then
   common="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)"
   volumes+=(--volume "$common:$common")
 fi
-# The image is tagged with the Dockerfile's blob hash, so a run whose tag exists uses it with no network call. Otherwise
-# it pulls the build base-images.yml pushes under that hash each day and on each change, and uses it when it is built
-# for the Docker server's architecture. A run that can't pull one, as without a login to ghcr.io, builds the image
-# here. Docker pulls an image of one architecture onto any server, so an amd64 image pulled on arm64 failed every
-# command with "Exec format error". sharp/bin/bench runs php-sharp-linux by that name. The pull and the build each run
+# The image is tagged with the blob hash of its Dockerfile and the tools image's, so a run whose tag exists uses it with
+# no network call. Otherwise it pulls the build base-images.yml pushes under that hash each day and on each change, and
+# uses it when it is built for the Docker server's architecture. A run that can't pull one, as without a login to
+# ghcr.io, builds the tools image, tagged php-sharp-tools, which the Dockerfile copies the pinned tools from, then the
+# image here. Docker pulls an image of one architecture onto any server, so an amd64 image pulled on arm64 failed every
+# command with "Exec format error". sharp/bin/bench runs php-sharp-linux by that name. The pull and the builds each run
 # again when the network fails them, as sharp/bin/network explains, and a failed build prints its output.
-hash="$(git -C "$root" hash-object sharp/docker/Dockerfile)"
+hash="$(cat "$root/sharp/docker/tools/Dockerfile" "$root/sharp/docker/Dockerfile" | git -C "$root" hash-object --stdin)"
 image="php-sharp-linux:$hash"
 published="ghcr.io/heyjordanparker/php-sharp-linux:$hash"
 if ! docker image inspect "$image" > /dev/null 2>&1; then
   if "$root/sharp/bin/network" docker pull --quiet "$published" > /dev/null \
     && [[ "$(docker image inspect --format '{{.Architecture}}' "$published")" == "$(docker version --format '{{.Server.Arch}}')" ]]; then
     docker tag "$published" "$image"
-  elif ! build="$("$root/sharp/bin/network" docker build --quiet --build-arg BASE_IMAGE --build-arg GOLANG_IMAGE --tag "$image" "$root/sharp/docker")"; then
+  elif ! build="$("$root/sharp/bin/network" docker build --quiet --build-arg BASE_IMAGE --tag php-sharp-tools "$root/sharp/docker/tools")" \
+    || ! build="$("$root/sharp/bin/network" docker build --quiet --build-arg BASE_IMAGE --build-arg GOLANG_IMAGE --tag "$image" "$root/sharp/docker")"; then
     printf '%s\n' "$build" >&2
     exit 1
   fi

@@ -181,7 +181,7 @@ if $mago && ! $cargo_built; then
   if [[ $os == linux ]]; then
     folder=${toolchain//\//--}
     if [[ ! -x ${ELAN_HOME:-}/toolchains/${folder//:/---}/bin/lake ]]; then
-      echo "The sharp/docker image carries no Lean $toolchain, which lean-toolchain pins. Pin it in sharp/docker/Dockerfile." >&2
+      echo "The sharp/docker image carries no Lean $toolchain, which lean-toolchain pins. Pin it in sharp/docker/tools/Dockerfile." >&2
       exit 1
     fi
   else

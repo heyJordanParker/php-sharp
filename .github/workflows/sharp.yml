@@ -871,6 +871,25 @@ jobs:
         with:
           driver-opts: image=${{ env.BUILDKIT }}
           cleanup: false
+      # The Dockerfile's tools stage, which the images copy PHP-Parser and Lean from, is the tools image base-images.yml
+      # pushes for both platforms under the blob hash of sharp/docker/tools/Dockerfile. A Dockerfile with no pushed
+      # image yet, as on the pull request that changes it, builds here from the same base, as sharp/docker/run builds it
+      # then.
+      - name: Take the tools image for the tools stage
+        run: |
+          image="ghcr.io/heyjordanparker/php-sharp-tools:$(git hash-object sharp/docker/tools/Dockerfile)"
+          if docker buildx imagetools inspect --format '{{json .Manifest}}' "$image" \
+            | jq -e --arg architecture "${PLATFORM#linux/}" '.manifests[]? | select(.platform.architecture == $architecture)' > /dev/null; then
+            echo "TOOLS=docker-image://$image" >> "$GITHUB_ENV"
+          else
+            echo "$image has no ${PLATFORM#linux/} image, so the job builds it."
+            sharp/bin/network docker buildx build \
+              --platform "$PLATFORM" \
+              --build-arg BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie \
+              --output "type=oci,dest=$RUNNER_TEMP/tools,tar=false,compression=zstd,force-compression=true" \
+              sharp/docker/tools
+            echo "TOOLS=oci-layout://$RUNNER_TEMP/tools" >> "$GITHUB_ENV"
+          fi
       # The build's context is the job's checkout, which actions/checkout fetched at the commit's SHA, so a ref moved
       # after the push builds nothing else. BuildKit's own fetch of that commit from GitHub took 188 s on run
       # 45088111311's amd64 job, where the checkout took 8 s. Each build runs through sharp/bin/network, so a registry or
@@ -885,6 +904,7 @@ jobs:
             ${TARGET:+--target "$TARGET"} \
             --platform "$PLATFORM" \
             --build-arg REGISTRY=ghcr.io/heyjordanparker \
+            --build-context "tools=$TOOLS" \
             --provenance "mode=max,builder-id=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT" \
             --sbom "$SBOM" \
             --output type=image,name=ghcr.io/heyjordanparker/php-sharp,push-by-digest=true,name-canonical=true,push=true \

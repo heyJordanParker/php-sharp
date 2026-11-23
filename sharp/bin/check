@@ -356,7 +356,7 @@ gen_stub() {
   # shellcheck disable=SC2016 # The container's shell expands them.
   sharp/docker/run sh -c '
     if [ ! -d "/opt/PHP-Parser-$1" ]; then
-      echo "The sharp/docker image carries no PHP-Parser $1, which build/gen_stub.php pins. Pin it in sharp/docker/Dockerfile." >&2
+      echo "The sharp/docker image carries no PHP-Parser $1, which build/gen_stub.php pins. Pin it in sharp/docker/tools/Dockerfile." >&2
       exit 1
     fi
     [ -e "build/PHP-Parser-$1" ] || ln -s "/opt/PHP-Parser-$1" "build/PHP-Parser-$1"
