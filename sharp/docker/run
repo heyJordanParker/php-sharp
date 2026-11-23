@@ -13,16 +13,18 @@ fi
 # it pulls the build base-images.yml pushes under that hash each day and on each change, and uses it when it is built
 # for the Docker server's architecture. A run that can't pull one, as without a login to ghcr.io, builds the image
 # here. Docker pulls an image of one architecture onto any server, so an amd64 image pulled on arm64 failed every
-# command with "Exec format error". sharp/bin/bench runs php-sharp-linux by that name.
+# command with "Exec format error". sharp/bin/bench runs php-sharp-linux by that name. The pull and the build each run
+# again when the network fails them, as sharp/bin/network explains, and a failed build prints its output.
 hash="$(git -C "$root" hash-object sharp/docker/Dockerfile)"
 image="php-sharp-linux:$hash"
 published="ghcr.io/heyjordanparker/php-sharp-linux:$hash"
 if ! docker image inspect "$image" > /dev/null 2>&1; then
-  if docker pull --quiet "$published" > /dev/null 2>&1 \
+  if "$root/sharp/bin/network" docker pull --quiet "$published" > /dev/null \
     && [[ "$(docker image inspect --format '{{.Architecture}}' "$published")" == "$(docker version --format '{{.Server.Arch}}')" ]]; then
     docker tag "$published" "$image"
-  else
-    docker build --quiet --build-arg BASE_IMAGE --build-arg GOLANG_IMAGE --tag "$image" "$root/sharp/docker" >/dev/null
+  elif ! build="$("$root/sharp/bin/network" docker build --quiet --build-arg BASE_IMAGE --build-arg GOLANG_IMAGE --tag "$image" "$root/sharp/docker")"; then
+    printf '%s\n' "$build" >&2
+    exit 1
   fi
 fi
 docker tag "$image" php-sharp-linux
