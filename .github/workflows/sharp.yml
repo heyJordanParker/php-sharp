@@ -958,6 +958,9 @@ jobs:
       EXTENSIONS: bcmath calendar exif ftp gd igbinary imagick intl pcntl pdo_mysql pdo_pgsql pgsql redis shmop sockets sysvmsg sysvsem sysvshm zip
       # The extensions the -dev image adds to those.
       DEV_EXTENSIONS: excimer
+      # The builds' platform and SBOM scanner.
+      PLATFORM: ${{ matrix.platform }}
+      SBOM: generator=ghcr.io/heyjordanparker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
     steps:
       # The builds' context, and .github/actions/boot-image and sharp/bin/php-extensions.
       - name: git checkout
@@ -1008,31 +1011,38 @@ jobs:
       # The build's context is the job's checkout, which actions/checkout fetched at the commit's SHA, so a ref moved
       # after the push builds nothing else. BuildKit's own fetch of that commit from GitHub took 188 s on run
       # 45088111311's amd64 job, where the checkout took 8 s.
+      # Each build runs through sharp/bin/network, so a registry or download request the network fails, as a base image's
+      # manifest, a git source or a package, runs the build again from BuildKit's cache of the steps that ended. The
+      # flags are the ones docker/build-push-action passed, its builder-id among them.
       - name: Build and push the image by digest
         id: build
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: sharp/docker/runtime/frankenphp.Dockerfile
-          platforms: ${{ matrix.platform }}
-          build-args: REGISTRY=ghcr.io/heyjordanparker
-          provenance: mode=max
-          sbom: generator=ghcr.io/heyjordanparker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
-          outputs: type=image,name=ghcr.io/heyjordanparker/php-sharp,push-by-digest=true,name-canonical=true,push=true
+        run: &build-image |
+          sharp/bin/network docker buildx build \
+            --file sharp/docker/runtime/frankenphp.Dockerfile \
+            ${TARGET:+--target "$TARGET"} \
+            --platform "$PLATFORM" \
+            --build-arg REGISTRY=ghcr.io/heyjordanparker \
+            --provenance "mode=max,builder-id=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT" \
+            --sbom "$SBOM" \
+            --output type=image,name=ghcr.io/heyjordanparker/php-sharp,push-by-digest=true,name-canonical=true,push=true \
+            --metadata-file "$RUNNER_TEMP/$GITHUB_ACTION.json" \
+            .
+          echo "digest=$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/$GITHUB_ACTION.json")" >> "$GITHUB_OUTPUT"
       # The -dev image, the runtime image with the law checker's Lean in Mago's cache folder, which RELEASE tags
       # <version>-dev. The build reuses the runtime image's stages from the build before it.
       - name: Build and push the -dev image by digest
         id: dev
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: sharp/docker/runtime/frankenphp.Dockerfile
-          target: dev
-          platforms: ${{ matrix.platform }}
-          build-args: REGISTRY=ghcr.io/heyjordanparker
-          provenance: mode=max
-          sbom: generator=ghcr.io/heyjordanparker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
-          outputs: type=image,name=ghcr.io/heyjordanparker/php-sharp,push-by-digest=true,name-canonical=true,push=true
+        env:
+          TARGET: dev
+        run: *build-image
+      # The steps below run both images, so they pull here, where a dropped connection runs the pull again.
+      - name: Pull the pushed images
+        env:
+          IMAGE: ghcr.io/heyjordanparker/php-sharp@${{ steps.build.outputs.digest }}
+          DEV: ghcr.io/heyjordanparker/php-sharp@${{ steps.dev.outputs.digest }}
+        run: |
+          sharp/bin/network docker pull --quiet "$IMAGE"
+          sharp/bin/network docker pull --quiet "$DEV"
       # A critical or high CVE that a fixed package resolves fails the job, so the digest is never uploaded and
       # RELEASE tags none. aquasecurity/trivy-action's v0.35.0 and later are immutable releases, made after its tags
       # were rewritten to malware on 2026-03-19, and Trivy's v0.71.1 and later fix GHSA-mcj4-mphf-j9ff.
@@ -1054,7 +1064,6 @@ jobs:
       - name: The image's php prints its version and lists the sharp extension
         env:
           IMAGE: ghcr.io/heyjordanparker/php-sharp@${{ steps.build.outputs.digest }}
-          PLATFORM: ${{ matrix.platform }}
         run: |
           docker run --rm "$IMAGE" php -v
           if ! docker run --rm "$IMAGE" php -m | grep -qx sharp; then
@@ -1066,7 +1075,6 @@ jobs:
       - name: A user other than root runs the -dev image's Lean and writes in Mago's cache folder
         env:
           IMAGE: ghcr.io/heyjordanparker/php-sharp@${{ steps.dev.outputs.digest }}
-          PLATFORM: ${{ matrix.platform }}
         run: |
           archive="lean-$(sed 's/.*:v//' sharp/mago/crates/sharp-lean/lean/lean-toolchain)-linux"
           if [[ $PLATFORM == linux/arm64 ]]; then
