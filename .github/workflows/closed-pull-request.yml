@@ -1,13 +1,11 @@
 name: Clean up a closed pull request
 
-# Once a pull request closes, merged or not, its runs check a tree nothing lands any more, and its caches serve nothing.
+# Once a pull request closes, merged or not, its runs check a tree nothing lands any more.
 # A run in progress finishes, since sharp.yml and mago.yml cancel one only when a job of it failed or a newer push
 # arrived, so a closed pull request's run kept the one Mac runner: pull request #534 closed at 15:43 UTC on 2026-11-20, and its run 44765885047
 # started MACOS at 16:20 with its macOS release build still waiting, while next's Mac jobs waited behind them. So this
-# cancels each of its runs that hasn't ended. Its runs saved their caches under its merge ref, refs/pull/<number>/merge, which only its
-# own runs restore, and they stayed until GitHub evicted them, so this deletes them too, as GitHub's "Force deleting
-# cache entries" example does. A pull request from another repository gets a token that can do neither, so its runs
-# end and its caches wait for eviction.
+# cancels each of its runs that hasn't ended. A pull request from another repository gets a token that can't, so its
+# runs end.
 on:
   pull_request:
     types: [closed]
@@ -37,14 +35,3 @@ jobs:
             gh api --method POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/cancel" --silent
             echo "Cancelled $name run $id."
           done < "$RUNNER_TEMP/runs"
-      - name: Delete every cache the pull request's runs saved
-        env:
-          REF: refs/pull/${{ github.event.pull_request.number }}/merge
-        run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/caches?ref=$REF&per_page=100" \
-            --jq '.actions_caches[] | "\(.id)\t\(.key)"' > "$RUNNER_TEMP/caches"
-          echo "$(wc -l < "$RUNNER_TEMP/caches") caches on $REF."
-          while IFS=$'\t' read -r id key; do
-            gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/caches/$id" --silent
-            echo "Deleted $key."
-          done < "$RUNNER_TEMP/caches"

@@ -99,15 +99,11 @@ COPY --from=source /usr/src/php.tar.xz /usr/src/
 
 COPY sharp/docker/runtime/docker-php-source /usr/local/bin/
 
-# PHP#: the engine compiles through ccache, whose folder is a cache mount, so a build keeps the objects of the build
-# before it and compiles only the files that changed. The IMAGE job of .github/workflows/sharp.yml carries the folder
-# from one job to the next: its make took 272 of the arm64 image's 714 seconds on run 45080049483.
-RUN --mount=type=cache,id=sharp-engine-ccache,target=/root/.cache/ccache set -eux; \
+RUN set -eux; \
 	\
 	savedAptMark="$(apt-mark showmanual)"; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
-		ccache \
 		git \
 		libargon2-dev \
 		libcurl4-openssl-dev \
@@ -130,13 +126,7 @@ RUN --mount=type=cache,id=sharp-engine-ccache,target=/root/.cache/ccache set -eu
 # https://github.com/php/php-src/blob/d6299206dd828382753453befd1b915491b741c6/configure.ac#L1496-L1511
 		PHP_BUILD_PROVIDER='https://github.com/heyJordanParker/php-sharp' \
 		PHP_UNAME='Linux - Docker' \
-# PHP#: ccache keys an object by the compiler's content, since each build installs gcc anew, and keeps at most 1 GB.
-		CC='ccache gcc' \
-		CXX='ccache g++' \
-		CCACHE_COMPILERCHECK=content \
-		CCACHE_MAXSIZE=1G \
 	; \
-	ccache --zero-stats; \
 	docker-php-source extract; \
 	cd /usr/src/php; \
 	gnuArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)"; \
@@ -168,7 +158,6 @@ RUN --mount=type=cache,id=sharp-engine-ccache,target=/root/.cache/ccache set -eu
 		$options \
 	; \
 	make -j "$(nproc)"; \
-	ccache --show-stats; \
 	find -type f -name '*.a' -delete; \
 # PHP#: the PEAR installer comes from the PEAR project's own repository at a fixed commit, so an outage of pear.php.net,
 # which make install downloads it from by default, can't stop a release.
@@ -437,12 +426,6 @@ RUN set -eux; \
 	tar --zstd --no-same-owner -xf /tmp/lean.tar.zst -C /cache/mago/lean; \
 	"/cache/mago/lean/$archive/bin/lake" --version; \
 	chmod -R a+rwX /cache/mago
-
-# The -dev image's Lean as a layer of its own, which IMAGE builds and caches alone, so the -dev build's copy below, the
-# same line, finds the layer's compressed blob in the cache and exports it as it is: compressing it again took 141 s of
-# run 45090650757's amd64 job.
-FROM scratch AS lean-layer
-COPY --link --from=lean /cache/ /var/cache/
 
 # ghcr.io/heyjordanparker/php-sharp:<version>-dev: the runtime image with the law checker's Lean installed, so a compile
 # with laws in it downloads nothing, and excimer, the sampling profiler a framework app's development image installs.

@@ -45,16 +45,8 @@ jobs:
           toolchain: ${{ env.NIGHTLY }}
       - name: The fuzz crate's Cargo.lock is current
         run: cargo +"$NIGHTLY" metadata --locked --format-version 1 > /dev/null
-      - name: Cache cargo-fuzz
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cargo/bin/cargo-fuzz
-          key: cargo-fuzz-0.13.2-${{ runner.os }}
       - name: Install cargo-fuzz
-        run: |
-          if ! command -v cargo-fuzz > /dev/null; then
-            cargo +"$NIGHTLY" install cargo-fuzz --version 0.13.2 --locked
-          fi
+        run: cargo +"$NIGHTLY" install cargo-fuzz --version 0.13.2 --locked
       # Each run saves its corpus under a key of its own, and the next run restores the newest one.
       - name: Restore ${{ matrix.target }}'s corpus from the runs before
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

@@ -3,7 +3,7 @@ name: Mago
 on:
   push:
     branches: [master]
-  # Only a pull request into master, as sharp.yml runs, so a run .github/actions/passed-tree finds passed against master.
+  # Only a pull request into master, as sharp.yml runs.
   pull_request:
     branches: [master]
 
@@ -24,11 +24,9 @@ defaults:
     working-directory: sharp/mago
 
 jobs:
-  # ci-passed is this workflow's one required check. Every push runs every job, whatever it changed. A run runs none of
-  # the tests when a pull request's run passed ci-passed on its tree, as sharp.yml's CHANGES explains. A push to master
-  # runs checks again, which saves the target every pull request's run restores. A push whose tree no pull request's
-  # run passed runs every job, and its red push opens an issue, as ci-passed does, for a pull request that fixes it
-  # forward. The workspace's tests run in sharp.yml, which CI_PASSED covers: on Linux in MAGO, on BUILD_LINUX's build, so
+  # ci-passed is this workflow's one required check. Every push runs every job, whatever it changed, and builds
+  # everything from source, as sharp.yml's CHANGES explains. A red push opens an issue, as ci-passed does, for a pull
+  # request that fixes it forward. The workspace's tests run in sharp.yml, which CI_PASSED covers: on Linux in MAGO, on BUILD_LINUX's build, so
   # Linux builds Mago's dev target once, and on macOS in MACOS, the run's one Mac job, so a defect only macOS finds, such
   # as one in the watch mode's FSEvents code, fails before the merge.
   CHANGES:
@@ -43,7 +41,6 @@ jobs:
         working-directory: .
     outputs:
       base: ${{ steps.base.outputs.sha }}
-      passed: ${{ steps.passed.outputs.run }}
       rust: ${{ steps.rust.outputs.version }}
     steps:
       - name: checkout
@@ -51,10 +48,6 @@ jobs:
 
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-
-      # The notice .github/actions/passed-tree finds a run's tree by, as sharp.yml's CHANGES names it.
-      - name: Name the tree this run tests
-        run: echo "::notice title=Tested tree::$(git rev-parse 'HEAD^{tree}')"
 
       # The root package's rust-version, which release.yml builds the binaries with, so every job tests that toolchain.
       - name: Read the toolchain sharp/mago/Cargo.toml's rust-version names
@@ -90,21 +83,7 @@ jobs:
             sleep $((attempt * 15))
           done
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "This push's changes start at ${sha:-no commit, so every job runs}."
-
-      - name: Find the pull request run that passed this tree
-        id: passed
-        uses: ./.github/actions/passed-tree
-        with:
-          workflow: mago.yml
-          events: pull_request
-          passed: any(.jobs[]; .name == "ci-passed" and .conclusion == "success")
-
-      - name: The tests don't run again
-        if: steps.passed.outputs.run
-        env:
-          RUN: ${{ steps.passed.outputs.run }}
-        run: echo "::notice::This tree ran and passed every Mago job in $RUN, so no test runs again."
+          echo "This push's changes start at ${sha:-no commit}."
 
       - name: Write the job's CPU-seconds and peak memory
         if: always()
@@ -113,20 +92,13 @@ jobs:
           end: true
 
   # The gates on Linux with CHANGES's rust toolchain, the one sharp/mago/Cargo.toml's rust-version names and
-  # release.yml builds the binaries with, and the Linux binary plain-php runs. On the push to master it saves its
-  # target, which every pull request's run restores, so it runs there even on a tree a pull request's run passed, as
-  # sharp.yml's BUILD_LINUX does.
-  #
-  # Ubuntu 24.04's glibc 2.39 is older than the 2.41 of the sharp/docker image's Debian, so the mago it builds runs in
+  # release.yml builds the binaries with, and the Linux binary plain-php and SPEED run. Ubuntu 24.04's glibc 2.39 is older than the 2.41 of the sharp/docker image's Debian, so the mago it builds runs in
   # that image, where SPEED counts it, and on plain-php's runner. On ubuntu-latest, Ubuntu 26.04 since November 2026, it
   # needed glibc 2.43, and SPEED failed on run 45139352435 with "version `GLIBC_2.43' not found".
   checks:
     needs: CHANGES
-    if: ${{ !needs.CHANGES.outputs.passed || github.event_name == 'push' }}
     runs-on: ubuntu-24.04
-    # A build of the engine takes up to 20 more minutes, which the engine's cache spares a run whose engine
-    # inputs an earlier run built.
-    timeout-minutes: 50
+    timeout-minutes: 60
 
     permissions:
       actions: write
@@ -151,18 +123,6 @@ jobs:
           rustc --version
           cargo --version
 
-      - name: Rust and Mago caches
-        uses: ./.github/actions/mago-cache
-        with:
-          name: MAGO_CHECKS
-          rust: MAGO
-          rust-paths: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          save: ${{ github.event_name == 'push' }}
-          target-dir-env: true
-
       - name: Install PHP
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
@@ -174,55 +134,13 @@ jobs:
         with:
           tool: typos
 
-      # The PHP# engine mago links, from the cache a run saved for the same inputs, or else built by
-      # sharp/bin/build-mago --engine from the static archives of these packages, which it links into libphp.a.
-      - name: Restore the engine mago links
-        id: mago-engine
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/linux-*-engine/install
-          key: MAGO_ENGINE-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('configure.ac', 'build/**', 'main/**', 'Zend/**', 'TSRM/**', 'sapi/**', 'ext/**', 'scripts/**', '!**/tests/**', 'sharp/bin/build-mago', 'sharp/docker/runtime/configure-options') }}
-      # Every change to ext/** or Zend/** misses the cache above, and the engine then built every object again: make
-      # took 152 to 257 seconds of a 229 to 541 second step on 8 runs that each missed, on 2026-11-20. Through ccache
-      # it compiles only the files whose preprocessed text changed. The push to master saves the ccache, every run
-      # restores the newest one, and ci-passed deletes the ones a newer push replaced.
-      - name: The engine's ccache, saved by the push to master
-        id: engine-ccache
-        if: steps.mago-engine.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/cache/engine-ccache
-          key: MAGO_ENGINE_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/runtime/configure-options') }}-${{ github.sha }}
-          restore-keys: MAGO_ENGINE_CCACHE-${{ runner.arch }}-
+      # The PHP# engine mago links, built by sharp/bin/build-mago --engine from the static archives of these packages,
+      # which it links into libphp.a.
       - name: Install what the PHP# engine builds with
-        if: steps.mago-engine.outputs.cache-hit != 'true'
         uses: ./.github/actions/engine-packages
-        with:
-          extra: ccache
-      # Only this step's CC and CXX, so mago's crates that compile C build as the job's other builds build them.
       - name: Build the engine mago links
-        if: steps.mago-engine.outputs.cache-hit != 'true'
         working-directory: ${{ github.workspace }}
-        env:
-          CC: ccache gcc
-          CXX: ccache g++
-          CCACHE_DIR: ${{ github.workspace }}/sharp/build/cache/engine-ccache
-        run: |
-          ccache --zero-stats
-          sharp/bin/build-mago --engine
-          ccache --show-stats
-      - name: Save the engine mago links
-        if: steps.mago-engine.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/linux-*-engine/install
-          key: ${{ steps.mago-engine.outputs.cache-primary-key }}
-      - name: Save the engine's ccache
-        if: steps.mago-engine.outputs.cache-hit != 'true' && github.event_name == 'push'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/cache/engine-ccache
-          key: ${{ steps.engine-ccache.outputs.cache-primary-key }}
+        run: sharp/bin/build-mago --engine
 
       # sharp/bin/check mago-checks runs them, as it does on a machine: typos, the PHP SDK's tests, cargo check of
       # the workspace and of the PHP# bridge alone, the fuzz crate's Cargo.lock, no file watcher in the bridge, the PHP
@@ -238,7 +156,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mago-${{ runner.os }}
-          path: ${{ env.CARGO_TARGET_DIR }}/test-run/mago
+          path: sharp/build/linux-x86_64/mago/test-run/mago
           if-no-files-found: error
 
       # As .github/actions/cancel-failed-run explains.
@@ -258,11 +176,9 @@ jobs:
   # upstream's carthage-software/mago at the release this checker left from, as an extension host does,
   # installs no second checker, and one that requires a later release installs nothing. Then runs mago on
   # a one-class .sharp project with the binary checks built, and sharp/phpunit's tests, which stop. On macOS,
-  # sharp.yml's MACOS runs the same check on its dev build, and release.yml's macOS build on the release binary. A push
-  # to master whose tree a pull request's run passed runs none of them.
+  # sharp.yml's MACOS runs the same check on its dev build, and release.yml's macOS build on the release binary.
   plain-php:
     needs: [CHANGES, checks]
-    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: ubuntu-latest
 
     permissions:
@@ -328,7 +244,6 @@ jobs:
   # glibc older than the image's, as its comment explains.
   SPEED:
     needs: [CHANGES, checks]
-    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -401,9 +316,9 @@ jobs:
         with:
           end: true
 
-  # The one required check of this workflow: it passes only when every job above passed, or skipped a push to master
-  # whose tree a pull request's run passed, so a job added later blocks merges without a change to the repository's
-  # rules. It runs always, so it reports on every run, even one whose every other job skipped.
+  # The one required check of this workflow: it passes only when every job above passed, so a job added later blocks
+  # merges without a change to the repository's rules. It runs always, so it reports on every run, even one whose
+  # other jobs failed before they started.
   ci-passed:
     if: always()
     needs: [CHANGES, checks, plain-php, SPEED]
@@ -426,10 +341,9 @@ jobs:
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
 
-      - name: Every job passed, or skipped a tree that a pull request's run passed
+      - name: Every job passed
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: checks, plain-php, SPEED
           jobs: ${{ toJSON(needs) }}
 
       # As .github/actions/red-master-issue explains.
@@ -439,11 +353,6 @@ jobs:
         with:
           title: A push to master failed Mago CI
           range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
-
-      # checks saved its target when it ended, so this job, which needs it, deletes the ones the new target replaced.
-      - name: Delete the Mago target caches this run replaced
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
-        uses: ./.github/actions/mago-cache-prune
 
       - name: Write the job's CPU-seconds and peak memory
         if: always()

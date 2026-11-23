@@ -13,6 +13,12 @@ name: Release
 # and mago self-update verify, so the binaries build here and nowhere else.
 on:
   workflow_call:
+    inputs:
+      range:
+        description: The commits the calling push run tests, as <base>..<sha>, which the red-master issue names.
+        type: string
+        required: false
+        default: ''
 
 # Every artifact is kept as long as the repository's artifact retention sets, 90 days, GitHub's longest.
 env:
@@ -173,24 +179,15 @@ jobs:
           - {target: x86_64-unknown-linux-gnu, os: ubuntu-22.04}
 
     steps:
-      # actions/checkout's clean deletes sharp/build. The Mac's one runner keeps its engine builds instead, as
-      # .github/actions/clean-kept-build explains, so the engine mago links rebuilds only what changed since the runner's
-      # last build.
+      # actions/checkout's clean removes every file an earlier job of the Mac runner's one work folder left, sharp/build
+      # among them, so every release builds from nothing.
       - name: checkout source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          clean: false
 
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
 
-      - name: Remove what an earlier job left, except the builds
-        if: runner.environment == 'self-hosted'
-        uses: ./.github/actions/clean-kept-build
-
-      # The build goes to a target folder of its own beside the dev builds sharp/.cargo's config names, so it never
-      # rebuilds the dev target the Mac's next job reuses. Only the next release would reuse it, so clean-kept-build
-      # removes it when the job ends, and every release builds from nothing, as a GitHub-hosted runner does.
+      # The release build's target folder, beside the dev builds sharp/.cargo's config names, which the steps below read.
       - name: Point CARGO_TARGET_DIR at the release target
         shell: bash
         run: echo "CARGO_TARGET_DIR=$GITHUB_WORKSPACE/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago-release" >> "$GITHUB_ENV"
@@ -244,18 +241,11 @@ jobs:
           COMPOSER_AUTH: '{"bearer": {"github.com": "${{ secrets.GITHUB_TOKEN }}"}}'
         run: composer install --ignore-platform-reqs --no-interaction --no-progress
 
-      # The PHP# engine mago links, which sharp/bin/build-mago --engine builds for the runner's own platform, each
-      # release from nothing but on the self-hosted Mac runner, which keeps the engine builds. There it builds through
-      # ccache with the CC and CXX sharp.yml's MACOS builds the same engine with, so neither job's build configures again
-      # for the other's, and each compiles a file the other changed back from the cache.
+      # The PHP# engine mago links, which sharp/bin/build-mago --engine builds for the runner's own platform.
       - name: Build the engine mago links
         shell: bash
         working-directory: ${{ github.workspace }}
-        run: |
-          if [[ $RUNNER_ENVIRONMENT == self-hosted ]]; then
-            export CC='ccache cc' CXX='ccache c++'
-          fi
-          sharp/bin/build-mago --engine
+        run: sharp/bin/build-mago --engine
 
       # The law checker's build for the job's platform, which mago embeds and unpacks on the first compile that
       # proves a law, so no machine builds the checker with lake and a binary runs only its own checker.
@@ -400,10 +390,6 @@ jobs:
         with:
           end: true
 
-      - name: Remove what the next Mac job doesn't reuse
-        if: always() && runner.environment == 'self-hosted'
-        uses: ./.github/actions/clean-kept-build
-
   # install.sh checks a download against these SHA-256s when gh is missing, and sharp.yml's COMPOSER pins them in the
   # release's heyjordanparker/mago-sharp version. They are written where the assets were built, so the release
   # publishes the SHA-256s of exactly these assets.
@@ -467,3 +453,24 @@ jobs:
           name: sha256sums
           path: ${{ runner.temp }}/mago-${{ env.VERSION }}-sha256sums.txt
           if-no-files-found: error
+
+  # sharp.yml's CI_PASSED doesn't need RELEASE_ASSETS, which runs only in a release's push, so this opens the
+  # red-master issue when one of the jobs above failed, as .github/actions/red-master-issue explains.
+  red-master:
+    name: Open an issue for the failed release build
+    if: failure()
+    needs: [crate_metadata, source_archive, build, sums]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+      - name: Open an issue for the failed run on master
+        uses: ./.github/actions/red-master-issue
+        with:
+          title: A push to master failed PHP# CI
+          range: ${{ inputs.range }}

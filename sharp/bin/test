@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   echo "usage: sharp/bin/test [--linux] [--no-build] [--census] [--spec] [--differential] [--phpunit] [--shard <i>/<n> | paths...]" >&2
   echo "       sharp/bin/test [--linux] [--no-build] --upstream" >&2
-  echo "       sharp/bin/test [--linux] [--no-build] --mago [--shard <i>/<n>] [--binary <crate root>]..." >&2
+  echo "       sharp/bin/test [--linux] [--no-build] --mago [--shard <i>/<n>]" >&2
   echo "       sharp/bin/test [--linux] --mago --cargo-built" >&2
   exit 2
 }
@@ -22,7 +22,6 @@ upstream=false
 mago=false
 cargo_built=false
 shard=
-chosen_binaries=()
 tests=()
 container_command=(sharp/bin/test)
 args=("$@")
@@ -32,12 +31,6 @@ for ((a = 0; a < ${#args[@]}; a++)); do
     --linux) linux=true; continue ;;
     --no-build) build=false ;;
     --shard) a=$((a + 1)); shard="${args[a]:-}"; container_command+=(--shard "$shard"); continue ;;
-    --binary)
-      a=$((a + 1))
-      chosen_binaries+=("${args[a]:-}")
-      container_command+=(--binary "${args[a]:-}")
-      continue
-      ;;
     --census) census=true ;;
     --spec) spec=true ;;
     --differential) differential=true ;;
@@ -60,14 +53,6 @@ fi
 if $cargo_built && { ! $mago || ! $build || [[ -n $shard ]]; }; then
   usage
 fi
-if [[ ${#chosen_binaries[@]} -gt 0 ]] && { ! $mago || $cargo_built; }; then
-  usage
-fi
-for binary in "${chosen_binaries[@]}"; do
-  if [[ -z $binary ]]; then
-    usage
-  fi
-done
 # --shard <i>/<n> runs the i-th of n slices, so n jobs that run the same modes together run each test once.
 if [[ -n $shard ]]; then
   if $upstream || [[ ${#tests[@]} -gt 0 || ! $shard =~ ^([1-9][0-9]*)/([1-9][0-9]*)$ ]] || (( BASH_REMATCH[1] > BASH_REMATCH[2] )); then
@@ -212,18 +197,6 @@ if $mago && ! $cargo_built; then
     echo "$messages is missing. Run sharp/bin/build-mago first." >&2
     exit 1
   fi
-  # --binary runs only the test binaries whose crate roots it names, as MACOS runs only those whose code differs on
-  # macOS and leaves the rest to Linux's MAGO slices, and --binary <crate root>::<prefix> runs only that binary's tests
-  # whose names start with a prefix it names, as MACOS runs those of tests/main.rs that read Lean's processes, file
-  # watching and the file system. A crate root or a prefix that matches nothing fails the run, so a misspelled or a
-  # renamed one can't drop its tests unseen.
-  declare -A named=() prefixes=() found=()
-  for binary in "${chosen_binaries[@]}"; do
-    named[${binary%%::*}]=1
-    if [[ $binary == *::* ]]; then
-      prefixes[${binary%%::*}]+="${binary#*::}"$'\n'
-    fi
-  done
   binaries=()
   while read -r line; do
     if [[ $line == *'"reason":"compiler-artifact"'* && $line =~ \"profile\":\{[^}]*\"test\":true &&
@@ -233,21 +206,9 @@ if $mago && ! $cargo_built; then
       folder="$(dirname "${BASH_REMATCH[1]}")"
       [[ $line =~ \"src_path\":\"([^\"]+)\" ]]
       source="${BASH_REMATCH[1]#"$root"/}"
-      if [[ ${#named[@]} -gt 0 ]]; then
-        if [[ -z ${named[$source]:-} ]]; then
-          continue
-        fi
-        found[$source]=1
-      fi
       binaries+=("$executable"$'\t'"$folder"$'\t'"$source")
     fi
   done < "$messages"
-  for source in "${!named[@]}"; do
-    if [[ -z ${found[$source]:-} ]]; then
-      echo "--binary $source names no test binary of $messages." >&2
-      exit 2
-    fi
-  done
   mapfile -t binaries < <(printf '%s\n' "${binaries[@]}" | LC_ALL=C sort -u)
   # The tests write below the folder cargo names CARGO_TARGET_TMPDIR, which a build makes and a copy of the binaries
   # alone leaves out.
@@ -265,22 +226,6 @@ if $mago && ! $cargo_built; then
       continue
     fi
     listed[$b]="$(sed -n 's/: test$//p' <<< "$names")"
-    while IFS= read -r prefix; do
-      if [[ -z $prefix ]]; then
-        continue
-      fi
-      starts=false
-      while IFS= read -r name; do
-        if [[ $name == "$prefix"* ]]; then
-          starts=true
-          break
-        fi
-      done <<< "${listed[$b]}"
-      if ! $starts; then
-        echo "--binary $source::$prefix names no test of $source." >&2
-        exit 2
-      fi
-    done <<< "${prefixes[$source]:-}"
   done
 
   # With --shard, each test weighs the seconds sharp/baseline/seconds lists under its binary's source file and its
@@ -347,17 +292,7 @@ if $mago && ! $cargo_built; then
       if [[ -z $name ]]; then
         continue
       fi
-      wanted=true
-      if [[ -n ${prefixes[$source]:-} ]]; then
-        wanted=false
-        while IFS= read -r prefix; do
-          if [[ -n $prefix && $name == "$prefix"* ]]; then
-            wanted=true
-            break
-          fi
-        done <<< "${prefixes[$source]}"
-      fi
-      if $wanted && [[ -z $shard || -n ${chosen[$b$'\t'$name]:-} ]]; then
+      if [[ -z $shard || -n ${chosen[$b$'\t'$name]:-} ]]; then
         selected=$((selected + 1))
       else
         skips+=(--skip "$name")
@@ -557,12 +492,11 @@ export TEST_MAGO_EXECUTABLE="$mago"
 # The PHP# suite runs in the four ways production runs the engine: without opcache, in opcache shared memory with each
 # test twice in one process, under the function JIT, which compiles each function of a file as the file loads, and
 # under the tracing JIT, with every hot counter at 1, so it compiles the code the tests run as soon as it runs. Each
-# expects the output of the run without opcache. macOS runs the first alone, where the engine is the one arm64 build, on
-# a disk that ignores case: Linux runs opcache's other three, whose code is the same on both, and Apple silicon has no
-# thread-safe JIT, as ext/opcache/config.m4 warns. Shared memory took 255 of the Mac's 370 s on run 45095302755.
+# expects the output of the run without opcache. macOS runs the first two, since Apple silicon has no thread-safe JIT,
+# as ext/opcache/config.m4 warns.
 run_tests "without opcache"
+run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
 if [[ $os == linux ]]; then
-  run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
   run_tests "with the function JIT" -d opcache.enable_cli=1 -d opcache.jit=function -d opcache.jit_buffer_size=32M
   run_tests "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
     -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1

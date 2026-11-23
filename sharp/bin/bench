@@ -41,8 +41,8 @@ if [[ ! -f /.dockerenv ]]; then
     php-sharp-linux bash -c '
       apt-get -qq update >/dev/null && apt-get -qq install -y valgrind >/dev/null
       exec setpriv --reuid="$BENCH_UID" --regid="$BENCH_GID" --clear-groups \
-        env HOME=/tmp CARGO_HOME=/src/sharp/build/cargo RUSTUP_HOME=/src/sharp/build/rustup \
-        XDG_CACHE_HOME=/src/sharp/build/cache sharp/bin/bench "$@"' bench "$@"
+        env HOME=/tmp CARGO_HOME=/src/sharp/build/cargo XDG_CACHE_HOME=/src/sharp/build/cache \
+        sharp/bin/bench "$@"' bench "$@"
 fi
 
 build_dir="$root/sharp/build/linux-$(uname -m)"
