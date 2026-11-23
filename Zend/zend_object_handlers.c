@@ -105,6 +105,65 @@ ZEND_API HashTable *rebuild_object_properties_internal(zend_object *zobj) /* {{{
 }
 /* }}} */
 
+/* PHP#: whether a listing by code of `scope` leaves out the property `info`: an `internal` one that the code doesn't
+ * reach, spec section 5. */
+static bool zend_sharp_lists_out(const zend_property_info *info, const zend_class_entry *scope)
+{
+	return (info->flags & (ZEND_ACC_SHARP_INTERNAL|ZEND_ACC_STATIC)) == ZEND_ACC_SHARP_INTERNAL
+		&& !zend_sharp_reaches_internal(info->ce, scope);
+}
+
+/* PHP#: `properties`, which lists the properties of `object`, without each one plain PHP that runs now doesn't reach,
+ * see zend_sharp_lists_out, as the table json_encode(), get_object_vars(), var_export() and an array cast read. It
+ * releases `properties` when it gives another table. PHP# code reads every one, as Json.encode does, since the checker
+ * holds its reach. */
+static zend_never_inline HashTable *zend_sharp_reachable_properties(const zend_object *object, HashTable *properties)
+{
+	if (!properties || sharp_runs_sharp_code()) {
+		return properties;
+	}
+	const zend_class_entry *scope = EG(fake_scope) ? EG(fake_scope) : zend_get_executed_scope();
+	const zend_property_info *info;
+	bool leaves_out = false;
+	ZEND_HASH_MAP_FOREACH_PTR(&object->ce->properties_info, info) {
+		if (zend_sharp_lists_out(info, scope)) {
+			leaves_out = true;
+			break;
+		}
+	} ZEND_HASH_FOREACH_END();
+	if (!leaves_out) {
+		return properties;
+	}
+
+	HashTable *reachable = zend_new_array(zend_hash_num_elements(properties));
+	zend_hash_real_init_mixed(reachable);
+	HT_FLAGS(reachable) |= HT_FLAGS(properties) & HASH_FLAG_HAS_EMPTY_IND;
+	zend_string *key;
+	zend_ulong index;
+	zval *value;
+	ZEND_HASH_FOREACH_KEY_VAL(properties, index, key, value) {
+		if (!key) {
+			Z_TRY_ADDREF_P(zend_hash_index_add_new(reachable, index, value));
+			continue;
+		}
+		info = zend_hash_find_ptr(&object->ce->properties_info, key);
+		if (!info || !zend_sharp_lists_out(info, scope)) {
+			Z_TRY_ADDREF_P(zend_hash_add_new(reachable, key, value));
+		}
+	} ZEND_HASH_FOREACH_END();
+	zend_array_release(properties);
+
+	return reachable;
+}
+
+/* PHP#: zend_sharp_reachable_properties for an object whose class has SHARP_CLASS_HAS_INTERNAL_PROPS, so a listing of
+ * an object of any other class pays one bit test. */
+static zend_always_inline HashTable *zend_sharp_listed_properties(const zend_object *object, HashTable *properties)
+{
+	return UNEXPECTED(object->ce->sharp_flags & SHARP_CLASS_HAS_INTERNAL_PROPS)
+		? zend_sharp_reachable_properties(object, properties) : properties;
+}
+
 /* Implements the fast path for array cast */
 ZEND_API HashTable *zend_std_build_object_properties_array(zend_object *zobj) /* {{{ */
 {
@@ -143,7 +202,7 @@ ZEND_API HashTable *zend_std_build_object_properties_array(zend_object *zobj) /*
 			_zend_hash_append(ht, prop_info->name, prop);
 		}
 	}
-	return ht;
+	return zend_sharp_listed_properties(zobj, ht);
 }
 /* }}} */
 
@@ -635,6 +694,10 @@ ZEND_API bool ZEND_FASTCALL zend_asymmetric_property_has_set_access(const zend_p
 	const zend_class_entry *scope = get_fake_or_executed_scope();
 	if (prop_info->ce == scope) {
 		return true;
+	}
+	/* PHP#: see ZEND_ACC_SHARP_INTERNAL_SET. */
+	if (UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_INTERNAL_SET)) {
+		return zend_sharp_reaches_internal(prop_info->ce, scope);
 	}
 	return EXPECTED((prop_info->flags & ZEND_ACC_PROTECTED_SET)
 		&& is_protected_compatible_scope(prop_info->prototype->ce, scope));
@@ -2998,19 +3061,20 @@ ZEND_API HashTable *zend_std_get_properties_for(zend_object *obj, zend_prop_purp
 		case ZEND_PROP_PURPOSE_GET_OBJECT_VARS:
 		case ZEND_PROP_PURPOSE_VAR_EXPORT:
 			if (obj->ce->num_hooked_props) {
-				return zend_hooked_object_build_properties(obj);
+				ht = zend_hooked_object_build_properties(obj);
+			} else {
+				ht = obj->handlers->get_properties(obj);
+				if (ht) {
+					GC_TRY_ADDREF(ht);
+				}
 			}
-			ht = obj->handlers->get_properties(obj);
-			if (ht) {
-				GC_TRY_ADDREF(ht);
-			}
-			return ht;
+			return purpose == ZEND_PROP_PURPOSE_DEBUG ? ht : zend_sharp_listed_properties(obj, ht);
 		case ZEND_PROP_PURPOSE_ARRAY_CAST:
 			ht = zend_get_properties_no_lazy_init(obj);
 			if (ht) {
 				GC_TRY_ADDREF(ht);
 			}
-			return ht;
+			return zend_sharp_listed_properties(obj, ht);
 		case ZEND_PROP_PURPOSE_SERIALIZE: {
 			if (zend_object_is_lazy(obj)
 					&& !zend_lazy_object_initialize_on_serialize(obj)) {

@@ -267,7 +267,7 @@ typedef struct _zend_oparray_context {
 /* code of its namespace and those below it reaches       |     |     |     */
 #define ZEND_ACC_SHARP_INTERNAL          (1 << 30) /*     |  X  |  X  |  X  */
 /*                                                        |     |     |     */
-/* Property Flags (unused: 17-27,29,31)                   |     |     |     */
+/* Property Flags (unused: 18-27,29,31)                   |     |     |     */
 /* ===========                                            |     |     |     */
 /*                                                        |     |     |     */
 /* Promoted property / parameter                          |     |     |     */
@@ -294,6 +294,10 @@ typedef struct _zend_oparray_context {
 /* PHP#: plain PHP reads the property's Map or Set as its |     |     |     */
 /* PHP array and a Bytes as its string, see ext/sharp     |     |     |     */
 #define ZEND_ACC_SHARP_CROSSING          (1 << 16) /*     |     |  X  |     */
+/*                                                        |     |     |     */
+/* PHP#: an `internal set`, which only code of the        |     |     |     */
+/* property's namespace and those below it writes         |     |     |     */
+#define ZEND_ACC_SHARP_INTERNAL_SET      (1 << 17) /*     |     |  X  |     */
 /*                                                        |     |     |     */
 /* Class Flags (unused: none)                             |     |     |     */
 /* ===========                                            |     |     |     */
@@ -1206,8 +1210,15 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  *   fn_flags of zend_function, flags of zend_property_info,
  *   and the flags of zend_class_constant                       upstream: the ZEND_ACC_* member flags
  *
- * ZEND_SHARP_INTERNAL_MEMBER: the ZEND_ACC_SHARP_INTERNAL of a property, a constant or a promoted parameter, which
- * sharp_translate gives the 16 bits of the node's attr in its place, and the compiler turns back into it.
+ * ZEND_ACC_SHARP_INTERNAL_SET: the property's `set` is `internal`, spec section 5, which PHP runs as protected(set), so
+ * each write PHP checks against ZEND_ACC_PPP_SET_MASK reaches zend_asymmetric_property_has_set_access, which lets
+ * code of the property's namespace and of the namespaces below it write, as zend_sharp_reaches_internal says. A write
+ * to any other property tests no more than it did.
+ *   flags of zend_property_info                               upstream: the ZEND_ACC_* property flags
+ *
+ * ZEND_SHARP_INTERNAL_MEMBER and ZEND_SHARP_INTERNAL_SET_MEMBER: the ZEND_ACC_SHARP_INTERNAL and the
+ * ZEND_ACC_SHARP_INTERNAL_SET of a property, a constant or a promoted parameter, which sharp_translate gives the 16
+ * bits of the node's attr in their place, and the compiler turns back into them.
  *   attr of ZEND_AST_PROP_GROUP, ZEND_AST_CLASS_CONST_GROUP and ZEND_AST_PARAM   upstream: no such flag
  *
  * ZEND_ACC_SHARP_TYPED: the property has a PHP# type, its sharp_type, which every write from plain PHP checks. A write
@@ -1253,12 +1264,22 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
 #define ZEND_SHARP_RESULT_CROSSES	(1<<0)
 #define ZEND_SHARP_RESULT_CALLER_CHECKED	(1<<1)
 #define ZEND_SHARP_INTERNAL_MEMBER	(1<<14)
+#define ZEND_SHARP_INTERNAL_SET_MEMBER	(1<<9)
 
 ZEND_STATIC_ASSERT(ZEND_SHARP_INTERNAL_MEMBER <= UINT16_MAX, "ZEND_SHARP_INTERNAL_MEMBER fits the attr of a zend_ast");
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_INTERNAL_MEMBER & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_SET_MASK|ZEND_ACC_STATIC|ZEND_ACC_FINAL
 		|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_FIELD|ZEND_ACC_SHARP_HIDDEN|ZEND_PARAM_REF|ZEND_PARAM_VARIADIC
 		|ZEND_PARAM_WIDENED)),
 	"ZEND_SHARP_INTERNAL_MEMBER overlaps a flag of the attr of ZEND_AST_PROP_GROUP, ZEND_AST_CLASS_CONST_GROUP or ZEND_AST_PARAM");
+ZEND_STATIC_ASSERT(!(ZEND_SHARP_INTERNAL_SET_MEMBER & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_SET_MASK|ZEND_ACC_STATIC
+		|ZEND_ACC_FINAL|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_FIELD|ZEND_ACC_SHARP_HIDDEN|ZEND_PARAM_REF
+		|ZEND_PARAM_VARIADIC|ZEND_PARAM_WIDENED|ZEND_SHARP_INTERNAL_MEMBER)),
+	"ZEND_SHARP_INTERNAL_SET_MEMBER overlaps a flag of the attr of ZEND_AST_PROP_GROUP, ZEND_AST_CLASS_CONST_GROUP or ZEND_AST_PARAM");
+ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_INTERNAL_SET & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_SET_MASK|ZEND_ACC_CHANGED
+		|ZEND_ACC_STATIC|ZEND_ACC_FINAL|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_PROMOTED|ZEND_ACC_VIRTUAL
+		|ZEND_ACC_DEPRECATED|ZEND_ACC_OVERRIDE|ZEND_ACC_SHARP_HIDDEN|ZEND_ACC_SHARP_TYPED|ZEND_ACC_FIELD
+		|ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_INTERNAL)),
+	"ZEND_ACC_SHARP_INTERNAL_SET overlaps a ZEND_ACC_* flag in the flags of zend_property_info");
 
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR_SYNTAX & UINT8_MAX),
 	"ZEND_SHARP_OPERATOR_SYNTAX overlaps the opcode in the attr of ZEND_AST_BINARY_OP");

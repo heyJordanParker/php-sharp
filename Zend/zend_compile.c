@@ -8260,10 +8260,13 @@ static bool zend_property_is_virtual(zend_class_entry *ce, zend_string *property
 }
 
 /* PHP#: the member flags the attr `attr` of a ZEND_AST_PROP_GROUP, a ZEND_AST_CLASS_CONST_GROUP or a ZEND_AST_PARAM
- * gives, with the ZEND_ACC_SHARP_INTERNAL its ZEND_SHARP_INTERNAL_MEMBER stands for. */
+ * gives, with the ZEND_ACC_SHARP_INTERNAL its ZEND_SHARP_INTERNAL_MEMBER stands for and the ZEND_ACC_SHARP_INTERNAL_SET
+ * its ZEND_SHARP_INTERNAL_SET_MEMBER stands for. */
 static uint32_t zend_sharp_member_flags(zend_ast_attr attr)
 {
-	return attr & ZEND_SHARP_INTERNAL_MEMBER ? (attr & ~ZEND_SHARP_INTERNAL_MEMBER) | ZEND_ACC_SHARP_INTERNAL : attr;
+	return (attr & ~(ZEND_SHARP_INTERNAL_MEMBER|ZEND_SHARP_INTERNAL_SET_MEMBER))
+		| (attr & ZEND_SHARP_INTERNAL_MEMBER ? ZEND_ACC_SHARP_INTERNAL : 0)
+		| (attr & ZEND_SHARP_INTERNAL_SET_MEMBER ? ZEND_ACC_SHARP_INTERNAL_SET : 0);
 }
 
 static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32_t fallback_return_type) /* {{{ */
@@ -8325,7 +8328,7 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 	}
 
 	const uint32_t promotion_flags = ZEND_ACC_PPP_MASK | ZEND_ACC_PPP_SET_MASK | ZEND_ACC_READONLY | ZEND_ACC_FINAL
-		| ZEND_ACC_FIELD | ZEND_ACC_SHARP_INTERNAL;
+		| ZEND_ACC_FIELD | ZEND_ACC_SHARP_INTERNAL | ZEND_ACC_SHARP_INTERNAL_SET;
 	for (i = 0; i < list->children; ++i) {
 		zend_ast *param_ast = list->child[i];
 		zend_string *sharp_type = NULL;

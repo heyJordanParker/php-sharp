@@ -227,14 +227,17 @@ static zend_ast *sharp_translate_zval(const sharp_unit *unit, const sharp_node *
 }
 
 /* The attr of a node of `kind` whose unit gives it `attr`: an operator's with the syntax PHP# flags it with, and a
- * member's with ZEND_SHARP_INTERNAL_MEMBER for its ZEND_ACC_SHARP_INTERNAL, which the 16 bits of an attr can't hold. */
+ * member's with ZEND_SHARP_INTERNAL_MEMBER for its ZEND_ACC_SHARP_INTERNAL and ZEND_SHARP_INTERNAL_SET_MEMBER for its
+ * ZEND_ACC_SHARP_INTERNAL_SET, which the 16 bits of an attr can't hold. */
 static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
 {
 	switch (kind) {
 		case ZEND_AST_PROP_GROUP:
 		case ZEND_AST_CLASS_CONST_GROUP:
 		case ZEND_AST_PARAM:
-			return attr & ZEND_ACC_SHARP_INTERNAL ? (attr & ~ZEND_ACC_SHARP_INTERNAL) | ZEND_SHARP_INTERNAL_MEMBER : attr;
+			return (attr & ~(ZEND_ACC_SHARP_INTERNAL|ZEND_ACC_SHARP_INTERNAL_SET))
+				| (attr & ZEND_ACC_SHARP_INTERNAL ? ZEND_SHARP_INTERNAL_MEMBER : 0)
+				| (attr & ZEND_ACC_SHARP_INTERNAL_SET ? ZEND_SHARP_INTERNAL_SET_MEMBER : 0);
 		case ZEND_AST_BINARY_OP:
 		case ZEND_AST_ASSIGN_OP:
 			return attr == ZEND_ADD || attr == ZEND_SUB || attr == ZEND_MUL || attr == ZEND_POW

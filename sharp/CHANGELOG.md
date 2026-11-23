@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.54
+
+- Drop `internal` from the `set` of each property that plain PHP outside its namespace writes, or move that write into the namespace: the engine now refuses it with `Error`, where 0.6.54 ran it as public. Plain PHP outside the namespace that lists an object's properties with `get_object_vars`, `var_export` or an array cast no longer finds an `internal` property there, so declare `public` each one such code reads.
+
 ### Added
 
 - A law reads `join(separator)` of a `List<string>`, spec section 28: the strings with the separator between each two, and `""` of no strings. So `` new Notice("", [a, b]).checklist == `${a}, ${b}` `` proves, where 0.6.53 refused it with `unmodeled-construct`, and a law that states the wrong text of a join fails for the small values that break it.
@@ -11,6 +15,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - A computed property in a machine case's block is a member of that case's class, spec section 20.2, as a move of the block is: the machine compiles, where 0.6.53 refused the file with `lowering-panic`, and a law reads the property on a value of the case. A read through the machine's type, as `Readiness r = Readiness.open(); r.failureMessage;`, is refused with the test that narrows `r` to the case, as a move's call is.
+
+### Changed
+
+- The engine holds an `internal set` to its namespace, spec section 5, as it holds an `internal` member: plain PHP's `$ledger->views = 3;` from outside `App.Billing` throws "Cannot modify internal(set) property App\Billing\Ledger::$views from global scope, outside namespace App\Billing", where 0.6.54 ran it as a public set. The engine checks it where PHP checks `protected(set)`, so a write to any other property costs what it did. `get_object_vars`, `var_export` and an array cast that plain PHP makes leave out an `internal` property that code outside its namespace doesn't reach, where 0.6.54 listed it to `var_export` and an array cast. `Json.encode` still writes every one.
 
 ## [0.6.54] - 2026-11-23
 
