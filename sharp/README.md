@@ -116,18 +116,14 @@ sharp.compile_command => no value => no value
 
 `sharp.compile_command` is the engine's one setting. It stays empty in production, and [Development](#development) says what it does in a dev container.
 
-`ghcr.io/heyjordanparker/php-sharp:<version>-dev` is the same image with the Lean version that release's `mago` proves laws with already installed, so a `mago compile` with laws in a container built from it downloads nothing, and with the sampling profiler `excimer`, which a framework app's development image installs. Its `XDG_CACHE_HOME` is `/var/cache`, so Mago's cache folder is `/var/cache/mago` for every user, and every user can read and write it, so a container run with `--user` finds the Lean too. The first compile with laws still builds the law checker's library there, in a few seconds. Lean takes about 3 GB, so build a dev container or a CI job on `<version>-dev` and a production image on `<version>`.
+`ghcr.io/heyjordanparker/php-sharp:<version>-dev` is the same image with the Lean version that release's `mago` proves laws with already installed, so a `mago compile` with laws in a container built from it downloads nothing, and with the sampling profiler `excimer`, which a framework app's development image installs. Both images set `XDG_CACHE_HOME` to `/var/cache`, so Mago's cache folder is `/var/cache/mago` for every user, and every user can read and write it, so a container run with `--user` finds the Lean too. The first compile with laws still builds the law checker's library there, in a few seconds. Lean takes about 3 GB, so build a dev container or a CI job on `<version>-dev` and a production image on `<version>`.
 
-A project's own image reuses that Lean by starting `FROM ghcr.io/heyjordanparker/php-sharp:<version>-dev`. An image that starts from another base copies Mago's cache folder from the `-dev` image, makes the folder first, and names it in `XDG_CACHE_HOME`:
+A project's own image reuses that Lean by starting `FROM ghcr.io/heyjordanparker/php-sharp:<version>-dev`, or, on the runtime image, by copying Mago's cache folder from the `-dev` image:
 
 ```dockerfile
 FROM ghcr.io/heyjordanparker/php-sharp:<version>
-RUN mkdir -m 0777 -p /var/cache/mago
 COPY --from=ghcr.io/heyjordanparker/php-sharp:<version>-dev /var/cache/mago /var/cache/mago
-ENV XDG_CACHE_HOME=/var/cache
 ```
-
-`COPY` gives a folder it creates root as its owner and mode 755, so without the `mkdir` a container run as `www-data` can't write in `/var/cache/mago`, and its first compile with an extension host fails with "can't create the folder `/var/cache/mago/hosts/…`: Permission denied".
 
 `sharp/docker/runtime/frankenphp.Dockerfile` builds the engine with docker-library's `8.5/trixie/zts` recipe, from this repository's source instead of the php.net tarball, with `ext/sharp` built in, then runs FrankenPHP v1.13.5's own Dockerfile stages on it, as FrankenPHP's images build on `php:8.5-zts-trixie`. It keeps docker-library's layout, so `docker-php-ext-*` and `install-php-extensions` work unchanged and an app on FrankenPHP's image switches to PHP# by changing only its `FROM` line. The `docker-php-*` scripts are verbatim copies, and `zts/docker-php-entrypoint` is docker-library's `zts` variant's. `sharp/bin/hosts` builds the same FrankenPHP release for `HOSTS`. Go 1.27, `e-dant/watcher` 0.14.5 and `install-php-extensions` 2.13.2 are pinned where FrankenPHP takes the latest. FrankenPHP's source is fetched by its release's commit, and the `e-dant/watcher` archive and the `install-php-extensions` script are checked against their SHA-256s. Compare the Dockerfile, the shared scripts and `zts/docker-php-entrypoint` with docker-library's `8.5/trixie/zts`, and the Dockerfile with FrankenPHP's `Dockerfile`, on every merge from either. FrankenPHP's stage rewrites `php` in the `zts` entrypoint to `frankenphp run`, so the image starts FrankenPHP on its default command.
 
