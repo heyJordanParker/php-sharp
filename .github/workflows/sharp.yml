@@ -493,32 +493,34 @@ jobs:
           end: true
   # The checks that keep the release pipeline on pinned code, which sharp/bin/check workflows runs: an action that is not
   # ours runs only at a full commit SHA, so a moved tag can't change what runs, no Dockerfile under sharp/docker names a
-  # `# syntax=` frontend, which BuildKit pulls from Docker Hub with no login (#86), and actionlint, at the version this
-  # job installs, passes over every workflow, with the runner labels .github/actionlint.yaml sets. It also checks that
-  # each released version in sharp/CHANGELOG.md keeps the lines its release published, so a commit of next that edits
-  # them fails before it lands.
+  # `# syntax=` frontend, which BuildKit pulls from Docker Hub with no login (#86), and actionlint, at the version
+  # sharp/docker/tools/Dockerfile pins, passes over every workflow, with the runner labels .github/actionlint.yaml sets.
+  # It runs in the sharp/docker image, which carries that actionlint and shellcheck, which actionlint checks each
+  # workflow's scripts with. It also checks that each released version in sharp/CHANGELOG.md keeps the lines its release
+  # published, so a commit of next that edits them fails before it lands.
   WORKFLOWS:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       actions: write
       contents: read
+      packages: read
       pull-requests: read
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-      - name: Install actionlint
-        run: |
-          archive="$RUNNER_TEMP/actionlint.tar.gz"
-          curl -fsSL https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o "$archive"
-          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $archive" | sha256sum -c
-          mkdir "$RUNNER_TEMP/actionlint"
-          tar -xzf "$archive" -C "$RUNNER_TEMP/actionlint" actionlint
-          echo "$RUNNER_TEMP/actionlint" >> "$GITHUB_PATH"
+      # sharp/docker/run pulls the sharp/docker image from ghcr.io, where base-images.yml pushes it.
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ github.token }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
       - name: The actions are pinned, no Dockerfile names a syntax frontend, and actionlint passes
-        run: sharp/bin/check workflows
+        run: sharp/docker/run sharp/bin/check workflows
       # sharp/bin/check changelog reads master's sharp/CHANGELOG.md and an open release pull request's through the API.
       - name: Every released version in sharp/CHANGELOG.md keeps the lines its release published
         env:
