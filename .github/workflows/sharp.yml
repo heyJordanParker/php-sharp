@@ -470,7 +470,10 @@ jobs:
       # The -dev image's Lean layer, which IMAGE keeps in BuildKit's GitHub Actions cache, holds the Lean mago installs
       # in lean/ of its cache folder, so the examples' laws run on it with no download from GitHub, where the install
       # #696 reports failed. A run whose ref cannot read IMAGE's cache builds the layer, which downloads Lean once.
+      # The export is one tar: BuildKit's type=local export of the layer's files stalled after "copying files 23B" until
+      # each SPEC job of runs 45114550392 and 45114738831 timed out.
       - name: Put the -dev image's Lean in mago's cache folder
+        timeout-minutes: 10
         run: |
           sharp/bin/network docker buildx build \
             --file sharp/docker/runtime/frankenphp.Dockerfile \
@@ -478,10 +481,11 @@ jobs:
             --platform linux/amd64 \
             --build-arg REGISTRY=ghcr.io/heyjordanparker \
             --cache-from type=gha,scope=lean-linux-amd64 \
-            --output "type=local,dest=$RUNNER_TEMP/lean-layer" \
+            --output "type=tar,dest=$RUNNER_TEMP/lean-layer.tar" \
             .
           mkdir -p sharp/build/cache
-          mv "$RUNNER_TEMP/lean-layer/var/cache/mago" sharp/build/cache/mago
+          tar -xf "$RUNNER_TEMP/lean-layer.tar" -C sharp/build/cache --strip-components 2 var/cache/mago
+          rm "$RUNNER_TEMP/lean-layer.tar"
       - name: Check the examples of docs/spec.md and README.md
         run: |
           build="sharp/build/linux-$(uname -m)"
