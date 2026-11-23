@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.52] - 2026-11-23
+
 ### Upgrading from 0.6.51
 
 - Move each test module whose file's class is abstract or doesn't extend PHPUnit's `TestCase` into the file of a test that does: such a module never ran, and it is refused now.
@@ -16,6 +18,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Fixed
 
+- An extension rule reads a machine's case where an `is` test names it, as it does in `typeof`. In `status is not SubscriptionStatus.Active active` and `status is SubscriptionStatus.Active active`, `SourceFile.getResolvedName` of the `DottedIdentifier` gives `App\Billing\SubscriptionStatus\Active`, where 0.6.51 gave the machine `App\Billing\SubscriptionStatus`. In `status is SubscriptionStatus.Active`, `FileAnalysis.getExpressionType` of the pattern's expression gives the case's type, where 0.6.51 gave `null`.
 - A law keeps the outcome of its proof across releases while nothing its proof reads changed: its statement, its theorem and the code it reaches, the law checker's Lean library and Lean version, and the heartbeats and fixed steps it is proved with. So the first compile after an upgrade proves only the laws whose proof the release changed, and none after a release that changes only the version, where 0.6.51 proved every law of the project again after any upgrade, which took 749 laws of a 2,400-file project about an hour of processor time.
 - The container finds a class's services in the modules of its namespace and of each namespace above it, wherever the class's file is, spec section 32, as the checker does. So a program under `tests/lib` that declares `namespace App.Testing.Lib` and takes a `Runtime` that `App`'s module binds runs with that `Runtime`, where 0.6.51 compiled it and then threw "No module binds App\Shared\Runtime for App\Testing\Lib\Link", because it read only the modules in the file's folder and the folders above it. A module in that folder that declares `namespace Tests.Lib` serves the classes of `Tests.Lib` alone. A test module in a file that holds no test is refused with the file named, "`tests/lib/Link.sharp` holds no test, so its test module would never run.", where 0.6.51 compiled a program's `module : App { … }` under `tests/` and ran the program with `App`'s own services. A file holds a test when its class isn't abstract and extends `PHPUnit.Framework.TestCase`, directly or through a parent.
 - A compiled file goes stale when a module of its namespace or of a namespace above it changes, wherever the file is, spec section 32, as the container reads those modules. So an edit to `app/Module.sharp` makes stale the compiled program `tests/lib/Link.sharp` of `App.Testing.Lib`, so the engine refuses it until a compile checks its services against the edited module, where 0.6.51 kept it current, because a compiled file named only the `Module.sharp` of its own folder and of each folder above it, and a program named none for its services. A module added to a folder that holds a file of the namespace or of a namespace above it, or to that folder's PSR-4 parent, makes the file stale too. A file added beside a module that isn't one makes nothing stale.
@@ -1787,7 +1790,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.51...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.52...HEAD
+[0.6.52]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.51...v0.6.52
 [0.6.51]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.50...v0.6.51
 [0.6.50]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.49...v0.6.50
 [0.6.49]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.48...v0.6.49
