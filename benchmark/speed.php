@@ -70,7 +70,7 @@ write_corpus($repository, $corpus);
 checked($corpus, $status, $output, $log);
 $laws = laws(CORPUS, $log);
 if ($laws === []) {
-    fwrite(STDERR, "The cold compile of the corpus logged no law.\n");
+    fwrite(STDERR, "The cold compile of the corpus logged no law:\n{$output}{$log}\n");
     exit(1);
 }
 $measured['laws'] += $laws;
