@@ -529,8 +529,8 @@ gate_plain_php() {
 }
 
 # SPEED: what proving and compiling cost, in counts no load changes, against sharp/baseline/speed.json, the last
-# release's: each law's Lean heartbeats, the law corpus's, and the instructions of one compile of each example of
-# docs/spec.md and README.md, as benchmark/speed.php explains. It measures the test-run mago that mago-checks builds, or that mago.yml's SPEED
+# release's: each law's Lean heartbeats, the law corpus's, and the instructions of a one-file edit, as
+# benchmark/speed.php explains. It measures the test-run mago that mago-checks builds, or that mago.yml's SPEED
 # downloads from its checks there, as plain-php does, which behaves as the release users run without its fat LTO, as
 # sharp/mago/Cargo.toml explains. A debug build's counts would move with code the optimizer removes. With SPEED_WRITE,
 # it also writes what it measured there, as the next baseline.
