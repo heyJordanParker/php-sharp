@@ -8,7 +8,7 @@ set -euo pipefail
 # BUILD_LINUX the generated files, WORKFLOWS the workflows, and mago.yml's checks and plain-php theirs.
 #
 # With --release, it prints what CI's CHANGES jobs write to $GITHUB_OUTPUT about sharp/mago/Cargo.toml's version: the
-# version; tagged, the commit tag v<version> names on origin, empty until sharp/bin/land creates it; missing, each part
+# version; tagged, the commit tag v<version> names on origin, empty until sharp/bin/tag creates it; missing, each part
 # of the release not published yet; and bump, whether any is, so a push to master publishes what is missing.
 usage() {
   echo "usage: sharp/bin/check [workflows | changelog | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php | speed]..." >&2
