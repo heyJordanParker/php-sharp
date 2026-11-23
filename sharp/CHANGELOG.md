@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.55] - 2026-11-24
+
 ### Upgrading from 0.6.54
 
 - Drop `internal` from the `set` of each property that plain PHP outside its namespace writes, or move that write into the namespace: the engine now refuses it with `Error`, where 0.6.54 ran it as public. Plain PHP outside the namespace that lists an object's properties with `get_object_vars`, `var_export` or an array cast no longer finds an `internal` property there, so declare `public` each one such code reads.
@@ -1850,7 +1852,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.54...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.55...HEAD
+[0.6.55]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.54...v0.6.55
 [0.6.54]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.53...v0.6.54
 [0.6.53]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.52...v0.6.53
 [0.6.52]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.51...v0.6.52
