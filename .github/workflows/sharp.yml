@@ -679,14 +679,16 @@ jobs:
           CC: ccache cc
           CXX: ccache c++
         run: sharp/bin/build
-      # mago and every test binary in the dev profile, which keeps the debug assertions and overflow checks the tests
-      # need, linked with the engine the step before last built. Its dependencies compile at opt-level 3, so the tests
+      # mago and the test binaries of the packages the test step runs, mago's, the database's, the extension hosts' and
+      # the Lean library's, in the dev profile, which keeps the debug assertions and overflow checks the tests need,
+      # linked with the engine the step before last built. The whole workspace's took 58 s on run 45101524191. Its dependencies compile at opt-level 3, so the tests
       # run on optimized dependencies, while a commit rebuilds the workspace crates it changed at opt-level 0: the whole
       # workspace optimized halved the tests, but its rebuild of 566 to 923 s per commit took the time back.
       - name: Build mago and its test binaries
         run: |
           MAGO_ENGINE="$GITHUB_WORKSPACE/sharp/build/darwin-arm64-engine/install" sharp/bin/build-mago --quiet \
-            --config 'profile.dev.package."*".opt-level=3'
+            --config 'profile.dev.package."*".opt-level=3' \
+            -p mago -p mago-database -p mago-extension -p mago-sharp-lean
       # The workspace's tests on macOS arm64, which cover the few lines of Mago that differ there, such as the watch
       # mode's FSEvents. They run lake and the SDK's Composer packages.
       - name: Install composer dependencies
