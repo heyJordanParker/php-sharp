@@ -130,10 +130,10 @@ A server whose PHP comes from its distribution, such as Ubuntu's packages, can't
 
 ### Extensions
 
-The image ships the extensions its release's `php -m` lists. For 0.6.51:
+The image ships the extensions its release's `php -m` lists. For 0.6.52:
 
 ```text
-$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.51 php -m
+$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.52 php -m
 [PHP Modules]
 bcmath
 calendar
@@ -209,7 +209,7 @@ The app's image installs every other extension it needs with [`install-php-exten
 The app builds its own image on the release, with its extensions, the production `php.ini` and its own ini settings:
 
 ```dockerfile
-FROM ghcr.io/heyjordanparker/php-sharp:0.6.51
+FROM ghcr.io/heyjordanparker/php-sharp:0.6.52
 RUN install-php-extensions xsl
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 COPY app.ini "$PHP_INI_DIR/conf.d/"

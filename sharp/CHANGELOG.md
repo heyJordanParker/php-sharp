@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.52] - 2026-11-23
+
 ### Upgrading from 0.6.51
 
 - Move each test module whose file's class is abstract or doesn't extend PHPUnit's `TestCase` into the file of a test that does: such a module never ran, and it is refused now.
@@ -1787,7 +1789,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.51...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.52...HEAD
+[0.6.52]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.51...v0.6.52
 [0.6.51]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.50...v0.6.51
 [0.6.50]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.49...v0.6.50
 [0.6.49]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.48...v0.6.49
