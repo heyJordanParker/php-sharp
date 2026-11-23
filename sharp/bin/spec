@@ -842,12 +842,15 @@ function put(string $path, string $contents): void
 }
 
 /**
- * Runs every command, as many at a time as sharp/bin/jobs prints.
+ * Runs every command, as many at a time as sharp/bin/jobs prints, each through sharp/bin/record, so the build record
+ * holds each one's own wall and CPU time under its key in $work: `<id>/<variant>` for an example's compile,
+ * `<id>/<variant>/lint<file>` for a php -l of its plain PHP, `<id>/run<variant>` for the compile of its run, and
+ * `<id>/run<variant>/run` for the run. The record names the slowest examples, which the part's one total couldn't.
  *
  * @param array<string, array{list<string>, array<string, string>}> $commands the command and its extra environment, by key
  * @return array<string, array{string, string, int}> stdout, stderr and exit status, by key
  */
-function run_all(array $commands): array
+function run_all(array $commands, string $work): array
 {
     static $parallel = null;
     $parallel ??= (int) shell_exec(escapeshellarg(__DIR__ . '/jobs'));
@@ -862,7 +865,8 @@ function run_all(array $commands): array
             $key = array_key_first($pending);
             [$command, $environment] = $pending[$key];
             unset($pending[$key]);
-            $process = proc_open($command, [1 => ['file', "$key.out", 'w'], 2 => ['file', "$key.err", 'w']], $pipes, null, $environment + getenv());
+            $recorded = [__DIR__ . '/record', 'sharp/bin/spec ' . substr($key, strlen($work) + 1), '--', ...$command];
+            $process = proc_open($recorded, [1 => ['file', "$key.out", 'w'], 2 => ['file', "$key.err", 'w']], $pipes, null, $environment + getenv());
             $running[$key] = $process;
         }
         foreach ($running as $key => $process) {
@@ -1362,7 +1366,7 @@ function measure(string $root, string $work, array $examples): array
     $compile = static fn (string $folder): array => [[$mago, '--no-version-check', '--colors', 'never', '--workspace', $folder, 'compile'], ['MAGO_REPORTING_FORMAT' => 'json', 'MAGO_THREADS' => '1']];
 
     write_project($root, "$work/harness", $harness, []);
-    [$stdout, $stderr, $status] = run_all(["$work/harness" => $compile("$work/harness")])["$work/harness"];
+    [$stdout, $stderr, $status] = run_all(["$work/harness" => $compile("$work/harness")], $work)["$work/harness"];
     if ($status !== 0) {
         $errors = array_map(static fn (array $error): string => "$error[name]:$error[line]: $error[message]", compile_errors($stdout));
         fail("the harness in sharp/harness/ does not compile:\n" . implode("\n", $errors ?: [trim($stderr)]));
@@ -1392,7 +1396,7 @@ function measure(string $root, string $work, array $examples): array
             }
         }
     }
-    $compiled = run_all($jobs);
+    $compiled = run_all($jobs, $work);
 
     $results = [];
     $runs = [];
@@ -1443,7 +1447,7 @@ function measure(string $root, string $work, array $examples): array
     $run_compiles = run_all(array_merge(...array_map(static fn (array $list): array => array_combine(
         array_column($list, 0),
         array_map(static fn (array $run): array => $compile($run[0]), $list),
-    ), array_values($runs)), ...[[]]));
+    ), array_values($runs)), ...[[]]), $work);
     $run_jobs = [];
     foreach ($runs as $id => $list) {
         foreach ($list as [$folder, $files]) {
@@ -1456,7 +1460,7 @@ function measure(string $root, string $work, array $examples): array
             $run_jobs["$folder/run"] = [[PHP_BINARY, '-n', '-d', 'error_reporting=E_ALL', "$folder/run.php"], ['SHARP_SPEC_OUTCOMES' => "$folder/outcomes"]];
         }
     }
-    foreach (run_all($run_jobs) as $key => [$stdout, $stderr, $status]) {
+    foreach (run_all($run_jobs, $work) as $key => [$stdout, $stderr, $status]) {
         $folder = dirname($key);
         $id = basename(dirname($folder));
         $outcomes = is_file("$folder/outcomes") ? file_get_contents("$folder/outcomes") : '';
