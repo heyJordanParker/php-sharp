@@ -11,7 +11,9 @@ description: >-
   hypervisor ran other machines on the job's CPUs, from /proc/stat, and on each system cpu, the processor's model, as
   lscpu or sysctl names it: the
   same Mago tests took 21 to 51 s across the MAGO slices of run 45025617782, so a slow job shows whether its machine was
-  slower or shared.
+  slower or shared. The job's own record, the build record sharp/bin/record writes, lives under $RUNNER_TEMP/state,
+  which the start points XDG_STATE_HOME at for every later step, sharp/docker/run's containers included, and the end
+  writes the job's line there through sharp/bin/record and uploads the file as the job's build-log artifact.
 
 inputs:
   end:
@@ -29,6 +31,8 @@ runs:
         state="$RUNNER_TEMP/usage"
         mkdir -p "$state"
         echo 0 > "$state/peak-kib"
+        date +%s > "$state/started"
+        echo "XDG_STATE_HOME=$RUNNER_TEMP/state" >> "$GITHUB_ENV"
         if [[ $RUNNER_OS == Linux ]]; then
           awk '/^cpu /{print $2 + $3 + $4 + $7 + $8, $9}' /proc/stat > "$state/cpu-start"
           sample='awk "/^MemTotal:/{total = \$2} /^MemAvailable:/{available = \$2} END{print total - available}" /proc/meminfo'
@@ -53,6 +57,8 @@ runs:
     - name: Write the job's CPU-seconds and peak memory
       if: inputs.end == 'true'
       shell: bash
+      env:
+        JOB_STATUS: ${{ job.status }}
       run: |
         state="$RUNNER_TEMP/usage"
         kill "$(< "$state/sampler")"
@@ -101,3 +107,15 @@ runs:
           )
         fi
         echo "::notice title=usage::cpu_seconds=$cpu peak_mib=$(( $(< "$state/peak-kib") / 1024 ))$stolen cpu=$model"
+        exit_status=1
+        if [[ $JOB_STATUS == success ]]; then
+          exit_status=0
+        fi
+        "$GITHUB_WORKSPACE/sharp/bin/record" "job $GITHUB_JOB" --measured "$(< "$state/started")" "$cpu" \
+          "$(( $(< "$state/peak-kib") / 1024 ))" "$exit_status"
+    - name: Upload the job's build record
+      if: inputs.end == 'true'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: build-log-${{ github.job }}-${{ strategy.job-index }}
+        path: ${{ runner.temp }}/state/php-sharp/builds.jsonl

@@ -28,9 +28,17 @@ if ! docker image inspect "$image" > /dev/null 2>&1; then
   fi
 fi
 docker tag "$image" php-sharp-linux
+# The build record's folder mounts at its own path, with XDG_STATE_HOME naming it and SHARP_RECORD_PARENT the record
+# that runs this, so a build or test in the image writes its lines to the same file, under that record, see
+# sharp/bin/record.
+state="${XDG_STATE_HOME:-$HOME/.local/state}"
+mkdir -p "$state/php-sharp"
+volumes+=(--volume "$state/php-sharp:$state/php-sharp")
 exec docker run --rm --init \
   --user "$(id -u):$(id -g)" \
   --ulimit stack=8388608:-1 \
+  --env XDG_STATE_HOME="$state" \
+  --env SHARP_RECORD_PARENT \
   --env CARGO_HOME=/src/sharp/build/cargo \
   --env XDG_CACHE_HOME=/src/sharp/build/cache \
   --env COMPOSER_HOME=/src/sharp/build/composer-home \

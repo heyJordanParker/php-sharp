@@ -8,6 +8,8 @@ set -euo pipefail
 # check again, the Mac's among them, on the commit merged into master, and once they pass it merges, and the repository
 # deletes its branch. The maintainer's tick runs it with the language
 # owner's gh login, whose pull request starts the required runs, where one GITHUB_TOKEN opened would start none.
+# Each run leaves its line in the build record, see sharp/bin/record.
+[[ ${SHARP_RECORDED:-} == sharp/bin/land ]] || exec "$(dirname "$0")/record" sharp/bin/land -- "$0" "$@"
 repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 api() { gh api "repos/$repo/$1" --jq "$2"; }
 

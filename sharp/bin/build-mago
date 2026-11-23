@@ -9,6 +9,9 @@ set -euo pipefail
 # argument goes to cargo test, such as --quiet. It builds the PHP# engine mago links first. `--engine` builds the engine
 # alone, which a CI job that links mago with cargo itself runs first, and a cargo check or clippy never needs.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
+# Each run leaves its line in the build record, with each step's under it, see sharp/bin/record.
+[[ ${SHARP_RECORDED:-} == sharp/bin/build-mago ]] || exec "$root/sharp/bin/record" sharp/bin/build-mago -- "$0" "$@"
+record="$root/sharp/bin/record"
 engine_only=false
 if [[ ${1:-} == --engine ]]; then
   engine_only=true
@@ -118,7 +121,7 @@ build_engine() {
     rm -rf "$engine"
   fi
   if [[ ! -f "$root/configure" ]]; then
-    (cd "$root" && ./buildconf --force)
+    (cd "$root" && "$record" buildconf -- ./buildconf --force)
   fi
   # The build configures again when what configure reads changed, as in sharp/bin/build: its options, the compilers in
   # CC and CXX, which configure writes into the Makefile, so ccache joins a build only through a configure, and the
@@ -133,9 +136,9 @@ build_engine() {
   )"
   stamp="$engine/configured-from"
   if [[ ! -f "$status" || ! -f "$stamp" || "$(< "$stamp")" != "$configured" ]]; then
-    (cd "$root" && ./buildconf --force)
+    (cd "$root" && "$record" buildconf -- ./buildconf --force)
     mkdir -p "$engine"
-    (cd "$engine" && "$root/configure" "${options[@]}")
+    (cd "$engine" && "$record" configure -- "$root/configure" "${options[@]}")
     printf '%s\n' "$configured" > "$stamp"
   fi
 
@@ -146,8 +149,9 @@ build_engine() {
   # The cargo build of ext/sharp's Rust library, which make runs, reads CARGO_BUILD_JOBS as its jobs.
   # shellcheck disable=SC2016 # The variables are make's, which make expands.
   read -r -a linked <<< "$(make -s -C "$engine" -f Makefile -f - print-objects <<< 'print-objects: ; @echo $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS)')"
-  CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")" make -C "$engine" -j"$("$root/sharp/bin/jobs")" "${linked[@]}" >/dev/null
-  make -C "$engine" install-headers install-programs >/dev/null
+  CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")" "$record" make -- \
+    make -C "$engine" -j"$("$root/sharp/bin/jobs")" "${linked[@]}" >/dev/null
+  "$record" "make install" -- make -C "$engine" install-headers install-programs >/dev/null
 
   # So the archive mago links holds those objects, and the static archive of each library the link names, so the linker
   # finds every symbol in one archive whatever order they need each other in. libsharp.a stays out: it bundles a Rust
@@ -255,7 +259,7 @@ for argument in "$@"; do
     scope=()
   fi
 done
-PATH="$(dirname "$cargo"):$PATH" "$cargo" test "${scope[@]}" --locked --no-run \
+PATH="$(dirname "$cargo"):$PATH" "$record" "cargo test --no-run" -- "$cargo" test "${scope[@]}" --locked --no-run \
   --manifest-path "$root/sharp/mago/Cargo.toml" \
   --target-dir "$target" --jobs "$("$root/sharp/bin/jobs")" --message-format=json-render-diagnostics "$@" \
   > "$messages.part.$$"

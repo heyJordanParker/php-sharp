@@ -10,6 +10,8 @@ usage() {
 }
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
+# Each run leaves its line in the build record, with each part's under it, see sharp/bin/record.
+[[ ${SHARP_RECORDED:-} == sharp/bin/test ]] || exec "$root/sharp/bin/record" sharp/bin/test -- "$0" "$@"
 linux=false
 # --no-build runs on the mago and the test binaries an earlier sharp/bin/build-mago made, as CI's suites run on their
 # build job's, and builds nothing.
@@ -129,25 +131,37 @@ run_step() {
 
 # Ends the part of the run under way with its wall seconds and the CPU-seconds the shell and the processes it waited
 # for used in it, as bash's times counts them, so a change to one part is judged by that part whatever else the machine
-# runs. Then it starts the part its heading names, if any.
+# runs, and writes its line to the build record, as failed when a step of it failed. Then it starts the part its heading
+# names, if any, from after that write, so the recorder's own time counts in neither part.
 part_heading=''
 part_started=0
 part_cpu=0
-part() {
-  local now="${EPOCHREALTIME/[^0-9]/}" cpu=0 time wall used
+part_failed=0
+part_clock() {
+  local time
+  now="${EPOCHREALTIME/[^0-9]/}"
+  cpu=0
   times > "$TMPDIR/sharp-bin-test-times"
   for time in $(< "$TMPDIR/sharp-bin-test-times"); do
     [[ $time =~ ^([0-9]+)m([0-9]+)[.,]([0-9]{3})s$ ]]
     cpu=$((cpu + (BASH_REMATCH[1] * 60 + BASH_REMATCH[2]) * 1000 + 10#${BASH_REMATCH[3]}))
   done
+}
+part() {
+  local now cpu wall used
+  part_clock
   if [[ -n $part_heading ]]; then
     wall=$(((now - part_started) / 100000))
     used=$(((cpu - part_cpu) / 100))
     printf '%s took %d.%d s and %d.%d CPU-seconds.\n' "$part_heading" $((wall / 10)) $((wall % 10)) $((used / 10)) $((used % 10))
+    "$root/sharp/bin/record" "$part_heading" --measured "${part_started:0:${#part_started}-6}.${part_started: -6}" \
+      "$((used / 10)).$((used % 10))" '' "$((${#failed[@]} > part_failed))"
+    part_clock
   fi
   part_heading="${1:-}"
   part_started=$now
   part_cpu=$cpu
+  part_failed=${#failed[@]}
   if [[ -n $part_heading ]]; then
     echo "== $part_heading"
   fi

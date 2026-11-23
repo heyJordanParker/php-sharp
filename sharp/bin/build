@@ -2,6 +2,9 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
+# Each run leaves its line in the build record, with each step's under it, see sharp/bin/record.
+[[ ${SHARP_RECORDED:-} == sharp/bin/build ]] || exec "$root/sharp/bin/record" sharp/bin/build -- "$0" "$@"
+record="$root/sharp/bin/record"
 linux=false
 clean=false
 release=false
@@ -102,9 +105,9 @@ configured="$(
 )"
 stamp="$build_dir/configured-from"
 if [[ ! -f "$status" || ! -f "$stamp" || "$(< "$stamp")" != "$configured" ]]; then
-  (cd "$root" && ./buildconf --force)
+  (cd "$root" && "$record" buildconf -- ./buildconf --force)
   mkdir -p "$build_dir"
-  (cd "$build_dir" && "$root/configure" "${flags[@]}")
+  (cd "$build_dir" && "$record" configure -- "$root/configure" "${flags[@]}")
   printf '%s\n' "$configured" > "$stamp"
 fi
 
@@ -117,9 +120,9 @@ export CARGO_BUILD_JOBS
 # s, libphp.dylib's 169 s and the install 123 s of the step's 392 s. configure takes the same flags everywhere, since
 # other flags would rebuild a Mac's engine from nothing.
 if [[ "$(uname -s)" == Linux ]]; then
-  make -C "$build_dir" -j"$CARGO_BUILD_JOBS" >/dev/null
-  make -C "$build_dir" install >/dev/null
+  "$record" make -- make -C "$build_dir" -j"$CARGO_BUILD_JOBS" >/dev/null
+  "$record" "make install" -- make -C "$build_dir" install >/dev/null
 else
-  make -C "$build_dir" -j"$CARGO_BUILD_JOBS" sapi/cli/php sapi/phpdbg/phpdbg >/dev/null
+  "$record" make -- make -C "$build_dir" -j"$CARGO_BUILD_JOBS" sapi/cli/php sapi/phpdbg/phpdbg >/dev/null
 fi
 "$build_dir/sapi/cli/php" -v
