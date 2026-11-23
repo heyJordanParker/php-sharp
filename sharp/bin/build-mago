@@ -249,7 +249,16 @@ fi
 messages="$target/build.json"
 rm -f "$messages"
 mkdir -p "$target"
-PATH="$(dirname "$cargo"):$PATH" "$cargo" test --workspace --locked --no-run \
+# A -p or --package among the arguments builds only the packages it names, as MACOS builds the packages of the test
+# binaries it runs: cargo resolves their features apart from the workspace's, so the shared crates they use compile
+# once more into the target, and later builds of the same list compile only what a change reaches.
+scope=(--workspace)
+for argument in "$@"; do
+  if [[ $argument == -p || $argument == --package || $argument == --package=* ]]; then
+    scope=()
+  fi
+done
+PATH="$(dirname "$cargo"):$PATH" "$cargo" test "${scope[@]}" --locked --no-run \
   --manifest-path "$root/sharp/mago/Cargo.toml" \
   --target-dir "$target" --jobs "$("$root/sharp/bin/jobs")" --message-format=json-render-diagnostics "$@" \
   > "$messages.part.$$"

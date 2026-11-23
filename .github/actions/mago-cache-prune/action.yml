@@ -6,7 +6,11 @@ description: >-
   then -<commit>, so each such run saves a new key beside the old ones. For each name and architecture, it keeps the
   newest key on the run's branch and deletes the older ones, of any hash, so the caches hold one of each kind: a run
   whose hash matches none restores the newest of any hash, and an older hash's target would stay until GitHub evicted
-  it, once the repository's caches passed their 10 GB. The calling job needs actions: write.
+  it, once the repository's caches passed their 10 GB. The built engines, MAGO_ENGINE-<os>-<arch>-<hash>, and the Rust
+  toolchains and crates, <name>_RUST-<arch>-<hash>, are keyed by their inputs' hash alone, and a run restores the one of
+  its hash, or the newest of any hash, so it keeps the newest of each kind of those too: 30 engines and 7 Rust caches of
+  older hashes held 1.9 GB of the 8.2 GB at 04:06 UTC on 2026-11-23, and GitHub evicts the least recently read once the
+  caches pass 10 GB. The calling job needs actions: write.
 
 runs:
   using: composite
@@ -19,8 +23,9 @@ runs:
         # Each line is the key without its hash and commit, the time it was saved, its id and its key, newest first per
         # kind.
         gh api --paginate "repos/$GITHUB_REPOSITORY/actions/caches?ref=$GITHUB_REF&per_page=100" --jq '
-          .actions_caches[] | select(.key | test("_(MAGO|CCACHE|GO)-[^-]+-[0-9a-f]{64}-[0-9a-f]{40}$"))
-          | "\(.key | sub("-[0-9a-f]{64}-[0-9a-f]{40}$"; ""))\t\(.created_at)\t\(.id)\t\(.key)"' \
+          .actions_caches[]
+          | select(.key | test("_(MAGO|CCACHE|GO)-[^-]+-[0-9a-f]{64}-[0-9a-f]{40}$") or test("^MAGO_ENGINE-[^-]+-[^-]+-[0-9a-f]{64}$") or test("_RUST-[^-]+-[0-9a-f]{64}$"))
+          | "\(.key | sub("-[0-9a-f]{64}(-[0-9a-f]{40})?$"; ""))\t\(.created_at)\t\(.id)\t\(.key)"' \
           | sort -t "$(printf '\t')" -k1,1 -k2,2r > "$RUNNER_TEMP/targets"
         awk -F '\t' '$1 == kind { print $3 "\t" $4 } { kind = $1 }' "$RUNNER_TEMP/targets" > "$RUNNER_TEMP/older"
         echo "$(wc -l < "$RUNNER_TEMP/targets") Mago target, ccache and Go caches on $GITHUB_REF, $(wc -l < "$RUNNER_TEMP/older") replaced by a newer one."
