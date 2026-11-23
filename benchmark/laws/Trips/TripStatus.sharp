@@ -1,0 +1,27 @@
+namespace App.Trips;
+
+import Sharp.Time.Instant;
+
+public machine TripStatus
+{
+    case Open(List<int> stopIds, Instant idleAt)
+    {
+        public TripStatus.Completed complete(Instant at) => TripStatus.Completed(at, this.reached());
+        public TripStatus.Abandoned abandon(Instant at) => TripStatus.Abandoned(at, this.reached());
+        public TripStatus.Idle idle() => TripStatus.Idle(this.reached());
+        private List<int> reached() => this.stopIds.count() > 0 ? this.stopIds : throw new ValueError("A trip has a stop.");
+    }
+
+    final case Idle(List<int> stopIds);
+    final case Completed(Instant completedAt, List<int> stopIds);
+    final case Abandoned(Instant abandonedAt, List<int> stopIds);
+
+    public static TripStatus.Open opened(int stopId, Instant idleAt) => TripStatus.Open([stopId], idleAt);
+    public bool isIdle() => this is TripStatus.Idle;
+
+    law onlyAnIdleTripIsIdle(int stopId, Instant idleAt, Instant at)
+        => TripStatus.opened(stopId, idleAt).idle().isIdle()
+            && !TripStatus.opened(stopId, idleAt).isIdle()
+            && !TripStatus.opened(stopId, idleAt).complete(at).isIdle()
+            && !TripStatus.opened(stopId, idleAt).abandon(at).isIdle();
+}

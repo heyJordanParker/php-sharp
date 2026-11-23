@@ -1,0 +1,29 @@
+namespace App.Seats;
+
+import Sharp.Key;
+import Sharp.Tag;
+import Sharp.Time.Instant;
+
+[Tag("status")]
+public machine SeatStatus
+{
+    [Key("held")]
+    case Held([Key("held_since")] Instant since)
+    {
+        public SeatStatus release(Instant at, string? reason) => at < this.since ? this : SeatStatus.Released(at, reason);
+        public SeatStatus.Held hold(Instant at) => this;
+    }
+
+    [Key("released")]
+    case Released([Key("released_at")] Instant at, [Key("reason")] string? reason)
+    {
+        public SeatStatus.Released release(Instant at, string? reason) => this;
+        public SeatStatus.Held hold(Instant at) => SeatStatus.Held(at);
+    }
+
+    public static SeatStatus.Held take(Instant at) => SeatStatus.Held(at);
+    public bool isHeld() => this is SeatStatus.Held;
+
+    law endingKeepsTheTimeAndReason(SeatStatus.Held held, Instant at, string? reason) => at < held.since || held.release(at, reason) == SeatStatus.Released(at, reason);
+    law aReleaseBeforeTheHoldKeepsItHeld(SeatStatus.Held held, Instant at, string? reason) => at >= held.since || held.release(at, reason) == held;
+}
