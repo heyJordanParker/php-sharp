@@ -354,6 +354,17 @@ A test runner includes each `.sharp` test file it lists itself, past the plugin'
 
 The file cache outlives each run, and `opcache.validate_timestamps=0` skips the check. Then every worker runs the bytecode an earlier run cached, of `.sharp` and `.php` files alike, and a suite can pass against code that no longer exists. So keep `opcache.validate_timestamps=1` wherever tests run with `opcache.file_cache`, or empty the file cache folder after each `mago compile`.
 
+**A test run checks the `extern` lines.** An `extern` line's `uses` is a claim about plain PHP that `mago compile` can't check. Start the tests with `sharp.effect_report` set to a file, and each call of a plain PHP method an `extern` line declares records each built-in it runs, then `mago effects` reads the file:
+
+```sh
+vendor/bin/mago compile
+rm -f build/effects.json
+php -d sharp.effect_report=build/effects.json vendor/bin/phpunit
+vendor/bin/mago effects build/effects.json
+```
+
+A built-in has the effect the standard library's `extern` line of it gives, as `PDO` has `Database`. A line whose calls ran an effect it doesn't list is an error, and `mago effects` exits non-zero on one: "`Validator.check` is declared `uses none` (app/Stubs/Libraries.sharp:4), but it ran PDO::query, which has the effect Database." A `uses any` line gets the `uses` its calls needed: "`Formatter.format` is declared `uses any`, and used nothing in 14 calls: declare it `uses none`." A built-in counts against the innermost declared call that runs it, and nothing counts while PHP# code it calls back runs, while a class loads, or when the built-in names a file inside the method's own package by its first argument. Each request appends one line to the file, so delete it before a run. A relative path is read from the folder PHP starts in. Without the setting, the engine observes no call.
+
 ## macOS dependencies
 
 ```sh
