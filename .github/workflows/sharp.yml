@@ -465,43 +465,25 @@ jobs:
       - *download-build-linux-again
       - name: Unpack BUILD_LINUX's engine and mago
         run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
-      - name: Set up BuildKit with the job's Actions cache
-        uses: ./.github/actions/buildkit
-      # The -dev image's Lean layer, which IMAGE keeps in BuildKit's GitHub Actions cache, holds the Lean mago installs
-      # in lean/ of its cache folder, so the examples' laws run on it with no download from GitHub, where the install
-      # #696 reports failed. A run whose ref cannot read IMAGE's cache builds the layer, which downloads Lean once.
-      # The export is one tar: BuildKit's type=local export of the layer's files stalled after "copying files 23B" until
-      # each SPEC job of runs 45114550392 and 45114738831 timed out.
-      - name: Put the -dev image's Lean in mago's cache folder
-        timeout-minutes: 10
-        run: |
-          sharp/bin/network docker buildx build \
-            --file sharp/docker/runtime/frankenphp.Dockerfile \
-            --target lean-layer \
-            --platform linux/amd64 \
-            --build-arg REGISTRY=ghcr.io/heyjordanparker \
-            --cache-from type=gha,scope=lean-linux-amd64 \
-            --output "type=tar,dest=$RUNNER_TEMP/lean-layer.tar" \
-            .
-          mkdir -p sharp/build/cache
-          tar -xf "$RUNNER_TEMP/lean-layer.tar" -C sharp/build/cache --strip-components 2 var/cache/mago
-          rm "$RUNNER_TEMP/lean-layer.tar"
-          sharp/docker/run sh -c 'sharp/build/cache/mago/lean/lean-*/bin/lake --version'
-          stat -c %i sharp/build/cache/mago/lean/lean-* > "$RUNNER_TEMP/lean-folder"
+      # The pinned Lean in sharp/build/elan, the ELAN_HOME sharp/docker/run sets, where mago finds it, from the Actions
+      # cache, so the examples' laws download no Lean from GitHub.
+      - name: Restore the pinned Lean
+        uses: ./.github/actions/setup-lean
+        with:
+          cache: true
       - name: Check the examples of docs/spec.md and README.md
         run: |
           build="sharp/build/linux-$(uname -m)"
           sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/4
-      # mago downloads Lean only when lean/lean-<version>-<platform>/bin/lake is missing, through a staging folder it
-      # renames into place, beside the law checker's builds, which lean/ holds under their hashes. So the exported
-      # folder is the one lean/lean-* matches after the examples, unless mago downloaded Lean.
+      # mago downloads Lean into lean/lean-<version>-<platform> of its cache folder only when it finds no pinned Lean,
+      # beside the law checker's builds, which lean/ holds under their hashes.
       - name: mago downloaded no Lean
         run: |
-          if [[ "$(stat -c %i sharp/build/cache/mago/lean/lean-*)" != "$(< "$RUNNER_TEMP/lean-folder")" ]]; then
-            echo "::error::mago downloaded Lean into sharp/build/cache/mago/lean, in place of the exported one."
+          if compgen -G 'sharp/build/cache/mago/lean/lean-*' > /dev/null; then
+            echo "::error::mago downloaded Lean into sharp/build/cache/mago/lean, so the restored Lean was missing."
             exit 1
           fi
-          echo "mago ran the examples' laws on the exported Lean, $(basename sharp/build/cache/mago/lean/lean-*), and downloaded none."
+          echo "mago ran the examples' laws on the restored Lean, $(basename "$ELAN_HOME"/toolchains/*), and downloaded none."
       - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
@@ -628,8 +610,10 @@ jobs:
           CXX: ccache g++
           CCACHE_DIR: ${{ github.workspace }}/sharp/build/cache/engine-ccache
         run: sharp/bin/build-mago --engine
-      - name: Install elan and Lean
+      - name: Restore the pinned Lean
         uses: ./.github/actions/setup-lean
+        with:
+          cache: true
       - name: Count what proving and compiling cost, against the last release's
         env:
           SPEED_WRITE: ${{ runner.temp }}/speed.json
@@ -1147,8 +1131,9 @@ jobs:
       EXTENSIONS: bcmath calendar exif ftp gd igbinary imagick intl pcntl pdo_mysql pdo_pgsql pgsql redis shmop sockets sysvmsg sysvsem sysvshm zip
       # The extensions the -dev image adds to those.
       DEV_EXTENSIONS: excimer
-      # The builds' platform and SBOM scanner.
+      # The builds' platform, BuildKit and SBOM scanner.
       PLATFORM: ${{ matrix.platform }}
+      BUILDKIT: ghcr.io/heyjordanparker/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
       SBOM: generator=ghcr.io/heyjordanparker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
     steps:
       # The builds' context, and .github/actions/boot-image and sharp/bin/php-extensions.
@@ -1162,8 +1147,16 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set up BuildKit with the job's Actions cache
-        uses: ./.github/actions/buildkit
+      # Buildx's docker-container driver pulls BuildKit's image again, and starts from the local one when that pull
+      # fails, so this pull, which sharp/bin/network runs again when the network drops it, covers both.
+      - name: Pull BuildKit's image
+        run: sharp/bin/network docker pull --quiet "$BUILDKIT"
+      # The job's runner is discarded with its builder, which the cleanup took 35 to 47 s to remove at each job's end.
+      - name: Set up Buildx with BuildKit from ghcr.io
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=${{ env.BUILDKIT }}
+          cleanup: false
       # The engine's ccache, the cache mount the Dockerfile's php-base stage compiles through, as .github/actions/mago-cache
       # keeps a target: next's own pull request and a push to master save it under the commit, since their own later
       # runs restore it, and CI_PASSED deletes the one it replaced. Every other run restores the newest and saves nothing.
@@ -1196,10 +1189,20 @@ jobs:
       # The build's context is the job's checkout, which actions/checkout fetched at the commit's SHA, so a ref moved
       # after the push builds nothing else. BuildKit's own fetch of that commit from GitHub took 188 s on run
       # 45088111311's amd64 job, where the checkout took 8 s.
+      # BuildKit's GitHub Actions cache, type=gha, reads the job's cache token and URLs, which the runner gives only an
+      # action, so this exports them to the steps after it, as crazy-max/ghaction-github-runtime does, and logs none.
+      - name: Give BuildKit the job's Actions cache
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            for (const [name, value] of Object.entries(process.env)) {
+              if (name.startsWith('ACTIONS_')) {
+                core.exportVariable(name, value);
+              }
+            }
       # The -dev image's Lean layer, the Dockerfile's lean-layer stage, kept in BuildKit's GitHub Actions cache under the
       # platform's scope, which next's own pull request and a push to master write, as the engine ccache, and every run
-      # reads, SPEC's among them. It changes only with the Lean version, so the -dev build below finds its compressed
-      # blob there.
+      # reads. It changes only with the Lean version, so the -dev build below finds its compressed blob there.
       - name: Build the -dev image's Lean layer through BuildKit's Actions cache
         env:
           WRITE: ${{ github.head_ref == 'next' || github.ref == 'refs/heads/master' }}
