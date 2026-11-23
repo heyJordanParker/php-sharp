@@ -287,7 +287,8 @@ misspellings() {
   "$typos"
 }
 gate_mago_checks() {
-  local mago="$target/test-run/mago"
+  local mago
+  mago="$root/sharp/build/$os-$(uname -m)/mago/test-run/mago"
   local -x CARGO_TARGET_DIR="$target"
   cd "$root/sharp/mago"
   step misspellings
@@ -303,10 +304,10 @@ gate_mago_checks() {
   step unchanged_by php scripts/regen-sdk-node-kinds.php
   step rustup run "$rust" cargo fmt --all -- --check
   step rustup run "$rust" cargo clippy --workspace --all-targets --all-features -- -D warnings
-  # The test-run binary, which behaves as release's without its fat LTO. sharp/bin/build-mago builds the dev mago, which
-  # logs at DEBUG and reports a missing code that release never prints, so this builds the profile itself, as
-  # sharp/mago/Cargo.toml explains.
-  if rustup run "$rust" cargo build --locked --profile test-run --bin mago; then
+  # The test-run binary, which behaves as release's without its fat LTO, where the dev mago logs at DEBUG and reports a
+  # missing code that release never prints, as sharp/mago/Cargo.toml explains. sharp/bin/build-mago --test-run builds
+  # it into the checkout's one build folder.
+  if "$root/sharp/bin/build-mago" --test-run; then
     # The PHP# standard library, with the sharp/harness interfaces its mago.toml includes, analyzes with no note. mago
     # writes what it compiles into the workspace's .sharp folder, and sharp/bin/test reinstalls Zend/tests/sharp's copy of
     # the library when it differs from sharp/composer, so the analysis runs on a copy in the run's folder, beside a copy
@@ -372,9 +373,9 @@ sharp_kinds() {
   sharp/docker/run php sharp/mago/scripts/regen-sharp-kinds.php Zend/zend_ast.h Zend/zend_language_parser.h \
     | diff -u sharp/mago/crates/sharp-bridge/src/kind.rs -
 }
-# cargo builds nothing for the mago sharp/bin/test built, and its build.json names the out_dir of the bridge it links.
+# The build reuses every unit of the mago sharp/bin/test built, and its build.json names the out_dir of the bridge it links.
 # `-p mago-sharp-bridge` resolves other features, so it built a second bridge and its dependencies beside it. A
-# MAGO_ENGINE in the environment names the engine that build linked, as BUILD_LINUX's restores it from its cache, so
+# MAGO_ENGINE in the environment names the engine that build linked, as BUILD_LINUX builds it first with --engine, so
 # build-mago links that one, where it would build the engine from nothing in a job that holds only its install.
 sharp_unit_header() {
   local line
