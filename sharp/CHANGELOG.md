@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A computed property in a machine case's block is a member of that case's class, spec section 20.2, as a move of the block is: the machine compiles, where 0.6.53 refused the file with `lowering-panic`, and a law reads the property on a value of the case. A read through the machine's type, as `Readiness r = Readiness.open(); r.failureMessage;`, is refused with the test that narrows `r` to the case, as a move's call is.
+
 ## [0.6.54] - 2026-11-23
 
 ### Upgrading from 0.6.53
