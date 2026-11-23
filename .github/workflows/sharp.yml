@@ -6,39 +6,35 @@ on:
   pull_request:
     branches:
       - master
+  # The merge queue's run of a pull request merged onto master and the changes ahead of it, which it merges only once
+  # CI_PASSED passes there.
+  merge_group:
   # ASAN alone, nightly on master's tip, or dispatched, as a fix of a red nightly run shows it green.
   schedule:
     - cron: '17 2 * * *'
   workflow_dispatch:
 permissions:
   contents: read
-# A pull request, and master, runs one push at a time, and only the newest push waits, since its tree holds every
-# commit before it. next's own pull request runs each push at once, in a group of its own, beside the runs before it,
-# since sharp/bin/land lands the newest commit of next whose runs passed, and next takes pushes faster than a run ends:
-# when each push cancelled the run before it, 69 of the last 150 runs were cancelled, and when each waited for the run
-# before it, run 45080049483 waited 859 s. Its MACOS job waits for the one Mac runner, which takes one job at a time.
-# Any other pull request merges only its newest commit, so a push cancels its run
-# in progress, where release #675's run on 75c9837da5a waited 38 minutes behind the run on a commit it replaced. A push
-# to master lets its run finish, since the run publishes. A failed job cancels any other pull request's run, which can
-# no longer pass, and next's run ends failed, as .github/actions/cancel-failed-run explains. A schedule or a dispatch
-# runs in a group of its own.
+# A pull request merges only its newest commit, so a push cancels its run in progress, where release #675's run on
+# 75c9837da5a waited 38 minutes behind the run on a commit it replaced. master runs one push at a time, and only the
+# newest push waits, since its tree holds every commit before it, and a push lets its run finish, since the run
+# publishes. A failed job cancels a pull request's run and a merge queue's run, which can no longer pass, as
+# .github/actions/cancel-failed-run explains. Each merge queue entry, schedule and dispatch runs in a group of its own.
 concurrency:
-  group: >-
-    ${{ github.workflow }}-${{ github.head_ref == 'next' && github.run_id || github.event.pull_request.url
-    || (github.event_name == 'push' && github.ref) || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.head_ref != 'next' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.url || (github.event_name == 'push' && github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  # CI_PASSED is this workflow's one required check. Every push runs every check, whatever it changed: the Linux suites,
-  # each job on 4 cores, the Mac's and the runtime image, so every check that guards a release runs before the merge, on
-  # the tree that merges. GitHub runs 20 of the account's hosted jobs at once, across all its repositories, and a job
+  # CI_PASSED is this workflow's one required check. Every pull request's push and every merge queue entry runs every
+  # check, whatever it changed: the Linux suites, each job on 4 cores, the Mac's and the runtime image, so every check
+  # that guards a release runs before the merge, and the queue's run runs them on the tree that merges. GitHub runs 20 of the account's hosted jobs at once, across all its repositories, and a job
   # past them waits.
   #
   # Every run builds and tests everything from source, with no cache and no result of an earlier run, so its length is
-  # what building and testing PHP# costs (#721): a landing's pull request and the push to master run every check
-  # again, the Mac's among them. Only a push to master whose version has no tag builds the release, and publishes it
+  # what building and testing PHP# costs (#721): a pull request, its merge queue entry and the push to master each run
+  # every check, the Mac's among them. Only a push to master whose version has no tag builds the release, and publishes it
   # once every check passed. A red push opens an issue, as CI_PASSED does, for a pull request that fixes it forward.
   CHANGES:
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: &checked ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -57,7 +53,7 @@ jobs:
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
       # sharp/bin/check --release prints sharp/mago/Cargo.toml's version, the commit its tag names, which
-      # sharp/bin/land creates, and each part of its release not published yet, which RELEASE publishes, as
+      # sharp/bin/tag creates, and each part of its release not published yet, which RELEASE publishes, as
       # sharp/bin/check --release explains. Pushes to master run one at a time, so the next push looks once this one has
       # published.
       - name: Find the version, and what of its release is missing
@@ -186,7 +182,7 @@ jobs:
       # As .github/actions/cancel-failed-run explains.
       - &cancel-failed-run
         name: Cancel the run, which can no longer pass
-        if: failure() && github.event_name == 'pull_request' && github.head_ref != 'next'
+        if: failure() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
         uses: ./.github/actions/cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
@@ -497,9 +493,9 @@ jobs:
   # sharp/docker/tools/Dockerfile pins, passes over every workflow, with the runner labels .github/actionlint.yaml sets.
   # It runs in the sharp/docker image, which carries that actionlint and shellcheck, which actionlint checks each
   # workflow's scripts with. It also checks that each released version in sharp/CHANGELOG.md keeps the lines its release
-  # published, so a commit of next that edits them fails before it lands.
+  # published, so a pull request that edits them fails before it merges.
   WORKFLOWS:
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: *checked
     runs-on: ubuntu-24.04
     permissions:
       actions: write
@@ -545,13 +541,6 @@ jobs:
   MACOS:
     needs: CHANGES
     runs-on: macos-arm64-local
-    # next's own pull request runs each push at once, so each push queued a Mac job on the one runner, behind every
-    # older one: at 03:10 UTC on 2026-11-23 run 45098228544's held the runner and three more waited, the newest 30
-    # minutes. So next's Mac jobs share a group: one runs, the newest waits, and a newer push replaces the one waiting,
-    # whose tree the newer one holds. Any other run's Mac job is a group of its own.
-    concurrency:
-      group: ${{ github.workflow }}-MACOS-${{ github.head_ref == 'next' && 'next' || github.run_id }}
-      cancel-in-progress: false
     permissions:
       actions: write
       contents: read
@@ -653,7 +642,7 @@ jobs:
   # on plain PHP, and its SPEED job counts what proving and compiling cost. RELEASE_ASSETS, RELEASE and COMPOSER run
   # only on a push to master, after the checks, so each opens the red-master issue itself when it fails.
   CI_PASSED:
-    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request')
+    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'merge_group')
     needs:
       - CHANGES
       - BUILD_LINUX
@@ -1012,7 +1001,7 @@ jobs:
   # every job before it passed, and mago.yml's run of the same push: the GitHub release of the files RELEASE_ASSETS
   # built, and the runtime image as ghcr.io/heyjordanparker/php-sharp:<version>, never as latest, with its -dev image as
   # <version>-dev, both from this run's IMAGE. COMPOSER then pushes the Composer packages' tags.
-  # The release is the commit tag v<version> names, which sharp/bin/land creates with the language owner's login on the
+  # The release is the commit tag v<version> names, which sharp/bin/tag creates with the language owner's login on the
   # merge commit that first holds the version: GitHub refuses GITHUB_TOKEN a tag on a commit whose workflows differ from
   # master's, and runs 45025602373 and 45027728255 failed to create v0.6.50 so. Each part publishes once, as
   # sharp/bin/check --release explains, and a rerun leaves what an earlier attempt published. It opens the red-master
@@ -1037,14 +1026,14 @@ jobs:
       VERSION: ${{ needs.CHANGES.outputs.version }}
       MISSING: ${{ needs.CHANGES.outputs.missing }}
     steps:
-      # The tag is read again, since CHANGES can run before sharp/bin/land created it, and then took this commit for
+      # The tag is read again, since CHANGES can run before sharp/bin/tag created it, and then took this commit for
       # the release's. Only the release commit's own push run builds what the release publishes: RELEASE_ASSETS, since
       # each attestation names the run's commit as the one it was built from, and IMAGE, which this run's RELEASE tags.
       - name: Find the release's commit
         id: run
         run: |
           if ! commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/v$VERSION" --jq .sha 2> /dev/null); then
-            echo "::error::Tag v$VERSION doesn't exist yet, so nothing of release $VERSION is published. sharp/bin/land creates it on the merge commit that first holds the version, and the next push to master publishes what is missing."
+            echo "::error::Tag v$VERSION doesn't exist yet, so nothing of release $VERSION is published. sharp/bin/tag creates it on the merge commit that first holds the version, and a rerun of this run publishes what is missing."
             exit 1
           fi
           if [[ $MISSING == *assets* || $MISSING == *images* ]] && [[ $commit != "$GITHUB_SHA" ]]; then
@@ -1150,7 +1139,7 @@ jobs:
             done
           done
           echo "Every asset matches its SHA-256 and its attestation, and was built from tree $TREE."
-      # The release takes the tag sharp/bin/land created, as it is, and creates no ref.
+      # The release takes the tag sharp/bin/tag created, as it is, and creates no ref.
       - name: Upload every asset to the draft release, check it, then publish it
         if: contains(env.MISSING, 'assets')
         env:
