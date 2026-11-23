@@ -313,8 +313,9 @@ jobs:
           end: true
 
   # What proving and compiling cost, against sharp/baseline/speed.json, the last release's, in counts no load changes, as
-  # benchmark/speed.php explains: each law's Lean heartbeats, and the instructions mago's own process retires for a
-  # one-file edit on one thread, under valgrind's cachegrind, since a hosted runner exposes no hardware counter to perf.
+  # benchmark/speed.php explains: each law's Lean heartbeats, and the instructions mago's own process retires compiling
+  # each example of docs/spec.md and README.md once on one thread, under valgrind's cachegrind, since a hosted runner
+  # exposes no hardware counter to perf.
   # It counts the test-run mago checks built, which behaves as the release users run, as plain-php runs it, so it builds
   # nothing: in sharp.yml it built that mago again, for 272 of its 408 s on run 45122643706. sharp/bin/land lands only a
   # commit whose runs passed, so a commit that proves or compiles slower never reaches master. What it counted is the

@@ -5,24 +5,30 @@ declare(strict_types=1);
 /*
  * Measures what proving and compiling cost, in counts that don't depend on the machine's load, and compares them with
  * a baseline: each law's Lean heartbeats, which Lean counts the same on every run of the same input, and the
- * instructions mago's own process retires for a one-file edit, on one worker thread, so no scheduling changes its work.
- * valgrind's cachegrind counts them on Linux, whose hosted runners expose no hardware counter, and `/usr/bin/time -l`
- * on macOS. Lean's work, the cold compiles' proving, is what the heartbeats count.
+ * instructions mago's own process retires compiling every example of docs/spec.md and README.md once, as
+ * sharp/bin/spec compiles them, on one worker thread, so no scheduling changes its work. valgrind's cachegrind counts
+ * them on Linux, whose hosted runners expose no hardware counter, and `/usr/bin/time -l` on macOS. Lean's work, the
+ * proving, is what the heartbeats count.
+ *
+ * Its inputs are the examples, which use every construct the language has, and the law corpus, each file of
+ * benchmark/laws under app/: one file per law shape a project proved slowly. No input is generated, so a count moves
+ * only when mago or an input does.
  *
  * Usage: php benchmark/speed.php <mago> [--baseline <file>] [--write <file>]
  *
- * <mago> is the test-run build, which behaves as the release users run. It writes c2ks and the law corpus with
- * benchmark/c2k.php into a temporary folder and compiles each from cold, then edits app/M66/Score.sharp of c2ks in
- * place, which no law reaches, for a whole `mago analyze`. With --write, it writes what it measured and the commit it
- * measured as a baseline, which only the SPEED job writes, since instructions differ between machines. With
- * --baseline, it exits 1 when any law of the baseline counts more than 1.2 times its heartbeats or ends unproven where
- * the baseline proved it, when the corpus counts more than 1.05 times its heartbeats, or, when the baseline counted
- * its instructions on this platform, when the edit retires more than 1.05 times them, and names each.
+ * <mago> is the test-run build, which behaves as the release users run. It writes the examples' projects with
+ * `sharp/bin/spec --projects` and the corpus's project into a temporary folder, and compiles each once from cold. With
+ * --write, it writes what it measured and the commit it measured as a baseline, which only the SPEED job writes, since
+ * instructions differ between machines. With --baseline, it exits 1 when any law of the baseline counts more than 1.2
+ * times its heartbeats or ends unproven where the baseline proved it, when the corpus counts more than 1.05 times its
+ * heartbeats, or, when the baseline counted its instructions on this platform, when the examples' compiles retire more
+ * than 1.05 times them, and names each.
  */
 
 const LAW_GROWTH = 1.2;
 const CORPUS_GROWTH = 1.05;
 const INSTRUCTION_GROWTH = 1.05;
+const CORPUS = 'benchmark/laws';
 
 $arguments = array_slice($argv, 1);
 $mago = array_shift($arguments);
@@ -40,6 +46,7 @@ if ($mago === null || !is_executable($mago)) {
     exit(2);
 }
 $mago = realpath($mago);
+$repository = dirname(__DIR__);
 
 $root = sys_get_temp_dir() . '/mago-speed-' . getmypid();
 register_shutdown_function(static function () use ($root): void {
@@ -54,31 +61,35 @@ register_shutdown_function(static function () use ($root): void {
     rmdir($root);
 });
 $measured = ['commit' => commit(), 'laws' => [], 'corpus_heartbeats' => 0, 'instructions' => []];
-foreach (['c2ks', 'laws'] as $kind) {
-    $started = microtime(true);
-    $project = "{$root}/{$kind}";
-    run([PHP_BINARY, __DIR__ . '/c2k.php', $kind, $project], getcwd());
-    $log = run_mago($mago, ['compile'], $project);
-    $laws = laws($log);
-    if ($laws === []) {
-        fwrite(STDERR, "The cold compile of {$kind} logged no law:\n{$log}\n");
-        exit(1);
-    }
-    $measured['laws'] += $laws;
-    if ($kind === 'laws') {
-        $measured['corpus_heartbeats'] = array_sum(array_column($laws, 'heartbeats'));
-    } else {
-        run_mago($mago, ['analyze'], $project);
-        $score = "{$project}/app/M66/Score.sharp";
-        file_put_contents($score, str_replace('line.doubled() * tier.weight()', 'tier.weight() * line.doubled()', file_get_contents($score)));
-        $measured['instructions'] = [
-            'platform' => PHP_OS_FAMILY . '-' . php_uname('m'),
-            'edit' => counted($mago, ['--threads', '1', 'analyze'], $project),
-        ];
-    }
-    printf("%s: %d laws, %.1f s\n", $kind, count($laws), microtime(true) - $started);
+
+$started = microtime(true);
+$corpus = "{$root}/corpus";
+write_corpus($repository, $corpus);
+[$status, $output, $log] = output([$mago, '--no-version-check', '--colors', 'never', 'compile'], $corpus,
+    ['MAGO_LOG' => 'debug'] + getenv());
+checked($corpus, $status, $output, $log);
+$laws = laws(CORPUS, $log);
+if ($laws === []) {
+    fwrite(STDERR, "The cold compile of the corpus logged no law.\n");
+    exit(1);
 }
-printf("edit %s instructions, corpus %s thousand heartbeats\n", number_format($measured['instructions']['edit']),
+$measured['laws'] += $laws;
+$measured['corpus_heartbeats'] = array_sum(array_column($laws, 'heartbeats'));
+printf("corpus: %d laws, %.1f s\n", count($laws), microtime(true) - $started);
+
+$started = microtime(true);
+$examples = "{$root}/examples";
+run([PHP_BINARY, "{$repository}/sharp/bin/spec", '--projects', $examples], $repository);
+$folders = array_map(static fn (string $id): string => "{$examples}/{$id}", array_diff(scandir($examples), ['.', '..']));
+$instructions = 0;
+foreach (run_magos($mago, $folders) as $folder => $log) {
+    $measured['laws'] += laws(basename($folder), $log);
+    $instructions += retired($log);
+}
+$measured['instructions'] = ['platform' => PHP_OS_FAMILY . '-' . php_uname('m'), 'examples' => $instructions];
+printf("examples: %d projects, %d laws, %.1f s\n", count($folders), count($measured['laws']) - count($laws),
+    microtime(true) - $started);
+printf("examples %s instructions, corpus %s thousand heartbeats\n", number_format($instructions),
     number_format($measured['corpus_heartbeats']));
 
 if (isset($options['--write'])) {
@@ -115,9 +126,9 @@ if ($before === []) {
 } elseif ($before['platform'] !== $now['platform']) {
     printf("The baseline's instructions were counted on %s, so this run on %s compares none.\n", $before['platform'],
         $now['platform']);
-} elseif ($now['edit'] > INSTRUCTION_GROWTH * $before['edit']) {
-    $failures[] = sprintf("The edit retires %s instructions, %.3f times its %s.", number_format($now['edit']),
-        $now['edit'] / $before['edit'], number_format($before['edit']));
+} elseif ($now['examples'] > INSTRUCTION_GROWTH * $before['examples']) {
+    $failures[] = sprintf("The examples' compiles retire %s instructions, %.3f times their %s.", number_format($now['examples']),
+        $now['examples'] / $before['examples'], number_format($before['examples']));
 }
 foreach ($failures as $failure) {
     fwrite(STDERR, "{$failure}\n");
@@ -139,6 +150,41 @@ function commit(): string
     [, $changes] = output(['git', 'status', '--porcelain', '--untracked-files=no'], __DIR__, getenv());
 
     return trim($head) . ($changes === '' ? '' : '-dirty');
+}
+
+/**
+ * Writes the corpus's project into `$folder`: each file of CORPUS under app/, with the Composer vendor folder of the
+ * checkout's `sharp/composer` package, its two dependencies from Packagist at the versions composer.json pins.
+ */
+function write_corpus(string $repository, string $folder): void
+{
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator("{$repository}/" . CORPUS, FilesystemIterator::SKIP_DOTS));
+    foreach ($files as $file) {
+        put("{$folder}/app/" . substr($file->getPathname(), strlen("{$repository}/" . CORPUS) + 1), file_get_contents($file->getPathname()));
+    }
+    put("{$folder}/mago.toml", "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n");
+    put("{$folder}/composer.json", json_encode([
+        'type' => 'library',
+        'repositories' => [['type' => 'path', 'url' => "{$repository}/sharp/composer", 'options' => ['symlink' => false]]],
+        'require' => [
+            'heyjordanparker/php-sharp-composer' => '*@dev',
+            'psr/container' => '2.0.2',
+            'psr/event-dispatcher' => '1.0.0',
+        ],
+        'autoload' => ['psr-4' => ['App\\' => 'app/']],
+        'config' => ['allow-plugins' => ['heyjordanparker/php-sharp-composer' => true]],
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+    run(['composer', 'install', '--no-interaction', '--no-progress', '--ignore-platform-reqs'], $folder);
+}
+
+function put(string $path, string $contents): void
+{
+    if (!is_dir(dirname($path)) && !mkdir(dirname($path), 0o777, true)) {
+        throw new RuntimeException("Could not create the folder of {$path}.");
+    }
+    if (file_put_contents($path, $contents) === false) {
+        throw new RuntimeException("Could not write {$path}.");
+    }
 }
 
 /** Runs `$command` in `$folder`, and stops the script with its output when it fails. */
@@ -170,22 +216,68 @@ function output(array $command, string $folder, array $environment): array
     return [$status, ...$written];
 }
 
-/** Runs `mago $arguments` in `$folder` at MAGO_LOG=debug, and gives its log. */
-function run_mago(string $mago, array $arguments, string $folder): string
-{
-    return mago($mago, $arguments, $folder, [])[1];
-}
-
 /**
- * Runs `mago $arguments` in `$folder` under the platform's instruction counter, and gives the instructions mago's own
- * process retired: cachegrind's "I refs" on Linux, and `/usr/bin/time -l`'s "instructions retired" on macOS.
+ * Compiles each example's project of `$folders` once, as sharp/bin/spec compiles it, on one worker thread at
+ * MAGO_LOG=debug, under the platform's instruction counter, cachegrind on Linux and `/usr/bin/time -l` on macOS, as
+ * many at a time as sharp/bin/jobs prints, as sharp/bin/spec does. Gives each one's standard error, which holds its log
+ * and its counter's report, by folder.
+ *
+ * @param list<string> $folders
+ * @return array<string, string>
  */
-function counted(string $mago, array $arguments, string $folder): int
+function run_magos(string $mago, array $folders): array
 {
     $counter = PHP_OS_FAMILY === 'Linux'
         ? ['valgrind', '--tool=cachegrind', '--cache-sim=no', '--cachegrind-out-file=/dev/null']
         : ['/usr/bin/time', '-l'];
-    $log = mago($mago, $arguments, $folder, $counter)[1];
+    $parallel = (int) shell_exec(escapeshellarg(dirname(__DIR__) . '/sharp/bin/jobs'));
+    $logs = [];
+    $running = [];
+    $pending = $folders;
+    while ($pending !== [] || $running !== []) {
+        while ($pending !== [] && count($running) < max($parallel, 1)) {
+            $folder = array_shift($pending);
+            $process = proc_open(
+                [...$counter, $mago, '--no-version-check', '--colors', 'never', '--workspace', $folder, 'compile'],
+                [1 => ['file', "{$folder}.out", 'w'], 2 => ['file', "{$folder}.err", 'w']],
+                $pipes,
+                $folder,
+                ['MAGO_LOG' => 'debug', 'MAGO_THREADS' => '1'] + getenv(),
+            );
+            $running[$folder] = $process;
+        }
+        foreach ($running as $folder => $process) {
+            $status = proc_get_status($process);
+            if (!$status['running']) {
+                proc_close($process);
+                checked($folder, $status['exitcode'], file_get_contents("{$folder}.out"), file_get_contents("{$folder}.err"));
+                $logs[$folder] = file_get_contents("{$folder}.err");
+                unset($running[$folder]);
+            }
+        }
+        usleep(5000);
+    }
+    ksort($logs);
+
+    return $logs;
+}
+
+/**
+ * Stops the script with a compile's output when it exited with neither 0 nor 1. mago exits 1 when it reports issues,
+ * as a refused law or an example's compile error, which the log's outcomes count, so only another status, a crash or a
+ * tool error, stops it.
+ */
+function checked(string $folder, int $status, string $output, string $log): void
+{
+    if ($status !== 0 && $status !== 1) {
+        fwrite(STDERR, "The compile of {$folder} exited {$status}:\n{$output}{$log}");
+        exit(1);
+    }
+}
+
+/** The instructions the counter's report in `$log` says mago's own process retired. */
+function retired(string $log): int
+{
     $pattern = PHP_OS_FAMILY === 'Linux' ? '/I\s+refs:\s+([\d,]+)/' : '/^\s*(\d+)\s+instructions retired/m';
     if (preg_match($pattern, $log, $match) !== 1) {
         fwrite(STDERR, "No instruction count in:\n{$log}\n");
@@ -196,37 +288,19 @@ function counted(string $mago, array $arguments, string $folder): int
 }
 
 /**
- * Runs `mago $arguments` in `$folder` at MAGO_LOG=debug, after `$counter`, and gives its standard output and its
- * standard error, which holds the log and the counter's report. mago exits 1 when it reports issues, as a refused law,
- * which the log's outcomes count, so only another status, a crash or a tool error, stops the script with both.
- *
- * @return array{string, string}
- */
-function mago(string $mago, array $arguments, string $folder, array $counter): array
-{
-    $command = [...$counter, $mago, '--no-version-check', '--colors', 'never', ...$arguments];
-    [$status, $output, $log] = output($command, $folder, ['MAGO_LOG' => 'debug'] + getenv());
-    if ($status !== 0 && $status !== 1) {
-        fwrite(STDERR, implode(' ', $arguments) . " in {$folder} exited {$status}:\n{$output}{$log}");
-        exit(1);
-    }
-
-    return [$output, $log];
-}
-
-/**
- * Each law the compile's log judged, by name, with how its proof ended, whether that is proved, and the thousands of
- * heartbeats Lean counted for it.
+ * Each law the compile's log judged, by `$project` and its name, as `benchmark/laws App.Plans.PlanState.aTrialPlanIsChargeable`,
+ * since two examples can each state a law of one name, with how its proof ended, whether that is proved, and the
+ * thousands of heartbeats Lean counted for it.
  *
  * @return array<string, array{ended: string, proved: bool, heartbeats: int}>
  */
-function laws(string $log): array
+function laws(string $project, string $log): array
 {
     preg_match_all('/The law (\S+) ended (.+?) after [\d.]+ s and (\d+) thousand heartbeats of the provers\' time\./', $log,
         $matches, PREG_SET_ORDER);
     $laws = [];
     foreach ($matches as [, $law, $ended, $heartbeats]) {
-        $laws[$law] = ['ended' => $ended, 'proved' => $ended === 'proved', 'heartbeats' => (int) $heartbeats];
+        $laws["{$project} {$law}"] = ['ended' => $ended, 'proved' => $ended === 'proved', 'heartbeats' => (int) $heartbeats];
     }
 
     return $laws;
