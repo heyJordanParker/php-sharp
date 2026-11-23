@@ -2,34 +2,31 @@ name: Spec guard
 # pull_request_target runs this file as the base branch has it, so a pull request can't change or skip these jobs.
 # Each job checks the pull request's merge commit out as data and runs only the base commit's sharp/bin/spec on it,
 # with a read-only token and no secrets. No file of the pull request runs, which is what makes pull_request_target safe.
+# The merge queue's run checks the commit the queue merged, the pull request onto master and the changes ahead of it,
+# the same way, so both checks report on it, as the queue requires.
 on:
   pull_request_target:
     types: [opened, edited, synchronize, reopened]
     branches:
       - master
+  merge_group:
 permissions:
   contents: read
-# Neither job runs on next's own pull request into master, which shows next's CI and never merges: next lands on master
-# through land/<sha> pull requests, which these jobs check. On next's, a push failed both for nothing, against a base
-# older than master's tip: on fd89f9f422c's, SPEC_GUARD reported a change to sharp/bin/spec, and COMPLETES died of exit
-# 141 when that base's sharp/bin/spec, which read BODY, read none of the 128 commit messages piped to it. A job its `if`
-# skips passes a required check, so they skip only this repository's next, and every other pull request, a fork's among
-# them, still runs them.
 jobs:
   # Compares sharp/baseline/spec and the examples with the base: sharp/bin/spec --base. It runs on `edited` too, where
   # it finds what it found before.
   SPEC_GUARD:
-    if: &not-next ${{ github.head_ref != 'next' || github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-24.04
     steps:
-      - name: git checkout
+      - &checkout
+        name: git checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          ref: ${{ github.event.merge_group.head_sha || format('refs/pull/{0}/merge', github.event.pull_request.number) }}
           persist-credentials: false
       - name: The base branch's checker compares sharp/baseline/spec with the base
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
         run: |
           git fetch --depth=1 origin "$BASE"
           if ! git cat-file -e "$BASE:sharp/bin/spec"; then
@@ -39,31 +36,23 @@ jobs:
           git show "$BASE:sharp/bin/spec" > "$RUNNER_TEMP/spec"
           php "$RUNNER_TEMP/spec" --base "$BASE"
   # A commit message line such as `Completes: §6.1, §9` claims those sections are done, so the pull request that lands
-  # the commit checks the claim, whichever commits it lands with: a pull request from a branch of next has a body of its
-  # own. sharp/bin/spec --completes, which reads the claims on its standard input, fails on a malformed claim, on a
-  # section with no checked example and on a section sharp/baseline/spec still lists. The messages come from the API, as
-  # data. They go to php through a pipe, since Linux takes no single argument or environment variable over 128 KiB:
-  # next's own pull request #576, 109 commits, stopped with "/usr/bin/php: Argument list too long" when they went in
-  # BODY. The step runs in bash with pipefail, so a failed API call fails it.
+  # the commit checks the claim, whichever commits it lands with. sharp/bin/spec --completes, which reads the claims on
+  # its standard input, fails on a malformed claim, on a section with no checked example and on a section
+  # sharp/baseline/spec still lists. The messages are those of the commits the head holds and the base lacks, from the
+  # API's compare, as data, which a pull request's run and the merge queue's read the same way. They go to php through
+  # a pipe, since Linux takes no single argument or environment variable over 128 KiB: pull request #576, 109 commits,
+  # stopped with "/usr/bin/php: Argument list too long" when they went in BODY. The step runs in bash with pipefail, so
+  # a failed API call fails it.
   COMPLETES:
-    if: *not-next
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pull-requests: read
     steps:
-      - name: git checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          ref: refs/pull/${{ github.event.pull_request.number }}/merge
-          persist-credentials: false
+      - *checkout
       - name: Every section a commit message completes has its examples passing
         shell: bash
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
           GH_TOKEN: ${{ github.token }}
-          NUMBER: ${{ github.event.pull_request.number }}
-          COMMITS: ${{ github.event.pull_request.commits }}
         run: |
           git fetch --depth=1 origin "$BASE"
           if ! git cat-file -e "$BASE:sharp/bin/spec"; then
@@ -71,9 +60,5 @@ jobs:
             exit 0
           fi
           git show "$BASE:sharp/bin/spec" > "$RUNNER_TEMP/spec"
-          if ((COMMITS > 250)); then
-            echo "::error::This pull request has $COMMITS commits, and GitHub lists only 250 of them, so their Completes: lines can't all be read."
-            exit 1
-          fi
-          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/commits?per_page=100" --jq '.[].commit.message' \
+          gh api --paginate "repos/$GITHUB_REPOSITORY/compare/$BASE...$HEAD?per_page=100" --jq '.commits[].commit.message' \
             | php "$RUNNER_TEMP/spec" --completes
