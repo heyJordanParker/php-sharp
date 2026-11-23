@@ -1064,9 +1064,22 @@ static ZEND_COLD void sharp_refuse(const sharp_compiled *compiled, sharp_state s
 		return;
 	}
 	switch (state) {
-		case SHARP_NOT_COMPILED:
-			refusal = zend_strpprintf(0, "%s isn't compiled. Run vendor/bin/mago compile.", name);
+		case SHARP_NOT_COMPILED: {
+			/* A worker of an extension host loads its file before mago compiled the project's own files for the hosts,
+			 * so the compile the refusal would name is the one running. */
+			size_t root_length;
+			zend_string *hosts = sharp_host_compiled(ZSTR_VAL(compiled->source), ZSTR_LEN(compiled->source), &root_length);
+
+			refusal = hosts
+				? zend_strpprintf(0, "%s isn't compiled for the extension hosts yet: a host's file runs as its worker "
+					"starts, before mago compiles the project's own files, so there it can construct only the PHP# "
+					"library's classes. Construct it in a hook instead.", name)
+				: zend_strpprintf(0, "%s isn't compiled. Run vendor/bin/mago compile.", name);
+			if (hosts) {
+				zend_string_release(hosts);
+			}
 			break;
+		}
 		case SHARP_OTHER_ENGINE:
 			refusal = zend_strpprintf(0,
 				"%s was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine.", name);
