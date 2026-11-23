@@ -1,0 +1,8 @@
+namespace LoweredAround;
+
+// A case named `class` that carries data, which runs as a class of its own.
+public enum Shape
+{
+    case class(int sides);
+    case Dot;
+}

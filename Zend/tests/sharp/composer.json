@@ -140,6 +140,7 @@
             "ListChanges\\": "ListChanges/",
             "ListMembers\\": "ListMembers/",
             "LoopNames\\": "LoopNames/",
+            "LoweredAround\\": "LoweredAround/",
             "Machines\\": "Machines/",
             "MagicProperties\\": "MagicProperties/",
             "Mailing\\": "Mailing/",
