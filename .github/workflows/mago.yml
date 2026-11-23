@@ -312,12 +312,97 @@ jobs:
         with:
           end: true
 
+  # What proving and compiling cost, against sharp/baseline/speed.json, the last release's, in counts no load changes, as
+  # benchmark/speed.php explains: each law's Lean heartbeats, and the instructions mago's own process retires for a
+  # one-file edit on one thread, under valgrind's cachegrind, since a hosted runner exposes no hardware counter to perf.
+  # It counts the test-run mago checks built, which behaves as the release users run, as plain-php runs it, so it builds
+  # nothing: in sharp.yml it built that mago again, for 272 of its 408 s on run 45122643706. sharp/bin/land lands only a
+  # commit whose runs passed, so a commit that proves or compiles slower never reaches master. What it counted is the
+  # run's speed artifact, which the release bump commits as the next baseline.
+  SPEED:
+    needs: [CHANGES, checks]
+    if: ${{ !needs.CHANGES.outputs.passed }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+
+      # benchmark/c2k.php writes the benchmark project's vendor folder with Composer.
+      - name: Install PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "8.3"
+          tools: "composer:v2"
+
+      - name: Install valgrind
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends valgrind
+
+      # As plain-php downloads it.
+      - name: Download the binary checks built
+        id: download
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mago-${{ runner.os }}
+          path: ${{ runner.temp }}/target/test-run
+      - name: Download the binary checks built, the second try
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mago-${{ runner.os }}
+          path: ${{ runner.temp }}/target/test-run
+      # The artifact keeps no file mode.
+      - name: Make the binary executable
+        run: chmod +x "$RUNNER_TEMP/target/test-run/mago"
+
+      - name: Restore the pinned Lean
+        uses: ./.github/actions/setup-lean
+        with:
+          cache: true
+
+      - name: Count what proving and compiling cost, against the last release's
+        working-directory: .
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/target
+          SPEED_WRITE: ${{ runner.temp }}/speed.json
+          SPEED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: sharp/bin/check speed
+
+      - name: Upload what the run counted, the next release's baseline
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: speed
+          path: ${{ runner.temp }}/speed.json
+          if-no-files-found: ignore
+
+      - *cancel-failed-run
+
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+
   # The one required check of this workflow: it passes only when every job above passed, or skipped a push to master
   # whose tree a pull request's run passed, so a job added later blocks merges without a change to the repository's
   # rules. It runs always, so it reports on every run, even one whose every other job skipped.
   ci-passed:
     if: always()
-    needs: [CHANGES, checks, plain-php]
+    needs: [CHANGES, checks, plain-php, SPEED]
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -340,7 +425,7 @@ jobs:
       - name: Every job passed, or skipped a tree that a pull request's run passed
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: checks, plain-php
+          allowed-skips: checks, plain-php, SPEED
           jobs: ${{ toJSON(needs) }}
 
       # As .github/actions/red-master-issue explains.
