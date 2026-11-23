@@ -1,0 +1,6 @@
+namespace Equatables;
+
+public struct Code : Failure
+{
+    public Code(public int value { get; }) { }
+}

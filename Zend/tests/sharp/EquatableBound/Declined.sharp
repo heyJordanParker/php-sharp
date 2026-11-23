@@ -1,0 +1,7 @@
+namespace Equatables;
+
+public enum Declined : Failure
+{
+    case Card;
+    case Fraud;
+}

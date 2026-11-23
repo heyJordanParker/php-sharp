@@ -1,0 +1,40 @@
+namespace Equatables;
+
+public class Failures
+{
+    public static bool same(Failure a, Failure b) => a == b;
+
+    public static bool differ(Failure a, Failure b) => a != b;
+
+    public static bool cardIsCard() => Failures.same(Declined.Card, Declined.Card);
+
+    public static bool cardIsFraud() => Failures.same(Declined.Card, Declined.Fraud);
+
+    public static bool cardIsGone() => Failures.same(Declined.Card, Lost.Gone);
+
+    public static bool cardIsNotGone() => Failures.differ(Declined.Card, Lost.Gone);
+
+    public static bool codes(int value, int other) => Failures.same(new Code(value), new Code(other));
+
+    public static bool lists(int value)
+    {
+        List<Failure> first = [new Code(value), Declined.Card];
+        List<Failure> second = [new Code(value), Declined.Card];
+        return first == second;
+    }
+
+    public static int held(int value)
+    {
+        Set<Failure> failures = [new Code(value), new Code(value), Declined.Card, Declined.Card, Lost.Gone];
+        return failures.count();
+    }
+
+    public static int keyed(int value)
+    {
+        Map<Failure, int> counts = [:];
+        for (const failure of [new Code(value), Declined.Card, new Code(value)]) {
+            counts[failure] = (counts[failure] ?? 0) + 1;
+        }
+        return counts[new Code(value)] ?? 0;
+    }
+}

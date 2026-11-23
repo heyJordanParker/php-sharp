@@ -3804,9 +3804,28 @@ PHP's backtick shell execution is removed, and so is `shell_exec()`. A program r
 - **A class** compares with `==` only if it or a parent declares `operator ==`. Otherwise `==` on it is a compile error.
 - **A function has no `==`,** so `==` between two function values is a compile error.
 - **A type parameter has `==` only through its bound:** `Equatable`, or a class or interface that declares or inherits `operator ==` (section 11).
+- **An interface that extends `Equatable`** has `==`: two of its values are equal when they are the same type and that type's `==` holds, and every type that implements it must have `==`.
 - **`Any?`** compared with `==` against a struct, enum, string, number or collection compares by value, and is false when the types differ.
 - **`===`** is true only for the same object. It works on classes only, and cannot be overridden.
 - **`Set`** hashes a struct, enum, string, number or collection by its value, and an object by its class's `hash()`. A struct that declares `hash()` is hashed by it.
+
+<!-- example equatable-interface -->
+```csharp
+public interface Failure : Equatable { }
+public enum Declined : Failure { case Card; case Fraud; }
+public enum Lost : Failure { case Gone; }
+public class Plain : Failure { }   // compile error: Plain implements Failure, which extends Equatable, so it needs ==: Plain declares no operator ==
+```
+
+<!-- example equatable-interface: statements -->
+```csharp
+Failure card = Declined.Card;
+Failure fraud = Declined.Fraud;
+Failure gone = Lost.Gone;
+card == Declined.Card;               // true: the same case
+card == fraud;                       // false: another case of the same enum
+card == gone;                        // false: values of two types
+```
 
 **Two sets are `==` when they hold the same elements, in any order.** Two equal sets hash alike whatever their order, so a `Set` keys a `Map` and joins a `Set`. A literal takes its collection type from where it lands (section 12), so a list literal compared with a set is a set:
 
