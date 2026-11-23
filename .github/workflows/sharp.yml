@@ -1029,6 +1029,39 @@ jobs:
       # The build's context is the job's checkout, which actions/checkout fetched at the commit's SHA, so a ref moved
       # after the push builds nothing else. BuildKit's own fetch of that commit from GitHub took 188 s on run
       # 45088111311's amd64 job, where the checkout took 8 s.
+      # BuildKit's GitHub Actions cache, type=gha, reads the job's cache token and URLs, which the runner gives only an
+      # action, so this exports them to the steps after it, as crazy-max/ghaction-github-runtime does, and logs none.
+      - name: Give BuildKit the job's Actions cache
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            for (const [name, value] of Object.entries(process.env)) {
+              if (name.startsWith('ACTIONS_')) {
+                core.exportVariable(name, value);
+              }
+            }
+      # The -dev image's Lean layer, the Dockerfile's lean-layer stage, kept in BuildKit's GitHub Actions cache under the
+      # platform's scope, which next's own pull request and a push to master write, as the engine ccache, and every run
+      # reads. It changes only with the Lean version, so the -dev build below finds its compressed blob there.
+      - name: Build the -dev image's Lean layer through BuildKit's Actions cache
+        env:
+          WRITE: ${{ github.head_ref == 'next' || github.ref == 'refs/heads/master' }}
+        run: |
+          scope="lean-${PLATFORM//\//-}"
+          write=()
+          if [[ $WRITE == true ]]; then
+            write=(--cache-to "type=gha,scope=$scope,mode=min")
+          fi
+          sharp/bin/network docker buildx build \
+            --file sharp/docker/runtime/frankenphp.Dockerfile \
+            --target lean-layer \
+            --platform "$PLATFORM" \
+            --build-arg REGISTRY=ghcr.io/heyjordanparker \
+            --cache-from "type=gha,scope=$scope" \
+            "${write[@]}" \
+            --output type=cacheonly \
+            .
+          echo "LEAN_CACHE=type=gha,scope=$scope" >> "$GITHUB_ENV"
       # Each build runs through sharp/bin/network, so a registry or download request the network fails, as a base image's
       # manifest, a git source or a package, runs the build again from BuildKit's cache of the steps that ended. The
       # flags are the ones docker/build-push-action passed, its builder-id among them.
@@ -1038,6 +1071,7 @@ jobs:
           sharp/bin/network docker buildx build \
             --file sharp/docker/runtime/frankenphp.Dockerfile \
             ${TARGET:+--target "$TARGET"} \
+            ${CACHE_FROM:+--cache-from "$CACHE_FROM"} \
             --platform "$PLATFORM" \
             --build-arg REGISTRY=ghcr.io/heyjordanparker \
             --provenance "mode=max,builder-id=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT" \
@@ -1052,6 +1086,7 @@ jobs:
         id: dev
         env:
           TARGET: dev
+          CACHE_FROM: ${{ env.LEAN_CACHE }}
         run: *build-image
       # The steps below run both images, so they pull here, where a dropped connection runs the pull again.
       - name: Pull the pushed images

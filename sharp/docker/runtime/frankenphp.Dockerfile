@@ -432,6 +432,12 @@ RUN set -eux; \
 	"/cache/mago/lean/$archive/bin/lake" --version; \
 	chmod -R a+rwX /cache/mago
 
+# The -dev image's Lean as a layer of its own, which IMAGE builds and caches alone, so the -dev build's copy below, the
+# same line, finds the layer's compressed blob in the cache and exports it as it is: compressing it again took 141 s of
+# run 45090650757's amd64 job.
+FROM scratch AS lean-layer
+COPY --link --from=lean /cache/ /var/cache/
+
 # ghcr.io/heyjordanparker/php-sharp:<version>-dev: the runtime image with the law checker's Lean installed, so a compile
 # with laws in it downloads nothing, and excimer, the sampling profiler a framework app's development image installs.
 # Mago's cache folder is /var/cache/mago for every user.
