@@ -955,7 +955,7 @@ jobs:
       # The extensions the -dev image adds to those.
       DEV_EXTENSIONS: excimer
     steps:
-      # For .github/actions/boot-image and sharp/bin/php-extensions. The build fetches its own context.
+      # The builds' context, and .github/actions/boot-image and sharp/bin/php-extensions.
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
@@ -966,10 +966,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # The job's runner is discarded with its builder, which the cleanup took 35 to 47 s to remove at each job's end.
       - name: Set up Buildx with BuildKit from ghcr.io
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           driver-opts: image=ghcr.io/heyjordanparker/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
+          cleanup: false
       # The engine's ccache, the cache mount the Dockerfile's php-base stage compiles through, as .github/actions/mago-cache
       # keeps a target: next's own pull request and a push to master save it under the commit, since their own later
       # runs restore it, and CI_PASSED deletes the one it replaced. Every other run restores the newest and saves nothing.
@@ -996,14 +998,17 @@ jobs:
           cache-map: |
             {"${{ runner.temp }}/engine-ccache": {"target": "/root/.cache/ccache", "id": "sharp-engine-ccache"}}
           utility-image: ghcr.io/containerd/busybox:1.36@sha256:7b3ccabffc97de872a30dfd234fd972a66d247c8cfc69b0550f276481852627c
+          # Outside the checkout, which is the builds' context.
+          scratch-dir: ${{ runner.temp }}/buildkit-cache-dance
           skip-extraction: ${{ github.head_ref != 'next' && github.ref != 'refs/heads/master' }}
-      # The build's context is the commit's tree, which BuildKit fetches from GitHub by the commit's SHA, so a ref
-      # moved after the push builds nothing else, as docker/github-builder's checksum pinned it.
+      # The build's context is the job's checkout, which actions/checkout fetched at the commit's SHA, so a ref moved
+      # after the push builds nothing else. BuildKit's own fetch of that commit from GitHub took 188 s on run
+      # 45088111311's amd64 job, where the checkout took 8 s.
       - name: Build and push the image by digest
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: ${{ github.server_url }}/${{ github.repository }}.git#${{ github.sha }}
+          context: .
           file: sharp/docker/runtime/frankenphp.Dockerfile
           platforms: ${{ matrix.platform }}
           build-args: REGISTRY=ghcr.io/heyjordanparker
@@ -1016,7 +1021,7 @@ jobs:
         id: dev
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: ${{ github.server_url }}/${{ github.repository }}.git#${{ github.sha }}
+          context: .
           file: sharp/docker/runtime/frankenphp.Dockerfile
           target: dev
           platforms: ${{ matrix.platform }}
