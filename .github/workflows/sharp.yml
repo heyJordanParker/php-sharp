@@ -710,14 +710,52 @@ jobs:
           ) > "$suite_log" 2>&1 &
           suite=$!
           workspace=0
-          sharp/bin/test --mago --no-build \
-            --binary sharp/mago/crates/database/src/lib.rs \
-            --binary sharp/mago/crates/extension/src/lib.rs \
-            --binary sharp/mago/crates/extension/tests/process_group.rs \
-            --binary sharp/mago/crates/sharp-lean/src/lib.rs \
-            --binary sharp/mago/src/main.rs \
-            --binary sharp/mago/tests/main.rs \
-            || workspace=$?
+          # tests/main.rs's tests that read macOS: Lean's processes, its library build and cache folder, the file
+          # watcher, the locks of concurrent compiles, renames, modes, change times, links, a disk that ignores case, and
+          # the extension hosts' processes. Its other tests check what a compile computes, which MAGO runs.
+          main=(
+            compile::a_watch_
+            compile::a_signal_that_ends_a_compile_ends_the_lean_it_waits_on
+            compile::a_runner_that_computes_past_its_deadline_without_writing_finishes
+            compile::lean_work_that_never_ends_stops_once_at_its_limit_or_deadline
+            compile::a_law_never_runs_on_the_lake_on_the_path
+            compile::compile_rebuilds_a_library_build_that_lost_its_lakefile_or_its_runner_and_proves_its_law
+            compile::compile_deletes_the_staging_folder_a_dead_build_left_and_proves_its_law
+            compile::compile_deletes_the_generated_code_and_the_lake_package_an_earlier_mago_left_and_proves_its_law
+            compile::compile_deletes_the_lean_package_once_no_law_remains
+            compile::compile_proves_the_laws_of_two_stale_files_with_one_runner
+            compile::compile_names_the_cache_folder_the_law_checker_cannot_create
+            compile::compile_reports_an_unavailable_law_checker_on_each_file_that_needs_it
+            compile::a_second_compile_leaves_the_compiled_file_byte_identical_and_starts_no_lean_process
+            compile::an_edit_to_a_file_no_law_reaches_starts_no_lean_process
+            compile::compiles_that_start_together_
+            compile::compiles_with_different_threads_share_one_compile
+            compile::a_compile_takes_its_turn_after_the_run_that_holds_the_write_lock
+            compile::compile_keeps_the_engine_s_compile_lock
+            compile::compile_replaces_a_compiled_file_by_rename_so_no_reader_sees_a_partial_file
+            compile::compile_writes_files_with_the_mode_of_a_new_file
+            compile::compile_reads_a_source_rewritten_at_the_same_size_with_its_modification_time_set_back
+            compile::compile_writes_the_compiled_file_at_the_new_target_of_a_link_to_an_identical_copy
+            compile::compile_reports_a_link_to_a_file_outside_the_project_and_writes_no_compiled_file_for_it
+            compile::compile_skips_a_dangling_link_beside_a_file_that_reaches_an_extension
+            compile::a_source_deleted_while_the_compile_runs_fails_nothing_and_the_next_compile_leaves_it_out
+            compile::compile_refuses_a_class_beside_a_folder_of_its_name_with_or_without_a_law
+            external_analyzer_lifecycle::
+            external_analyzer_invocation::
+          )
+          binaries=(
+            sharp/mago/crates/database/src/lib.rs
+            sharp/mago/crates/extension/src/lib.rs
+            sharp/mago/crates/extension/tests/process_group.rs
+            sharp/mago/crates/sharp-lean/src/lib.rs
+            sharp/mago/src/main.rs
+            "${main[@]/#/sharp/mago/tests/main.rs::}"
+          )
+          chosen=()
+          for binary in "${binaries[@]}"; do
+            chosen+=(--binary "$binary")
+          done
+          sharp/bin/test --mago --no-build "${chosen[@]}" || workspace=$?
           echo "mago's workspace tests took $SECONDS s."
           suite_status=0
           wait "$suite" || suite_status=$?
