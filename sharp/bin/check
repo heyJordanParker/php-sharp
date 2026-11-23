@@ -17,6 +17,8 @@ usage() {
 }
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
+# Each run leaves its line in the build record, with each gate's under it, see sharp/bin/record.
+[[ ${SHARP_RECORDED:-} == sharp/bin/check ]] || exec "$root/sharp/bin/record" sharp/bin/check -- "$0" "$@"
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 target="${CARGO_TARGET_DIR:-$root/sharp/build/$os-$(uname -m)/mago}"
 rust="$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' "$root/sharp/mago/Cargo.toml")"
@@ -396,7 +398,8 @@ local_sources() {
 gate_generated() {
   step local_sources
   step unchanged_by php_src_generated
-  step unchanged_by sharp/docker/run sharp/bin/native
+  # sharp/bin/native is PHP, which can't hand itself to the recorder, so its run is recorded here.
+  step unchanged_by sharp/bin/record sharp/bin/native -- sharp/docker/run sharp/bin/native
   step unchanged_by builtins
   step sharp_kinds
   step sharp_unit_header
@@ -548,6 +551,20 @@ gate_speed() {
   step speed
 }
 
+# Sets clock_now to the epoch seconds now and clock_cpu to the CPU milliseconds this shell and the processes it waited
+# for have used, as bash's times counts them, so each gate's line in the build record holds its own.
+clock() {
+  local time
+  clock_now=$EPOCHREALTIME
+  clock_cpu=0
+  times > "${TMPDIR:-/tmp}/sharp-bin-check-times.$$"
+  for time in $(< "${TMPDIR:-/tmp}/sharp-bin-check-times.$$"); do
+    [[ $time =~ ^([0-9]+)m([0-9]+)[.,]([0-9]{3})s$ ]]
+    clock_cpu=$((clock_cpu + (BASH_REMATCH[1] * 60 + BASH_REMATCH[2]) * 1000 + 10#${BASH_REMATCH[3]}))
+  done
+  rm -f "${TMPDIR:-/tmp}/sharp-bin-check-times.$$"
+}
+
 cd "$root"
 failed=()
 times=()
@@ -556,14 +573,22 @@ for gate in "${gates[@]}"; do
   echo "=== $gate"
   gate_passed=true
   start=$SECONDS
+  clock
+  gate_started=$clock_now
+  gate_cpu=$clock_cpu
   "gate_${gate//-/_}"
   cd "$root"
+  clock
+  gate_exit=0
   if $gate_passed; then
     result=passed
   else
     result=FAILED
+    gate_exit=1
     failed+=("$gate")
   fi
+  printf -v gate_cpu_s '%d.%03d' $(((clock_cpu - gate_cpu) / 1000)) $(((clock_cpu - gate_cpu) % 1000))
+  "$root/sharp/bin/record" "$gate" --measured "$gate_started" "$gate_cpu_s" '' "$gate_exit"
   times+=("$(printf '%-15s %5ss  %s' "$gate" "$((SECONDS - start))" "$result")")
 done
 

@@ -941,6 +941,16 @@ ZEND_API ZEND_COLD void ZEND_FASTCALL zend_asymmetric_visibility_property_modifi
 		scope = zend_get_called_scope(EG(current_execute_data));
 	}
 
+	/* PHP#: as zend_bad_property_access names an `internal` property, see ZEND_ACC_SHARP_INTERNAL_SET. */
+	if (prop_info->flags & ZEND_ACC_SHARP_INTERNAL_SET) {
+		zend_string *outside = zend_sharp_outside_namespace(prop_info->ce,
+			EG(fake_scope) ? EG(fake_scope) : zend_get_executed_scope());
+		zend_throw_error(NULL, "Cannot %s internal(set) property %s::$%s%s", operation, ZSTR_VAL(prop_info->ce->name),
+			ZSTR_VAL(prop_info->name), ZSTR_VAL(outside));
+		zend_string_release_ex(outside, false);
+		return;
+	}
+
 	const char *visibility;
 	if (prop_info->flags & ZEND_ACC_PRIVATE_SET) {
 		visibility = "private(set)";

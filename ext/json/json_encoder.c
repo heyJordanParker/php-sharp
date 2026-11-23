@@ -132,6 +132,8 @@ static zend_result php_json_encode_array(smart_str *buf, zval *val, int options,
 	 && Z_OBJ_HT_P(val)->get_properties_for == NULL
 	 && Z_OBJ_HT_P(val)->get_properties == zend_std_get_properties
 	 && Z_OBJ_P(val)->ce->num_hooked_props == 0
+	 /* PHP#: zend_std_get_properties_for lists the properties of such an object, see SHARP_CLASS_HAS_INTERNAL_PROPS. */
+	 && !(Z_OBJ_P(val)->ce->sharp_flags & SHARP_CLASS_HAS_INTERNAL_PROPS)
 	 && !zend_object_is_lazy(Z_OBJ_P(val))) {
 		/* Optimized version without rebuilding properties HashTable */
 		zend_object *obj = Z_OBJ_P(val);
@@ -213,7 +215,9 @@ static zend_result php_json_encode_array(smart_str *buf, zval *val, int options,
 	} else {
 		zend_object *obj = Z_OBJ_P(val);
 		prop_ht = myht = zend_get_properties_for(val, ZEND_PROP_PURPOSE_JSON);
-		if (obj->ce->num_hooked_props == 0) {
+		/* PHP#: the table of an object whose class has SHARP_CLASS_HAS_INTERNAL_PROPS can be temporary too, see
+		 * zend_std_get_properties_for. */
+		if (obj->ce->num_hooked_props == 0 && !(obj->ce->sharp_flags & SHARP_CLASS_HAS_INTERNAL_PROPS)) {
 			recursion_rc = (zend_refcounted *)prop_ht;
 		} else {
 			/* Protecting the object itself is fine here because myht is temporary and can't be

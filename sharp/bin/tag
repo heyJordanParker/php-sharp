@@ -6,6 +6,8 @@ set -euo pipefail
 # while a release builds: runs 45025602373 and 45027728255 failed to create v0.6.50 so. The language owner's login may,
 # so once master holds a version with no tag, this tags the merge commit on master that first holds it, which master's
 # first parents lead back to. The maintainer's tick runs it with that login.
+# Each run leaves its line in the build record, see sharp/bin/record.
+[[ ${SHARP_RECORDED:-} == sharp/bin/tag ]] || exec "$(dirname "$0")/record" sharp/bin/tag -- "$0" "$@"
 repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 api() { gh api "repos/$repo/$1" --jq "$2"; }
 

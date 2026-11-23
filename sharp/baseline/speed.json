@@ -1,5 +1,5 @@
 {
-    "commit": "b62b907227c",
+    "commit": "5a1128706d4-dirty",
     "laws": {
         "App.M0.Label.sameKeepsText": {
             "ended": "proved",
@@ -6659,7 +6659,7 @@
         "App.Offers.OfferAvailability.aStartedOfferBeforeItsEndIsAvailable": {
             "ended": "proved",
             "proved": true,
-            "heartbeats": 201181
+            "heartbeats": 201180
         },
         "App.Offers.OfferAvailability.anInactiveOfferStaysInactive": {
             "ended": "proved",
@@ -6669,7 +6669,7 @@
         "App.Offers.OfferAvailability.anOfferNotStartedComesBeforeItsEnd": {
             "ended": "proved",
             "proved": true,
-            "heartbeats": 188771
+            "heartbeats": 188770
         },
         "App.Offers.OfferAvailability.anOfferPastItsEndHasEnded": {
             "ended": "proved",
@@ -6679,7 +6679,7 @@
         "App.Parcels.ParcelState.aFullRefundFullyReturnsTheParcel": {
             "ended": "proved",
             "proved": true,
-            "heartbeats": 4652
+            "heartbeats": 4653
         },
         "App.Plans.PlanState.aClosedPlanIsNotChargeable": {
             "ended": "proved",
@@ -6711,13 +6711,28 @@
             "proved": true,
             "heartbeats": 8682
         },
+        "App.Seats.SeatStatus.aReleaseBeforeTheHoldKeepsItHeld": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 36223
+        },
+        "App.Seats.SeatStatus.endingKeepsTheTimeAndReason": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 22266
+        },
         "App.Trips.TripState.onlyAStalledTripIsStalled": {
             "ended": "proved",
             "proved": true,
             "heartbeats": 19678
+        },
+        "App.Trips.TripStatus.onlyAnIdleTripIsIdle": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 19673
         }
     },
-    "corpus_heartbeats": 850576,
+    "corpus_heartbeats": 928737,
     "instructions": {
         "platform": "Linux-x86_64",
         "edit": 6206462344
