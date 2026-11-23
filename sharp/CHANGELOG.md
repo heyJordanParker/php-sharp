@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Added
+
+- An interface that extends `Equatable` has `==`, spec section 19: two of its values are equal when they are the same type and that type's `==` holds, so a `Set` holds one of two equal values and a `Map` keys them. So beside `public interface Failure : Equatable { }`, `enum Declined : Failure { case Card; case Fraud; }` and `enum Lost : Failure { case Gone; }`, a `Failure card` that holds `Declined.Card` gives `card == Declined.Card` true, `card == Declined.Fraud` false and `card == Lost.Gone` false, where 0.6.51 refused each with "`Failure` declares no `operator ==`". Every type that implements such an interface has `==`: an enum, a struct whose fields have `==`, or a class that declares or inherits `operator ==`, so `class Plain : Failure { }` is refused at its header with "`Plain` implements `Failure`, which extends `Equatable`, so it needs `==`: `Plain` declares no `operator ==`.". A law over such values proves, as `law keepsItsFailure(Failure f) => new Failed(f).failure == f;`, and through each implementer of a sealed one, so `Declined.Card != Lost.Gone` proves there.
+
 ## [0.6.52] - 2026-11-23
 
 ### Upgrading from 0.6.51
