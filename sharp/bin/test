@@ -187,10 +187,21 @@ finish() {
 # --no-build or --shard, cargo runs nothing, so those tests are left to a run with --cargo-built, or with neither.
 if $mago && ! $cargo_built; then
   # The tests run a PHP SDK worker from sharp/mago's vendor folder, and lake, which mago compile proves laws with:
-  # installing the pinned Lean first keeps the tests that run lake at once from each installing it.
+  # installing the pinned Lean first keeps the tests that run lake at once from each installing it. On Linux the tests
+  # run in the sharp/docker image, which carries it in its ELAN_HOME, as sharp/docker/Dockerfile explains, so no run
+  # downloads it.
   part "composer install in sharp/mago, and the pinned Lean"
   composer install --no-interaction --no-progress --quiet --working-dir="$root/sharp/mago"
-  elan toolchain install "$(cat "$root/sharp/mago/crates/sharp-lean/lean/lean-toolchain")"
+  toolchain="$(cat "$root/sharp/mago/crates/sharp-lean/lean/lean-toolchain")"
+  if [[ $os == linux ]]; then
+    folder=${toolchain//\//--}
+    if [[ ! -x ${ELAN_HOME:-}/toolchains/${folder//:/---}/bin/lake ]]; then
+      echo "The sharp/docker image carries no Lean $toolchain, which lean-toolchain pins. Pin it in sharp/docker/Dockerfile." >&2
+      exit 1
+    fi
+  else
+    elan toolchain install "$toolchain"
+  fi
   if $build; then
     part "sharp/bin/build-mago"
     "$root/sharp/bin/build-mago" --quiet

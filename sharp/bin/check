@@ -344,7 +344,22 @@ php_src_generated() {
   sharp/docker/run scripts/gdb/debug_gdb_scripts_gen.php
   sharp/docker/run Zend/zend_vm_gen.php
   sharp/docker/run ext/tokenizer/tokenizer_data_gen.php
-  sharp/docker/run build/gen_stub.php -f --generate-optimizer-info --verify
+  gen_stub
+}
+# gen_stub.php reads PHP-Parser from build/PHP-Parser-<version>, the version it pins, and downloads it when that folder
+# is missing, so this links the copy the sharp/docker image carries there, as sharp/docker/Dockerfile explains. A
+# folder already there is a copy of the same version an earlier run left.
+gen_stub() {
+  local version
+  version=$(sed -n 's/^ *[$]version = "\(.*\)";$/\1/p' "$root/build/gen_stub.php")
+  # shellcheck disable=SC2016 # The container's shell expands them.
+  sharp/docker/run sh -c '
+    if [ ! -d "/opt/PHP-Parser-$1" ]; then
+      echo "The sharp/docker image carries no PHP-Parser $1, which build/gen_stub.php pins. Pin it in sharp/docker/Dockerfile." >&2
+      exit 1
+    fi
+    [ -e "build/PHP-Parser-$1" ] || ln -s "/opt/PHP-Parser-$1" "build/PHP-Parser-$1"
+    exec build/gen_stub.php -f --generate-optimizer-info --verify' sh "$version"
 }
 builtins() {
   sharp/docker/run sharp/bin/builtins --self-test

@@ -1,81 +1,31 @@
 name: Set up Lean
 description: >-
-  Installs the Lean version sharp/mago/crates/sharp-lean/lean/lean-toolchain pins as elan's toolchain, checks that its
-  lake and lean run, and puts them on PATH. mago compile proves laws with Lean, and finds elan's toolchain of the
-  pinned version in ELAN_HOME, so installing it up front keeps the tests that run lake in parallel from each installing
-  it. With cache, the toolchain lives in sharp/build/elan, the ELAN_HOME sharp/docker/run sets and this exports, and
-  comes from the Actions cache under the pin: only a run that finds none downloads it, through elan, and saves it, so
-  a hosted job downloads no Lean from GitHub, where #696's install failed. Without cache, elan installs into ~/.elan,
-  which the Mac's runner keeps.
-
-inputs:
-  cache:
-    description: true to restore the toolchain from the Actions cache, and save it when no entry holds it.
-    default: 'false'
+  Installs elan and the Lean version pinned in sharp/mago/crates/sharp-lean/lean/lean-toolchain, checks that its lake and lean
+  run, and puts them on PATH. mago compile proves laws with Lean, and installing the pinned version up front keeps the
+  tests that run lake in parallel from each installing it.
 
 runs:
   using: composite
   steps:
-    - name: Name the pinned toolchain's folder
-      id: toolchain
+    - name: Install elan and Lean
       shell: bash
-      env:
-        CACHE: ${{ inputs.cache }}
       run: |
         toolchain=$(cat sharp/mago/crates/sharp-lean/lean/lean-toolchain)
-        home="$HOME/.elan"
-        if [[ $CACHE == true ]]; then
-          home="$GITHUB_WORKSPACE/sharp/build/elan"
-          echo "ELAN_HOME=$home" >> "$GITHUB_ENV"
-        fi
-        # elan names a toolchain's folder after it, with / as -- and : as ---.
-        folder=${toolchain//\//--}
-        echo "toolchain=$toolchain" >> "$GITHUB_OUTPUT"
-        echo "home=$home" >> "$GITHUB_OUTPUT"
-        echo "path=$home/toolchains/${folder//:/---}" >> "$GITHUB_OUTPUT"
-    - name: Restore the pinned Lean
-      id: restore
-      if: inputs.cache == 'true'
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ${{ steps.toolchain.outputs.path }}
-        key: LEAN-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('sharp/mago/crates/sharp-lean/lean/lean-toolchain') }}
-    - name: Install elan and Lean
-      if: steps.restore.outputs.cache-hit != 'true'
-      shell: bash
-      env:
-        ELAN_HOME: ${{ steps.toolchain.outputs.home }}
-        TOOLCHAIN: ${{ steps.toolchain.outputs.toolchain }}
-      run: |
-        export PATH="$ELAN_HOME/bin:$PATH"
-        echo "$ELAN_HOME/bin" >> "$GITHUB_PATH"
+        export PATH="$HOME/.elan/bin:$PATH"
+        echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
         for attempt in 1 2 3; do
           # elan-init only sets the default toolchain, so the toolchain install is what downloads Lean.
-          if curl -sSfL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --no-modify-path --default-toolchain "$TOOLCHAIN"; then
-            if elan toolchain install "$TOOLCHAIN" && lake +"$TOOLCHAIN" --version && lean +"$TOOLCHAIN" --version; then
+          if curl -sSfL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --no-modify-path --default-toolchain "$toolchain"; then
+            if elan toolchain install "$toolchain" && lake +"$toolchain" --version && lean +"$toolchain" --version; then
               exit 0
             fi
             # A failed download can leave a toolchain elan calls installed although its lake cannot run.
-            elan toolchain uninstall "$TOOLCHAIN"
+            elan toolchain uninstall "$toolchain"
           fi
           if [[ $attempt != 3 ]]; then
             echo "Retrying the Lean install in $((attempt * 15)) seconds (retry $attempt of 2)" >&2
             sleep $((attempt * 15))
           fi
         done
-        echo "::error::Lean $TOOLCHAIN did not install and run after 3 attempts. The output above names the cause."
+        echo "::error::Lean $toolchain did not install and run after 3 attempts. The output above names the cause."
         exit 1
-    - name: Save the pinned Lean
-      if: inputs.cache == 'true' && steps.restore.outputs.cache-hit != 'true'
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ${{ steps.toolchain.outputs.path }}
-        key: ${{ steps.restore.outputs.cache-primary-key }}
-    - name: Put the pinned Lean on PATH
-      shell: bash
-      env:
-        TOOLCHAIN_PATH: ${{ steps.toolchain.outputs.path }}
-      run: |
-        echo "$TOOLCHAIN_PATH/bin" >> "$GITHUB_PATH"
-        "$TOOLCHAIN_PATH/bin/lake" --version
-        "$TOOLCHAIN_PATH/bin/lean" --version
