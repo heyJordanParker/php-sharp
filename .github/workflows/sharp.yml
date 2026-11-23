@@ -630,6 +630,13 @@ jobs:
     needs: CHANGES
     if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: macos-arm64-local
+    # next's own pull request runs each push at once, so each push queued a Mac job on the one runner, behind every
+    # older one: at 03:10 UTC on 2026-11-23 run 45098228544's held the runner and three more waited, the newest 30
+    # minutes. So next's Mac jobs share a group: one runs, the newest waits, and a newer push replaces the one waiting,
+    # whose tree the newer one holds. Any other run's Mac job is a group of its own.
+    concurrency:
+      group: ${{ github.workflow }}-MACOS-${{ github.head_ref == 'next' && 'next' || github.run_id }}
+      cancel-in-progress: false
     permissions:
       actions: write
       contents: read
