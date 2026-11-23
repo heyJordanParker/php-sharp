@@ -39,6 +39,10 @@ function compile_project(string $name, array $files): string
     return $root;
 }
 
+// Every mago a test starts prints one issue to a line, through run_mago, an exec of its own, or the engine's
+// sharp.compile_command, since mago prints GitHub's annotations instead under GitHub Actions.
+putenv('MAGO_REPORTING_FORMAT=emacs');
+
 function run_mago(string $root): void
 {
     exec(escapeshellarg(getenv('TEST_MAGO_EXECUTABLE')) . ' --no-version-check --workspace ' . escapeshellarg($root) . ' compile 2>&1', $output, $status);
