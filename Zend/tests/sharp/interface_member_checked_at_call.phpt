@@ -92,7 +92,7 @@ echo $run('$contact = new Demo\Contact(); $contact->wrong = true;'
 echo $run('echo Demo\Tags::of(new Demo\Post()), "\n", Demo\Tags::ofPost(new Demo\Post()), "\n";');
 
 file_put_contents("$root/Contact.php", "<?php\nnamespace Demo;\nclass Contact extends \\Acme\\TextModel implements Taggable\n{\n}\n");
-exec('MAGO_REPORTING_FORMAT=emacs ' . escapeshellarg(getenv('TEST_MAGO_EXECUTABLE')) . ' --no-version-check --colors never --workspace ' . escapeshellarg($root) . ' compile 2>&1', $output, $status);
+exec(escapeshellarg(getenv('TEST_MAGO_EXECUTABLE')) . ' --no-version-check --colors never --workspace ' . escapeshellarg($root) . ' compile 2>&1', $output, $status);
 echo "mago compile exits $status\n";
 foreach ($output as $line) {
     if (preg_match('/^\w+\.php:\d+:\d+:error - ([\w-]+): (.*)$/', $line, $match)) {
