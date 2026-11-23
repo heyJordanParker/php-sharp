@@ -1,0 +1,6662 @@
+{
+    "commit": "e7a865fddfe-dirty",
+    "laws": {
+        "App.M0.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M0.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M0.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M0.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M0.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M0.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M0.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M0.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M0.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M0.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M1.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M1.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M1.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M1.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M1.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M1.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M1.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M1.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M1.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M1.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M10.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M10.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M10.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M10.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M10.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M10.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M10.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M10.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M10.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M10.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M100.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M100.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M100.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M100.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M100.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M100.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M100.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M100.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M100.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M100.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M101.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M101.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M101.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M101.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M101.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M101.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M101.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M101.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M101.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M101.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M102.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M102.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M102.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M102.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M102.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M102.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M102.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M102.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M102.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M102.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M103.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M103.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M103.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M103.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M103.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M103.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M103.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M103.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M103.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M103.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M104.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M104.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M104.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M104.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M104.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M104.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M104.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M104.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M104.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M104.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M105.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M105.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M105.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M105.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M105.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M105.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M105.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M105.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M105.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M105.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M106.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M106.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M106.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M106.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M106.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M106.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M106.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M106.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M106.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M106.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M107.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M107.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M107.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M107.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M107.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M107.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M107.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M107.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M107.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M107.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M108.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M108.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M108.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M108.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M108.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M108.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M108.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M108.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M108.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M108.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M109.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M109.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M109.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M109.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M109.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M109.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M109.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M109.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M109.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M109.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M11.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M11.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M11.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M11.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M11.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M11.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M11.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M11.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M11.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M11.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M110.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M110.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M110.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M110.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M110.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M110.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M110.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M110.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M110.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M110.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M111.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M111.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M111.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M111.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M111.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M111.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M111.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M111.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M111.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M111.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M112.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M112.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M112.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M112.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M112.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M112.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M112.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M112.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M112.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M112.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M113.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M113.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M113.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M113.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M113.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M113.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M113.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M113.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M113.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M113.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M114.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M114.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M114.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M114.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M114.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M114.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M114.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M114.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M114.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M114.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M115.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M115.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M115.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M115.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M115.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M115.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M115.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M115.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M115.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M115.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M116.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M116.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M116.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M116.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M116.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M116.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M116.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M116.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M116.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M116.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M117.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M117.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M117.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M117.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M117.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M117.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M117.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M117.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M117.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M117.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M118.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M118.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M118.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M118.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M118.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M118.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M118.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M118.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M118.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M118.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M119.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M119.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M119.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M119.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M119.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M119.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M119.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M119.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M119.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M119.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M12.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M12.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M12.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M12.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M12.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M12.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M12.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M12.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M12.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M12.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M120.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M120.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M120.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M120.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M120.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M120.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M120.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M120.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M120.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M120.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M121.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M121.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M121.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M121.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M121.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M121.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M121.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M121.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M121.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M121.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M122.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M122.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M122.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M122.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M122.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M122.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M122.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M122.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M122.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M122.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M123.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M123.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M123.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M123.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M123.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M123.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M123.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M123.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M123.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M123.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M124.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M124.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M124.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M124.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M124.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M124.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M124.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M124.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M124.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M124.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M125.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M125.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M125.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M125.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M125.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M125.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M125.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M125.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M125.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M125.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M126.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M126.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M126.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M126.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M126.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M126.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M126.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M126.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M126.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M126.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M127.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M127.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M127.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M127.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M127.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M127.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M127.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M127.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M127.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M127.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M128.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M128.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M128.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M128.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M128.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M128.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M128.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M128.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M128.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M128.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M129.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M129.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M129.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M129.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M129.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M129.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M129.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M129.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M129.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M129.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M13.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M13.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M13.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M13.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M13.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M13.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M13.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M13.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M13.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M13.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M130.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M130.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M130.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M130.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M130.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M130.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M130.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M130.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M130.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M130.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M131.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M131.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M131.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M131.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M131.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M131.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M131.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M131.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M131.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M131.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M132.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M132.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M132.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M132.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M132.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M132.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M132.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M132.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M132.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M132.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M14.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M14.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M14.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M14.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M14.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M14.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 118
+        },
+        "App.M14.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M14.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M14.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M14.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M15.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M15.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M15.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M15.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M15.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M15.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M15.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M15.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M15.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M15.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M16.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M16.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M16.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M16.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M16.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M16.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M16.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M16.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M16.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M16.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M17.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M17.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M17.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M17.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M17.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M17.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M17.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M17.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M17.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M17.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M18.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M18.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M18.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M18.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M18.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M18.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 118
+        },
+        "App.M18.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M18.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M18.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M18.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M19.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M19.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M19.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M19.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M19.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M19.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M19.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M19.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M19.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M19.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M2.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M2.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M2.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M2.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M2.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M2.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M2.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M2.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M2.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M2.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M20.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M20.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M20.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M20.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M20.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M20.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M20.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M20.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M20.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M20.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M21.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M21.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M21.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M21.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M21.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M21.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M21.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M21.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M21.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M21.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M22.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M22.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M22.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M22.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M22.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M22.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M22.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M22.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M22.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M22.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M23.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M23.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M23.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M23.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M23.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M23.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M23.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M23.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M23.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M23.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M24.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M24.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M24.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M24.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M24.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M24.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 118
+        },
+        "App.M24.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M24.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M24.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M24.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M25.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M25.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M25.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M25.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M25.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M25.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M25.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M25.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M25.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M25.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M26.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M26.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M26.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M26.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M26.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M26.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M26.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M26.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M26.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M26.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M27.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M27.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M27.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M27.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M27.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M27.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M27.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M27.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M27.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M27.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M28.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M28.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M28.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M28.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M28.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M28.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M28.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M28.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M28.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M28.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M29.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M29.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M29.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M29.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M29.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M29.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M29.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M29.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M29.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M29.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M3.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M3.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M3.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M3.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M3.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M3.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M3.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M3.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M3.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M3.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M30.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M30.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M30.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M30.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M30.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M30.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M30.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M30.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M30.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M30.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M31.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M31.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M31.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M31.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M31.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M31.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M31.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M31.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M31.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M31.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M32.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M32.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M32.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M32.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M32.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M32.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M32.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M32.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M32.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M32.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M33.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M33.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M33.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M33.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M33.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M33.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M33.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M33.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M33.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M33.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M34.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M34.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M34.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M34.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M34.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M34.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M34.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M34.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M34.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M34.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M35.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M35.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M35.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M35.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M35.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M35.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M35.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M35.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M35.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M35.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M36.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M36.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M36.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M36.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M36.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M36.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M36.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M36.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M36.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M36.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M37.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M37.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M37.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M37.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M37.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M37.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M37.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M37.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M37.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M37.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M38.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M38.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M38.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M38.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M38.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M38.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M38.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M38.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M38.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M38.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M39.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M39.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M39.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M39.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M39.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M39.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M39.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M39.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M39.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M39.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M4.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M4.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M4.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M4.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M4.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M4.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M4.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M4.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M4.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M4.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M40.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M40.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M40.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M40.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M40.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M40.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M40.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M40.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M40.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M40.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M41.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M41.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M41.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M41.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M41.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M41.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M41.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M41.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M41.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M41.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M42.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M42.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M42.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M42.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M42.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M42.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M42.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M42.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M42.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M42.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M43.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M43.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M43.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M43.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M43.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M43.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M43.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M43.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M43.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M43.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M44.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M44.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M44.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M44.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M44.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M44.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M44.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M44.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M44.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M44.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M45.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M45.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M45.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M45.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M45.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M45.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M45.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M45.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M45.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M45.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M46.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M46.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M46.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M46.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M46.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M46.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M46.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M46.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M46.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M46.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M47.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M47.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M47.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M47.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M47.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M47.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M47.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M47.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M47.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M47.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M48.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M48.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M48.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M48.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M48.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M48.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M48.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M48.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M48.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M48.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M49.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M49.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M49.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M49.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M49.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M49.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M49.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M49.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M49.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M49.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M5.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M5.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M5.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M5.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M5.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M5.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M5.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M5.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M5.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M5.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M50.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M50.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M50.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M50.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M50.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M50.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M50.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M50.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M50.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M50.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M51.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M51.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M51.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M51.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M51.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M51.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M51.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M51.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M51.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M51.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M52.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M52.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M52.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M52.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M52.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M52.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M52.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M52.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M52.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M52.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M53.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M53.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M53.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M53.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M53.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M53.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M53.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M53.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M53.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M53.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M54.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M54.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M54.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M54.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M54.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M54.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M54.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M54.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M54.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M54.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M55.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M55.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M55.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M55.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M55.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M55.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M55.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M55.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M55.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M55.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M56.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M56.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M56.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M56.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M56.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M56.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M56.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M56.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M56.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M56.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M57.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M57.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M57.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M57.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M57.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M57.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M57.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M57.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M57.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M57.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M58.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M58.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M58.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M58.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M58.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M58.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M58.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M58.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M58.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M58.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M59.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M59.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M59.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M59.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M59.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M59.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M59.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M59.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M59.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M59.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M6.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M6.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M6.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M6.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M6.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M6.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M6.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M6.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M6.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M6.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M60.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M60.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M60.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M60.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M60.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M60.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M60.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M60.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M60.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M60.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M61.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M61.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M61.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M61.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M61.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M61.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M61.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M61.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M61.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M61.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M62.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M62.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M62.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M62.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M62.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M62.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 118
+        },
+        "App.M62.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M62.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M62.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M62.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M63.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M63.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M63.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M63.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M63.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M63.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M63.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M63.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M63.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M63.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M64.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M64.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M64.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M64.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M64.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M64.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 118
+        },
+        "App.M64.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M64.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M64.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M64.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M65.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M65.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M65.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M65.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M65.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M65.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M65.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M65.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M65.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M65.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M66.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M66.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M66.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M66.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M66.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M66.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M66.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M66.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M66.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M66.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M67.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M67.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M67.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M67.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M67.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M67.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M67.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M67.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M67.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M67.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M68.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M68.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M68.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M68.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M68.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M68.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M68.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M68.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M68.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M68.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M69.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M69.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M69.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M69.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M69.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M69.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M69.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M69.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M69.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M69.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M7.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M7.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M7.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M7.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M7.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M7.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M7.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M7.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M7.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M7.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M70.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M70.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M70.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M70.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M70.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M70.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M70.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M70.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M70.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M70.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M71.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M71.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M71.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M71.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M71.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M71.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M71.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M71.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M71.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M71.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M72.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M72.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M72.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M72.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M72.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M72.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M72.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M72.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M72.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M72.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M73.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M73.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M73.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M73.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M73.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M73.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M73.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M73.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M73.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M73.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M74.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M74.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M74.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M74.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M74.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M74.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M74.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M74.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M74.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M74.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M75.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M75.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M75.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M75.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M75.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M75.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M75.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M75.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M75.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M75.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M76.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M76.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M76.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M76.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M76.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M76.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M76.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M76.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M76.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M76.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M77.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M77.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M77.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M77.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M77.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M77.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M77.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M77.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M77.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M77.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M78.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M78.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M78.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M78.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M78.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M78.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M78.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M78.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M78.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M78.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M79.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M79.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M79.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M79.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M79.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M79.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M79.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M79.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M79.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M79.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M8.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M8.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M8.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M8.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M8.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M8.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M8.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M8.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M8.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M8.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M80.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M80.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M80.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M80.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M80.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M80.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M80.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M80.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M80.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M80.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M81.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M81.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M81.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M81.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M81.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M81.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 118
+        },
+        "App.M81.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M81.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M81.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M81.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M82.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M82.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M82.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M82.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M82.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M82.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M82.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M82.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M82.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M82.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M83.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M83.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M83.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M83.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M83.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M83.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M83.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M83.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M83.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M83.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M84.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M84.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M84.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M84.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M84.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M84.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M84.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M84.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M84.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M84.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M85.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M85.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M85.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M85.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M85.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M85.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M85.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M85.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M85.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M85.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M86.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M86.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M86.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M86.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M86.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M86.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M86.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M86.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M86.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M86.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M87.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M87.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M87.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M87.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M87.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M87.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M87.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M87.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M87.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M87.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M88.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M88.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M88.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M88.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M88.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M88.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M88.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M88.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M88.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M88.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M89.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M89.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M89.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M89.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M89.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M89.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M89.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M89.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M89.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M89.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M9.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M9.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M9.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M9.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M9.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M9.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M9.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M9.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M9.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M9.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M90.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M90.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M90.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M90.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M90.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M90.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M90.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M90.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M90.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M90.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M91.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M91.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M91.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M91.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M91.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M91.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M91.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M91.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M91.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M91.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M92.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M92.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M92.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M92.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M92.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M92.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M92.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M92.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M92.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M92.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M93.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M93.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M93.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M93.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M93.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M93.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M93.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M93.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M93.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M93.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M94.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M94.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M94.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M94.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M94.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M94.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M94.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M94.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M94.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M94.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M95.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M95.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M95.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M95.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M95.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M95.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M95.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M95.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M95.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M95.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M96.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M96.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M96.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M96.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M96.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M96.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M96.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M96.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M96.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M96.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M97.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M97.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M97.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M97.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M97.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M97.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M97.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M97.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M97.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M97.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M98.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M98.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M98.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M98.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M98.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M98.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M98.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M98.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M98.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M98.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.M99.Label.sameKeepsText": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 199
+        },
+        "App.M99.Line.builds": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 159
+        },
+        "App.M99.Line.buildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 163
+        },
+        "App.M99.Line.feeBuildsTwice": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 183
+        },
+        "App.M99.Line.feeReadsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 181
+        },
+        "App.M99.Line.readsTop": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 119
+        },
+        "App.M99.Meter.keepsRaw": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 136
+        },
+        "App.M99.Rates.maxIsAtLeast": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 254
+        },
+        "App.M99.Rates.netIsNeverNegative": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 445
+        },
+        "App.M99.Steps.sumOfNothingIsZero": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 110
+        },
+        "App.Offers.OfferAvailability.anOfferNotStartedComesBeforeItsEnd": {
+            "ended": "proved",
+            "proved": true,
+            "heartbeats": 189398
+        }
+    },
+    "corpus_heartbeats": 189398,
+    "instructions": []
+}

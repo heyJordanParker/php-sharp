@@ -3,11 +3,13 @@
 declare(strict_types=1);
 
 /*
- * Writes the c2k benchmark project, or c2ks, into a folder: 133 modules of 16 PHP# files each, 2,128 files with 1,330
- * laws, one extension host whose return-type provider every `App\` method call asks, and the Composer vendor folder of
- * this checkout's `sharp/composer` package. c2ks is c2k whose host also registers a codebase-scan hook.
+ * Writes a benchmark project into a folder, with the Composer vendor folder of this checkout's `sharp/composer` package:
+ * - c2k: 133 modules of 16 PHP# files each, 2,128 files with 1,330 laws, and one extension host whose return-type
+ *   provider every `App\` method call asks.
+ * - c2ks: c2k whose host also registers a codebase-scan hook.
+ * - laws: the law corpus, each file of benchmark/laws under app/, with no host: one file per law shape a project hit.
  *
- * Usage: php benchmark/c2k.php c2k|c2ks <folder>
+ * Usage: php benchmark/c2k.php c2k|c2ks|laws <folder>
  *
  * The folder must not exist. Composer installs the package from this checkout and its two dependencies from Packagist,
  * at the versions composer.json pins.
@@ -16,8 +18,8 @@ declare(strict_types=1);
 const MODULES = 133;
 
 [$script, $kind, $folder] = $argv + [null, null, null];
-if (!in_array($kind, ['c2k', 'c2ks'], true) || $folder === null) {
-    fwrite(STDERR, "Usage: php {$script} c2k|c2ks <folder>\n");
+if (!in_array($kind, ['c2k', 'c2ks', 'laws'], true) || $folder === null) {
+    fwrite(STDERR, "Usage: php {$script} c2k|c2ks|laws <folder>\n");
     exit(2);
 }
 if (file_exists($folder)) {
@@ -26,17 +28,8 @@ if (file_exists($folder)) {
 }
 
 $package = realpath(__DIR__ . '/../sharp/composer');
-write($folder, 'mago.toml', <<<'TOML'
-    php-version = "8.4"
-
-    [source]
-    paths = ["app"]
-    includes = ["vendor"]
-
-    [extension-hosts.amounts]
-    file = "tools/host.php"
-
-    TOML);
+$hosts = $kind === 'laws' ? '' : "\n[extension-hosts.amounts]\nfile = \"tools/host.php\"\n";
+write($folder, 'mago.toml', "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n{$hosts}");
 write($folder, 'composer.json', json_encode([
     'type' => 'library',
     'repositories' => [['type' => 'path', 'url' => $package, 'options' => ['symlink' => false]]],
@@ -48,10 +41,18 @@ write($folder, 'composer.json', json_encode([
     'autoload' => ['psr-4' => ['App\\' => 'app/']],
     'config' => ['allow-plugins' => ['heyjordanparker/php-sharp-composer' => true]],
 ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
-write($folder, 'tools/host.php', host($kind === 'c2ks'));
-for ($module = 0; $module < MODULES; $module++) {
-    foreach (module($module) as $name => $source) {
-        write($folder, "app/M{$module}/{$name}.sharp", $source);
+if ($kind === 'laws') {
+    $corpus = __DIR__ . '/laws';
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($corpus, FilesystemIterator::SKIP_DOTS));
+    foreach ($files as $file) {
+        write($folder, 'app/' . substr($file->getPathname(), strlen($corpus) + 1), file_get_contents($file->getPathname()));
+    }
+} else {
+    write($folder, 'tools/host.php', host($kind === 'c2ks'));
+    for ($module = 0; $module < MODULES; $module++) {
+        foreach (module($module) as $name => $source) {
+            write($folder, "app/M{$module}/{$name}.sharp", $source);
+        }
     }
 }
 
