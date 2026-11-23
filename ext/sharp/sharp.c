@@ -11264,9 +11264,9 @@ static void sharp_fiber_destroyed(zend_fiber_context *context)
 
 /* The key the bindings of id, a service's id as sharp_container_id() writes it, in the namespace's first length bytes
  * are kept under. A namespace matches in any case, so its part is lowercase. */
-static zend_string *sharp_container_key(const zend_string *namespace, size_t length, const zend_string *id)
+static zend_string *sharp_container_key(const char *namespace, size_t length, const zend_string *id)
 {
-	zend_string *key = zend_strpprintf(0, "%.*s %s", (int) length, ZSTR_VAL(namespace), ZSTR_VAL(id));
+	zend_string *key = zend_strpprintf(0, "%.*s %s", (int) length, namespace, ZSTR_VAL(id));
 	zend_str_tolower(ZSTR_VAL(key), length);
 
 	return key;
@@ -11306,7 +11306,7 @@ static void sharp_container_group(HashTable *rows, HashTable *module)
 	zval *row;
 	ZEND_HASH_FOREACH_VAL(rows, row) {
 		zend_string *namespace = Z_STR_P(zend_hash_index_find(Z_ARRVAL_P(row), 0));
-		zend_string *key = sharp_container_key(namespace, ZSTR_LEN(namespace), Z_STR_P(zend_hash_index_find(Z_ARRVAL_P(row), 1)));
+		zend_string *key = sharp_container_key(ZSTR_VAL(namespace), ZSTR_LEN(namespace), Z_STR_P(zend_hash_index_find(Z_ARRVAL_P(row), 1)));
 		zval *list = zend_hash_find(module, key);
 		if (!list) {
 			zval empty;
@@ -11693,40 +11693,54 @@ static zval *sharp_container_first_row(zval *modules, const zend_class_entry *re
 	return NULL;
 }
 
-/* The binding row that serves id to requester, a class of namespace or NULL, or NULL when no module binds it. While a
- * test runs, its module replaces the environment modules, as the checker checks a test module over the base modules
+/* The namespace of the standard library's module, in lowercase, as mago compile writes the namespace of its rows. */
+static const char sharp_library_namespace[] = "sharp";
+
+/* The row of the modules of the namespace's first length bytes that serves id to requester, or NULL. While a test
+ * runs, its module replaces the environment modules, as the checker checks a test module over the base modules
  * alone. */
+static zval *sharp_container_namespace_row(
+	const char *namespace, size_t length, const zend_string *id, const zend_class_entry *requester)
+{
+	zend_string *key = sharp_container_key(namespace, length, id);
+	zval *test = SHARP_G(container_test) ? zend_hash_find(SHARP_G(container_test), key) : NULL;
+	zval *environment = SHARP_G(container_test) ? NULL : zend_hash_find(&SHARP_G(container_environment), key);
+	zval *modules = zend_hash_find(&SHARP_G(container_bindings), key);
+	zend_string_release(key);
+	zval *row = test ? sharp_container_row(test, requester) : NULL;
+	if (!row) {
+		row = sharp_container_first_row(environment, requester);
+	}
+	if (!row) {
+		row = sharp_container_first_row(modules, requester);
+	}
+
+	return row;
+}
+
+/* The binding row that serves id to requester, a class of namespace or NULL, or NULL when no module binds it: of the
+ * modules of namespace and of each namespace above it, the root one included, then of the standard library's module,
+ * which serves every class after them, spec section 32. */
 static zval *sharp_container_binding(const zend_string *id, const zend_string *namespace, const zend_class_entry *requester)
 {
 	sharp_container_read_library();
 	if (EG(exception)) {
 		return NULL;
 	}
-	size_t length = ZSTR_LEN(namespace);
 
-	while (true) {
-		zend_string *key = sharp_container_key(namespace, length, id);
-		zval *test = SHARP_G(container_test) ? zend_hash_find(SHARP_G(container_test), key) : NULL;
-		zval *environment = SHARP_G(container_test) ? NULL : zend_hash_find(&SHARP_G(container_environment), key);
-		zval *modules = zend_hash_find(&SHARP_G(container_bindings), key);
-		zend_string_release(key);
-		zval *row = test ? sharp_container_row(test, requester) : NULL;
-		if (!row) {
-			row = sharp_container_first_row(environment, requester);
-		}
-		if (!row) {
-			row = sharp_container_first_row(modules, requester);
-		}
+	for (size_t length = ZSTR_LEN(namespace);;) {
+		zval *row = sharp_container_namespace_row(ZSTR_VAL(namespace), length, id, requester);
 		if (row) {
 			return row;
 		}
-
 		if (length == 0) {
-			return NULL;
+			break;
 		}
 		const char *end = zend_memrchr(ZSTR_VAL(namespace), '\\', length);
 		length = end ? (size_t) (end - ZSTR_VAL(namespace)) : 0;
 	}
+
+	return sharp_container_namespace_row(sharp_library_namespace, sizeof(sharp_library_namespace) - 1, id, requester);
 }
 
 static bool sharp_container_service(zend_string *id, const zend_string *written, const zend_string *namespace, const zend_class_entry *requester, zval *service);
