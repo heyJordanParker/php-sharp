@@ -18,7 +18,8 @@ set -euo pipefail
 # the tree was (the count of changed paths and the SHA-256 of `git diff HEAD`), the host, its processor model, cores and
 # load at the start, the start and end in UTC, the wall seconds, the CPU-seconds the command and every process it
 # waited for used, its peak memory, which is the most the command and its descendants held at once, sampled each
-# second, its exit status, and the CI run and job when one runs it.
+# second, its exit status, and the CI run and job when one runs it. A container sharp/docker/run starts under it adds
+# the CPU-seconds and the peak memory its cgroup counted, page cache included.
 
 usage() {
   echo "usage: sharp/bin/record <name> -- <command...>" >&2
@@ -162,7 +163,13 @@ else
   interrupted=''
   trap 'interrupted=130' INT
   trap 'interrupted=143' TERM
-  export SHARP_RECORD_PARENT="$id" SHARP_RECORDED="$name"
+  # A container's processes are no children of this shell, so `times` and the sampler miss them. sharp/docker/run
+  # appends each container's CPU microseconds and peak bytes, read from its cgroup as it ends, to the file
+  # SHARP_RECORD_USAGE names, in the record's folder it mounts, and this record adds them to its own and passes them on to
+  # the record that runs it.
+  usage_file="$state/usage.$id"
+  outer_usage=${SHARP_RECORD_USAGE:-}
+  export SHARP_RECORD_PARENT="$id" SHARP_RECORDED="$name" SHARP_RECORD_USAGE="$usage_file"
   if "$@"; then
     status=0
   else
@@ -176,7 +183,25 @@ else
   wait "$sampler" 2>/dev/null || true
   peak_kib="$(< "$peak_file")"
   rm -f "$peak_file" "$times_file"
-  peak_mib=$((peak_kib / 1024))
+  # The containers run one after another, so the most one held adds to what this shell's descendants held.
+  container_us=0
+  container_peak=0
+  if [[ -f $usage_file ]]; then
+    while read -r used held; do
+      if [[ $used =~ ^[0-9]+$ && $held =~ ^[0-9]+$ ]]; then
+        container_us=$((container_us + used))
+        if ((held > container_peak)); then
+          container_peak=$held
+        fi
+      fi
+    done < "$usage_file"
+    rm -f "$usage_file"
+    if [[ -n $outer_usage ]]; then
+      echo "$container_us $container_peak" >> "$outer_usage"
+    fi
+  fi
+  cpu_ms=$((cpu_ms + container_us / 1000))
+  peak_mib=$(((peak_kib + container_peak / 1024) / 1024))
 fi
 
 argv_json='['
