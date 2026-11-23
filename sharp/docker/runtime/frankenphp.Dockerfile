@@ -14,6 +14,13 @@ ARG REGISTRY=public.ecr.aws/docker/library
 ARG BASE_IMAGE=${REGISTRY}/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
 # Go 1.27.4 builds FrankenPHP, which fixes CVE-2026-97054 in 1.27.3's net/http.
 ARG GOLANG_IMAGE=${REGISTRY}/golang:1.27-trixie@sha256:f18c3d73a184fb0582828510722e723b63a93f7188d11dd223d9be6f6880e65d
+
+# The tools image sharp/docker/tools/Dockerfile builds, the one place that pins each tool a build would otherwise
+# download, so the image ships the PHP-Parser and the Lean its tests ran with. A local build tags it php-sharp-tools,
+# as sharp/README.md shows, and the IMAGE job of .github/workflows/sharp.yml replaces this stage with
+# --build-context tools=…, the image base-images.yml pushes under the blob hash of sharp/docker/tools/Dockerfile.
+FROM php-sharp-tools AS tools
+
 FROM ${BASE_IMAGE} AS source
 
 RUN set -eux; \
@@ -281,9 +288,20 @@ RUN ln /etc/caddy/Caddyfile /etc/frankenphp/Caddyfile && \
 # builds none of them again on each release: the PostgreSQL drivers, gd, imagick, and redis with igbinary as its
 # serializer, which install-php-extensions installs first and builds redis against. It keeps each one's runtime
 # libraries and removes its build packages. The sources mount for this step alone, so none stays in the image.
+# imagick's `make install` generates its arginfo headers again with the gen_stub.php phpize copies into
+# /tmp/pear/temp/imagick/build, which downloads the PHP-Parser it pins when that folder lacks it. So the folder links
+# the tools stage's copy of that version first, and pecl deletes the link with its build folder.
 RUN --mount=type=bind,from=igbinary-source,target=/usr/src/igbinary,rw \
 	--mount=type=bind,from=imagick-source,target=/usr/src/imagick,rw \
 	--mount=type=bind,from=phpredis-source,target=/usr/src/phpredis,rw \
+	--mount=type=bind,from=tools,source=/opt,target=/opt/tools \
+	version=$(sed -n 's/^ *[$]version = "\(.*\)";$/\1/p' /usr/local/lib/php/build/gen_stub.php) && \
+	if [ ! -d "/opt/tools/PHP-Parser-$version" ]; then \
+		echo "The tools image carries no PHP-Parser $version, which build/gen_stub.php pins. Pin it in sharp/docker/tools/Dockerfile." >&2; \
+		exit 1; \
+	fi && \
+	mkdir -p /tmp/pear/temp/imagick/build && \
+	ln -s "/opt/tools/PHP-Parser-$version" /tmp/pear/temp/imagick/build/ && \
 	install-php-extensions gd pdo_pgsql pgsql /usr/src/igbinary /usr/src/imagick /usr/src/phpredis && \
 	# Remove files with non-deterministic content (embedded timestamps and mtimes) to keep image digests reproducible
 	rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache
@@ -399,31 +417,33 @@ RUN setcap cap_net_bind_service=+ep /usr/local/bin/frankenphp && \
 ENV XDG_CACHE_HOME=/var/cache
 RUN mkdir -m 0777 /var/cache/mago
 
-# The Lean the law checker runs, unpacked where mago reads it: `lean/<archive>/` in Mago's cache folder. The archive is
-# the release of the Lean version sharp/mago/crates/sharp-lean/lean/lean-toolchain pins, with the SHA-256
-# sharp/mago/crates/sharp-lean/src/library.rs pins for the platform, so a new Lean version fails here until both pin it.
-# Every user reads and writes the folder, so a container run with --user finds the Lean and builds the library beside it.
+# The Lean the law checker runs, where mago reads it: `lean/<archive>/` in Mago's cache folder, named as Lean's release
+# archive for the platform is, which sharp/mago/crates/sharp-lean/src/library.rs pins. It is the tools stage's elan
+# toolchain of the Lean version sharp/mago/crates/sharp-lean/lean/lean-toolchain pins, unpacked from that archive, so a
+# new Lean version fails here until sharp/docker/tools/Dockerfile pins it too. Every user reads and writes the folder,
+# so a container run with --user finds the Lean and builds the library beside it.
 FROM ${BASE_IMAGE} AS lean
 
 ARG TARGETARCH
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN apt-get update && \
-	apt-get -y --no-install-recommends install ca-certificates curl zstd && \
-	apt-get dist-clean
-
 COPY sharp/mago/crates/sharp-lean/lean/lean-toolchain /tmp/lean-toolchain
-RUN set -eux; \
-	version=$(sed 's/.*:v//' /tmp/lean-toolchain); \
+RUN --mount=type=bind,from=tools,source=/opt,target=/opt/tools \
+	set -eux; \
+	toolchain=$(< /tmp/lean-toolchain); \
+	version=${toolchain##*:v}; \
 	case "$TARGETARCH" in \
-		amd64) archive="lean-$version-linux"; sha256=47bf4bbd78f70c2e9670598ab7124d92b6efb7330ff33e5fbb4030f6fd72e4e4 ;; \
-		arm64) archive="lean-$version-linux_aarch64"; sha256=fdb974c2cdb4627e090d5d4007b913e09d13c4868720fb5594e22808b3de9e37 ;; \
+		amd64) archive="lean-$version-linux" ;; \
+		arm64) archive="lean-$version-linux_aarch64" ;; \
 		*) echo "Lean ships no Linux archive for $TARGETARCH." >&2; exit 1 ;; \
 	esac; \
-	curl -fsSL --retry 3 -o /tmp/lean.tar.zst "https://github.com/leanprover/lean4/releases/download/v$version/$archive.tar.zst"; \
-	echo "$sha256  /tmp/lean.tar.zst" | sha256sum -c; \
+	installed="/opt/tools/elan/toolchains/$(sed 's|/|--|; s|:|---|' <<< "$toolchain")"; \
+	if [[ ! -d $installed ]]; then \
+		echo "The tools image carries no Lean $toolchain, which lean-toolchain pins. Pin it in sharp/docker/tools/Dockerfile." >&2; \
+		exit 1; \
+	fi; \
 	mkdir -p /cache/mago/lean; \
-	tar --zstd --no-same-owner -xf /tmp/lean.tar.zst -C /cache/mago/lean; \
+	cp -a "$installed" "/cache/mago/lean/$archive"; \
 	"/cache/mago/lean/$archive/bin/lake" --version; \
 	chmod -R a+rwX /cache/mago
 

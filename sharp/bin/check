@@ -168,7 +168,7 @@ unchanged_by() {
 }
 
 # The workflows: every action that is not ours runs at a full commit SHA, no Dockerfile under sharp/docker names a
-# syntax frontend, and actionlint, at the version WORKFLOWS installs, passes over every workflow.
+# syntax frontend, and actionlint, at the version sharp/docker/tools/Dockerfile pins, passes over every workflow.
 unpinned() {
   if git -C "$root" grep -nE '^[[:space:]]*(-[[:space:]]+)?uses:' -- .github/workflows .github/actions \
     | grep -vE 'uses:[[:space:]]+(\./|[^@[:space:]]+@[0-9a-f]{40}([[:space:]]|$)|docker://[^@[:space:]]+@sha256:[0-9a-f]{64}([[:space:]]|$))'; then
@@ -184,9 +184,9 @@ syntax_frontend() {
 }
 lint_workflows() {
   local version
-  version="$(sed -n 's|.*actionlint/releases/download/v\([0-9.]*\)/.*|\1|p' "$root/.github/workflows/sharp.yml")"
+  version="$(sed -n 's/^ARG ACTIONLINT_VERSION=//p' "$root/sharp/docker/tools/Dockerfile")"
   if [[ "$(actionlint -version | head -n 1)" != "$version" ]]; then
-    echo "WORKFLOWS runs actionlint $version. Install that version: https://github.com/rhysd/actionlint/releases/tag/v$version" >&2
+    echo "sharp/docker/tools/Dockerfile pins actionlint $version. Install that version: https://github.com/rhysd/actionlint/releases/tag/v$version" >&2
     return 1
   fi
   (cd "$root" && actionlint)
@@ -357,7 +357,7 @@ gen_stub() {
   # shellcheck disable=SC2016 # The container's shell expands them.
   sharp/docker/run sh -c '
     if [ ! -d "/opt/PHP-Parser-$1" ]; then
-      echo "The sharp/docker image carries no PHP-Parser $1, which build/gen_stub.php pins. Pin it in sharp/docker/Dockerfile." >&2
+      echo "The sharp/docker image carries no PHP-Parser $1, which build/gen_stub.php pins. Pin it in sharp/docker/tools/Dockerfile." >&2
       exit 1
     fi
     [ -e "build/PHP-Parser-$1" ] || ln -s "/opt/PHP-Parser-$1" "build/PHP-Parser-$1"
