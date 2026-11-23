@@ -404,6 +404,12 @@ RUN setcap cap_net_bind_service=+ep /usr/local/bin/frankenphp && \
 	frankenphp build-info && \
 	php --ri sharp
 
+# Mago's cache folder is /var/cache/mago for every user. A copy into a folder that exists keeps the folder's mode, so a
+# project's image that copies the -dev image's Lean with COPY --from=…-dev /var/cache/mago /var/cache/mago gets a folder
+# www-data writes in, where COPY makes a folder it creates root's with mode 755.
+ENV XDG_CACHE_HOME=/var/cache
+RUN mkdir -m 0777 /var/cache/mago
+
 # The Lean the law checker runs, unpacked where mago reads it: `lean/<archive>/` in Mago's cache folder. The archive is
 # the release of the Lean version sharp/mago/crates/sharp-lean/lean/lean-toolchain pins, with the SHA-256
 # sharp/mago/crates/sharp-lean/src/library.rs pins for the platform, so a new Lean version fails here until both pin it.
@@ -449,7 +455,6 @@ RUN --mount=type=bind,from=excimer-source,target=/usr/src/excimer,rw \
 	# Remove files with non-deterministic content (embedded timestamps and mtimes) to keep image digests reproducible
 	rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache
 
-ENV XDG_CACHE_HOME=/var/cache
 # The folder's contents, so the copy keeps the mode of mago/ too.
 COPY --link --from=lean /cache/ /var/cache/
 
