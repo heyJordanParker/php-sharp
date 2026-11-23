@@ -7,9 +7,13 @@ declare(strict_types=1);
  * - c2k: 133 modules of 16 PHP# files each, 2,128 files with 1,330 laws, and one extension host whose return-type
  *   provider every `App\` method call asks.
  * - c2ks: c2k whose host also registers a codebase-scan hook.
+ * - c2kr: c2k whose host also reports each method body an earlier file in path order wrote, a whole-codebase rule, in
+ *   two forms: mago.toml's host gathers each file's bodies in an after-file hook and reports from its worker reducer,
+ *   and mago-walked.toml's host walks every file in an after-analysis hook. `mago --config mago-walked.toml analyze`
+ *   runs the second.
  * - laws: the law corpus, each file of benchmark/laws under app/, with no host: one file per law shape a project hit.
  *
- * Usage: php benchmark/c2k.php c2k|c2ks|laws <folder>
+ * Usage: php benchmark/c2k.php c2k|c2ks|c2kr|laws <folder>
  *
  * The folder must not exist. Composer installs the package from this checkout and its two dependencies from Packagist,
  * at the versions composer.json pins.
@@ -17,9 +21,143 @@ declare(strict_types=1);
 
 const MODULES = 133;
 
+/** The imports of each form of the duplicate-body rule, beside the host's own. */
+const BODIES_USES = [
+    'reduced' => [
+        'Mago\Sdk\Analyzer\AfterFileAnalysisContext',
+        'Mago\Sdk\Analyzer\AfterFileAnalysisHook',
+        'Mago\Sdk\Reporting\Issue',
+        'Mago\Sdk\Reporting\Level',
+        'Mago\Sdk\SourceLocation',
+        'Mago\Sdk\Span',
+        'Mago\Sdk\Syntax\NodeKind',
+        'Mago\Sdk\Syntax\SourceFile',
+        'Mago\Sdk\WorkerReducer',
+        'Mago\Sdk\WorkerReductionContext',
+    ],
+    'walked' => [
+        'Mago\Sdk\Analyzer\AfterAnalysisContext',
+        'Mago\Sdk\Analyzer\AfterAnalysisHook',
+        'Mago\Sdk\Reporting\Issue',
+        'Mago\Sdk\Reporting\Level',
+        'Mago\Sdk\SourceLocation',
+        'Mago\Sdk\Span',
+        'Mago\Sdk\Syntax\NodeKind',
+        'Mago\Sdk\Syntax\SourceFile',
+    ],
+];
+
+/** The functions both forms of the duplicate-body rule share: one file's bodies, and the bodies an earlier file wrote. */
+const BODIES = <<<'PHP'
+    /** Each method body of `$source`, as [its text, its file, its start, its end]. */
+    function method_bodies(SourceFile $source): array
+    {
+        $bodies = [];
+        foreach ($source->getNodes(NodeKind::Method) as $method) {
+            $body = $source->getFirstDescendant($method, NodeKind::MethodBody)
+                ?? $source->getFirstDescendant($method, NodeKind::MethodExpressionBody);
+            if ($body !== null) {
+                $bodies[] = [$source->getText($body), $source->path, $body->span->start, $body->span->end];
+            }
+        }
+
+        return $bodies;
+    }
+
+    /** Each issue of a body of `$bodies` whose text a body earlier in path order has. */
+    function repeated_bodies(array $bodies): array
+    {
+        usort($bodies, static fn (array $a, array $b): int => [$a[1], $a[2]] <=> [$b[1], $b[2]]);
+        $first = [];
+        $issues = [];
+        foreach ($bodies as [$text, $file, $start, $end]) {
+            if (isset($first[$text])) {
+                $issues[] = Issue::at("This body repeats the one in {$first[$text]}.", new SourceLocation($file, new Span($start, $end)));
+            } else {
+                $first[$text] = $file;
+            }
+        }
+
+        return $issues;
+    }
+
+    PHP;
+
+/** The duplicate-body rule as an after-file hook that gathers on each worker and a worker reducer that reports. */
+const REDUCED_BODIES = <<<'PHP'
+    final class Bodies implements Plugin, AfterFileAnalysisHook, WorkerReducer
+    {
+        private array $bodies = [];
+
+        public function getDefinition(): PluginDefinition
+        {
+            return new PluginDefinition('bodies', 'Bodies', 'Reports a method body an earlier file wrote.');
+        }
+
+        public function register(PluginRegistry $registry): void
+        {
+            $registry->registerAfterFileAnalysisHook($this);
+        }
+
+        public function getRequirements(): array
+        {
+            return [];
+        }
+
+        public function afterFileAnalysis(AfterFileAnalysisContext $context): void
+        {
+            array_push($this->bodies, ...method_bodies($context->analysis->getSourceFile()));
+        }
+
+        public function collect(): string
+        {
+            $collected = serialize($this->bodies);
+            $this->bodies = [];
+
+            return $collected;
+        }
+
+        public function reduce(WorkerReductionContext $context): void
+        {
+            foreach (repeated_bodies(array_merge(...array_map('unserialize', $context->workerPayloads))) as $issue) {
+                $context->report(Level::Warning, 'duplicate-body', $issue);
+            }
+        }
+    }
+
+    PHP;
+
+/** The duplicate-body rule as an after-analysis hook that walks every file on one thread. */
+const WALKED_BODIES = <<<'PHP'
+    final class Bodies implements Plugin, AfterAnalysisHook
+    {
+        public function getDefinition(): PluginDefinition
+        {
+            return new PluginDefinition('bodies', 'Bodies', 'Reports a method body an earlier file wrote.');
+        }
+
+        public function register(PluginRegistry $registry): void
+        {
+            $registry->registerAfterAnalysisHook($this);
+        }
+
+        public function afterAnalysis(AfterAnalysisContext $context): void
+        {
+            $bodies = [];
+            foreach ($context->analysis->files as $file) {
+                array_push($bodies, ...method_bodies($file->getSourceFile()));
+            }
+            foreach (repeated_bodies($bodies) as $issue) {
+                $context->report(Level::Warning, 'duplicate-body', $issue);
+            }
+        }
+    }
+
+    PHP;
+
 [$script, $kind, $folder] = $argv + [null, null, null];
-if (!in_array($kind, ['c2k', 'c2ks', 'laws'], true) || $folder === null) {
-    fwrite(STDERR, "Usage: php {$script} c2k|c2ks|laws <folder>\n");
+if (!in_array($kind, ['c2k', 'c2ks', 'c2kr', 'laws'], true) || $folder === null) {
+    fwrite(STDERR, "Usage: php {$script} c2k|c2ks|c2kr|laws <folder>\n");
     exit(2);
 }
 if (file_exists($folder)) {
@@ -28,8 +166,9 @@ if (file_exists($folder)) {
 }
 
 $package = realpath(__DIR__ . '/../sharp/composer');
-$hosts = $kind === 'laws' ? '' : "\n[extension-hosts.amounts]\nfile = \"tools/host.php\"\n";
-write($folder, 'mago.toml', "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n{$hosts}");
+$configuration = static fn (string $host): string => "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n"
+    . ($host === '' ? '' : "\n[extension-hosts.amounts]\nfile = \"tools/{$host}\"\n");
+write($folder, 'mago.toml', $configuration($kind === 'laws' ? '' : 'host.php'));
 write($folder, 'composer.json', json_encode([
     'type' => 'library',
     'repositories' => [['type' => 'path', 'url' => $package, 'options' => ['symlink' => false]]],
@@ -48,7 +187,11 @@ if ($kind === 'laws') {
         write($folder, 'app/' . substr($file->getPathname(), strlen($corpus) + 1), file_get_contents($file->getPathname()));
     }
 } else {
-    write($folder, 'tools/host.php', host($kind === 'c2ks'));
+    write($folder, 'tools/host.php', host($kind === 'c2ks', $kind === 'c2kr' ? 'reduced' : null));
+    if ($kind === 'c2kr') {
+        write($folder, 'tools/walked.php', host(false, 'walked'));
+        write($folder, 'mago-walked.toml', $configuration('walked.php'));
+    }
     for ($module = 0; $module < MODULES; $module++) {
         foreach (module($module) as $name => $source) {
             write($folder, "app/M{$module}/{$name}.sharp", $source);
@@ -76,10 +219,11 @@ function write(string $folder, string $name, string $contents): void
 }
 
 /**
- * The extension host: a return-type provider every `App\` method call asks, which answers none, and in c2ks a
- * codebase-scan hook that selects the first module's files and reads nothing from them.
+ * The extension host: a return-type provider every `App\` method call asks, which answers none, in c2ks a codebase-scan
+ * hook that selects the first module's files and reads nothing from them, and in c2kr the duplicate-body rule in the
+ * form `$bodies` names: `reduced` or `walked`.
  */
-function host(bool $scans): string
+function host(bool $scans, ?string $bodies = null): string
 {
     $amounts = <<<'PHP'
         final class Amounts implements Plugin, MethodReturnTypeProvider
@@ -144,13 +288,22 @@ function host(bool $scans): string
     if ($scans) {
         array_unshift($uses, 'Mago\Sdk\Analyzer\CodebaseScanContext', 'Mago\Sdk\Analyzer\CodebaseScanHook');
     }
-    $imports = implode('', array_map(static fn (string $use): string => "use {$use};\n", $uses));
     $plugins = $scans ? 'new Amounts(), new Scans()' : 'new Amounts()';
     $classes = $amounts . ($scans ? "\n" . $scanner : '');
+    $run = "(new Worker(new Extension('amounts', 'Amounts', '0.0.0', analyzerPlugins: [{$plugins}])))->run();\n";
+    if ($bodies !== null) {
+        array_push($uses, ...BODIES_USES[$bodies]);
+        $classes .= "\n" . BODIES . "\n" . ($bodies === 'reduced' ? REDUCED_BODIES : WALKED_BODIES);
+        $run = $bodies === 'reduced'
+            ? "\$bodies = new Bodies();\n(new Worker(new Extension('amounts', 'Amounts', '0.0.0', analyzerPlugins: [new Amounts(), \$bodies], workerReducer: \$bodies)))->run();\n"
+            : "(new Worker(new Extension('amounts', 'Amounts', '0.0.0', analyzerPlugins: [new Amounts(), new Bodies()])))->run();\n";
+    }
+    sort($uses);
+    $imports = implode('', array_map(static fn (string $use): string => "use {$use};\n", $uses));
 
-    return "<?php\n\ndeclare(strict_types=1);\n\n{$imports}\n{$classes}\n"
-        . "(new Worker(new Extension('amounts', 'Amounts', '0.0.0', analyzerPlugins: [{$plugins}])))->run();\n";
+    return "<?php\n\ndeclare(strict_types=1);\n\n{$imports}\n{$classes}\n{$run}";
 }
+
 
 /**
  * The 16 files of module `$n`, by class name, with 10 laws that each end with the fixed steps: five on `Line` over the
