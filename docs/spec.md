@@ -406,6 +406,8 @@ public class OwnersTest : TestCase
 }
 ```
 
+**Production code can't use a class of a dev-only package,** since a production install leaves the package out. A dev-only package is one `composer.lock` lists under `packages-dev`, so PHPUnit installed through Pest counts, or, with no `composer.lock`, one `composer.json` lists under `require-dev`. A PHP# file outside every `autoload-dev` folder that extends, implements, creates, names as a type, or calls a class of one is a compile error that says where tests go: "`OptInTest` extends `TestCase`, from phpunit/phpunit, a dev-only package that a production install leaves out. Tests go in a folder composer.json lists under autoload-dev, such as tests/." It runs in projects and libraries alike, since both ship without dev packages. A class it refuses for what it extends or implements gets no unused-class error too.
+
 **An interface member is always public, so it takes no access modifier.** Writing one, `public` included, is a compile error:
 
 <!-- example interface-members -->

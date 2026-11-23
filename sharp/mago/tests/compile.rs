@@ -3276,7 +3276,7 @@ fn listener_table(root: &Path, inputs: &[&str], rows: &str, dispatcher: &str) ->
     let inputs: String = inputs.iter().map(|path| input_row(root, path)).collect();
 
     format!(
-        "<?php\n\nreturn [\n    'inputs' => [\n{inputs}    ],\n    'listeners' => [\n{rows}    ],\n    'dispatcher' => {dispatcher},\n    'attributes' => [\n    ],\n    'effects' => [\n    ],\n    'tags' => [\n    ],\n    'modules' => [\n    ],\n];\n"
+        "<?php\n\nreturn [\n    'inputs' => [\n{inputs}    ],\n    'listeners' => [\n{rows}    ],\n    'dispatcher' => {dispatcher},\n    'packages' => [\n    ],\n    'attributes' => [\n    ],\n    'effects' => [\n    ],\n    'tags' => [\n    ],\n    'modules' => [\n    ],\n];\n"
     )
 }
 
@@ -3407,18 +3407,18 @@ fn compile_names_the_app_module_that_binds_the_dispatcher() {
     let root = directory.path();
 
     compile_succeeds(root);
-    assert!(read(root, ".sharp/listeners.php").contains("    'dispatcher' => 'app\\\\shop',\n    'attributes' => [\n"));
+    assert!(read(root, ".sharp/listeners.php").contains("    'dispatcher' => 'app\\\\shop',\n"));
 
     write(root, "app/Module.sharp", &dispatcher_module("App"));
     let output = compile(root);
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     assert!(printed(&output).contains("Only `app/Module.sharp` binds `Dispatcher`"), "{}", printed(&output));
-    assert!(read(root, ".sharp/listeners.php").contains("    'dispatcher' => 'app',\n    'attributes' => [\n"));
+    assert!(read(root, ".sharp/listeners.php").contains("    'dispatcher' => 'app',\n"));
 
     std::fs::remove_file(root.join("app/Shop/Module.sharp")).unwrap();
     std::fs::remove_file(root.join("app/Module.sharp")).unwrap();
     compile_succeeds(root);
-    assert!(read(root, ".sharp/listeners.php").contains("    'dispatcher' => null,\n    'attributes' => [\n"));
+    assert!(read(root, ".sharp/listeners.php").contains("    'dispatcher' => null,\n"));
 }
 
 /// Spec section 32: a class's services come from the modules of its namespace and of each namespace above it, wherever
@@ -3561,6 +3561,30 @@ fn compile_lists_the_effects_each_extern_line_declares_for_a_class_and_a_method(
         read(root, ".sharp/listeners.php").ends_with(
             "    'effects' => [\n        'lib\\\\mailer' => [],\n        'lib\\\\mailer::count' => null,\n        'lib\\\\mailer::send' => ['App.Mail.Smtp'],\n    ],\n    'tags' => [\n    ],\n    'modules' => [\n    ],\n];\n"
         ),
+        "{}",
+        read(root, ".sharp/listeners.php")
+    );
+}
+
+/// Spec section 29: the listener table lists the folder Composer installs each of the project's packages in, those
+/// `composer.lock` lists, dev-only or not, under its `config.vendor-dir`, in which the engine finds a plain PHP
+/// method's own package.
+#[test]
+fn compile_lists_the_install_folder_of_each_package_under_the_vendor_dir() {
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    write(root, "composer.json", "{\"type\": \"library\", \"config\": {\"vendor-dir\": \"libs\"}}\n");
+    write(
+        root,
+        "composer.lock",
+        "{\"packages\": [{\"name\": \"acme/money\"}], \"packages-dev\": [{\"name\": \"phpunit/phpunit\"}]}\n",
+    );
+
+    compile_succeeds(root);
+
+    assert!(
+        read(root, ".sharp/listeners.php")
+            .contains("    'dispatcher' => null,\n    'packages' => [\n        'libs/acme/money/',\n        'libs/phpunit/phpunit/',\n    ],\n    'attributes' => [\n"),
         "{}",
         read(root, ".sharp/listeners.php")
     );
@@ -3954,6 +3978,124 @@ fn compile_reports_an_unavailable_law_checker_on_each_file_that_needs_it_and_who
     assert!(!printed(&output).contains("elan"), "{}", printed(&output));
     assert!(compiled(root, "app/Order.sharp").exists());
     assert!(!root.join(".sharp/inputs.json").exists(), "the next compile tries to install the law checker again");
+}
+
+/// A project of `kind`, `"project"` or `"library"`, with `app/` under `autoload` and `tests/` under `autoload-dev`,
+/// whose `composer.lock` lists `phpunit/phpunit` under `packages-dev` and `acme/report` under `packages`, both
+/// installed in `vendor/` with their plain PHP classes, and `files`.
+fn dev_package_project(kind: &str, files: &[(&str, &str)]) -> tempfile::TempDir {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    write(
+        root,
+        "mago.toml",
+        "php-version = \"8.4\"\n\n[source]\npaths = [\"app\", \"tests\"]\nincludes = [\"vendor\"]\n",
+    );
+    write(
+        root,
+        "composer.json",
+        &format!(
+            "{{\"type\": \"{kind}\", \"autoload\": {{\"psr-4\": {{\"App\\\\\": \"app/\"}}}}, \"autoload-dev\": {{\"psr-4\": {{\"Tests\\\\\": \"tests/\"}}}}}}\n"
+        ),
+    );
+    write(
+        root,
+        "composer.lock",
+        "{\"packages\": [{\"name\": \"acme/report\"}], \"packages-dev\": [{\"name\": \"phpunit/phpunit\"}]}\n",
+    );
+    write(
+        root,
+        "vendor/phpunit/phpunit/src/Framework/TestCase.php",
+        "<?php\n\nnamespace PHPUnit\\Framework;\n\nabstract class TestCase\n{\n}\n",
+    );
+    write(
+        root,
+        "vendor/phpunit/phpunit/src/Framework/Test.php",
+        "<?php\n\nnamespace PHPUnit\\Framework;\n\ninterface Test\n{\n}\n",
+    );
+    write(
+        root,
+        "vendor/acme/report/src/Report.php",
+        "<?php\n\nnamespace Acme\\Report;\n\nabstract class Report\n{\n}\n",
+    );
+    for (name, contents) in files {
+        write(root, name, contents);
+    }
+
+    directory
+}
+
+/// A test class outside every `autoload-dev` folder extends PHPUnit's `TestCase`, a class of a dev-only package, one
+/// `composer.lock` lists under `packages-dev`: a production install leaves the package out, so the class is refused
+/// with where tests go, and no `unused-class` names it too.
+#[test]
+fn production_code_that_extends_a_class_of_a_dev_only_package_is_refused_with_where_tests_go() {
+    let directory = dev_package_project(
+        "project",
+        &[(
+            "app/OptInTest.sharp",
+            "namespace App;\n\nimport PHPUnit.Framework.TestCase;\n\ninternal class OptInTest : TestCase\n{\n}\n",
+        )],
+    );
+
+    let output = compile_lines(directory.path());
+
+    assert_eq!(
+        issue_lines(&output),
+        [
+            "app/OptInTest.sharp:5:28:error - production-uses-dev-package: `OptInTest` extends `TestCase`, from phpunit/phpunit, a dev-only package that a production install leaves out. Tests go in a folder composer.json lists under autoload-dev, such as tests/."
+        ],
+        "{}",
+        printed(&output)
+    );
+}
+
+/// Production code of a library that implements an interface of a dev-only package, or names it as a type, is
+/// refused at each name, the header's saying which class implements it.
+#[test]
+fn production_code_that_implements_or_names_a_class_of_a_dev_only_package_is_refused_at_each_name() {
+    let directory = dev_package_project(
+        "library",
+        &[(
+            "app/Probe.sharp",
+            "namespace App;\n\nimport PHPUnit.Framework.Test;\n\ninternal class Probe : Test\n{\n    internal void check(Test other)\n    {\n    }\n}\n",
+        )],
+    );
+
+    let output = compile_lines(directory.path());
+
+    assert_eq!(
+        issue_lines(&output),
+        [
+            "app/Probe.sharp:5:24:error - production-uses-dev-package: `Probe` implements `Test`, from phpunit/phpunit, a dev-only package that a production install leaves out. Tests go in a folder composer.json lists under autoload-dev, such as tests/.",
+            "app/Probe.sharp:7:25:error - production-uses-dev-package: Production code uses `Test`, from phpunit/phpunit, a dev-only package that a production install leaves out. Tests go in a folder composer.json lists under autoload-dev, such as tests/.",
+        ],
+        "{}",
+        printed(&output)
+    );
+}
+
+/// The same test class in `tests/`, a folder `composer.json` lists under `autoload-dev`, compiles, and so does
+/// production code that extends a class of a package `composer.lock` lists under `packages`.
+#[test]
+fn a_test_in_an_autoload_dev_folder_and_production_code_of_a_required_package_compile() {
+    let test = dev_package_project(
+        "project",
+        &[(
+            "tests/OptInTest.sharp",
+            "namespace Tests;\n\nimport PHPUnit.Framework.TestCase;\n\ninternal class OptInTest : TestCase\n{\n}\n",
+        )],
+    );
+    let required = dev_package_project(
+        "library",
+        &[("app/Sales.sharp", "namespace App;\n\nimport Acme.Report.Report;\n\npublic class Sales : Report\n{\n}\n")],
+    );
+
+    for directory in [test, required] {
+        let output = compile_lines(directory.path());
+
+        assert!(output.status.success(), "{}", printed(&output));
+    }
 }
 
 #[test]

@@ -69,6 +69,9 @@ fi
 workspace=/tmp
 mkdir "$workspace/sharp"
 cp -R "$root/sharp/bench" "$root/sharp/composer" "$workspace/sharp/"
+# The rows are no application's code, so spec section 5's strict rules, which code with no composer.json above it
+# meets as a project's, stay off them.
+echo '{"type": "library"}' > "$workspace/composer.json"
 "$mago_dir/debug/mago" --no-version-check --colors never --workspace "$workspace" \
   --config "$workspace/sharp/bench/mago.toml" compile >/dev/null
 

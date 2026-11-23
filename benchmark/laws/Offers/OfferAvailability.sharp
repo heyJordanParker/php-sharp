@@ -1,0 +1,42 @@
+namespace App.Offers;
+
+import Sharp.Time.Instant;
+
+public machine OfferAvailability : Variant
+{
+    final case Available(Instant? startsAt, Instant? endsAt, int? spotsRemaining);
+    final case Inactive;
+    final case Undeliverable;
+    final case NotStarted;
+    final case Ended(Instant endedAt);
+    final case SoldOut(Instant? startsAt, Instant? endsAt);
+    final case Purchased(Instant? startsAt, Instant? endsAt);
+
+    public static OfferAvailability of(bool active, bool deliverable, Instant? startsAt, Instant? deadline, int? maxBuyers, int claims, int? maxPerCustomer, int? customerClaims) {
+        if (!active) { return OfferAvailability.Inactive; }
+        if (!deliverable) { return OfferAvailability.Undeliverable; }
+        if (maxBuyers != null && claims >= maxBuyers) { return OfferAvailability.SoldOut(startsAt, deadline); }
+        if (maxPerCustomer != null && customerClaims != null && customerClaims >= maxPerCustomer) { return OfferAvailability.Purchased(startsAt, deadline); }
+        if (maxBuyers == null) { return OfferAvailability.Available(startsAt, deadline, null); }
+        return OfferAvailability.Available(startsAt, deadline, maxBuyers - claims);
+    }
+
+    public static OfferAvailability at(OfferAvailability status, Instant now)
+        => status is OfferAvailability.Available available
+            ? OfferAvailability.timed(available, available.startsAt, available.endsAt, now)
+            : (status is OfferAvailability.SoldOut soldOut
+                ? OfferAvailability.timed(soldOut, soldOut.startsAt, soldOut.endsAt, now)
+                : (status is OfferAvailability.Purchased purchased ? OfferAvailability.timed(purchased, purchased.startsAt, purchased.endsAt, now) : status));
+
+    private static OfferAvailability timed(OfferAvailability open, Instant? startsAt, Instant? endsAt, Instant now)
+        => startsAt is Instant starts
+            ? (now < starts ? OfferAvailability.NotStarted : OfferAvailability.ended(open, endsAt, now))
+            : OfferAvailability.ended(open, endsAt, now);
+
+    private static OfferAvailability ended(OfferAvailability open, Instant? endsAt, Instant now)
+        => endsAt is Instant ends ? (now >= ends ? OfferAvailability.Ended(ends) : open) : open;
+
+    law anOfferNotStartedComesBeforeItsEnd(Instant now, Instant starts, Instant ends, int claims)
+        when now < starts
+        => OfferAvailability.at(OfferAvailability.of(true, true, starts, ends, null, claims, null, null), now) is OfferAvailability.NotStarted;
+}

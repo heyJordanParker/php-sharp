@@ -14,6 +14,7 @@ These files change, and nothing else:
 - what `php sharp/mago/scripts/set-version.php <version>` writes: the root package's `version` in `sharp/mago/Cargo.toml`, the one place the release version lives, its line in `sharp/mago/Cargo.lock`, and the versioned docs
 - the engine's version, which `RELEASE_ASSETS` refuses unless it equals `mago`'s: `PHP_SHARP_VERSION` in `ext/sharp/php_sharp.h`, and the `Version =>` line of `Zend/tests/sharp/ri_sharp.phpt`
 - in `sharp/CHANGELOG.md`, the `## [<version>] - <YYYY-MM-DD>` heading over the notes, the `[Unreleased]` link from `v<version>`, and a `[<version>]` link from the last tag
+- `sharp/baseline/speed.json`, the `speed` artifact of the green `PHP#` run on the commit the bump releases, `gh run download <run> --name speed`, so the next commits are counted against what this release proves and compiles in
 
 Builders' uncommitted work shares the tree, so build the bump from HEAD's copies of those files in the scratchpad, `set-version.php` included, and commit it from a private index as `/implement` step 5 does, as `chore: release <version>`. Then write the same edits into the working tree, keeping every builder's uncommitted line under `## [Unreleased]`. Push it, and write the pull request's body with `gh pr edit --body-file <file>`: what users can do now, the fixes with the issues they close, and how to upgrade past a break.
 

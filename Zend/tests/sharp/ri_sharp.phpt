@@ -12,3 +12,4 @@ Version => %d.%d.%d
 
 Directive => Local Value => Master Value
 sharp.compile_command => no value => no value
+sharp.effect_report => no value => no value

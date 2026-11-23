@@ -82,12 +82,15 @@ typedef struct {
 } sharp_scope;
 
 /* A fiber's scopes, in the reserved slot sharp_fiber_slot of its zend_fiber_context: the scope it started in, the scope
- * it runs in now, and the bindings and classes it is building, to refuse a cycle. The request's main context has them
- * too. A fiber may suspend in the middle of a build, so each fiber builds on its own. */
+ * it runs in now, the bindings and classes it is building, to refuse a cycle, and, while sharp.effect_report is set,
+ * the calls a built-in it runs counts against, innermost on top, each a declared method's run, or NULL for PHP# code.
+ * The request's main context has them too. A fiber may suspend in the middle of a build or of a declared call, so
+ * each fiber builds and counts on its own, and starts counting against nothing. See sharp_effect_observer. */
 typedef struct {
 	sharp_scope *started_in;
 	sharp_scope *current;
 	HashTable building;
+	zend_stack effect_calls;
 } sharp_fiber_scopes;
 
 ZEND_BEGIN_MODULE_GLOBALS(sharp)
@@ -150,6 +153,9 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	zend_string *silenced_warning;
 	/* The field whose value Sharp_Internal_seal is writing, which each Secret in it is encrypted for, or NULL. */
 	zend_string *seal_path;
+	/* Spec section 29, while sharp.effect_report is set: for the request, what the calls of each plain PHP method an
+	 * `extern` line declares ran, a sharp_effect_run by the method's name. See sharp_effect_observer. */
+	HashTable effect_runs;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
@@ -158,6 +164,7 @@ ZEND_DECLARE_MODULE_GLOBALS(sharp)
 
 PHP_INI_BEGIN()
 	STD_PHP_INI_ENTRY("sharp.compile_command", "", PHP_INI_SYSTEM, OnUpdateString, compile_command, zend_sharp_globals, sharp_globals)
+	PHP_INI_ENTRY("sharp.effect_report", "", PHP_INI_SYSTEM, NULL)
 PHP_INI_END()
 
 static zend_op_array *(*sharp_next_compile_file)(zend_file_handle *file_handle, int type);
@@ -11233,6 +11240,7 @@ static void sharp_fiber_scopes_start(sharp_fiber_scopes *scopes, sharp_scope *st
 {
 	scopes->started_in = scopes->current = started_in;
 	zend_hash_init(&scopes->building, 8, NULL, NULL, false);
+	zend_stack_init(&scopes->effect_calls, sizeof(struct sharp_effect_run *));
 }
 
 /* Ends scopes: they let go of the scope they started in, and a build a suspended fiber never finished ends with them. */
@@ -11240,6 +11248,7 @@ static void sharp_fiber_scopes_end(sharp_fiber_scopes *scopes)
 {
 	sharp_scope_release(scopes->started_in);
 	zend_hash_destroy(&scopes->building);
+	zend_stack_destroy(&scopes->effect_calls);
 }
 
 /* A fiber starts in the scope of the code that starts it, as .NET's AsyncLocal flows into the work it starts. */
@@ -12355,7 +12364,8 @@ static bool sharp_listener_lists_fit(const zval *lists, bool nullable)
 }
 
 /* Whether table is a table mago compile wrote: ['inputs' => [input, ...], 'listeners' => [row, ...], 'dispatcher' =>
- * null or the lowercase namespace of the app's modules that bind the dispatcher, 'attributes' => [the lowercase name
+ * null or the lowercase namespace of the app's modules that bind the dispatcher, 'packages' => [the workspace-relative
+ * folder, ending in `/`, Composer installs each of the project's packages in, ...], 'attributes' => [the lowercase name
  * of a plain PHP class an `extern` line gives attributes => [the workspace-relative path of each .sharp file whose line
  * does, ...], ...], 'effects' => [the lowercase name of a plain PHP class or method an `extern` line declares => [the
  * dotted full name of each effect it declares, ...], or null for `uses any`, ...], 'tags' => [a family's full name =>
@@ -12372,11 +12382,12 @@ static bool sharp_listener_table_fits(const zval *table)
 	const zval *effects = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "effects", sizeof("effects") - 1) : NULL;
 	const zval *tags = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "tags", sizeof("tags") - 1) : NULL;
 	const zval *modules = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "modules", sizeof("modules") - 1) : NULL;
+	const zval *packages = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "packages", sizeof("packages") - 1) : NULL;
 	const zval *element, *file;
 	zend_string *class;
 
 	if (!inputs || Z_TYPE_P(inputs) != IS_ARRAY || !listeners || Z_TYPE_P(listeners) != IS_ARRAY || !dispatcher
-			|| (Z_TYPE_P(dispatcher) != IS_NULL && Z_TYPE_P(dispatcher) != IS_STRING)
+			|| (Z_TYPE_P(dispatcher) != IS_NULL && Z_TYPE_P(dispatcher) != IS_STRING) || !packages || Z_TYPE_P(packages) != IS_ARRAY
 			|| !sharp_listener_lists_fit(attributes, false) || !sharp_listener_lists_fit(effects, true) || !tags
 			|| Z_TYPE_P(tags) != IS_ARRAY || !sharp_listener_lists_fit(modules, false)) {
 		return false;
@@ -12394,6 +12405,11 @@ static bool sharp_listener_table_fits(const zval *table)
 	} ZEND_HASH_FOREACH_END();
 	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(inputs), element) {
 		if (!sharp_listener_input_fits(element)) {
+			return false;
+		}
+	} ZEND_HASH_FOREACH_END();
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(packages), element) {
+		if (Z_TYPE_P(element) != IS_STRING) {
 			return false;
 		}
 	} ZEND_HASH_FOREACH_END();
@@ -12558,21 +12574,29 @@ static zend_string *sharp_extern_key(zend_string *name, uint32_t target)
 	return key;
 }
 
-/* The effects, each a dotted full name, the `extern` lines give the plain PHP method `func`, spec section 29, as the
- * listener table of the root above `file` lists them: the method's own line, else the line of the class or trait that
- * declares it, as the checker reads them, so a method a class takes from a trait takes the trait's lines under the
- * name the trait gives it. Nothing passes from a parent class, so a method of a subclass no line declares may have
- * every effect, as the checker holds a call of it. NULL when no line or a line that says `uses any` declares them, so
- * the method may have every effect, and after an exception reading the table threw. */
-static HashTable *sharp_extern_effects(const zend_function *func, const zend_string *file)
+/* The method whose `extern` lines declare the method `func`: the trait's, under the name the trait gives it, for a
+ * method a class takes from a trait, else `func` itself. */
+static const zend_function *sharp_extern_method(const zend_function *func)
+{
+	for (const zend_function *original; (original = sharp_trait_method(func->common.scope, func));) {
+		func = original;
+	}
+
+	return func;
+}
+
+/* The `extern` line of the plain PHP method `func`, spec section 29, as the listener table of the root above `file`
+ * lists it: the method's own line, else the line of the class or trait that declares it, as the checker reads them.
+ * Nothing passes from a parent class. The entry is the list of the line's effects, each a dotted full name, or null
+ * for a line that says `uses any`. NULL when no line declares the method, and after an exception reading the table
+ * threw. */
+static zval *sharp_method_extern_line(const zend_function *func, const zend_string *file)
 {
 	size_t root_length;
 	if (!file || !func->common.scope || !sharp_find_root(file, &root_length)) {
 		return NULL;
 	}
-	for (const zend_function *original; (original = sharp_trait_method(func->common.scope, func));) {
-		func = original;
-	}
+	func = sharp_extern_method(func);
 	HashTable *table = sharp_listener_table(ZSTR_VAL(file), root_length);
 	/* A missing table, which sharp_listener_table gives as one without effects, declares none. */
 	zval *effects = table ? zend_hash_str_find(table, "effects", sizeof("effects") - 1) : NULL;
@@ -12588,7 +12612,200 @@ static HashTable *sharp_extern_effects(const zend_function *func, const zend_str
 	zend_string_release(member);
 	zend_string_release(class);
 
+	return declared;
+}
+
+/* The effects the `extern` line of the plain PHP method `func` gives it, as sharp_method_extern_line finds the line. NULL when
+ * no line or a line that says `uses any` declares them, so the method may have every effect, as the checker holds a
+ * call of it, and after an exception reading the table threw. */
+static HashTable *sharp_extern_effects(const zend_function *func, const zend_string *file)
+{
+	zval *declared = sharp_method_extern_line(func, file);
+
 	return declared && Z_TYPE_P(declared) == IS_ARRAY ? Z_ARRVAL_P(declared) : NULL;
+}
+
+/* Spec section 29: what the calls of one plain PHP method an `extern` line declares ran this request, while
+ * sharp.effect_report is set: how many calls, the times they ran each built-in, by its name, as `PDO::query` or
+ * `strlen`, and the folder Composer installed the method's package in, a read of a file inside which records
+ * nothing, or NULL for a method outside `vendor/`. */
+typedef struct sharp_effect_run {
+	zend_long calls;
+	HashTable ran;
+	zend_string *folder;
+} sharp_effect_run;
+
+/* The report file sharp.effect_report names, from the folder PHP started in, or NULL when it is not set. */
+static char *sharp_effect_report;
+
+static void sharp_effect_run_free(zval *entry)
+{
+	sharp_effect_run *run = Z_PTR_P(entry);
+
+	zend_hash_destroy(&run->ran);
+	if (run->folder) {
+		zend_string_release(run->folder);
+	}
+	efree(run);
+}
+
+/* The folder Composer installed the package of the file `file` in, as `/app/vendor/acme/lib/`: the longest of the
+ * `packages` the listener table of the root above it lists that holds it. NULL for a file of no package, and after an
+ * exception reading the table threw. */
+static zend_string *sharp_package_folder(const zend_string *file)
+{
+	size_t root_length;
+	if (!sharp_find_root(file, &root_length)) {
+		return NULL;
+	}
+	HashTable *table = sharp_listener_table(ZSTR_VAL(file), root_length);
+	zval *packages = table ? zend_hash_str_find(table, "packages", sizeof("packages") - 1) : NULL;
+	if (!packages) {
+		return NULL;
+	}
+
+	size_t length = 0;
+	zval *folder;
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(packages), folder) {
+		size_t holds = root_length + 1 + Z_STRLEN_P(folder);
+		if (holds > length && ZSTR_LEN(file) > holds && ZSTR_VAL(file)[root_length] == '/'
+				&& memcmp(ZSTR_VAL(file) + root_length + 1, Z_STRVAL_P(folder), Z_STRLEN_P(folder)) == 0) {
+			length = holds;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return length ? zend_string_init(ZSTR_VAL(file), length, false) : NULL;
+}
+
+/* A call of a plain PHP method an `extern` line declares: it counts, and the built-ins it runs count against it. */
+static void sharp_effect_declared_call(zend_execute_data *execute_data)
+{
+	const zend_function *func = sharp_extern_method(execute_data->func);
+	zend_string *name = zend_create_member_string(func->common.scope->name, func->common.function_name);
+	sharp_effect_run *run = zend_hash_find_ptr(&SHARP_G(effect_runs), name);
+
+	if (!run) {
+		run = emalloc(sizeof(sharp_effect_run));
+		run->calls = 0;
+		zend_hash_init(&run->ran, 8, NULL, NULL, false);
+		run->folder = sharp_package_folder(execute_data->func->op_array.filename);
+		zend_hash_add_new_ptr(&SHARP_G(effect_runs), name, run);
+	}
+	zend_string_release(name);
+	run->calls++;
+	zend_stack_push(&sharp_running_fiber_scopes()->effect_calls, &run);
+}
+
+/* A call of PHP# code, as a callback a declared method calls: the built-ins it runs count against nothing. */
+static void sharp_effect_sharp_call(zend_execute_data *execute_data)
+{
+	sharp_effect_run *none = NULL;
+
+	zend_stack_push(&sharp_running_fiber_scopes()->effect_calls, &none);
+}
+
+static void sharp_effect_returned(zend_execute_data *execute_data, zval *retval)
+{
+	zend_stack_del_top(&sharp_running_fiber_scopes()->effect_calls);
+}
+
+/* A call of a built-in, which counts against the innermost declared call that runs it, past no PHP# code, unless an
+ * autoload runs it or it names a file inside the declared method's own package by its first argument. */
+static void sharp_effect_built_in_call(zend_execute_data *execute_data)
+{
+	zend_stack *calls = &sharp_running_fiber_scopes()->effect_calls;
+	sharp_effect_run *run = zend_stack_is_empty(calls) ? NULL : *(sharp_effect_run **) zend_stack_top(calls);
+
+	if (!run || (EG(in_autoload) && zend_hash_num_elements(EG(in_autoload)) > 0)) {
+		return;
+	}
+	if (run->folder && ZEND_CALL_NUM_ARGS(execute_data) > 0) {
+		zval *path = ZEND_CALL_ARG(execute_data, 1);
+		if (Z_TYPE_P(path) == IS_STRING && zend_string_starts_with(Z_STR_P(path), run->folder)) {
+			return;
+		}
+	}
+	const zend_function *func = execute_data->func;
+	zend_string *name = func->common.scope
+		? zend_create_member_string(func->common.scope->name, func->common.function_name)
+		: zend_string_copy(func->common.function_name);
+	zval *times = zend_hash_find(&run->ran, name);
+
+	if (times) {
+		Z_LVAL_P(times)++;
+	} else {
+		zval once;
+		ZVAL_LONG(&once, 1);
+		zend_hash_add_new(&run->ran, name, &once);
+	}
+	zend_string_release(name);
+}
+
+/* The observer sharp.effect_report registers: of each function's first call in the request, a built-in's, a PHP#
+ * function's, and a plain PHP method's an `extern` line declares. Every other function runs unobserved. */
+static zend_observer_fcall_handlers sharp_effect_observer(zend_execute_data *execute_data)
+{
+	zend_function *func = execute_data->func;
+
+	if (func->type == ZEND_INTERNAL_FUNCTION) {
+		return (zend_observer_fcall_handlers){sharp_effect_built_in_call, NULL};
+	}
+	if (sharp_function_is_sharp(func)) {
+		return (zend_observer_fcall_handlers){sharp_effect_sharp_call, sharp_effect_returned};
+	}
+	if (func->common.scope && sharp_method_extern_line(func, func->op_array.filename)) {
+		return (zend_observer_fcall_handlers){sharp_effect_declared_call, sharp_effect_returned};
+	}
+
+	return (zend_observer_fcall_handlers){NULL, NULL};
+}
+
+/* Appends what the request's declared calls ran to the report, as one line of JSON that `mago effects` reads: each
+ * method, by its name, as {"calls": 3, "ran": {"PDO::query": 2}}. The lock keeps the lines of requests that end
+ * together whole. */
+static void sharp_write_effect_report(void)
+{
+	if (zend_hash_num_elements(&SHARP_G(effect_runs)) == 0) {
+		return;
+	}
+
+	zval report;
+	zend_string *name;
+	sharp_effect_run *run;
+	array_init(&report);
+	ZEND_HASH_FOREACH_STR_KEY_PTR(&SHARP_G(effect_runs), name, run) {
+		zval entry, ran;
+		array_init(&entry);
+		add_assoc_long(&entry, "calls", run->calls);
+		ZVAL_ARR(&ran, zend_array_dup(&run->ran));
+		add_assoc_zval(&entry, "ran", &ran);
+		zend_hash_add_new(Z_ARRVAL(report), name, &entry);
+	} ZEND_HASH_FOREACH_END();
+
+	smart_str line = {0};
+	php_json_encode(&line, &report, PHP_JSON_FORCE_OBJECT | PHP_JSON_UNESCAPED_SLASHES | PHP_JSON_UNESCAPED_UNICODE);
+	smart_str_appendc(&line, '\n');
+	zval_ptr_dtor(&report);
+
+	int file = open(sharp_effect_report, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0644);
+	if (file < 0) {
+		php_error_docref(NULL, E_WARNING, "sharp.effect_report can't open %s: %s", sharp_effect_report, strerror(errno));
+	} else {
+		flock(file, LOCK_EX);
+		for (size_t written = 0; written < ZSTR_LEN(line.s);) {
+			ssize_t wrote = write(file, ZSTR_VAL(line.s) + written, ZSTR_LEN(line.s) - written);
+			if (wrote < 0 && errno == EINTR) {
+				continue;
+			}
+			if (wrote <= 0) {
+				php_error_docref(NULL, E_WARNING, "sharp.effect_report can't write %s: %s", sharp_effect_report, strerror(errno));
+				break;
+			}
+			written += wrote;
+		}
+		close(file);
+	}
+	smart_str_free(&line);
 }
 
 /* The name of the method of an anonymous class that holds a method's or a function's `extern` attributes. */
@@ -16616,6 +16833,20 @@ static PHP_MINIT_FUNCTION(sharp)
 	zend_observer_fiber_init_register(sharp_fiber_started);
 	zend_observer_fiber_destroy_register(sharp_fiber_destroyed);
 	zend_observer_error_register(sharp_observe_error);
+	/* Spec section 29: only a run that asks for the report observes its calls, so every other run pays nothing. */
+	const char *effect_report = INI_STR("sharp.effect_report");
+	if (effect_report && *effect_report) {
+		char folder[MAXPATHLEN];
+		size_t length = strlen(effect_report);
+		if (IS_ABSOLUTE_PATH(effect_report, length) || !VCWD_GETCWD(folder, sizeof(folder))) {
+			sharp_effect_report = pestrdup(effect_report, true);
+		} else {
+			size_t size = strlen(folder) + 1 + length + 1;
+			sharp_effect_report = pemalloc(size, true);
+			snprintf(sharp_effect_report, size, "%s/%s", folder, effect_report);
+		}
+		zend_observer_fcall_register(sharp_effect_observer);
+	}
 
 	sharp_ce_listener = register_class_Sharp_Internal_Listener();
 	sharp_ce_listener->create_object = sharp_listener_create;
@@ -16681,6 +16912,10 @@ static PHP_MINIT_FUNCTION(sharp)
 static PHP_MSHUTDOWN_FUNCTION(sharp)
 {
 	UNREGISTER_INI_ENTRIES();
+	if (sharp_effect_report) {
+		pefree(sharp_effect_report, true);
+		sharp_effect_report = NULL;
+	}
 	zend_hash_destroy(&sharp_class_values);
 	zend_hash_destroy(&sharp_type_lists);
 	zend_hash_destroy(&sharp_types);
@@ -16725,6 +16960,9 @@ static PHP_RINIT_FUNCTION(sharp)
 	zend_hash_init(&SHARP_G(container_tests), 8, NULL, ZVAL_PTR_DTOR, false);
 	SHARP_G(container_test) = NULL;
 	zend_hash_init(&SHARP_G(container_singletons), 8, NULL, ZVAL_PTR_DTOR, false);
+	if (sharp_effect_report) {
+		zend_hash_init(&SHARP_G(effect_runs), 8, NULL, sharp_effect_run_free, false);
+	}
 	/* Spec section 32: the request is the default scope, as each CLI run is. */
 	sharp_fiber_scopes_start(&SHARP_G(container_main_scopes), sharp_scope_start());
 	EG(main_fiber_context)->reserved[sharp_fiber_slot] = &SHARP_G(container_main_scopes);
@@ -16744,6 +16982,10 @@ static PHP_RINIT_FUNCTION(sharp)
 static PHP_RSHUTDOWN_FUNCTION(sharp)
 {
 	zend_hash_destroy(&SHARP_G(request_stamps));
+	if (sharp_effect_report) {
+		sharp_write_effect_report();
+		zend_hash_destroy(&SHARP_G(effect_runs));
+	}
 	/* A fiber that is still to be freed keeps the request's scope, ended, until it is. */
 	sharp_scope_end(SHARP_G(container_main_scopes).started_in);
 	sharp_fiber_scopes_end(&SHARP_G(container_main_scopes));
