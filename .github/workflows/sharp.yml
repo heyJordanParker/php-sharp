@@ -615,17 +615,17 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
-  # The run's one Mac job, which runs every check only macOS can fail, on the Mac's one build of the engine mago links:
-  # mago compile and the PHP# suite on the debug engine, on a disk that ignores case, without opcache and in shared
-  # memory, since Apple silicon has no thread-safe JIT, with the census and the differential, mago's workspace tests on
-  # the dev build, which keeps the debug assertions and overflow checks the release profile turns off, and plain-php.
+  # The run's one Mac job, which runs only what macOS can fail, on the Mac's one build of the engine mago links:
+  # mago compile and the PHP# suite without opcache on the debug engine, the one arm64 build of it, on a disk that
+  # ignores case, the workspace's test binaries whose code differs on macOS, on the dev build, and plain-php.
   # As four jobs, MACOS, tests (macOS), release-build and the release's macOS build, they queued one after another on
   # the Mac, and three of them ran the engine step: 700, 1,443 and 940 s on 0.6.40's green run 44740612180.
-  # It leaves two checks to Linux, since neither reads anything that differs by platform: the law-proof tests of
-  # sharp/mago/tests/laws.rs, since a law's outcome is Lean's kernel judging a theorem under a deterministic heartbeat
-  # budget, and the whole-project proof of mago convert, the same computation. They held 2,812 test-seconds of the
-  # workspace tests' 376.9 s binary and 242.3 s of the suite on run 45051101012. What can fail only on macOS stays:
-  # Lean's install, the runner, its process handling and its paths, in sharp/mago/tests/compile.rs.
+  # Linux runs the rest on the same debug engine and dev build: opcache's shared memory and the census and the
+  # differential, in LINUX's slices, and every other test binary, in MAGO's, since none reads anything that differs by
+  # platform. Shared memory took 255 of the suite's 370 s and the workspace's tests 370 s of the step's 420 s on run
+  # 45095302755. The binaries that stay are the ones whose code differs on macOS: the database's FSEvents watcher, the
+  # extension hosts' process groups, the Lean library's archive, processor time and cache folder, the compile's file
+  # systems in mago's own, and tests/main.rs, with Lean's install, the runner, its process handling and its paths.
   MACOS:
     needs: CHANGES
     if: ${{ !needs.CHANGES.outputs.passed }}
@@ -690,21 +690,27 @@ jobs:
       # The suite and the workspace's tests share no output, and each sharp/bin/test keeps its files in a temporary
       # folder of its own, so they run at once, where one after the other they took 410 and 654 s of job 137009338505.
       # The suite's output prints once it ends, so the logs don't mix. The suite runs by its folder, so sharp/bin/test
-      # runs no proof of mago convert, which only a run of the whole suite or of its slice runs, and the workspace's
-      # tests leave out sharp/mago/tests/laws.rs, as the job's comment explains. The step took 707 s on run
-      # 45051101012 with both.
+      # runs no proof of mago convert, which only a run of the whole suite or of its slice runs, and the workspace runs
+      # the binaries the job's comment names. The step took 707 s on run 45051101012 and 420 s on run 45095302755.
       - name: Test PHP# and mago's workspace
         run: |
           suite_log="$RUNNER_TEMP/php-sharp-suite.log"
           (
             status=0
-            sharp/bin/test --no-build --census --differential Zend/tests/sharp || status=$?
+            sharp/bin/test --no-build Zend/tests/sharp || status=$?
             echo "The PHP# suite took $SECONDS s."
             exit "$status"
           ) > "$suite_log" 2>&1 &
           suite=$!
           workspace=0
-          sharp/bin/test --mago --no-build --skip-binary sharp/mago/tests/laws.rs || workspace=$?
+          sharp/bin/test --mago --no-build \
+            --binary sharp/mago/crates/database/src/lib.rs \
+            --binary sharp/mago/crates/extension/src/lib.rs \
+            --binary sharp/mago/crates/extension/tests/process_group.rs \
+            --binary sharp/mago/crates/sharp-lean/src/lib.rs \
+            --binary sharp/mago/src/main.rs \
+            --binary sharp/mago/tests/main.rs \
+            || workspace=$?
           echo "mago's workspace tests took $SECONDS s."
           suite_status=0
           wait "$suite" || suite_status=$?

@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   echo "usage: sharp/bin/test [--linux] [--no-build] [--census] [--spec] [--differential] [--phpunit] [--shard <i>/<n> | paths...]" >&2
   echo "       sharp/bin/test [--linux] [--no-build] --upstream" >&2
-  echo "       sharp/bin/test [--linux] [--no-build] --mago [--shard <i>/<n>] [--skip-binary <crate root>]..." >&2
+  echo "       sharp/bin/test [--linux] [--no-build] --mago [--shard <i>/<n>] [--binary <crate root>]..." >&2
   echo "       sharp/bin/test [--linux] --mago --cargo-built" >&2
   exit 2
 }
@@ -22,7 +22,7 @@ upstream=false
 mago=false
 cargo_built=false
 shard=
-skipped_binaries=()
+chosen_binaries=()
 tests=()
 container_command=(sharp/bin/test)
 args=("$@")
@@ -32,10 +32,10 @@ for ((a = 0; a < ${#args[@]}; a++)); do
     --linux) linux=true; continue ;;
     --no-build) build=false ;;
     --shard) a=$((a + 1)); shard="${args[a]:-}"; container_command+=(--shard "$shard"); continue ;;
-    --skip-binary)
+    --binary)
       a=$((a + 1))
-      skipped_binaries+=("${args[a]:-}")
-      container_command+=(--skip-binary "${args[a]:-}")
+      chosen_binaries+=("${args[a]:-}")
+      container_command+=(--binary "${args[a]:-}")
       continue
       ;;
     --census) census=true ;;
@@ -60,10 +60,10 @@ fi
 if $cargo_built && { ! $mago || ! $build || [[ -n $shard ]]; }; then
   usage
 fi
-if [[ ${#skipped_binaries[@]} -gt 0 ]] && { ! $mago || $cargo_built; }; then
+if [[ ${#chosen_binaries[@]} -gt 0 ]] && { ! $mago || $cargo_built; }; then
   usage
 fi
-for binary in "${skipped_binaries[@]}"; do
+for binary in "${chosen_binaries[@]}"; do
   if [[ -z $binary ]]; then
     usage
   fi
@@ -181,10 +181,11 @@ if $mago && ! $cargo_built; then
     echo "$messages is missing. Run sharp/bin/build-mago first." >&2
     exit 1
   fi
-  # --skip-binary leaves out each test binary whose crate root it names, as sharp/mago/tests/laws.rs, whose tests MACOS
-  # leaves to Linux's MAGO slices. A name that matches no binary fails the run, so a misspelled one runs nothing extra.
+  # --binary runs only the test binaries whose crate roots it names, as MACOS runs only those whose code differs on
+  # macOS and leaves the rest to Linux's MAGO slices. A name that matches no binary fails the run, so a misspelled one
+  # can't drop its tests unseen.
   binaries=()
-  declare -A skipped=()
+  declare -A chosen=()
   while read -r line; do
     if [[ $line == *'"reason":"compiler-artifact"'* && $line =~ \"profile\":\{[^}]*\"test\":true &&
       $line =~ \"executable\":\"([^\"]+)\" ]]; then
@@ -193,16 +194,18 @@ if $mago && ! $cargo_built; then
       folder="$(dirname "${BASH_REMATCH[1]}")"
       [[ $line =~ \"src_path\":\"([^\"]+)\" ]]
       source="${BASH_REMATCH[1]#"$root"/}"
-      if [[ " ${skipped_binaries[*]} " == *" $source "* ]]; then
-        skipped[$source]=1
-        continue
+      if [[ ${#chosen_binaries[@]} -gt 0 ]]; then
+        if [[ " ${chosen_binaries[*]} " != *" $source "* ]]; then
+          continue
+        fi
+        chosen[$source]=1
       fi
       binaries+=("$executable"$'\t'"$folder"$'\t'"$source")
     fi
   done < "$messages"
-  for source in "${skipped_binaries[@]}"; do
-    if [[ -z ${skipped[$source]:-} ]]; then
-      echo "--skip-binary $source names no test binary of $messages." >&2
+  for source in "${chosen_binaries[@]}"; do
+    if [[ -z ${chosen[$source]:-} ]]; then
+      echo "--binary $source names no test binary of $messages." >&2
       exit 2
     fi
   done
@@ -483,11 +486,12 @@ export TEST_MAGO_EXECUTABLE="$mago"
 # The PHP# suite runs in the four ways production runs the engine: without opcache, in opcache shared memory with each
 # test twice in one process, under the function JIT, which compiles each function of a file as the file loads, and
 # under the tracing JIT, with every hot counter at 1, so it compiles the code the tests run as soon as it runs. Each
-# expects the output of the run without opcache. Apple silicon has no thread-safe JIT, as ext/opcache/config.m4 warns,
-# so macOS runs the first two.
+# expects the output of the run without opcache. macOS runs the first alone, where the engine is the one arm64 build, on
+# a disk that ignores case: Linux runs opcache's other three, whose code is the same on both, and Apple silicon has no
+# thread-safe JIT, as ext/opcache/config.m4 warns. Shared memory took 255 of the Mac's 370 s on run 45095302755.
 run_tests "without opcache"
-run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
 if [[ $os == linux ]]; then
+  run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
   run_tests "with the function JIT" -d opcache.enable_cli=1 -d opcache.jit=function -d opcache.jit_buffer_size=32M
   run_tests "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
     -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
