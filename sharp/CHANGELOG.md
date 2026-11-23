@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.54] - 2026-11-23
+
 ### Upgrading from 0.6.53
 
 - Write `public` each class that plain PHP outside its namespace creates or calls, a test's top-level code and a framework that resolves a method by name included, and each `internal` member such code uses, or move that code into the namespace: the engine now refuses such a use with `Error`, where 0.6.53 ran it as public.
@@ -1831,7 +1833,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.53...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.54...HEAD
+[0.6.54]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.53...v0.6.54
 [0.6.53]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.52...v0.6.53
 [0.6.52]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.51...v0.6.52
 [0.6.51]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.50...v0.6.51

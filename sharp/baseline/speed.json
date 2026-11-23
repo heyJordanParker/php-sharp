@@ -1,5 +1,5 @@
 {
-    "commit": "b650f8e0210",
+    "commit": "b62b907227c",
     "laws": {
         "App.M0.Label.sameKeepsText": {
             "ended": "proved",
@@ -6654,12 +6654,12 @@
         "App.Offers.OfferAvailability.aSoldOutOfferNotStartedComesBeforeItsEnd": {
             "ended": "proved",
             "proved": true,
-            "heartbeats": 189740
+            "heartbeats": 189739
         },
         "App.Offers.OfferAvailability.aStartedOfferBeforeItsEndIsAvailable": {
             "ended": "proved",
             "proved": true,
-            "heartbeats": 201180
+            "heartbeats": 201181
         },
         "App.Offers.OfferAvailability.anInactiveOfferStaysInactive": {
             "ended": "proved",
@@ -6669,12 +6669,12 @@
         "App.Offers.OfferAvailability.anOfferNotStartedComesBeforeItsEnd": {
             "ended": "proved",
             "proved": true,
-            "heartbeats": 188770
+            "heartbeats": 188771
         },
         "App.Offers.OfferAvailability.anOfferPastItsEndHasEnded": {
             "ended": "proved",
             "proved": true,
-            "heartbeats": 198289
+            "heartbeats": 198287
         },
         "App.Parcels.ParcelState.aFullRefundFullyReturnsTheParcel": {
             "ended": "proved",
@@ -6717,9 +6717,9 @@
             "heartbeats": 19678
         }
     },
-    "corpus_heartbeats": 850577,
+    "corpus_heartbeats": 850576,
     "instructions": {
         "platform": "Linux-x86_64",
-        "edit": 6195097469
+        "edit": 6206462344
     }
 }
