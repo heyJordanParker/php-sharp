@@ -169,6 +169,24 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
+      # build/gen_stub.php reads PHP-Parser from build/PHP-Parser-<version>, the version its initPhpParser pins, and
+      # downloads it from GitHub only when that folder is missing: run 45113483078 failed when GitHub answered that
+      # download with 1,812 bytes that were no archive. The folder comes from the Actions cache under that version, so
+      # only the first run of a version downloads it, and the cache's save spares every run after it.
+      - name: Find the PHP-Parser version build/gen_stub.php pins
+        id: php-parser
+        run: |
+          version=$(sed -n 's/^ *[$]version = "\(.*\)";$/\1/p' build/gen_stub.php)
+          if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::build/gen_stub.php's initPhpParser pins no PHP-Parser version this step reads: '$version'."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: PHP-Parser for build/gen_stub.php, from the Actions cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/PHP-Parser-${{ steps.php-parser.outputs.version }}
+          key: PHP_PARSER-${{ steps.php-parser.outputs.version }}
       # sharp/bin/build-mago builds inside the image, where CARGO_HOME and RUSTUP_HOME are sharp/build/cargo and
       # sharp/build/rustup, which the Rust cache holds.
       - name: Build and install the engine, and restore the Rust and Mago caches
