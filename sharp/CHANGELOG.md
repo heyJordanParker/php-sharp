@@ -4,6 +4,12 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Added
+
+- An extension's worker reducer reports issues: `WorkerReductionContext::report(Level $level, string $code, Issue $issue)` reports one as `LifecycleContext::report` does, coded under the extension's identifier. An analysis runs each reducer once, after every worker ran its hooks on every file and before the report, so a rule that needs the whole codebase gathers in an after-file hook on whichever worker analyzes each file and reports from `reduce()`, where 0.6.52 ran a reducer only when Mago stopped the hosts and a rule could report only from an after-analysis hook that walks every file on one thread. On a generated project of 2,128 PHP# files whose rule reports each method body an earlier file wrote, the reducer form reports the same 2,513 issues as the after-analysis form, and its analysis phase takes 0.15 to 0.29 s where the after-analysis form's takes 0.24 to 0.55 s, 0.12 to 0.38 s of it in the hook's walk, lower in each of 6 alternating rounds. The linter still runs its reducers when Mago stops the hosts.
+
+## [0.6.53] - 2026-11-23
+
 ### Upgrading from 0.6.52
 
 - Make each extension's `WorkerReducer::collect()` clear what it returns: an analysis now runs the reducer after each analysis, where 0.6.52 ran it once when Mago stopped the hosts, so a reducer that keeps its state hands the same files over again in the next analysis of a watch or server run.
@@ -1817,7 +1823,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.52...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.53...HEAD
+[0.6.53]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.52...v0.6.53
 [0.6.52]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.51...v0.6.52
 [0.6.51]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.50...v0.6.51
 [0.6.50]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.49...v0.6.50
