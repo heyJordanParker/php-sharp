@@ -78,10 +78,11 @@ const PROOF_STEPS: &str = "Sharp.Lean.Proof";
 const LAW_STATEMENT: &str = "Sharp.Lean.Law";
 
 /// The lemmas the fixed steps of a case rewrite with, beside the definitions the law uses: an `if` on a condition that
-/// decides, the monad's steps, a law's claim, the int operations and comparisons, an int literal's value, and a value
-/// a nullable side holds.
+/// decides, an `if` whose branches are the same, as a comparison the law's condition already settled leaves, the monad's
+/// steps, a law's claim, the int operations and comparisons, an int literal's value, and a value a nullable side holds.
 const STEP_LEMMAS: &[&str] = &[
     "↓reduceIte",
+    "ite_self",
     "bind_assoc",
     "pure_bind",
     "holds_bind",
