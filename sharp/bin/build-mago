@@ -5,22 +5,25 @@ set -euo pipefail
 # sharp/build/<os>-<arch>/mago, with the toolchain ext/sharp/rust-toolchain.toml pins. So a worktree keeps one build of
 # Mago, and the binary is the mago the tests run, sharp/build/<os>-<arch>/mago/debug/mago. A build of mago alone would
 # resolve its dependencies' features without the tests' dev-dependencies and compile most crates a second time.
-# sharp/bin/test, sharp/bin/hosts and sharp/bin/bench build it here alone, with the jobs sharp/bin/jobs prints. Every
-# argument goes to cargo test, such as --quiet. It builds the PHP# engine mago links first. `--engine` builds the engine
-# alone, which a CI job that links mago with cargo itself runs first, and a cargo check or clippy never needs.
+# Every script that builds sharp/mago builds it here, with the jobs sharp/bin/jobs prints, so one place keeps the build
+# folder the size of one fresh build of each kind, as the prune below explains (#730). Every argument goes to cargo
+# test, such as --quiet. It builds the PHP# engine mago links first. `--engine` builds the engine alone, which a CI job
+# runs first, and a cargo check or clippy never needs. `--test-run` builds the mago of the test-run profile, which
+# behaves as release's without its fat LTO, as sharp/mago/Cargo.toml explains, into test-run/mago, for sharp/bin/check.
+# `--cargo-tests` builds and runs the tests cargo builds only as it runs them: the doc tests, and mago-codex's property
+# tests, which build with a feature of their own.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-engine_only=false
-if [[ ${1:-} == --engine ]]; then
-  engine_only=true
-  shift
-fi
+mode=tests
+case ${1:-} in
+  --engine | --test-run | --cargo-tests) mode=${1#--}; shift ;;
+esac
 cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
 target="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago"
 # Every file a rename publishes is written under a name with this process's id first, so two builds in one checkout
 # never rename each other's: two builders writing build.json.part both renamed it, and the second rename failed with
 # "No such file or directory". A build that fails leaves none of them.
 library=
-trap 'rm -f "$target/build.json.part.$$" ${library:+"$library/system-libs.part.$$" "$library/libphp.a.part.$$"}' EXIT
+trap 'rm -f "$target"/*.json.part.$$ ${library:+"$library/system-libs.part.$$" "$library/libphp.a.part.$$"}' EXIT
 
 # The PHP# engine mago links, which runs the extension hosts inside mago, one interpreter per analysis thread. It builds
 # with the options sharp/docker/runtime/configure-options prints, the runtime image's, so a host runs inside mago with
@@ -28,7 +31,7 @@ trap 'rm -f "$target/build.json.part.$$" ${library:+"$library/system-libs.part.$
 # into its own binary, each shared extension links in too, since a static engine loads no shared extension, readline
 # runs on libedit, since GNU readline is GPL, which mago can't link, and the Argon2 password hashes come from sodium,
 # whose archive holds Argon2's own functions under the names libargon2's archive gives them, so one link can't hold both.
-# MAGO_ENGINE names an engine built elsewhere, as a CI job's `--engine` step builds one, which mago links as it is.
+# MAGO_ENGINE names an engine built elsewhere, as a CI job builds one with --engine first, which mago links as it is.
 build_engine() {
   platform="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
   engine="$root/sharp/build/$platform-engine"
@@ -236,48 +239,75 @@ build_engine() {
     mv "$library/libphp.a.part.$$" "$library/libphp.a"
   fi
 }
-if $engine_only || [[ -z ${MAGO_ENGINE:-} ]]; then
+if [[ $mode == engine || -z ${MAGO_ENGINE:-} ]]; then
   build_engine
 fi
-if $engine_only; then
+if [[ $mode == engine ]]; then
   exit 0
 fi
 
-# $target/build.json holds cargo's messages about the build, one JSON object per line, among them every test binary it
-# made and the folder each build script wrote, while the diagnostics print as cargo prints them. sharp/bin/test runs the
-# test binaries it names, as does a CI job that runs them on another job's build with sharp/bin/test --no-build. A
-# failed build leaves no build.json, so no run takes a build that failed for one that passed.
-messages="$target/build.json"
+# Each kind of build keeps cargo's messages about it in a file of its own under $target, one JSON object per line, among
+# them every file it made or found fresh and the folder each build script wrote, while the diagnostics print as cargo
+# prints them: build.json, whose test binaries sharp/bin/test runs, as a CI job does on another job's build with
+# sharp/bin/test --no-build, test-run.json and cargo-tests.json. A failed build leaves no file, so no run takes a build
+# that failed for one that passed.
+case $mode in
+  tests) messages=$target/build.json ;;
+  *) messages=$target/$mode.json ;;
+esac
 rm -f "$messages"
 mkdir -p "$target"
-# A -p or --package among the arguments builds only the packages it names, as MACOS builds the packages of the test
-# binaries it runs: cargo resolves their features apart from the workspace's, so the shared crates they use compile
-# once more into the target, and later builds of the same list compile only what a change reaches.
-scope=(--workspace)
-for argument in "$@"; do
-  if [[ $argument == -p || $argument == --package || $argument == --package=* ]]; then
-    scope=()
-  fi
-done
-PATH="$(dirname "$cargo"):$PATH" "$cargo" test "${scope[@]}" --locked --no-run \
-  --manifest-path "$root/sharp/mago/Cargo.toml" \
-  --target-dir "$target" --jobs "$("$root/sharp/bin/jobs")" --message-format=json-render-diagnostics "$@" \
-  > "$messages.part.$$"
+jobs=$("$root/sharp/bin/jobs")
+cargo_in_target() {
+  local command=$1
+  shift
+  PATH="$(dirname "$cargo"):$PATH" "$cargo" "$command" --locked --manifest-path "$root/sharp/mago/Cargo.toml" \
+    --target-dir "$target" --jobs "$jobs" --message-format=json-render-diagnostics "$@"
+}
+case $mode in
+  tests)
+    cargo_in_target test --workspace --no-run "$@" > "$messages.part.$$"
+    ;;
+  test-run)
+    cargo_in_target build --profile test-run --bin mago "$@" > "$messages.part.$$"
+    ;;
+  cargo-tests)
+    # cargo prints its messages on its standard output among the tests' own lines, so each message goes to the file and
+    # every other line prints. Both runs run, and the build fails when either did.
+    messages_to_file() {
+      local line
+      while IFS= read -r line; do
+        if [[ $line == '{"reason":'* ]]; then
+          printf '%s\n' "$line" >> "$messages.part.$$"
+        else
+          printf '%s\n' "$line"
+        fi
+      done
+    }
+    failed=()
+    cargo_in_target test --workspace --doc -- --test-threads "$jobs" | messages_to_file || failed+=("the doc tests")
+    cargo_in_target test -p mago-codex --features property-tests -- --test-threads "$jobs" | messages_to_file \
+      || failed+=("mago-codex's property tests")
+    if ((${#failed[@]})); then
+      printf 'Failed: %s\n' "${failed[@]}" >&2
+      exit 1
+    fi
+    ;;
+esac
 mv "$messages.part.$$" "$messages"
 
-# Cargo never deletes a copy of a crate it no longer uses. Each distinct `cargo test -p` or `cargo clippy -p` list
-# compiles its own copy of the shared crates, and so does each version bump or Cargo.lock change. A fresh build holds
-# 5.9 GiB, 7 lists took one slot from 5.85 to 7.37 GiB, and live slots reached 16 GiB. So in a builder's slot, a
-# profile folder above 10 GiB keeps only the crates this build used. Cargo names each file and folder of a crate's
-# compile, and of a build script's run, with that unit's metadata hash, and build.json names the files of every unit
-# the build used, built or fresh. So an entry of deps, build, examples or .fingerprint whose hash build.json doesn't
-# name goes. The prune runs once the build has passed, so a failed build, even on a bad argument, leaves every file.
-# A CI job builds the folder from nothing, under the bound, so the prune finds nothing to remove there.
+# Cargo never deletes a copy of a crate it no longer uses, so every edit that rebuilt a crate left the build before it
+# beside the new one: sharp/build/darwin-arm64/mago/debug held 13 GiB on 2026-11-23, where a fresh build holds 4.4 (#730).
+# So after each build that passed, each profile folder a build names keeps only the units some build named. Cargo
+# names each file and folder of a crate's compile, and of a build script's run, with that unit's metadata hash, and each
+# messages file names the files of every unit its build used, built or fresh. So an entry of deps, build, examples or
+# .fingerprint whose hash no messages file names goes, and the next build finds every unit it uses, and rebuilds
+# nothing it wouldn't have. A profile folder no messages file names, as a tool's llvm-cov-target, stays as it is.
 # A profile folder in use stays. Cargo holds the flock on the folder's .cargo-lock while it builds there, and releases
 # it before it runs the test binaries, which run from the folder, as each mago the tests start does. So the prune
 # skips the folder while it can't take that flock without waiting, or while a process runs from the build. Each
 # sharp/docker/run is its own container with its own processes, so a prune there can't see a test binary another
-# container runs from the same folder: run one sharp/docker/run at a time per slot.
+# container runs from the same folder: run one sharp/docker/run at a time per checkout.
 # Runs the rest of the line while it holds the flock on the lock file, or exits 75 at once when another process
 # holds it: util-linux's flock on Linux, and BSD's lockf on macOS, which has no flock command.
 holding() {
@@ -292,70 +322,68 @@ holding() {
 
 tab=$'\t'
 shopt -s nullglob
-# Each profile folder: debug, and one a tool builds below the folder, as cargo-llvm-cov's llvm-cov-target/debug.
-for lock in "$target"/*/.cargo-lock "$target"/*/*/.cargo-lock; do
-  profile=$(dirname "$lock")
-  size=$(du -sk "$profile" | cut -f1)
-  if (( size <= 10 * 1024 * 1024 )); then
+all_messages=("$target"/*.json)
+named=$(cat "${all_messages[@]}")
+used=$({ grep -oE '/(deps|build|examples)/[^/"]+-[0-9a-f]{16}' <<< "$named" || true; } \
+  | sed -E 's/.*-([0-9a-f]{16})$/\1/')
+# Cargo copies a bin up out of deps, and an example out of its hashed name in examples, and names only the copy. So
+# each one's unit is the hashed file its copy matches byte for byte.
+while IFS= read -r copy; do
+  if [[ $copy =~ -[0-9a-f]{16}$ ]]; then
     continue
   fi
-  held="$profile held $((size / 1024)) MiB, above the 10 GiB bound, but"
+  folder=$(dirname "$copy")
+  if [[ $(basename "$folder") != examples ]]; then
+    folder="$folder/deps"
+  fi
+  for file in "$folder/$(basename "$copy")"-*; do
+    if [[ $file =~ -([0-9a-f]{16})$ ]] && cmp -s "$file" "$copy"; then
+      used+=$'\n'"${BASH_REMATCH[1]}"
+    fi
+  done
+done < <(sed -nE 's/.*"executable":"([^"]+)".*/\1/p' <<< "$named")
+used=$(LC_ALL=C sort -u <<< "$used" | sed '/^$/d')
+if [[ -z $used ]]; then
+  echo "${all_messages[*]} name no crate's hash, so no prune can tell the crates a build used." >&2
+  exit 1
+fi
+mapfile -t profiles < <({ grep -oE "\"$target/[^/\"]+/(deps|build|examples)/" <<< "$named" || true; } \
+  | sed -E "s|^\"($target/[^/\"]+)/.*|\\1|" | LC_ALL=C sort -u)
+for profile in "${profiles[@]}"; do
+  lock="$profile/.cargo-lock"
+  if [[ ! -e $lock ]]; then
+    continue
+  fi
   status=0
   holding "$lock" true || status=$?
   if (( status == 75 )); then
-    echo "$held a cargo holds $lock, so it is building there, and the folder stays." >&2
+    echo "A cargo holds $lock, so it is building there, and $profile keeps the units no build named." >&2
     continue
   fi
   if ! command -v pgrep > /dev/null; then
-    echo "$held pgrep is missing, so no check sees a process running from $target, and the folder stays." >&2
+    echo "pgrep is missing, so no check sees a process running from $target, and $profile keeps the units no build named." >&2
     continue
   fi
   running=$(pgrep -d, -f "$target/" || true)
   if [[ -n $running ]]; then
-    echo "$held these processes run from $target, so the folder stays:" >&2
+    echo "These processes run from $target, so $profile keeps the units no build named:" >&2
     ps -o pid=,command= -p "$running" >&2
     continue
-  fi
-  used=$({ grep -oE '/(deps|build|examples)/[^/"]+-[0-9a-f]{16}' "$messages" || true; } \
-    | sed -E 's/.*-([0-9a-f]{16})$/\1/')
-  # Cargo copies a bin up out of deps, and an example out of its hashed name in examples, and names only the copy. So
-  # each one's unit is the hashed file its copy matches byte for byte.
-  while IFS= read -r copy; do
-    if [[ $copy != "$profile"/* || $copy =~ -[0-9a-f]{16}$ ]]; then
-      continue
-    fi
-    folder=$(dirname "$copy")
-    if [[ $folder == "$profile" ]]; then
-      folder="$profile/deps"
-    fi
-    for file in "$folder/$(basename "$copy")"-*; do
-      if [[ $file =~ -([0-9a-f]{16})$ ]] && cmp -s "$file" "$copy"; then
-        used+=$'\n'"${BASH_REMATCH[1]}"
-      fi
-    done
-  done < <(sed -nE 's/.*"executable":"([^"]+)".*/\1/p' "$messages")
-  used=$(LC_ALL=C sort -u <<< "$used" | sed '/^$/d')
-  if [[ -z $used ]]; then
-    echo "$held $messages names no crate's hash, so no prune can tell the crates this build used." >&2
-    exit 1
   fi
   stale=$(printf '%s\n' "$profile"/{deps,build,examples,.fingerprint}/* \
     | sed -nE "s|^(.*-([0-9a-f]{16})([.][^/]*)?)\$|\\2$tab\\1|p" | LC_ALL=C sort -t "$tab" -k 1,1 \
     | LC_ALL=C join -t "$tab" -v 1 - <(printf '%s\n' "$used") | cut -f 2-)
   if [[ -z $stale ]]; then
-    echo "$held each crate in it is one this build used, so the folder stays." >&2
     continue
   fi
   status=0
   printf '%s\n' "$stale" | tr '\n' '\0' | holding "$lock" xargs -0 rm -rf -- || status=$?
   if (( status == 75 )); then
-    echo "$held a cargo holds $lock, so it is building there, and the folder stays." >&2
+    echo "A cargo holds $lock, so it is building there, and $profile keeps the units no build named." >&2
     continue
   fi
   if (( status != 0 )); then
     exit "$status"
   fi
-  echo "$profile held $((size / 1024)) MiB, above the 10 GiB bound, so the $(grep -c '' <<< "$stale") entries of" \
-    "crates this build didn't use went, and it holds $(($(du -sk "$profile" | cut -f1) / 1024)) MiB." >&2
 done
 shopt -u nullglob

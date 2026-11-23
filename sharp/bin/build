@@ -73,7 +73,7 @@ status="$build_dir/config.status"
 # php-src's build writes its parsers, scanners and configure into the source tree, and a configured build's dependency
 # files name them. make has no rule that makes some of them again, such as Zend/zend_ini_scanner_defs.h (CI run
 # 41504845687), so a configured build in a tree without configure, as git clean -x leaves it, builds from nothing. It
-# keeps mago, which sharp/bin/build-mago builds there from sharp/mago alone, and which CI restores into a new checkout.
+# keeps mago, which sharp/bin/build-mago builds there from sharp/mago alone.
 # php-src's Makefile tracks no header either, so a build configured with other flags, such as one without
 # --enable-zts, would link the objects it compiled into this one: it builds from nothing too. config.status prints the
 # flags it was configured with, then the variables configure keeps, such as PKG_CONFIG_PATH.
@@ -108,7 +108,7 @@ if [[ ! -f "$status" || ! -f "$stamp" || "$(< "$stamp")" != "$configured" ]]; th
   printf '%s\n' "$configured" > "$stamp"
 fi
 
-# The cargo build of ext/sharp's Rust library, which make runs, reads CARGO_BUILD_JOBS as its jobs.
+# ext/sharp's Rust library, which make builds with cargo, reads CARGO_BUILD_JOBS as its jobs.
 CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")"
 export CARGO_BUILD_JOBS
 # sharp/bin/hosts runs on Linux alone and links FrankenPHP against the libphp the build installs, so only Linux builds
