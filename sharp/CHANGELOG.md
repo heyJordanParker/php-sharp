@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Added
+
+- A law reads `join(separator)` of a `List<string>`, spec section 28: the strings with the separator between each two, and `""` of no strings. So `` new Notice("", [a, b]).checklist == `${a}, ${b}` `` proves, where 0.6.53 refused it with `unmodeled-construct`, and a law that states the wrong text of a join fails for the small values that break it.
+
 ### Fixed
 
 - A computed property in a machine case's block is a member of that case's class, spec section 20.2, as a move of the block is: the machine compiles, where 0.6.53 refused the file with `lowering-panic`, and a law reads the property on a value of the case. A read through the machine's type, as `Readiness r = Readiness.open(); r.failureMessage;`, is refused with the test that narrows `r` to the case, as a move's call is.
