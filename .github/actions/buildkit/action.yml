@@ -1,0 +1,31 @@
+name: Set up BuildKit with the job's Actions cache
+description: >-
+  Starts a Buildx builder on base-images.yml's copy of BuildKit in ghcr.io, at a pinned digest, so no pull is an
+  anonymous Docker Hub pull (#86), and gives BuildKit's GitHub Actions cache, type=gha, the job's cache token and URLs.
+  The calling job logs in to ghcr.io first.
+
+runs:
+  using: composite
+  steps:
+    # Buildx's docker-container driver pulls BuildKit's image again, and starts from the local one when that pull
+    # fails, so this pull, which sharp/bin/network runs again when the network drops it, covers both.
+    - name: Pull BuildKit's image
+      shell: bash
+      run: sharp/bin/network docker pull --quiet ghcr.io/heyjordanparker/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
+    # The job's runner is discarded with its builder, which the cleanup took 35 to 47 s to remove at each job's end.
+    - name: Set up Buildx with BuildKit from ghcr.io
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      with:
+        driver-opts: image=ghcr.io/heyjordanparker/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
+        cleanup: false
+    # type=gha reads the job's cache token and URLs, which the runner gives only an action, so this exports them to the
+    # steps after it, as crazy-max/ghaction-github-runtime does, and logs none.
+    - name: Give BuildKit the job's Actions cache
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      with:
+        script: |
+          for (const [name, value] of Object.entries(process.env)) {
+            if (name.startsWith('ACTIONS_')) {
+              core.exportVariable(name, value);
+            }
+          }
