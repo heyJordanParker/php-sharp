@@ -6,6 +6,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Fixed
 
+- A compile whose `.sharp` folder is current writes nothing under `.sharp` when only the extension hosts' folder in mago's cache is out of date, spec section 27, as after the cache is cleared or in a run under another `HOME` or `XDG_CACHE_HOME`: it compiles the hosts' folder alone. Each folder is current by its own record, where 0.6.52 compiled the whole project again for a stale hosts' folder and rewrote `.sharp/inputs.json` of a tree no file of which changed.
 - Two `List`s of a type parameter bounded by `Equatable` compare element by element, each pair by the `==` of the type its values are, spec sections 11 and 19. So over `public static bool same<T : Equatable>(List<T> a, List<T> b) => a == b;`, `same([new Point(1)], [new Point(1)])` of a `struct Point` gives true, where 0.6.52 compared the two arrays with PHP's `===`, which tells two equal structs apart, and gave false.
 
 ### Added
