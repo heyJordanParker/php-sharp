@@ -124,9 +124,17 @@ foreach ($failures as $failure) {
 }
 exit($failures === [] ? 0 : 1);
 
-/** The commit of the tree this script measures, with `-dirty` when the tree holds changes no commit holds. */
+/**
+ * The commit this script measures: SPEED_COMMIT, which the SPEED job sets to its pull request's head, since a pull
+ * request's run checks out GitHub's merge of it, which no branch holds, or else the checkout's own, with `-dirty` when
+ * the tree holds changes no commit holds.
+ */
 function commit(): string
 {
+    $named = getenv('SPEED_COMMIT');
+    if ($named !== false && $named !== '') {
+        return substr($named, 0, 11);
+    }
     [, $head] = output(['git', 'rev-parse', '--short=11', 'HEAD'], __DIR__, getenv());
     [, $changes] = output(['git', 'status', '--porcelain', '--untracked-files=no'], __DIR__, getenv());
 

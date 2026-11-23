@@ -625,6 +625,7 @@ jobs:
       - name: Count what proving and compiling cost, against the last release's
         env:
           SPEED_WRITE: ${{ runner.temp }}/speed.json
+          SPEED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: sharp/bin/check speed
       - name: Upload what the run counted, the next release's baseline
         if: always()

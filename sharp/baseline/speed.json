@@ -1,5 +1,5 @@
 {
-    "commit": "e7a865fddfe-dirty",
+    "commit": "2a6e9aba374",
     "laws": {
         "App.M0.Label.sameKeepsText": {
             "ended": "proved",
@@ -6658,5 +6658,8 @@
         }
     },
     "corpus_heartbeats": 189398,
-    "instructions": []
+    "instructions": {
+        "platform": "Linux-x86_64",
+        "edit": 6287021639
+    }
 }
