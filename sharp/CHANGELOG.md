@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A class handed to a framework by its class value stays `public`, spec section 25: `typeof(TaggedCast)`, or `typeof(TaggedCast).name()`, written anywhere but as the receiver of a member is a use of `TaggedCast` from outside its namespace, so a class a framework builds by its name compiles as `public` and boots, where 0.6.54 refused it with "`TaggedCast` is public, and nothing outside `App.Store` uses it." and the engine refused it as `internal`. A class value that receives a member, as `typeof(Order).fields()`, still reflects inside its namespace. `mago analyze` refuses plain PHP exactly where the engine refuses it when it runs, in the engine's words and naming the caller the engine names, as "Call to internal method `App\Store\Catalog::secret()` from `Illuminate\Database\Eloquent\Model`, outside namespace `App\Store`.", "Cannot instantiate internal class `App\Store\Till` from …" and "Cannot modify internal(set) property `App\Store\Catalog::$views` from …", where 0.6.54 passed each one. Top-level code and a closure outside any class are refused inside the namespace too, "from global scope", as the engine refuses them. So plain PHP of another namespace that calls a PHP# class needs the class declared `public`. A `public` member of an `internal` class that replaces a wider one, as an `internal` enum's `from`, reaches every namespace, as the engine runs it.
+
 ## [0.6.55] - 2026-11-24
 
 ### Upgrading from 0.6.54
