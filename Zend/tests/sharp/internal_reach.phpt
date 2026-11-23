@@ -1,5 +1,5 @@
 --TEST--
-The engine holds an internal member, an internal class's `new` and each public member of an internal class that replaces no wider one, to its namespace and the namespaces below it, spec section 5: plain PHP and a PHP# call the checker can't follow throw Error from outside, through a call, a property read or write, a write through an internal set, a constant, `new`, a callable string or array, call_user_func and Closure::fromCallable, and get_object_vars, var_export and an array cast that plain PHP makes leave an internal property out, while plain PHP and PHP# of the namespace, PHP# of one below it and of a test folder that declares it reach every member, and Json.encode lists every one
+The engine holds an internal member, an internal class's `new` and each public member of an internal class that replaces no wider one, to its namespace and the namespaces below it, spec section 5: plain PHP and a PHP# call the checker can't follow throw Error from outside, through a call, a property read or write, a write through an internal set, a constant, `new`, a callable string or array, call_user_func and Closure::fromCallable, and get_object_vars, var_export and an array cast that plain PHP makes leave an internal property out, while json_encode writes the class's stored form, internal fields included, while plain PHP and PHP# of the namespace, PHP# of one below it and of a test folder that declares it reach every member, and Json.encode lists every one
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -88,11 +88,13 @@ a test folder: [16,8,10,12]
 listed by plain PHP outside its namespace:
 {"views":0}
 {"views":0}
+{"balance":5,"views":0}
 \Demo\InternalReach\Ledger::__set_state(array(
    'views' => 0,
 ))
 {"views":0}
 listed by plain PHP of its namespace:
+{"balance":5,"views":0}
 {"balance":5,"views":0}
 {"balance":5,"views":0}
 \Demo\InternalReach\Ledger::__set_state(array(

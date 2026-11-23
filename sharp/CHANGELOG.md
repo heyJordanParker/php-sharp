@@ -18,7 +18,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Changed
 
-- The engine holds an `internal set` to its namespace, spec section 5, as it holds an `internal` member: plain PHP's `$ledger->views = 3;` from outside `App.Billing` throws "Cannot modify internal(set) property App\Billing\Ledger::$views from global scope, outside namespace App\Billing", where 0.6.54 ran it as a public set. The engine checks it where PHP checks `protected(set)`, so a write to any other property costs what it did. `get_object_vars`, `var_export` and an array cast that plain PHP makes leave out an `internal` property that code outside its namespace doesn't reach, where 0.6.54 listed it to `var_export` and an array cast. `Json.encode` still writes every one.
+- The engine holds an `internal set` to its namespace, spec section 5, as it holds an `internal` member: plain PHP's `$ledger->views = 3;` from outside `App.Billing` throws "Cannot modify internal(set) property App\Billing\Ledger::$views from global scope, outside namespace App\Billing", where 0.6.54 ran it as a public set. The engine checks it where PHP checks `protected(set)`, so a write to any other property costs what it did. `get_object_vars`, `var_export` and an array cast that plain PHP makes leave out an `internal` property that code outside its namespace doesn't reach, where 0.6.54 listed it to `var_export` and an array cast. `json_encode` and `Json.encode` still write a PHP# class's stored form, `internal` fields included, as `json_encode` writes what `jsonSerialize()` gives.
 
 ## [0.6.54] - 2026-11-23
 

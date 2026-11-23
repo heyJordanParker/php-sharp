@@ -15,6 +15,7 @@ namespace {
             return [
                 json_encode((array) $object),
                 json_encode(get_object_vars($object)),
+                json_encode($object),
                 var_export($object, true),
                 json_encode((array) $object),
             ];
