@@ -318,6 +318,14 @@ static zend_never_inline zend_property_info *zend_get_parent_private_property(co
 
 static ZEND_COLD zend_never_inline void zend_bad_property_access(const zend_property_info *property_info, const zend_class_entry *ce, const zend_string *member) /* {{{ */
 {
+	if (property_info->flags & ZEND_ACC_SHARP_INTERNAL) {
+		zend_string *outside = zend_sharp_outside_namespace(property_info->ce,
+			EG(fake_scope) ? EG(fake_scope) : zend_get_executed_scope());
+		zend_throw_error(NULL, "Cannot access internal property %s::$%s%s", ZSTR_VAL(property_info->ce->name),
+			ZSTR_VAL(member), ZSTR_VAL(outside));
+		zend_string_release_ex(outside, false);
+		return;
+	}
 	zend_throw_error(NULL, "Cannot access %s property %s::$%s", zend_visibility_string(property_info->flags), ZSTR_VAL(ce->name), ZSTR_VAL(member));
 }
 /* }}} */
@@ -398,7 +406,7 @@ dynamic:
 	property_info = (zend_property_info*)Z_PTR_P(zv);
 	flags = property_info->flags;
 
-	if (flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED|ZEND_ACC_SHARP_HIDDEN)) {
+	if (flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED|ZEND_ACC_SHARP_HIDDEN|ZEND_ACC_SHARP_INTERNAL)) {
 		/* PHP#: no code names the slot that keeps an object's type arguments, see ZEND_ACC_SHARP_HIDDEN. */
 		if (UNEXPECTED(flags & ZEND_ACC_SHARP_HIDDEN)) {
 			if (!silent) {
@@ -421,7 +429,7 @@ dynamic:
 					property_info = p;
 					flags = property_info->flags;
 					goto found;
-				} else if (flags & ZEND_ACC_PUBLIC) {
+				} else if ((flags & ZEND_ACC_PUBLIC) && !(flags & ZEND_ACC_SHARP_INTERNAL)) {
 					goto found;
 				}
 			}
@@ -436,9 +444,15 @@ wrong:
 					}
 					return ZEND_WRONG_PROPERTY_OFFSET;
 				}
-			} else {
-				ZEND_ASSERT(flags & ZEND_ACC_PROTECTED);
+			} else if (flags & ZEND_ACC_PROTECTED) {
 				if (UNEXPECTED(!is_protected_compatible_scope(property_info->prototype->ce, scope))) {
+					goto wrong;
+				}
+			} else {
+				/* PHP#: an `internal` property is public to PHP, and only code of its namespace and those below it
+				 * reaches it, see ZEND_ACC_SHARP_INTERNAL. */
+				ZEND_ASSERT(flags & ZEND_ACC_SHARP_INTERNAL);
+				if (UNEXPECTED(!zend_sharp_reaches_internal(property_info->ce, scope))) {
 					goto wrong;
 				}
 			}
@@ -506,7 +520,7 @@ dynamic:
 	property_info = (zend_property_info*)Z_PTR_P(zv);
 	flags = property_info->flags;
 
-	if (flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED|ZEND_ACC_SHARP_HIDDEN)) {
+	if (flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED|ZEND_ACC_SHARP_HIDDEN|ZEND_ACC_SHARP_INTERNAL)) {
 		/* PHP#: no code names the slot that keeps an object's type arguments, see ZEND_ACC_SHARP_HIDDEN. */
 		if (UNEXPECTED(flags & ZEND_ACC_SHARP_HIDDEN)) {
 			if (!silent) {
@@ -524,7 +538,7 @@ dynamic:
 					property_info = p;
 					flags = property_info->flags;
 					goto found;
-				} else if (flags & ZEND_ACC_PUBLIC) {
+				} else if ((flags & ZEND_ACC_PUBLIC) && !(flags & ZEND_ACC_SHARP_INTERNAL)) {
 					goto found;
 				}
 			}
@@ -539,9 +553,15 @@ wrong:
 					}
 					return ZEND_WRONG_PROPERTY_INFO;
 				}
-			} else {
-				ZEND_ASSERT(flags & ZEND_ACC_PROTECTED);
+			} else if (flags & ZEND_ACC_PROTECTED) {
 				if (UNEXPECTED(!is_protected_compatible_scope(property_info->prototype->ce, scope))) {
+					goto wrong;
+				}
+			} else {
+				/* PHP#: an `internal` property is public to PHP, and only code of its namespace and those below it
+				 * reaches it, see ZEND_ACC_SHARP_INTERNAL. */
+				ZEND_ASSERT(flags & ZEND_ACC_SHARP_INTERNAL);
+				if (UNEXPECTED(!zend_sharp_reaches_internal(property_info->ce, scope))) {
 					goto wrong;
 				}
 			}
@@ -1854,6 +1874,100 @@ ZEND_API bool zend_check_protected(const zend_class_entry *ce, const zend_class_
 }
 /* }}} */
 
+/* PHP#: the length of the namespace of the class `name` names, 0 in PHP's root namespace. */
+static size_t zend_sharp_namespace_length(const zend_string *name)
+{
+	const char *separator = zend_memrchr(ZSTR_VAL(name), '\\', ZSTR_LEN(name));
+
+	return separator ? (size_t) (separator - ZSTR_VAL(name)) : 0;
+}
+
+/* PHP#: the name of the code the frame `frame` runs, by which spec section 5 reads the namespace it runs in: its
+ * class, or with no class its function, or NULL for top-level code and a closure outside any class, which run in no
+ * namespace. */
+ZEND_API const zend_string *zend_sharp_frame_code_name(const zend_execute_data *frame)
+{
+	if (!frame) {
+		return NULL;
+	}
+	if (frame->func->common.scope) {
+		return frame->func->common.scope->name;
+	}
+
+	return frame->func->common.fn_flags & ZEND_ACC_CLOSURE ? NULL : frame->func->common.function_name;
+}
+
+/* PHP#: the name of the code that runs in `scope`, as zend_sharp_frame_code_name gives it: the class, or with no class
+ * that of the nearest user code, which is the frame zend_get_executed_scope reads a NULL scope from. */
+ZEND_API const zend_string *zend_sharp_code_name(const zend_class_entry *scope)
+{
+	if (scope) {
+		return scope->name;
+	}
+	const zend_execute_data *ex = EG(current_execute_data);
+	while (ex && (!ex->func || !ZEND_USER_CODE(ex->func->type))) {
+		ex = ex->prev_execute_data;
+	}
+
+	return zend_sharp_frame_code_name(ex);
+}
+
+/* PHP#: whether the code named `code`, as zend_sharp_frame_code_name names it, reaches a member that `ce` declares
+ * `internal`, spec section 5: code of `ce`'s namespace or of one below it, whose name continues the namespace past a
+ * backslash. Namespaces compare in any case, spec section 24, and every code reaches a member of PHP's root
+ * namespace. */
+ZEND_API bool zend_sharp_code_reaches_internal(const zend_class_entry *ce, const zend_string *code)
+{
+	size_t length = zend_sharp_namespace_length(ce->name);
+
+	return length == 0 || (code && ZSTR_LEN(code) > length && ZSTR_VAL(code)[length] == '\\'
+		&& zend_binary_strncasecmp(ZSTR_VAL(code), length, ZSTR_VAL(ce->name), length, length) == 0);
+}
+
+/* PHP#: whether code of `scope` reaches a member that `ce` declares `internal`, see zend_sharp_code_reaches_internal. */
+ZEND_API bool zend_sharp_reaches_internal(const zend_class_entry *ce, const zend_class_entry *scope)
+{
+	return scope == ce || zend_sharp_code_reaches_internal(ce, zend_sharp_code_name(scope));
+}
+
+/* PHP#: whether code compiled in the class `scope` reaches a member of `ce` with the flags `flags`, as far as the
+ * compiler, the optimizer and the JIT can tell: a member that is not `internal`, or one that code of `scope` reaches.
+ * Code outside any class runs a known function or the top level, so its use of an `internal` member is checked when it
+ * runs. */
+ZEND_API bool zend_sharp_compiled_reaches(uint32_t flags, const zend_class_entry *ce, const zend_class_entry *scope)
+{
+	return !(flags & ZEND_ACC_SHARP_INTERNAL) || (scope && zend_sharp_reaches_internal(ce, scope));
+}
+
+/* PHP#: the end of the Error a use of a member `ce` declares `internal` gets from the code named `code` that does not
+ * reach it, which names the code and the member's namespace, as " from App\Shop\Checkout, outside namespace
+ * App\Billing". */
+ZEND_API ZEND_COLD zend_string *zend_sharp_code_outside_namespace(const zend_class_entry *ce, const zend_string *code)
+{
+	return zend_strpprintf(0, " from %s, outside namespace %.*s", code ? ZSTR_VAL(code) : "global scope",
+		(int) zend_sharp_namespace_length(ce->name), ZSTR_VAL(ce->name));
+}
+
+/* PHP#: as zend_sharp_code_outside_namespace, for code of `scope`. */
+ZEND_API ZEND_COLD zend_string *zend_sharp_outside_namespace(const zend_class_entry *ce, const zend_class_entry *scope)
+{
+	return zend_sharp_code_outside_namespace(ce, zend_sharp_code_name(scope));
+}
+
+/* PHP#: whether code of `scope` runs `new` of `ce`, spec section 5: a class that is not `internal`, or one that code
+ * reaches as it reaches an `internal` member. Otherwise it throws the Error that says so, and `new` creates nothing. */
+ZEND_API bool zend_sharp_creates(const zend_class_entry *ce, const zend_class_entry *scope)
+{
+	if (EXPECTED(!(ce->sharp_flags & SHARP_CLASS_INTERNAL)) || zend_sharp_reaches_internal(ce, scope)) {
+		return true;
+	}
+	zend_string *outside = zend_sharp_outside_namespace(ce, scope);
+	zend_throw_error(NULL, "Cannot instantiate internal class %s%s", ZSTR_VAL(ce->name), ZSTR_VAL(outside));
+	zend_string_release_ex(outside, 0);
+
+	return false;
+}
+
 ZEND_API zend_function *zend_get_call_trampoline_func(const zend_class_entry *ce, zend_string *method_name, bool is_static) /* {{{ */
 {
 	size_t mname_len;
@@ -2016,6 +2130,13 @@ static zend_always_inline zend_function *zend_get_user_call_function(zend_class_
 
 ZEND_API ZEND_COLD zend_never_inline void zend_bad_method_call(const zend_function *fbc, const zend_string *method_name, const zend_class_entry *scope) /* {{{ */
 {
+	if (fbc->common.fn_flags & ZEND_ACC_SHARP_INTERNAL) {
+		zend_string *outside = zend_sharp_outside_namespace(fbc->common.scope, scope);
+		zend_throw_error(NULL, "Call to internal method %s::%s()%s",
+			ZEND_FN_SCOPE_NAME(fbc), ZSTR_VAL(method_name), ZSTR_VAL(outside));
+		zend_string_release_ex(outside, false);
+		return;
+	}
 	zend_throw_error(NULL, "Call to %s method %s::%s() from %s%s",
 		zend_visibility_string(fbc->common.fn_flags), ZEND_FN_SCOPE_NAME(fbc), ZSTR_VAL(method_name),
 		scope ? "scope " : "global scope",
@@ -2072,7 +2193,7 @@ ZEND_API zend_function *zend_std_get_method(zend_object **obj_ptr, zend_string *
 	fbc = Z_FUNC_P(func);
 
 	/* Check access level */
-	if (fbc->op_array.fn_flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED)) {
+	if (fbc->op_array.fn_flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED|ZEND_ACC_SHARP_INTERNAL)) {
 		scope = zend_get_executed_scope();
 
 		if (fbc->common.scope != scope) {
@@ -2082,12 +2203,17 @@ ZEND_API zend_function *zend_std_get_method(zend_object **obj_ptr, zend_string *
 				if (EXPECTED(updated_fbc != NULL)) {
 					fbc = updated_fbc;
 					goto exit;
-				} else if (fbc->op_array.fn_flags & ZEND_ACC_PUBLIC) {
+				} else if ((fbc->op_array.fn_flags & ZEND_ACC_PUBLIC) && !(fbc->op_array.fn_flags & ZEND_ACC_SHARP_INTERNAL)) {
 					goto exit;
 				}
 			}
 			if (UNEXPECTED(fbc->op_array.fn_flags & ZEND_ACC_PRIVATE)
-			 || UNEXPECTED(!zend_check_protected(zend_get_function_root_class(fbc), scope))) {
+			 || UNEXPECTED((fbc->op_array.fn_flags & ZEND_ACC_PROTECTED)
+				&& !zend_check_protected(zend_get_function_root_class(fbc), scope))
+			 /* PHP#: an `internal` method is public to PHP, and only code of its namespace and those below it
+			  * reaches it, see ZEND_ACC_SHARP_INTERNAL. */
+			 || UNEXPECTED((fbc->op_array.fn_flags & ZEND_ACC_SHARP_INTERNAL)
+				&& !zend_sharp_reaches_internal(fbc->common.scope, scope))) {
 				if (zobj->ce->__call) {
 					fbc = zend_get_user_call_function(zobj->ce, method_name);
 				} else {
@@ -2154,9 +2280,8 @@ ZEND_API zend_function *zend_std_get_static_method(zend_class_entry *ce, zend_st
 	zval *func = zend_hash_find(&ce->function_table, lc_function_name);
 	if (EXPECTED(func)) {
 		fbc = Z_FUNC_P(func);
-		if (!(fbc->common.fn_flags & ZEND_ACC_PUBLIC)) {
+		if (!(fbc->common.fn_flags & ZEND_ACC_PUBLIC) || UNEXPECTED(fbc->common.fn_flags & ZEND_ACC_SHARP_INTERNAL)) {
 			zend_class_entry *scope = zend_get_executed_scope();
-			ZEND_ASSERT(!(fbc->common.fn_flags & ZEND_ACC_PUBLIC));
 			if (!zend_check_method_accessible(fbc, scope)) {
 				zend_function *fallback_fbc = get_static_method_fallback(ce, function_name);
 				if (!fallback_fbc) {
@@ -2336,11 +2461,15 @@ ZEND_API zval *zend_std_get_static_property_with_info(zend_class_entry *ce, zend
 		goto undeclared_property;
 	}
 
-	if (!(property_info->flags & ZEND_ACC_PUBLIC)) {
+	if (!(property_info->flags & ZEND_ACC_PUBLIC) || UNEXPECTED(property_info->flags & ZEND_ACC_SHARP_INTERNAL)) {
 		const zend_class_entry *scope = get_fake_or_executed_scope();
 		if (property_info->ce != scope) {
 			if (UNEXPECTED(property_info->flags & ZEND_ACC_PRIVATE)
-			 || UNEXPECTED(!is_protected_compatible_scope(property_info->prototype->ce, scope))) {
+			 || UNEXPECTED((property_info->flags & ZEND_ACC_PROTECTED)
+				&& !is_protected_compatible_scope(property_info->prototype->ce, scope))
+			 /* PHP#: as for an instance property, see ZEND_ACC_SHARP_INTERNAL. */
+			 || UNEXPECTED((property_info->flags & ZEND_ACC_SHARP_INTERNAL)
+				&& !zend_sharp_reaches_internal(property_info->ce, scope))) {
 				if (type != BP_VAR_IS) {
 					zend_bad_property_access(property_info, ce, property_name);
 				}
@@ -2421,7 +2550,12 @@ ZEND_API ZEND_COLD bool zend_std_unset_static_property(const zend_class_entry *c
 
 static ZEND_COLD zend_never_inline void zend_bad_constructor_call(const zend_function *constructor, const zend_class_entry *scope) /* {{{ */
 {
-	if (scope) {
+	if (constructor->common.fn_flags & ZEND_ACC_SHARP_INTERNAL) {
+		zend_string *outside = zend_sharp_outside_namespace(constructor->common.scope, scope);
+		zend_throw_error(NULL, "Call to internal %s::%s()%s", ZSTR_VAL(constructor->common.scope->name),
+			ZSTR_VAL(constructor->common.function_name), ZSTR_VAL(outside));
+		zend_string_release_ex(outside, false);
+	} else if (scope) {
 		zend_throw_error(NULL, "Call to %s %s::%s() from scope %s",
 			zend_visibility_string(constructor->common.fn_flags), ZSTR_VAL(constructor->common.scope->name),
 			ZSTR_VAL(constructor->common.function_name), ZSTR_VAL(scope->name)
@@ -2437,9 +2571,9 @@ ZEND_API zend_function *zend_std_get_constructor(zend_object *zobj) /* {{{ */
 	zend_function *constructor = zobj->ce->constructor;
 
 	if (constructor) {
-		if (UNEXPECTED(!(constructor->common.fn_flags & ZEND_ACC_PUBLIC))) {
+		if (UNEXPECTED(!(constructor->common.fn_flags & ZEND_ACC_PUBLIC))
+	 || UNEXPECTED(constructor->common.fn_flags & ZEND_ACC_SHARP_INTERNAL)) {
 			const zend_class_entry *scope = get_fake_or_executed_scope();
-			ZEND_ASSERT(!(constructor->common.fn_flags & ZEND_ACC_PUBLIC));
 			if (!zend_check_method_accessible(constructor, scope)) {
 				zend_bad_constructor_call(constructor, scope);
 				zend_object_store_ctor_failed(zobj);

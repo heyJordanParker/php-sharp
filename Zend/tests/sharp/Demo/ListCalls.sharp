@@ -1,6 +1,6 @@
 namespace Demo;
 
-class ListCalls
+public class ListCalls
 {
     public static List<int> reversed(List<int> values) => values.reversed();
 

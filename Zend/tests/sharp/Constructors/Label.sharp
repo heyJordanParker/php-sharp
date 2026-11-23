@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Label
+public class Label
 {
     public Label(public string text { get; init; }) { }
 

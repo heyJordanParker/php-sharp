@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Shipment
+public class Shipment
 {
     public Stage status { get; private set; }
 

@@ -1,6 +1,6 @@
 namespace Demo;
 
-enum Suit
+public enum Suit
 {
     case Hearts;
     case Spades;

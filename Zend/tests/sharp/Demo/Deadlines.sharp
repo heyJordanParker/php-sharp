@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Deadlines
+public class Deadlines
 {
     public static List<int?> byDay(List<int?> days) => days.sortedBy(day => day);
 

@@ -3,7 +3,7 @@ namespace Demo;
 import Sharp.Encoding.PhpLiteral;
 import Sharp.Encoding.Serialized;
 
-class SerializedCalls
+public class SerializedCalls
 {
     public static string encode(Any? value) => Serialized.encode(value);
 

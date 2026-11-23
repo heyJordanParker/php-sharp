@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Profile
+public class Profile
 {
     public int views { get; private set; } = 0;
     public string name { get; set; } = "guest";

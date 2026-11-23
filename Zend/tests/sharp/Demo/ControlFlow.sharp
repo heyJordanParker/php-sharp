@@ -1,6 +1,6 @@
 namespace Demo;
 
-class ControlFlow
+public class ControlFlow
 {
     public static string sign(int value)
     {

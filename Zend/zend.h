@@ -144,7 +144,7 @@ struct _zend_inheritance_cache_entry {
 	zend_class_entry             *traits_and_interfaces[1];
 };
 
-/* PHP#: PHP#'s own class flags, in sharp_flags of zend_class_entry (unused: 5-7). */
+/* PHP#: PHP#'s own class flags, in sharp_flags of zend_class_entry (unused: 6-7). */
 /* A property of the class, its own or inherited, has ZEND_ACC_SHARP_CROSSING. */
 #define SHARP_CLASS_HAS_CROSSING_PROPS (1 << 0)
 /* A property of the class, its own or inherited, has ZEND_ACC_SHARP_TYPED. */
@@ -157,6 +157,8 @@ struct _zend_inheritance_cache_entry {
 /* The class is declared in a .sharp file, or extends one that is, so an object of it is built only through its
  * constructor, spec section 9: object_init_ex refuses it, and only object_init_to_build creates one. */
 #define SHARP_CLASS_BUILT_BY_CONSTRUCTOR (1 << 4)
+/* The class is `internal`, spec section 5, so only code of its namespace, or of a namespace below it, runs `new` of it. */
+#define SHARP_CLASS_INTERNAL           (1 << 5)
 
 struct _zend_class_entry {
 	char type;

@@ -2,7 +2,7 @@ namespace Demo;
 
 import Sharp.Encoding.Hex;
 
-class TextCalls
+public class TextCalls
 {
     public static string slug(string title) => title.slug();
 

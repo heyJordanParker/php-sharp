@@ -4,7 +4,7 @@ import Lib.Shipping;
 
 extern Shipping.shipping_label uses any;
 
-class Interop
+public class Interop
 {
     public static string shipping(int cents)
     {

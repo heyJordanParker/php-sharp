@@ -33,13 +33,10 @@ jobs:
   # the tree that merges. GitHub runs 20 of the account's hosted jobs at once, across all its repositories, and a job
   # past them waits.
   #
-  # A tree runs the checks once, as bors's "not rocket science" rule tests the exact tree that lands once. A run runs
-  # none of them when a pull request's run passed CI_PASSED on its tree, as .github/actions/passed-tree explains, and
-  # links that run. So the pull request that lands a commit of next passes in a minute, and a push to master saves the
-  # caches every pull request's run restores. A push whose tree no pull request's run passed runs every check, the
-  # Mac's among them, as the check of the merge. Only a push to master whose version has no tag builds the release, and
-  # publishes it once every check passed. A red push opens an issue, as CI_PASSED does, for a pull request that fixes
-  # it forward.
+  # Every run builds and tests everything from source, with no cache and no result of an earlier run, so its length is
+  # what building and testing PHP# costs (#721): a landing's pull request and the push to master run every check
+  # again, the Mac's among them. Only a push to master whose version has no tag builds the release, and publishes it
+  # once every check passed. A red push opens an issue, as CI_PASSED does, for a pull request that fixes it forward.
   CHANGES:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
@@ -51,9 +48,7 @@ jobs:
     outputs:
       base: ${{ steps.base.outputs.sha }}
       bump: ${{ steps.version.outputs.bump }}
-      images: ${{ steps.images.outputs.run }}
       missing: ${{ steps.version.outputs.missing }}
-      passed: ${{ steps.passed.outputs.run }}
       tagged: ${{ steps.version.outputs.tagged }}
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -61,49 +56,20 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-      # .github/actions/passed-tree finds the runs that passed a tree by this notice. A pull request's run checks out the
-      # pull request merged into master, so the tree it tests is that merge's, not its head's.
-      - name: Name the tree this run tests
-        run: echo "::notice title=Tested tree::$(git rev-parse 'HEAD^{tree}')"
       # sharp/bin/check --release prints sharp/mago/Cargo.toml's version, the commit its tag names, which
-      # sharp/bin/land creates, and each part of its release not published yet. A push to master publishes what is
-      # missing, from the tagged commit, so a part an earlier push failed to publish publishes at the next push. Pushes
-      # to master run one at a time, so the next push looks once this one has published.
+      # sharp/bin/land creates, and each part of its release not published yet, which RELEASE publishes, as
+      # sharp/bin/check --release explains. Pushes to master run one at a time, so the next push looks once this one has
+      # published.
       - name: Find the version, and what of its release is missing
         id: version
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: sharp/bin/check --release | tee -a "$GITHUB_OUTPUT"
-      - name: Find the pull request run that passed this tree
-        id: passed
-        uses: ./.github/actions/passed-tree
-        with:
-          workflow: sharp.yml
-          events: pull_request
-          passed: any(.jobs[]; .name == "CI_PASSED" and .conclusion == "success")
-      # RELEASE tags the images IMAGE built on the release's tree, in the run that ran it: a pull request's run that ran
-      # every check, or a push's. A landing pull request's run links next's run and builds none, so run 45033462105,
-      # which took them from landing run 45033130198, found none and left 0.6.50 without its images. When no run built
-      # them, the push of the tagged commit builds them itself.
-      - name: Find the run that built the images of the release's tree
-        id: images
-        if: contains(steps.version.outputs.missing, 'images')
-        uses: ./.github/actions/passed-tree
-        with:
-          workflow: sharp.yml
-          events: pull_request push
-          commit: ${{ steps.version.outputs.tagged || github.sha }}
-          passed: any(.jobs[]; (.name | startswith("IMAGE (")) and .conclusion == "success")
-      - name: The checks don't run again
-        if: steps.passed.outputs.run
-        env:
-          RUN: ${{ steps.passed.outputs.run }}
-        run: echo "::notice::This tree ran and passed every PHP# check in $RUN, so none runs again."
       # A push's changes start at the commit of master's newest push run that GitHub didn't cancel, so a merge whose
       # pending run a later push replaced still counts, and a red run's issue names every commit it tests. Pushes run
       # one at a time, so every earlier run has ended. Only an earlier run counts, so a rerun of an old run diffs from
-      # the run before it, as its first attempt did. With none among the last 100 runs, every job runs.
+      # the run before it, as its first attempt did. With none among the last 100 runs, the issue names only the commit.
       - name: Find the commit of master's last push run that ran
         id: base
         if: github.event_name == 'push'
@@ -125,7 +91,7 @@ jobs:
             sleep $((attempt * 15))
           done
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "This push's changes start at ${sha:-no commit, so every job runs}."
+          echo "This push's changes start at ${sha:-no commit}."
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -134,27 +100,16 @@ jobs:
   # The run's one Linux build, which every Linux suite runs on: the engine, its install and mago, which the suites run
   # with --no-build. Each of the 8 suite jobs built them itself for 2 to 5 minutes on release pull request #363's run,
   # where the bump rebuilt every Mago crate in each, so a run built the same code 8 times. The suites wait for it, so its
-  # minutes are on every suite's path, and it keeps them few: .github/actions/linux-build builds the engine through
-  # ccache in the sharp/docker image, which sharp/docker/run passes CC and CXX into, with its folder at
-  # sharp/build/cache/ccache under the XDG_CACHE_HOME sharp/docker/run sets, while master's Mago target restores, and
-  # sharp/bin/build-mago then builds only what changed since master's build, with every test binary, which MAGO's slices
-  # run, so Linux builds Mago's dev target once per run, where mago.yml's build job built it a second time for 122
-  # seconds on dfa6e7e2941's run. It also runs the checks of generated files, since one of them reads the header the
-  # build generates, and the doc tests and the property tests, which cargo builds, so they need this target: a job
+  # minutes are on every suite's path. sharp/bin/build --linux builds the engine in the sharp/docker image,
+  # sharp/bin/build-mago --engine the engine mago links, and sharp/bin/build-mago mago with every test binary, which
+  # MAGO's slices run, so Linux builds Mago's dev target once per run, where mago.yml's build job built it a second time
+  # for 122 seconds on dfa6e7e2941's run. It also runs the checks of generated files, since one of them reads the header
+  # the build generates, and the doc tests and the property tests, which cargo builds, so they need this target: a job
   # starts once every job it needs has ended, so the suites wait for them too. MAGO's slices run every test binary.
-  #
-  # On each push to master it saves the ccache, the Rust toolchain and crates, and the target, which every pull
-  # request's run restores, as .github/actions/mago-cache explains. A cache only its own ref's runs would restore is no
-  # use to the next pull request, so only master saves. So it runs on every push to master, even one whose tree a pull
-  # request's run passed. A pull request's run of a tree that passed saves nothing, so it doesn't run. CI_PASSED, which
-  # runs after it, deletes the caches it replaced.
   BUILD_LINUX:
     needs: CHANGES
-    if: ${{ !needs.CHANGES.outputs.passed || github.event_name == 'push' }}
     runs-on: ubuntu-24.04
-    # A build of the engine takes up to 20 more minutes, which the engine's cache spares a run whose engine
-    # inputs an earlier run built.
-    timeout-minutes: 50
+    timeout-minutes: 60
     permissions:
       actions: write
       contents: read
@@ -162,54 +117,27 @@ jobs:
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-      CC: ccache gcc
-      CXX: ccache g++
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-      # build/gen_stub.php reads PHP-Parser from build/PHP-Parser-<version>, the version its initPhpParser pins, and
-      # downloads it from GitHub only when that folder is missing: run 45113483078 failed when GitHub answered that
-      # download with 1,812 bytes that were no archive. The folder comes from the Actions cache under that version, so
-      # only the first run of a version downloads it, and the cache's save spares every run after it.
-      - name: Find the PHP-Parser version build/gen_stub.php pins
-        id: php-parser
+      # sharp/docker/run pulls the sharp/docker image from ghcr.io, where base-images.yml pushes it.
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ github.token }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      # sharp/build/cargo is the CARGO_HOME of cargo in the sharp/docker image, so every build of the job reads this
+      # config. Without debug info a Mago test binary holds 142 MB where it held 235, so the test binaries MAGO's slices
+      # download are smaller, and a panic still names its file and line.
+      - name: Build without debug info in the sharp/docker image
         run: |
-          version=$(sed -n 's/^ *[$]version = "\(.*\)";$/\1/p' build/gen_stub.php)
-          if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::build/gen_stub.php's initPhpParser pins no PHP-Parser version this step reads: '$version'."
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: PHP-Parser for build/gen_stub.php, from the Actions cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: build/PHP-Parser-${{ steps.php-parser.outputs.version }}
-          key: PHP_PARSER-${{ steps.php-parser.outputs.version }}
-      # sharp/bin/build-mago builds inside the image, where CARGO_HOME and RUSTUP_HOME are sharp/build/cargo and
-      # sharp/build/rustup, which the Rust cache holds.
-      - name: Build and install the engine, and restore the Rust and Mago caches
-        uses: ./.github/actions/linux-build
-        with:
-          save: ${{ github.event_name == 'push' }}
-      # The PHP# engine mago links, from the cache a run saved for the same inputs, or else built in the image by
-      # sharp/bin/build-mago --engine. A build that links mago then takes it through MAGO_ENGINE, as it is.
-      - name: Restore the engine mago links
-        id: mago-engine
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/linux-x86_64-engine/install
-          key: MAGO_ENGINE-debian-${{ runner.arch }}-${{ hashFiles('configure.ac', 'build/**', 'main/**', 'Zend/**', 'TSRM/**', 'sapi/**', 'ext/**', 'scripts/**', '!**/tests/**', 'sharp/bin/build-mago', 'sharp/docker/runtime/configure-options', 'sharp/docker/Dockerfile') }}
+          mkdir -p sharp/build/cargo
+          printf '[profile.dev]\ndebug = false\n' > sharp/build/cargo/config.toml
+      - name: Build and install the engine
+        run: sharp/bin/build --linux
       - name: Build the engine mago links
-        if: steps.mago-engine.outputs.cache-hit != 'true'
         run: sharp/docker/run sharp/bin/build-mago --engine
-      - name: Save the engine mago links
-        if: steps.mago-engine.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/linux-x86_64-engine/install
-          key: ${{ steps.mago-engine.outputs.cache-primary-key }}
       - name: Build mago and its test binaries
         run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/build-mago --quiet
       # What the suites run: the CLI, phpdbg, which run-tests.php finds beside it for the tests that need it, the install
@@ -230,14 +158,12 @@ jobs:
           if-no-files-found: error
       # What MAGO's slices run: the test binaries build.json names, mago, which the tests run, and build.json.
       - name: Pack Mago's test binaries
-        if: ${{ !needs.CHANGES.outputs.passed }}
         run: |
           build="sharp/build/linux-$(uname -m)/mago"
           jq -r 'select(.reason == "compiler-artifact" and .profile.test and .executable) | .executable | ltrimstr("/src/")' \
             "$build/build.json" | sort -u > "$RUNNER_TEMP/test-binaries"
           tar --zstd -cf "$RUNNER_TEMP/tests.tar.zst" "$build/build.json" "$build/debug/mago" --files-from "$RUNNER_TEMP/test-binaries"
       - name: Upload Mago's test binaries
-        if: ${{ !needs.CHANGES.outputs.passed }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: tests-linux
@@ -256,7 +182,6 @@ jobs:
       # from nothing first, for 4.5 of its 8.7 minutes on dfa6e7e2941's run. They run after the uploads, which the
       # suites download, and the job ends about a minute after them.
       - name: Test the doc tests and the property tests
-        if: ${{ !needs.CHANGES.outputs.passed }}
         run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/test --mago --cargo-built
       # As .github/actions/cancel-failed-run explains.
       - &cancel-failed-run
@@ -278,7 +203,6 @@ jobs:
   LINUX:
     name: LINUX (${{ matrix.shard }}/3)
     needs: [CHANGES, BUILD_LINUX]
-    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -341,7 +265,6 @@ jobs:
   MAGO:
     name: MAGO (${{ matrix.shard }}/5)
     needs: [CHANGES, BUILD_LINUX]
-    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -395,7 +318,6 @@ jobs:
   # with it, its fixtures' compile and the tests took 281 s of this job's 361 on run 45051337556, the slowest Linux job.
   UPSTREAM:
     needs: [CHANGES, BUILD_LINUX]
-    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -438,7 +360,6 @@ jobs:
   SPEC:
     name: SPEC (${{ matrix.shard }}/4)
     needs: [CHANGES, BUILD_LINUX]
-    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -465,25 +386,20 @@ jobs:
       - *download-build-linux-again
       - name: Unpack BUILD_LINUX's engine and mago
         run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
-      # The pinned Lean in sharp/build/elan, the ELAN_HOME sharp/docker/run sets, where mago finds it, from the Actions
-      # cache, so the examples' laws download no Lean from GitHub.
-      - name: Restore the pinned Lean
-        uses: ./.github/actions/setup-lean
-        with:
-          cache: true
       - name: Check the examples of docs/spec.md and README.md
         run: |
           build="sharp/build/linux-$(uname -m)"
           sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/4
       # mago downloads Lean into lean/lean-<version>-<platform> of its cache folder only when it finds no pinned Lean,
-      # beside the law checker's builds, which lean/ holds under their hashes.
+      # beside the law checker's builds, which lean/ holds under their hashes. The sharp/docker image carries the pinned
+      # Lean, as sharp/docker/Dockerfile explains.
       - name: mago downloaded no Lean
         run: |
           if compgen -G 'sharp/build/cache/mago/lean/lean-*' > /dev/null; then
-            echo "::error::mago downloaded Lean into sharp/build/cache/mago/lean, so the restored Lean was missing."
+            echo "::error::mago downloaded Lean into sharp/build/cache/mago/lean, so the sharp/docker image's Lean was missing."
             exit 1
           fi
-          echo "mago ran the examples' laws on the restored Lean, $(basename "$ELAN_HOME"/toolchains/*), and downloaded none."
+          echo "mago ran the examples' laws on the sharp/docker image's Lean, $(cat sharp/mago/crates/sharp-lean/lean/lean-toolchain), and downloaded none."
       - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
@@ -491,12 +407,9 @@ jobs:
         with:
           end: true
   # The fixture in sharp/hosts, served from FrankenPHP's worker mode, with FrankenPHP built with Go against
-  # BUILD_LINUX's installed engine, and BUILD_LINUX's mago. It runs on every push to master that BUILD_LINUX runs on,
-  # even one whose tree a pull request's run passed, because that push's HOSTS saves the Go modules and Go's build cache
-  # of FrankenPHP's packages, which every pull request's run restores, as BUILD_LINUX saves its caches.
+  # BUILD_LINUX's installed engine, and BUILD_LINUX's mago.
   HOSTS:
     needs: [CHANGES, BUILD_LINUX]
-    if: ${{ !needs.CHANGES.outputs.passed || github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -519,27 +432,8 @@ jobs:
       - *download-build-linux-again
       - name: Unpack BUILD_LINUX's engine and mago
         run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
-      # sharp/bin/hosts keeps Go's build cache in the build's folder, because the cache never reads the PHP headers
-      # FrankenPHP's C files include, as it explains. So the key holds the hash of the headers the engine just installed,
-      # and a change to them restores nothing, as a new build folder would hold nothing.
-      - name: Go modules and build cache, saved by the push to master
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            sharp/build/go/pkg/mod
-            sharp/build/linux-x86_64/frankenphp/go-build
-          key: SHARP_HOSTS_GO-${{ runner.arch }}-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile', 'sharp/build/linux-x86_64/install/include/**') }}-${{ github.sha }}
-          restore-keys: SHARP_HOSTS_GO-${{ runner.arch }}-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile', 'sharp/build/linux-x86_64/install/include/**') }}-
       - name: Serve the fixture from FrankenPHP
         run: sharp/bin/hosts --linux --no-build
-      - name: Save the Go modules and build cache
-        if: github.event_name == 'push'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            sharp/build/go/pkg/mod
-            sharp/build/linux-x86_64/frankenphp/go-build
-          key: SHARP_HOSTS_GO-${{ runner.arch }}-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile', 'sharp/build/linux-x86_64/install/include/**') }}-${{ github.sha }}
       - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
@@ -557,8 +451,6 @@ jobs:
   # sharp/bin/test doesn't take: the Zend allocator off, so ASan sees each allocation, and LeakSanitizer with php-src's
   # suppressions. The PHP# tests run without opcache, in shared memory twice per process, and under the tracing JIT,
   # the stores a PHP# mark passes through, and leave out the upstream tests, whose baseline lists a build without ASan.
-  # It restores BUILD_LINUX's Rust and Mago caches and saves none, so the caches keep room for the ones every pull
-  # request restores.
   # A failed run opens the red-master issue, as CI_PASSED does for a push.
   ASAN:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -571,8 +463,6 @@ jobs:
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-      CC: ccache gcc
-      CXX: ccache g++
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -582,14 +472,6 @@ jobs:
         env:
           TOKEN: ${{ github.token }}
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      - name: Rust and Mago caches, saved by BUILD_LINUX on master
-        uses: ./.github/actions/mago-cache
-        with:
-          name: SHARP_LINUX
-          rust: SHARP_LINUX
-          rust-paths: |
-            sharp/build/cargo
-            sharp/build/rustup
       # Only this step's CFLAGS, so mago builds without ASan.
       - name: Build with AddressSanitizer
         run: sharp/docker/run env CFLAGS="-fsanitize=address -DZEND_TRACK_ARENA_ALLOC" LDFLAGS=-fsanitize=address sharp/bin/build
@@ -648,20 +530,18 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
-  # The run's one Mac job, which runs only what macOS can fail, on the Mac's one build of the engine mago links:
-  # mago compile and the PHP# suite without opcache on the debug engine, the one arm64 build of it, on a disk that
-  # ignores case, the workspace's test binaries whose code differs on macOS, on the dev build, and plain-php.
-  # As four jobs, MACOS, tests (macOS), release-build and the release's macOS build, they queued one after another on
-  # the Mac, and three of them ran the engine step: 700, 1,443 and 940 s on 0.6.40's green run 44740612180.
-  # Linux runs the rest on the same debug engine and dev build: opcache's shared memory and the census and the
-  # differential, in LINUX's slices, and every other test binary, in MAGO's, since none reads anything that differs by
-  # platform. Shared memory took 255 of the suite's 370 s and the workspace's tests 370 s of the step's 420 s on run
-  # 45095302755. The binaries that stay are the ones whose code differs on macOS: the database's FSEvents watcher, the
-  # extension hosts' process groups, the Lean library's archive, processor time and cache folder, the compile's file
-  # systems in mago's own, and tests/main.rs, with Lean's install, the runner, its process handling and its paths.
+  # The run's one Mac job, on the Mac's one build of the engine mago links, the debug engine, the one arm64 build of
+  # it, and the dev build of mago and every test binary, on a disk that ignores case. It runs every test LINUX, MAGO,
+  # SPEC and UPSTREAM's spec self-test run: the PHP# suite without opcache and in opcache's shared memory, mago
+  # convert's whole-project proof, the census, the differential, PHPUnit, the spec's self-test and examples, every
+  # workspace test, tests/laws.rs among them, the doc tests and the property tests, then plain-php. Three Linux checks
+  # can't run on macOS: the JIT, which Apple silicon has no thread-safe build of, as ext/opcache/config.m4 warns, the
+  # upstream tests, whose sharp/baseline/linux holds Linux's results, and sharp/bin/hosts, which builds FrankenPHP in the
+  # sharp/docker image. As four jobs, MACOS, tests (macOS), release-build and the release's macOS build, they queued
+  # one after another on the Mac, and three of them ran the engine step: 700, 1,443 and 940 s on 0.6.40's green run
+  # 44740612180.
   MACOS:
     needs: CHANGES
-    if: ${{ !needs.CHANGES.outputs.passed }}
     runs-on: macos-arm64-local
     # next's own pull request runs each push at once, so each push queued a Mac job on the one runner, behind every
     # older one: at 03:10 UTC on 2026-11-23 run 45098228544's held the runner and three more waited, the newest 30
@@ -674,123 +554,57 @@ jobs:
       actions: write
       contents: read
     steps:
-      # actions/checkout's clean deletes sharp/build. The Mac's runner keeps it instead, as
-      # .github/actions/clean-kept-build explains, so the engines and mago rebuild only what changed since the runner's
-      # last build.
+      # actions/checkout's clean removes every file an earlier job of the runner's one work folder left, sharp/build
+      # among them, so the job builds everything from its tree.
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          clean: false
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-      - name: Remove what an earlier job left, except the builds
-        uses: ./.github/actions/clean-kept-build
-      # A job never installs on the self-hosted Mac, so it checks that Homebrew already has the build's formulae, ccache
-      # among them.
+      # mago's cache folder, where the law checker builds its Lean library, in the checkout's build folder, as
+      # sharp/docker/run puts it on Linux, so no job reads a build an earlier job left in the runner's home.
+      - name: Keep mago's cache folder in the checkout
+        run: echo "XDG_CACHE_HOME=$GITHUB_WORKSPACE/sharp/build/cache" >> "$GITHUB_ENV"
+      # A job never installs on the self-hosted Mac, so it checks that Homebrew already has the build's formulae.
       - name: Homebrew has the build's formulae
         env:
-          FORMULAE: autoconf bison ccache curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
+          FORMULAE: autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
         run: |
           # shellcheck disable=SC2086 # FORMULAE is a list of formulae.
           brew list --versions $FORMULAE
-      # Through ccache, as release.yml's macOS build builds the same engine, so a file that differs between the trees of
-      # the two jobs, master's for a release and next's, compiles from the cache when it changes back: the run after a
-      # release spent 314 s rebuilding it on run 45025617782, where it took 31 s on run 45016081891.
       - name: Build the engine mago links
-        env:
-          CC: ccache cc
-          CXX: ccache c++
         run: sharp/bin/build-mago --engine
       # The engine the PHP# suite runs on, with --enable-debug, since only a debug engine runs ZEND_ASSERT and reports
-      # a leak. It builds through ccache, as BUILD_LINUX's does, so a file that changes back, as a run of another branch
-      # makes it, compiles from the cache, and sharp/bin/build configures again only when what configure reads changed.
-      # On macOS sharp/bin/build builds only sapi/cli/php and sapi/phpdbg/phpdbg, so a commit relinks no libphp and
-      # installs nothing, which took 376 of this step's 392 s on run 45051337556. Only this step's CC and CXX, so mago's crates that compile C build as the job's other builds build them in the
-      # same target, where another CC rebuilds them and every crate above them.
+      # a leak. On macOS sharp/bin/build builds only sapi/cli/php and sapi/phpdbg/phpdbg, and installs nothing.
       - name: Build the engine the PHP# suite runs on
-        env:
-          CC: ccache cc
-          CXX: ccache c++
         run: sharp/bin/build
-      # mago and the test binaries of the packages the test step runs, mago's, the database's, the extension hosts' and
-      # the Lean library's, in the dev profile, which keeps the debug assertions and overflow checks the tests need,
-      # linked with the engine the step before last built. The whole workspace's took 58 s on run 45101524191. Its dependencies compile at opt-level 3, so the tests
-      # run on optimized dependencies, while a commit rebuilds the workspace crates it changed at opt-level 0: the whole
-      # workspace optimized halved the tests, but its rebuild of 566 to 923 s per commit took the time back.
+      # mago and every test binary of the workspace, in the dev profile, which keeps the debug assertions and overflow
+      # checks the tests need, linked with the engine the step before last built, as BUILD_LINUX builds them.
       - name: Build mago and its test binaries
-        run: |
-          MAGO_ENGINE="$GITHUB_WORKSPACE/sharp/build/darwin-arm64-engine/install" sharp/bin/build-mago --quiet \
-            --config 'profile.dev.package."*".opt-level=3' \
-            -p mago -p mago-database -p mago-extension -p mago-sharp-lean
-      # The workspace's tests on macOS arm64, which cover the few lines of Mago that differ there, such as the watch
-      # mode's FSEvents. They run lake and the SDK's Composer packages.
-      - name: Install composer dependencies
-        working-directory: sharp/mago
-        run: composer install --no-interaction --no-progress
+        env:
+          MAGO_ENGINE: ${{ github.workspace }}/sharp/build/darwin-arm64-engine/install
+        run: sharp/bin/build-mago --quiet
       - name: Install elan and Lean
         uses: ./.github/actions/setup-lean
       # The suite and the workspace's tests share no output, and each sharp/bin/test keeps its files in a temporary
       # folder of its own, so they run at once, where one after the other they took 410 and 654 s of job 137009338505.
-      # The suite's output prints once it ends, so the logs don't mix. The suite runs by its folder, so sharp/bin/test
-      # runs no proof of mago convert, which only a run of the whole suite or of its slice runs, and the workspace runs
-      # the binaries the job's comment names. The step took 707 s on run 45051101012 and 420 s on run 45095302755.
+      # The suite's output prints once it ends, so the logs don't mix. The suite runs whole, so it runs mago convert's
+      # whole-project proof after it. The doc tests and the property tests, which cargo builds in the target the step
+      # before last built, run after the workspace's test binaries.
       - name: Test PHP# and mago's workspace
+        env:
+          MAGO_ENGINE: ${{ github.workspace }}/sharp/build/darwin-arm64-engine/install
         run: |
           suite_log="$RUNNER_TEMP/php-sharp-suite.log"
           (
             status=0
-            sharp/bin/test --no-build Zend/tests/sharp || status=$?
+            sharp/bin/test --no-build --census --spec --differential --phpunit || status=$?
             echo "The PHP# suite took $SECONDS s."
             exit "$status"
           ) > "$suite_log" 2>&1 &
           suite=$!
           workspace=0
-          # tests/main.rs's tests that read macOS: Lean's processes, its library build and cache folder, the file
-          # watcher, the locks of concurrent compiles, renames, modes, change times, links, a disk that ignores case, and
-          # the extension hosts' processes. Its other tests check what a compile computes, which MAGO runs.
-          main=(
-            compile::a_watch_
-            compile::a_signal_that_ends_a_compile_ends_the_lean_it_waits_on
-            compile::a_runner_that_computes_past_its_deadline_without_writing_finishes
-            compile::lean_work_that_never_ends_stops_once_at_its_limit_or_deadline
-            compile::a_law_never_runs_on_the_lake_on_the_path
-            compile::compile_rebuilds_a_library_build_that_lost_its_lakefile_or_its_runner_and_proves_its_law
-            compile::compile_deletes_the_staging_folder_a_dead_build_left_and_proves_its_law
-            compile::compile_deletes_the_generated_code_and_the_lake_package_an_earlier_mago_left_and_proves_its_law
-            compile::compile_deletes_the_lean_package_once_no_law_remains
-            compile::compile_proves_the_laws_of_two_stale_files_with_one_runner
-            compile::compile_names_the_cache_folder_the_law_checker_cannot_create
-            compile::compile_reports_an_unavailable_law_checker_on_each_file_that_needs_it
-            compile::a_second_compile_leaves_the_compiled_file_byte_identical_and_starts_no_lean_process
-            compile::an_edit_to_a_file_no_law_reaches_starts_no_lean_process
-            compile::compiles_that_start_together_
-            compile::compiles_with_different_threads_share_one_compile
-            compile::a_compile_takes_its_turn_after_the_run_that_holds_the_write_lock
-            compile::compile_keeps_the_engine_s_compile_lock
-            compile::compile_replaces_a_compiled_file_by_rename_so_no_reader_sees_a_partial_file
-            compile::compile_writes_files_with_the_mode_of_a_new_file
-            compile::compile_reads_a_source_rewritten_at_the_same_size_with_its_modification_time_set_back
-            compile::compile_writes_the_compiled_file_at_the_new_target_of_a_link_to_an_identical_copy
-            compile::compile_reports_a_link_to_a_file_outside_the_project_and_writes_no_compiled_file_for_it
-            compile::compile_skips_a_dangling_link_beside_a_file_that_reaches_an_extension
-            compile::a_source_deleted_while_the_compile_runs_fails_nothing_and_the_next_compile_leaves_it_out
-            compile::compile_refuses_a_class_beside_a_folder_of_its_name_with_or_without_a_law
-            external_analyzer_lifecycle::
-            external_analyzer_invocation::
-          )
-          binaries=(
-            sharp/mago/crates/database/src/lib.rs
-            sharp/mago/crates/extension/src/lib.rs
-            sharp/mago/crates/extension/tests/process_group.rs
-            sharp/mago/crates/sharp-lean/src/lib.rs
-            sharp/mago/src/main.rs
-            "${main[@]/#/sharp/mago/tests/main.rs::}"
-          )
-          chosen=()
-          for binary in "${binaries[@]}"; do
-            chosen+=(--binary "$binary")
-          done
-          sharp/bin/test --mago --no-build "${chosen[@]}" || workspace=$?
+          sharp/bin/test --mago --no-build || workspace=$?
+          sharp/bin/test --mago --cargo-built || workspace=$?
           echo "mago's workspace tests took $SECONDS s."
           suite_status=0
           wait "$suite" || suite_status=$?
@@ -815,28 +629,27 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
-      - name: Remove what the next Mac job doesn't reuse
-        if: always()
-        uses: ./.github/actions/clean-kept-build
   # release.yml builds Mago's binaries, the macOS one with profile-guided optimization, their attestations, Mago's source
   # archives, their SHA-256s and the release's notes, in the push of the release's commit while its GitHub release isn't
   # published, and RELEASE publishes them as they are once every check of the push passed. Only that commit's own run
   # builds them, since each attestation names the run's commit as the one it was built from. A pull request's run never
   # builds them, so the Mac job's checks set its length. A called workflow's jobs may ask only for permissions its
-  # caller grants.
+  # caller grants, and release.yml's red-master job opens the red-master issue when one of its builds failed.
   RELEASE_ASSETS:
     needs: CHANGES
     if: contains(needs.CHANGES.outputs.missing, 'assets') && (needs.CHANGES.outputs.tagged || github.sha) == github.sha
     uses: ./.github/workflows/release.yml
+    with:
+      range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
     permissions:
       attestations: write
       contents: read
       id-token: write
-  # This workflow's one required check. A job skipped by its `if` reports one check under the job's
-  # name, so CI_PASSED stands in for every job it needs. It fails when any of them failed or was
-  # cancelled, a release that failed to publish among them. mago.yml's ci-passed is the other
-  # required check, and its plain-php job runs mago from Composer on plain PHP, and its SPEED job counts what proving
-  # and compiling cost.
+      issues: write
+  # This workflow's one required check. It needs every job that runs on every push and pull request, and fails unless
+  # each of them passed. mago.yml's ci-passed is the other required check, and its plain-php job runs mago from Composer
+  # on plain PHP, and its SPEED job counts what proving and compiling cost. RELEASE_ASSETS, RELEASE and COMPOSER run
+  # only on a push to master, after the checks, so each opens the red-master issue itself when it fails.
   CI_PASSED:
     if: always() && (github.event_name == 'push' || github.event_name == 'pull_request')
     needs:
@@ -849,10 +662,7 @@ jobs:
       - HOSTS
       - WORKFLOWS
       - MACOS
-      - RELEASE_ASSETS
       - IMAGE
-      - RELEASE
-      - COMPOSER
     runs-on: ubuntu-24.04
     permissions:
       actions: write
@@ -867,27 +677,18 @@ jobs:
           sparse-checkout: .github/actions
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-      - name: Every job passed, or skipped a tree that a pull request's run passed
+      - name: Every job passed
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: >-
-            BUILD_LINUX, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, MACOS, RELEASE_ASSETS, IMAGE, RELEASE, COMPOSER
           jobs: ${{ toJSON(needs) }}
-      # As .github/actions/red-master-issue explains.
-      - name: Open an issue for the failed run on master
+      # As .github/actions/red-master-issue explains. RELEASE and COMPOSER run it by its anchor.
+      - &red-master-issue
+        name: Open an issue for the failed run on master
         if: failure() && github.event_name == 'push'
         uses: ./.github/actions/red-master-issue
         with:
           title: A push to master failed PHP# CI
           range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
-      # BUILD_LINUX saved its target and ccache on master when it ended, and HOSTS its Go caches, so this job, which
-      # needs both, deletes the ones they replaced. IMAGE saved the engine ccache on master and on next's own pull
-      # request.
-      - name: Delete the caches this run replaced
-        if: >-
-          ${{ always() && (github.event_name == 'push' && needs.BUILD_LINUX.result == 'success'
-          || github.head_ref == 'next' && needs.IMAGE.result == 'success') }}
-        uses: ./.github/actions/mago-cache-prune
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -906,6 +707,7 @@ jobs:
     concurrency: composer-${{ github.ref }}
     permissions:
       contents: read
+      issues: write
     env:
       VERSION: ${{ needs.RELEASE.outputs.version }}
     steps:
@@ -1009,6 +811,7 @@ jobs:
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit --message "The SHA-256 of every mago $VERSION release asset"
           git push origin "HEAD:refs/tags/v$VERSION"
+      - *red-master-issue
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -1021,14 +824,11 @@ jobs:
   # BuildKit, its SBOM scanner and the bases are base-images.yml's copies in ghcr.io at pinned digests, pulled after the
   # login, so no pull is an anonymous Docker Hub pull (#86). The engine changes PHP's internal structures, so an
   # extension can stop building or loading: the image builds every extension it ships, and the job calls into each one
-  # from the pushed image, as an app runs them. Every pull request's push runs it, a push to master whose tree no pull
-  # request's run passed, and the push of a release's commit whose images no run built. The two platforms build at
-  # once, since a run ends with its slowest job: each took 12 to 13 minutes on the pushes of pull requests #351 and #352.
+  # from the pushed image, as an app runs them. Every run builds both, and a release's push tags the ones it built. The
+  # two platforms build at once, since a run ends with its slowest job: each took 12 to 13 minutes on the pushes of pull
+  # requests #351 and #352.
   IMAGE:
     name: IMAGE (${{ matrix.platform }})
-    if: >-
-      ${{ !needs.CHANGES.outputs.passed || (contains(needs.CHANGES.outputs.missing, 'images')
-      && !needs.CHANGES.outputs.images && (needs.CHANGES.outputs.tagged || github.sha) == github.sha) }}
     needs: CHANGES
     runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 45
@@ -1071,81 +871,18 @@ jobs:
         with:
           driver-opts: image=${{ env.BUILDKIT }}
           cleanup: false
-      # The engine's ccache, the cache mount the Dockerfile's php-base stage compiles through, as .github/actions/mago-cache
-      # keeps a target: next's own pull request and a push to master save it under the commit, since their own later
-      # runs restore it, and CI_PASSED deletes the one it replaced. Every other run restores the newest and saves nothing.
-      - name: Engine ccache, saved by next's own pull request and master
-        if: github.head_ref == 'next' || github.ref == 'refs/heads/master'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/engine-ccache
-          key: IMAGE_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/runtime/frankenphp.Dockerfile') }}-${{ github.sha }}
-          restore-keys: IMAGE_CCACHE-${{ runner.arch }}-
-      - name: Engine ccache, restored only
-        if: github.head_ref != 'next' && github.ref != 'refs/heads/master'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/engine-ccache
-          key: IMAGE_CCACHE-${{ runner.arch }}-${{ hashFiles('sharp/docker/runtime/frankenphp.Dockerfile') }}-${{ github.sha }}
-          restore-keys: IMAGE_CCACHE-${{ runner.arch }}-
-      # BuildKit's cache mount lives in its builder, which each job starts anew, so this copies the folder into the
-      # mount before the builds and back out after them, as Docker's documentation for cache mounts in GitHub Actions
-      # does. Its post step runs before the cache's save, which is declared before it.
-      - name: Put the engine ccache in BuildKit's cache mount, and take it back after the builds
-        uses: reproducible-containers/buildkit-cache-dance@5422eac04292c961a382e0f584ea0f03ad9da723 # v3.4.0
-        with:
-          cache-map: |
-            {"${{ runner.temp }}/engine-ccache": {"target": "/root/.cache/ccache", "id": "sharp-engine-ccache"}}
-          utility-image: ghcr.io/containerd/busybox:1.36@sha256:7b3ccabffc97de872a30dfd234fd972a66d247c8cfc69b0550f276481852627c
-          # Outside the checkout, which is the builds' context.
-          scratch-dir: ${{ runner.temp }}/buildkit-cache-dance
-          skip-extraction: ${{ github.head_ref != 'next' && github.ref != 'refs/heads/master' }}
       # The build's context is the job's checkout, which actions/checkout fetched at the commit's SHA, so a ref moved
       # after the push builds nothing else. BuildKit's own fetch of that commit from GitHub took 188 s on run
-      # 45088111311's amd64 job, where the checkout took 8 s.
-      # BuildKit's GitHub Actions cache, type=gha, reads the job's cache token and URLs, which the runner gives only an
-      # action, so this exports them to the steps after it, as crazy-max/ghaction-github-runtime does, and logs none.
-      - name: Give BuildKit the job's Actions cache
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            for (const [name, value] of Object.entries(process.env)) {
-              if (name.startsWith('ACTIONS_')) {
-                core.exportVariable(name, value);
-              }
-            }
-      # The -dev image's Lean layer, the Dockerfile's lean-layer stage, kept in BuildKit's GitHub Actions cache under the
-      # platform's scope, which next's own pull request and a push to master write, as the engine ccache, and every run
-      # reads. It changes only with the Lean version, so the -dev build below finds its compressed blob there.
-      - name: Build the -dev image's Lean layer through BuildKit's Actions cache
-        env:
-          WRITE: ${{ github.head_ref == 'next' || github.ref == 'refs/heads/master' }}
-        run: |
-          scope="lean-${PLATFORM//\//-}"
-          write=()
-          if [[ $WRITE == true ]]; then
-            write=(--cache-to "type=gha,scope=$scope,mode=min")
-          fi
-          sharp/bin/network docker buildx build \
-            --file sharp/docker/runtime/frankenphp.Dockerfile \
-            --target lean-layer \
-            --platform "$PLATFORM" \
-            --build-arg REGISTRY=ghcr.io/heyjordanparker \
-            --cache-from "type=gha,scope=$scope" \
-            "${write[@]}" \
-            --output type=cacheonly \
-            .
-          echo "LEAN_CACHE=type=gha,scope=$scope" >> "$GITHUB_ENV"
-      # Each build runs through sharp/bin/network, so a registry or download request the network fails, as a base image's
-      # manifest, a git source or a package, runs the build again from BuildKit's cache of the steps that ended. The
-      # flags are the ones docker/build-push-action passed, its builder-id among them.
+      # 45088111311's amd64 job, where the checkout took 8 s. Each build runs through sharp/bin/network, so a registry or
+      # download request the network fails, as a base image's manifest, a git source or a package, runs the build again,
+      # and BuildKit keeps the steps that ended in the job's builder. The flags are the ones docker/build-push-action
+      # passed, its builder-id among them.
       - name: Build and push the image by digest
         id: build
         run: &build-image |
           sharp/bin/network docker buildx build \
             --file sharp/docker/runtime/frankenphp.Dockerfile \
             ${TARGET:+--target "$TARGET"} \
-            ${CACHE_FROM:+--cache-from "$CACHE_FROM"} \
             --platform "$PLATFORM" \
             --build-arg REGISTRY=ghcr.io/heyjordanparker \
             --provenance "mode=max,builder-id=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT" \
@@ -1155,12 +892,11 @@ jobs:
             .
           echo "digest=$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/$GITHUB_ACTION.json")" >> "$GITHUB_OUTPUT"
       # The -dev image, the runtime image with the law checker's Lean in Mago's cache folder, which RELEASE tags
-      # <version>-dev. The build reuses the runtime image's stages from the build before it.
+      # <version>-dev. The build reuses the runtime image's stages from the build before it, in the job's builder.
       - name: Build and push the -dev image by digest
         id: dev
         env:
           TARGET: dev
-          CACHE_FROM: ${{ env.LEAN_CACHE }}
         run: *build-image
       # The steps below run both images, so they pull here, where a dropped connection runs the pull again.
       - name: Pull the pushed images
@@ -1253,11 +989,12 @@ jobs:
   # Publishes what sharp/bin/check --release finds missing of the release of sharp/mago/Cargo.toml's version, once
   # every job before it passed, and mago.yml's run of the same push: the GitHub release of the files RELEASE_ASSETS
   # built, and the runtime image as ghcr.io/heyjordanparker/php-sharp:<version>, never as latest, with its -dev image as
-  # <version>-dev, from the run that built them on the release's tree. COMPOSER then pushes the Composer packages' tags.
+  # <version>-dev, both from this run's IMAGE. COMPOSER then pushes the Composer packages' tags.
   # The release is the commit tag v<version> names, which sharp/bin/land creates with the language owner's login on the
   # merge commit that first holds the version: GitHub refuses GITHUB_TOKEN a tag on a commit whose workflows differ from
-  # master's, and runs 45025602373 and 45027728255 failed to create v0.6.50 so. Each part publishes once, so a later
-  # push finishes a release an earlier one left half published, and a rerun leaves what an earlier attempt published.
+  # master's, and runs 45025602373 and 45027728255 failed to create v0.6.50 so. Each part publishes once, as
+  # sharp/bin/check --release explains, and a rerun leaves what an earlier attempt published. It opens the red-master
+  # issue when it fails, since CI_PASSED doesn't need it.
   RELEASE:
     needs: [CHANGES, BUILD_LINUX, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, WORKFLOWS, MACOS, RELEASE_ASSETS, IMAGE]
     if: ${{ !failure() && !cancelled() && needs.CHANGES.outputs.bump == 'true' }}
@@ -1267,6 +1004,7 @@ jobs:
       attestations: write
       contents: write
       id-token: write
+      issues: write
       packages: write
     outputs:
       commit: ${{ steps.run.outputs.commit }}
@@ -1278,40 +1016,25 @@ jobs:
       MISSING: ${{ needs.CHANGES.outputs.missing }}
     steps:
       # The tag is read again, since CHANGES can run before sharp/bin/land created it, and then took this commit for
-      # the release's. RELEASE_ASSETS ran only in the release commit's own push, since each attestation names the run's
-      # commit as the one it was built from, and IMAGE built the images there when no other run did.
-      - name: Find the release's commit, and the run that built its images
+      # the release's. Only the release commit's own push run builds what the release publishes: RELEASE_ASSETS, since
+      # each attestation names the run's commit as the one it was built from, and IMAGE, which this run's RELEASE tags.
+      - name: Find the release's commit
         id: run
-        env:
-          IMAGES: ${{ needs.CHANGES.outputs.images }}
         run: |
           if ! commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/v$VERSION" --jq .sha 2> /dev/null); then
             echo "::error::Tag v$VERSION doesn't exist yet, so nothing of release $VERSION is published. sharp/bin/land creates it on the merge commit that first holds the version, and the next push to master publishes what is missing."
             exit 1
           fi
-          built="the push run of $commit"
-          if [[ $MISSING == *assets* && $commit != "$GITHUB_SHA" ]]; then
-            echo "::error::Release v$VERSION isn't published, and only $built builds its files, since each attestation names its run's commit. Rerun the failed jobs of $built."
+          if [[ $MISSING == *assets* || $MISSING == *images* ]] && [[ $commit != "$GITHUB_SHA" ]]; then
+            echo "::error::Release v$VERSION lacks its ${MISSING// / and }, and only the push run of $commit builds them. Rerun the failed jobs of the push run of $commit."
             exit 1
-          fi
-          images=
-          if [[ $MISSING == *images* ]]; then
-            images=${IMAGES##*/}
-            if [[ -z $images && $commit == "$GITHUB_SHA" ]]; then
-              images=$GITHUB_RUN_ID
-            elif [[ -z $images ]]; then
-              echo "::error::No run built the images of commit $commit's tree, and only $built builds them. Rerun the failed jobs of $built."
-              exit 1
-            fi
-            echo "Release $VERSION tags the images run $images built."
           fi
           {
             echo "commit=$commit"
             echo "tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)"
-            echo "images=$images"
           } >> "$GITHUB_OUTPUT"
           echo "Release $VERSION is commit $commit, and publishes:${MISSING:+ $MISSING}."
-      # Its pull request's run passed both workflows on this tree, or this push's run of mago.yml runs every Mago check.
+      # This push's run of mago.yml runs every Mago check.
       - name: Mago CI passed on this push
         run: |
           run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mago.yml/runs?head_sha=$GITHUB_SHA&event=push" \
@@ -1438,8 +1161,6 @@ jobs:
           pattern: digest-frankenphp-*
           path: ${{ runner.temp }}/digests/runtime
           merge-multiple: true
-          run-id: ${{ steps.run.outputs.images }}
-          github-token: ${{ github.token }}
       - name: Download the platforms' digests, the second try
         if: steps.digests.outcome == 'failure'
         timeout-minutes: 5
@@ -1448,8 +1169,6 @@ jobs:
           pattern: digest-frankenphp-*
           path: ${{ runner.temp }}/digests/runtime
           merge-multiple: true
-          run-id: ${{ steps.run.outputs.images }}
-          github-token: ${{ github.token }}
       - name: Download the platforms' -dev digests
         id: dev-digests
         if: contains(env.MISSING, 'images')
@@ -1460,8 +1179,6 @@ jobs:
           pattern: digest-dev-*
           path: ${{ runner.temp }}/digests/dev
           merge-multiple: true
-          run-id: ${{ steps.run.outputs.images }}
-          github-token: ${{ github.token }}
       - name: Download the platforms' -dev digests, the second try
         if: steps.dev-digests.outcome == 'failure'
         timeout-minutes: 5
@@ -1470,8 +1187,6 @@ jobs:
           pattern: digest-dev-*
           path: ${{ runner.temp }}/digests/dev
           merge-multiple: true
-          run-id: ${{ steps.run.outputs.images }}
-          github-token: ${{ github.token }}
       - name: Log in to ghcr.io
         if: contains(env.MISSING, 'images')
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -1486,7 +1201,6 @@ jobs:
         if: contains(env.MISSING, 'images')
         env:
           TREE: ${{ steps.run.outputs.tree }}
-          IMAGES: ${{ steps.run.outputs.images }}
         run: |
           image=ghcr.io/heyjordanparker/php-sharp
           for kind in runtime dev; do
@@ -1497,7 +1211,7 @@ jobs:
             sources=()
             for file in "$RUNNER_TEMP/digests/$kind"/*; do
               if [[ ! -f $file ]]; then
-                echo "::error::Run $IMAGES kept no digest for $tag, so the images aren't tagged."
+                echo "::error::IMAGE kept no digest for $tag in this run, so the images aren't tagged."
                 exit 1
               fi
               digest=${file##*/}

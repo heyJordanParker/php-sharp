@@ -3,7 +3,7 @@ namespace Demo;
 import Lib.Ledger;
 import Lib.Probe;
 
-class Cashier
+public class Cashier
 {
     private Function<int(int)> discount;
 

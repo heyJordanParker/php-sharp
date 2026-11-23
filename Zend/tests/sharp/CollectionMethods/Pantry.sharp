@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Pantry
+public class Pantry
 {
     public List<int> sizes { get; private set; } = [];
     private Map<string, int> stock = ["tea": 3, "pie": 7];

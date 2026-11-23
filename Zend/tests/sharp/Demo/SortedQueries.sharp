@@ -4,7 +4,7 @@ import Sharp.Collections.PriorityQueue;
 import Sharp.Collections.SortedMap;
 import Sharp.Collections.SortedSet;
 
-class SortedQueries
+public class SortedQueries
 {
     public static SortedMap<string, int> stock()
     {

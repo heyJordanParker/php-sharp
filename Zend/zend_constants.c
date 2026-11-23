@@ -254,7 +254,9 @@ ZEND_API zend_constant *_zend_get_special_const(const char *name, size_t len) /*
 ZEND_API bool zend_verify_const_access(zend_class_constant *c, zend_class_entry *scope) /* {{{ */
 {
 	if (ZEND_CLASS_CONST_FLAGS(c) & ZEND_ACC_PUBLIC) {
-		return 1;
+		/* PHP#: an `internal` constant is public to PHP, and only code of its namespace and those below it reaches it,
+		 * see ZEND_ACC_SHARP_INTERNAL. */
+		return !(ZEND_CLASS_CONST_FLAGS(c) & ZEND_ACC_SHARP_INTERNAL) || zend_sharp_reaches_internal(c->ce, scope);
 	} else if (ZEND_CLASS_CONST_FLAGS(c) & ZEND_ACC_PRIVATE) {
 		return (c->ce == scope);
 	} else {
@@ -263,6 +265,21 @@ ZEND_API bool zend_verify_const_access(zend_class_constant *c, zend_class_entry 
 	}
 }
 /* }}} */
+
+/* Throws the Error a use of the constant `name` of `c`, read on the class `class_name`, gets from code of `scope` that
+ * zend_verify_const_access refuses. */
+ZEND_API ZEND_COLD void zend_bad_class_constant_access(const zend_class_constant *c, const zend_string *class_name, const zend_string *name, const zend_class_entry *scope)
+{
+	if (ZEND_CLASS_CONST_FLAGS(c) & ZEND_ACC_SHARP_INTERNAL) {
+		zend_string *outside = zend_sharp_outside_namespace(c->ce, scope);
+		zend_throw_error(NULL, "Cannot access internal constant %s::%s%s", ZSTR_VAL(c->ce->name), ZSTR_VAL(name),
+			ZSTR_VAL(outside));
+		zend_string_release_ex(outside, false);
+		return;
+	}
+	zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)),
+		ZSTR_VAL(class_name), ZSTR_VAL(name));
+}
 
 static zend_constant *zend_get_constant_str_impl(const char *name, size_t name_len)
 {
@@ -359,7 +376,7 @@ ZEND_API zval *zend_get_class_constant_ex(zend_string *class_name, zend_string *
 		} else {
 			if (!zend_verify_const_access(c, scope)) {
 				if ((flags & ZEND_FETCH_CLASS_SILENT) == 0) {
-					zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)), ZSTR_VAL(class_name), ZSTR_VAL(constant_name));
+					zend_bad_class_constant_access(c, class_name, constant_name, scope);
 				}
 				goto failure;
 			}

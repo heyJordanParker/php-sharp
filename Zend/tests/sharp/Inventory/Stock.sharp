@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Stock
+public class Stock
 {
     public int count { get; private set; }
 

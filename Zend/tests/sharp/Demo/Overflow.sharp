@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Overflow
+public class Overflow
 {
     public static int add(int a, int b)
     {

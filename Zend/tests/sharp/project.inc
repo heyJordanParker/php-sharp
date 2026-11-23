@@ -94,7 +94,7 @@ function refusal(array|string $paths, array $settings = []): void
 const SHOP = <<<'SHARP'
 namespace Demo;
 
-class Shop
+public class Shop
 {
     public static int run(int amount)
     {

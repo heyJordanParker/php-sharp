@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Task
+public class Task
 {
     public Priority priority { get; }
 

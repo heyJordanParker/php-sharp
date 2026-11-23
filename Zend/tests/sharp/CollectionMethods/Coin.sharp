@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Coin
+public class Coin
 {
     public Coin(public int cents { get; })
     {

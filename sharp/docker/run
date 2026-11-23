@@ -32,8 +32,6 @@ exec docker run --rm --init \
   --user "$(id -u):$(id -g)" \
   --ulimit stack=8388608:-1 \
   --env CARGO_HOME=/src/sharp/build/cargo \
-  --env RUSTUP_HOME=/src/sharp/build/rustup \
-  --env ELAN_HOME=/src/sharp/build/elan \
   --env XDG_CACHE_HOME=/src/sharp/build/cache \
   --env COMPOSER_HOME=/src/sharp/build/composer-home \
   --env GOPATH=/src/sharp/build/go \

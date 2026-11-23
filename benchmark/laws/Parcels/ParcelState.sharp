@@ -1,0 +1,79 @@
+namespace App.Parcels;
+
+import Sharp.Key;
+import Sharp.Tag;
+
+[Tag("state")]
+public machine ParcelState
+{
+    [Key("awaiting")]
+    case Awaiting([Key("receipt")] Receipt receipt)
+    {
+        public ParcelState.Settled settle(Receipt receipt) => ParcelState.Settled(receipt);
+
+        public ParcelState.Held hold() => ParcelState.Held(this.receipt);
+
+        public ParcelState.Declined decline(string? why) => ParcelState.Declined(why, this.receipt);
+
+        public ParcelState.Dropped drop(string? why) => ParcelState.Dropped(why, this.receipt);
+    }
+
+    [Key("held")]
+    case Held([Key("receipt")] Receipt receipt)
+    {
+        public ParcelState.Settled release() => ParcelState.Settled(this.receipt);
+
+        public ParcelState.Voided void(string? why) => ParcelState.Voided(why, this.receipt);
+    }
+
+    [Key("settled")]
+    case Settled([Key("receipt")] Receipt receipt)
+    {
+        public ParcelState.PartlyReturned|ParcelState.Returned refund(int cents, int amount)
+        {
+            if (cents <= 0 || cents > amount) {
+                throw new ValueError("A refund takes between 1 and the amount the parcel settled.");
+            }
+
+            return cents == amount ? ParcelState.Returned(this.receipt) : ParcelState.PartlyReturned(cents, this.receipt);
+        }
+
+        public ParcelState.Contested contest() => ParcelState.Contested(0, this.receipt);
+    }
+
+    [Key("partlyReturned")]
+    case PartlyReturned([Key("returned_cents")] int returnedCents, [Key("receipt")] Receipt receipt)
+    {
+        public ParcelState.Returned finish() => ParcelState.Returned(this.receipt);
+    }
+
+    [Key("contested")]
+    case Contested([Key("returned_cents")] int returnedCents, [Key("receipt")] Receipt receipt)
+    {
+        public ParcelState.Returned lose() => ParcelState.Returned(this.receipt);
+
+        public ParcelState.Settled win() => ParcelState.Settled(this.receipt);
+    }
+
+    [Key("declined")]
+    final case Declined([Key("why")] string? why, [Key("receipt")] Receipt receipt);
+
+    [Key("dropped")]
+    final case Dropped([Key("why")] string? why, [Key("receipt")] Receipt receipt);
+
+    [Key("voided")]
+    final case Voided([Key("why")] string? why, [Key("receipt")] Receipt receipt);
+
+    [Key("returned")]
+    final case Returned([Key("receipt")] Receipt receipt);
+
+    public static ParcelState.Awaiting opened(Receipt receipt) => ParcelState.Awaiting(receipt);
+
+    public bool fullyReturned() => match (this) {
+        ParcelState.Returned => true,
+        ParcelState.Awaiting or ParcelState.Held or ParcelState.Settled or ParcelState.PartlyReturned or ParcelState.Contested or ParcelState.Declined or ParcelState.Dropped or ParcelState.Voided => false,
+    };
+
+    law aFullRefundFullyReturnsTheParcel(Receipt receipt, int amount) when amount > 0
+        => ParcelState.opened(receipt).settle(receipt).refund(amount, amount).fullyReturned();
+}

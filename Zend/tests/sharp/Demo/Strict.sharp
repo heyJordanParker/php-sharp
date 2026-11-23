@@ -4,7 +4,7 @@ import Illuminate.Support.Collection;
 
 // Reads each value of a plain PHP collection by the type argument the collection's docblock states, which the object
 // doesn't carry while the code runs.
-class Strict
+public class Strict
 {
     public static int run(Collection<int, int> values)
     {

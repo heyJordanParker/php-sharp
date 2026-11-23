@@ -95,8 +95,11 @@
                 "Traits/"
             ],
             "Demo\\Audits\\": "Audits/",
+            "Demo\\InternalReach\\": "InternalReach/",
+            "Demo\\InternalReach\\Below\\": "InternalReachBelow/",
             "Demo\\InternalStructs\\": "InternalStructs/",
             "Demo\\Labels\\": "UnionLabels/",
+            "Demo\\Reaching\\": "Reaching/",
             "Demo\\ReadonlyValues\\": "ReadonlyValues/",
             "Demo\\Wallets\\": "Wallets/",
             "Departures\\": "Departures/",
@@ -202,6 +205,11 @@
             "VariantTags\\": "VariantTags/",
             "Writes\\": "Writes/",
             "XmlDocuments\\": "XmlDocuments/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Demo\\InternalReach\\": "InternalReachTests/"
         }
     },
     "config": {

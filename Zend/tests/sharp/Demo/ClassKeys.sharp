@@ -1,6 +1,6 @@
 namespace Demo;
 
-class ClassKeys
+public class ClassKeys
 {
     public static Map<Pass, int> scans()
     {

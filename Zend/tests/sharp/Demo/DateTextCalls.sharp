@@ -6,7 +6,7 @@ import Sharp.Time.Instant;
 import Sharp.Time.TimeZone;
 import Sharp.Time.Weekday;
 
-class DateTextCalls
+public class DateTextCalls
 {
     public static string names(string day)
     {

@@ -1,0 +1,94 @@
+namespace App.Plans;
+
+import Sharp.Key;
+import Sharp.Tag;
+import Sharp.Time.Instant;
+
+[Tag("state")]
+public machine PlanState
+{
+    [Key("draft")]
+    case Draft
+    {
+        public PlanState.Live start(Instant chargeAt) => PlanState.Live(false, chargeAt);
+
+        public PlanState.Trial try(Instant chargeAt, Instant trialEndsAt) => PlanState.Trial(chargeAt, trialEndsAt);
+    }
+
+    [Key("trial")]
+    case Trial([Key("charge_at")] Instant chargeAt, [Key("trial_ends_at")] Instant trialEndsAt)
+    {
+        public PlanState.Live convert() => PlanState.Live(false, this.chargeAt);
+    }
+
+    [Key("live")]
+    case Live([Key("stops_at_end")] bool stopsAtEnd, [Key("charge_at")] Instant chargeAt)
+    {
+        public PlanState.Overdue|PlanState.Lapsed lapse(Instant retryAt, int maxTries, string why, Instant failedAt)
+            => PlanState.triesLeft(0, maxTries) ? PlanState.Overdue(1, retryAt, why, failedAt) : PlanState.Lapsed(failedAt);
+
+        public PlanState.Held hold(Instant? resumesAt) => PlanState.Held(resumesAt);
+
+        public PlanState.Closed close(Instant at) => PlanState.Closed(at);
+    }
+
+    [Key("held")]
+    case Held([Key("resumes_at")] Instant? resumesAt)
+    {
+        public PlanState.Live resume(Instant chargeAt) => PlanState.Live(false, chargeAt);
+    }
+
+    [Key("overdue")]
+    case Overdue(
+        [Key("tries")] int tries,
+        [Key("retry_at")] Instant retryAt,
+        [Key("why")] string why,
+        [Key("failed_at")] Instant failedAt,
+    ) {
+        public PlanState.Live recover(Instant chargeAt) => PlanState.Live(false, chargeAt);
+
+        public PlanState.Lapsed lapse(Instant at) => PlanState.Lapsed(at);
+    }
+
+    [Key("lapsed")]
+    case Lapsed([Key("lapsed_at")] Instant lapsedAt)
+    {
+        public PlanState.Closed close(Instant at) => PlanState.Closed(at);
+    }
+
+    [Key("closed")]
+    final case Closed([Key("closed_at")] Instant closedAt);
+
+    public static PlanState.Draft enter() => PlanState.Draft;
+
+    public bool charges() => match (this) {
+        PlanState.Trial => true,
+        PlanState.Live live => !live.stopsAtEnd,
+        PlanState.Draft or PlanState.Held or PlanState.Overdue or PlanState.Lapsed or PlanState.Closed => false,
+    };
+
+    public bool chargeable() => match (this) {
+        PlanState.Overdue => true,
+        PlanState.Draft or PlanState.Trial or PlanState.Live or PlanState.Held or PlanState.Lapsed or PlanState.Closed => this.charges(),
+    };
+
+    law anOverduePlanIsChargeable(Instant chargeAt, Instant retryAt, string why, Instant failedAt)
+        => PlanState.enter().start(chargeAt).lapse(retryAt, 2, why, failedAt).chargeable();
+
+    law aLapsedPlanIsNotChargeable(Instant chargeAt, Instant retryAt, string why, Instant failedAt)
+        => !PlanState.enter().start(chargeAt).lapse(retryAt, 1, why, failedAt).chargeable();
+
+    law aTrialPlanIsChargeable(Instant chargeAt, Instant trialEndsAt)
+        => PlanState.enter().try(chargeAt, trialEndsAt).chargeable();
+
+    law aConvertedTrialCharges(Instant chargeAt, Instant trialEndsAt)
+        => PlanState.enter().try(chargeAt, trialEndsAt).convert().charges();
+
+    law aHeldPlanIsNotChargeable(Instant chargeAt, Instant? resumesAt)
+        => !PlanState.enter().start(chargeAt).hold(resumesAt).chargeable();
+
+    law aClosedPlanIsNotChargeable(Instant chargeAt, Instant at)
+        => !PlanState.enter().start(chargeAt).close(at).chargeable();
+
+    public static bool triesLeft(int tries, int maxTries) => maxTries >= 1 && tries < maxTries - 1;
+}

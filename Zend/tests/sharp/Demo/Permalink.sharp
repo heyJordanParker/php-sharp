@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Permalink
+public class Permalink
 {
     public static string of(string title) => title.slug();
 }

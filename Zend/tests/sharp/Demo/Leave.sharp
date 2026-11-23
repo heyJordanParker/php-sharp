@@ -2,7 +2,7 @@ namespace Demo;
 
 import RuntimeException;
 
-class Leave
+public class Leave
 {
     private int finished = 0;
 

@@ -23,10 +23,11 @@ rust="$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' "$root/sharp/mago/Cargo.toml")
 CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")"
 export CARGO_BUILD_JOBS
 
-# A release publishes three parts, each once, so a part an earlier run left missing is what the next push to master
-# publishes, and a published one stays: assets, the GitHub release v<version> with mago's files, images, the runtime
-# image ghcr.io/heyjordanparker/php-sharp:<version> and its <version>-dev, and composer, tag v<version> of
-# heyJordanParker/php-sharp-composer and heyJordanParker/mago-sharp. Run 45033462105 published 0.6.50's GitHub release
+# A release publishes three parts, each once, so a part an earlier run left missing is what a later run publishes, and
+# a published one stays: assets, the GitHub release v<version> with mago's files, images, the runtime image
+# ghcr.io/heyjordanparker/php-sharp:<version> and its <version>-dev, and composer, tag v<version> of
+# heyJordanParker/php-sharp-composer and heyJordanParker/mago-sharp. Only a rerun of the release commit's push run
+# publishes its assets and images, which that run built, and the next push to master pushes the Composer tags. Run 45033462105 published 0.6.50's GitHub release
 # and failed before its images and its Composer tags, which a check of the tag alone then counted as released. The image
 # and the mirrors are public, so their checks need no login. git ls-remote --exit-code exits 2 when a remote has no such
 # ref, and with another code when it can't ask.
@@ -344,7 +345,22 @@ php_src_generated() {
   sharp/docker/run scripts/gdb/debug_gdb_scripts_gen.php
   sharp/docker/run Zend/zend_vm_gen.php
   sharp/docker/run ext/tokenizer/tokenizer_data_gen.php
-  sharp/docker/run build/gen_stub.php -f --generate-optimizer-info --verify
+  gen_stub
+}
+# gen_stub.php reads PHP-Parser from build/PHP-Parser-<version>, the version it pins, and downloads it when that folder
+# is missing, so this links the copy the sharp/docker image carries there, as sharp/docker/Dockerfile explains. A
+# folder already there is a copy of the same version an earlier run left.
+gen_stub() {
+  local version
+  version=$(sed -n 's/^ *[$]version = "\(.*\)";$/\1/p' "$root/build/gen_stub.php")
+  # shellcheck disable=SC2016 # The container's shell expands them.
+  sharp/docker/run sh -c '
+    if [ ! -d "/opt/PHP-Parser-$1" ]; then
+      echo "The sharp/docker image carries no PHP-Parser $1, which build/gen_stub.php pins. Pin it in sharp/docker/Dockerfile." >&2
+      exit 1
+    fi
+    [ -e "build/PHP-Parser-$1" ] || ln -s "/opt/PHP-Parser-$1" "build/PHP-Parser-$1"
+    exec build/gen_stub.php -f --generate-optimizer-info --verify' sh "$version"
 }
 builtins() {
   sharp/docker/run sharp/bin/builtins --self-test

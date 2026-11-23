@@ -2,7 +2,7 @@ namespace Demo;
 
 import Exception;
 
-class InactiveTenant : Exception
+public class InactiveTenant : Exception
 {
     public InactiveTenant(public Tenant tenant { get; }) : super("The tenant is inactive.") { }
 }

@@ -1,6 +1,6 @@
 namespace Demo;
 
-class NumberCalls
+public class NumberCalls
 {
     public static int absolute(int value) => value.abs();
 

@@ -1,0 +1,7 @@
+namespace Demo.InternalReach;
+
+// A public interface, through whose member code of any namespace reaches the internal `Till`'s.
+public interface Labeled
+{
+    string label();
+}

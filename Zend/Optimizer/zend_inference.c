@@ -2428,7 +2428,7 @@ static const zend_property_info *lookup_prop_info(const zend_class_entry *ce, ze
 	prop_info = zend_hash_find_ptr(&ce->properties_info, name);
 	if (prop_info &&
 		((prop_info->ce == scope) ||
-		 (!scope && (prop_info->flags & ZEND_ACC_PUBLIC)))
+		 (!scope && (prop_info->flags & ZEND_ACC_PUBLIC) && !(prop_info->flags & ZEND_ACC_SHARP_INTERNAL)))
 	) {
 		return prop_info;
 	}
@@ -5367,7 +5367,8 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 					if (ZEND_TYPE_IS_SET(prop_info->type)) {
 						return 1;
 					}
-					return !(prop_info->flags & ZEND_ACC_PUBLIC)
+					return (!(prop_info->flags & ZEND_ACC_PUBLIC)
+							|| !zend_sharp_compiled_reaches(prop_info->flags, prop_info->ce, op_array->scope))
 						&& prop_info->ce != op_array->scope;
 				} else {
 					return !(ce->ce_flags & ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES);

@@ -1,6 +1,6 @@
 namespace Demo;
 
-class LiteralCast
+public class LiteralCast
 {
     public static int half()
     {

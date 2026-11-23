@@ -2,7 +2,7 @@ namespace Demo;
 
 import Lib.Slots;
 
-class IndexRead
+public class IndexRead
 {
     public static int at(List<int> values, int index)
     {

@@ -905,7 +905,8 @@ const zend_class_constant *zend_fetch_class_const_info(
 		return NULL;
 	}
 	if ((ZEND_CLASS_CONST_FLAGS(const_info) & ZEND_ACC_DEPRECATED)
-		|| ((ZEND_CLASS_CONST_FLAGS(const_info) & ZEND_ACC_PPP_MASK) != ZEND_ACC_PUBLIC && const_info->ce != op_array->scope)) {
+		|| ((ZEND_CLASS_CONST_FLAGS(const_info) & ZEND_ACC_PPP_MASK) != ZEND_ACC_PUBLIC && const_info->ce != op_array->scope)
+		|| !zend_sharp_compiled_reaches(ZEND_CLASS_CONST_FLAGS(const_info), const_info->ce, op_array->scope)) {
 		return NULL;
 	}
 	*is_prototype = is_static_reference
@@ -955,7 +956,8 @@ zend_function *zend_optimizer_get_called_func(
 				if (ce) {
 					zend_function *fbc = zend_class_find_method_spelled(ce, Z_STR_P(CRT_CONSTANT(opline->op2)));
 					if (fbc && !(fbc->common.fn_flags & ZEND_ACC_ABSTRACT)) {
-						bool is_public = (fbc->common.fn_flags & ZEND_ACC_PUBLIC) != 0;
+						bool is_public = (fbc->common.fn_flags & ZEND_ACC_PUBLIC) != 0
+							&& zend_sharp_compiled_reaches(fbc->common.fn_flags, fbc->common.scope, op_array->scope);
 						bool same_scope = fbc->common.scope == op_array->scope;
 						if (is_public || same_scope) {
 							return fbc;
@@ -979,6 +981,9 @@ zend_function *zend_optimizer_get_called_func(
 						 * as a prototype, as it may be overridden with changed signature. */
 						bool same_scope = fbc->common.scope == op_array->scope;
 						return same_scope ? fbc : NULL;
+					}
+					if (!zend_sharp_compiled_reaches(fbc->common.fn_flags, fbc->common.scope, op_array->scope)) {
+						return NULL;
 					}
 					/* Prototype methods are potentially overridden. fbc still contains useful type information.
 					 * Some optimizations may not be applied, like inlining or inferring the send-mode of superfluous args.

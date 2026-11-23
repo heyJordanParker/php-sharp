@@ -655,7 +655,7 @@ static zend_property_info* zend_get_known_property_info(const zend_op_array *op_
 		return NULL;
 	}
 
-	if (info->flags & ZEND_ACC_PUBLIC) {
+	if ((info->flags & ZEND_ACC_PUBLIC) && zend_sharp_compiled_reaches(info->flags, info->ce, op_array->scope)) {
 		if ((info->flags & ZEND_ACC_CHANGED)
 		 && op_array->scope
 		 && op_array->scope != ce) {
@@ -695,7 +695,8 @@ static zend_property_info* zend_get_known_static_property_info(const zend_op_arr
 			if ((prop_info->flags & ZEND_ACC_STATIC)
 			 && (!(prop_info->flags & ZEND_ACC_SHARP_CROSSING) || sharp_function_is_sharp((const zend_function *) op_array))) {
 				if (prop_info->ce == op_array->scope
-				 || (prop_info->flags & ZEND_ACC_PUBLIC)
+				 || ((prop_info->flags & ZEND_ACC_PUBLIC)
+				  && zend_sharp_compiled_reaches(prop_info->flags, prop_info->ce, op_array->scope))
 				 || ((prop_info->flags & ZEND_ACC_PROTECTED)
 				  && op_array->scope
 				  && instanceof_function_slow(op_array->scope, prop_info->ce))) {
@@ -745,7 +746,7 @@ static bool zend_may_be_dynamic_property(zend_class_entry *ce, zend_string *memb
 		return 1;
 	}
 
-	if (!(info->flags & ZEND_ACC_PUBLIC) &&
+	if ((!(info->flags & ZEND_ACC_PUBLIC) || !zend_sharp_compiled_reaches(info->flags, info->ce, op_array->scope)) &&
 	    (!on_this || info->ce != ce)) {
 		return 1;
 	}

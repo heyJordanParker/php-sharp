@@ -9,8 +9,8 @@ require __DIR__ . '/project.inc';
 // refuses anything deeper.
 $sum = implode(' + ', array_fill(0, 509, 'extra'));
 $root = compile_project('nesting', [
-    'DeepMain.sharp' => "namespace App;\n\nclass DeepMain\n{\n    public int run(int extra)\n    {\n        return $sum;\n    }\n}\n",
-    'DeepFiber.sharp' => "namespace App;\n\nclass DeepFiber\n{\n    public int run(int extra)\n    {\n        return $sum;\n    }\n}\n",
+    'DeepMain.sharp' => "namespace App;\n\npublic class DeepMain\n{\n    public int run(int extra)\n    {\n        return $sum;\n    }\n}\n",
+    'DeepFiber.sharp' => "namespace App;\n\npublic class DeepFiber\n{\n    public int run(int extra)\n    {\n        return $sum;\n    }\n}\n",
 ]);
 
 function run(string $root, string $where): void {

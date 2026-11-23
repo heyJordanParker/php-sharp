@@ -3,7 +3,7 @@ namespace Demo;
 import Sharp.Encoding.Base64;
 import Sharp.Encoding.Hex;
 
-class EncodingQueries
+public class EncodingQueries
 {
     public static string encode(Bytes data, bool urlSafe) => Base64.encode(data, urlSafe);
 

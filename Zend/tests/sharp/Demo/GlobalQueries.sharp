@@ -3,7 +3,7 @@ namespace Demo;
 import Sharp.Interop.PhpGlobals;
 import Sharp.Interop.Superglobal;
 
-class GlobalQueries
+public class GlobalQueries
 {
     public static List<string> page(PhpGlobals globals, string path)
     {

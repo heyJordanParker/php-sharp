@@ -3,7 +3,7 @@ namespace Demo;
 import Sharp.Net.IpAddress;
 import Sharp.Net.IpFamily;
 
-class NetworkQueries
+public class NetworkQueries
 {
     public static string? normalized(string text) => IpAddress.tryParse(text)?.toString();
 

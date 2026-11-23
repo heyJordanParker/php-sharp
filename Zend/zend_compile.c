@@ -1865,7 +1865,7 @@ static bool zend_verify_ct_const_access(zend_class_constant *c, zend_class_entry
 		 * on binding. */
 		return 0;
 	} else if (ZEND_CLASS_CONST_FLAGS(c) & ZEND_ACC_PUBLIC) {
-		return 1;
+		return zend_sharp_compiled_reaches(ZEND_CLASS_CONST_FLAGS(c), c->ce, scope);
 	} else if (ZEND_CLASS_CONST_FLAGS(c) & ZEND_ACC_PRIVATE) {
 		return c->ce == scope;
 	} else {
@@ -5550,7 +5550,13 @@ static bool zend_is_constructor(zend_string *name) /* {{{ */
 static zend_function *zend_get_compatible_func_or_null(zend_class_entry *ce, zend_string *name) /* {{{ */
 {
 	zend_function *fbc = zend_class_find_method_spelled(ce, name);
-	if (!fbc || (fbc->common.fn_flags & ZEND_ACC_PUBLIC) || ce == CG(active_class_entry)) {
+	if (!fbc || ce == CG(active_class_entry)) {
+		return fbc;
+	}
+	if (!zend_sharp_compiled_reaches(fbc->common.fn_flags, fbc->common.scope, CG(active_class_entry))) {
+		return NULL;
+	}
+	if (fbc->common.fn_flags & ZEND_ACC_PUBLIC) {
 		return fbc;
 	}
 
@@ -8253,6 +8259,13 @@ static bool zend_property_is_virtual(zend_class_entry *ce, zend_string *property
 	return is_virtual;
 }
 
+/* PHP#: the member flags the attr `attr` of a ZEND_AST_PROP_GROUP, a ZEND_AST_CLASS_CONST_GROUP or a ZEND_AST_PARAM
+ * gives, with the ZEND_ACC_SHARP_INTERNAL its ZEND_SHARP_INTERNAL_MEMBER stands for. */
+static uint32_t zend_sharp_member_flags(zend_ast_attr attr)
+{
+	return attr & ZEND_SHARP_INTERNAL_MEMBER ? (attr & ~ZEND_SHARP_INTERNAL_MEMBER) | ZEND_ACC_SHARP_INTERNAL : attr;
+}
+
 static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32_t fallback_return_type) /* {{{ */
 {
 	zend_ast_list *list = zend_ast_get_list(ast);
@@ -8311,8 +8324,8 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 		}
 	}
 
-	const uint32_t promotion_flags =
-		ZEND_ACC_PPP_MASK | ZEND_ACC_PPP_SET_MASK | ZEND_ACC_READONLY | ZEND_ACC_FINAL | ZEND_ACC_FIELD;
+	const uint32_t promotion_flags = ZEND_ACC_PPP_MASK | ZEND_ACC_PPP_SET_MASK | ZEND_ACC_READONLY | ZEND_ACC_FINAL
+		| ZEND_ACC_FIELD | ZEND_ACC_SHARP_INTERNAL;
 	for (i = 0; i < list->children; ++i) {
 		zend_ast *param_ast = list->child[i];
 		zend_string *sharp_type = NULL;
@@ -8326,7 +8339,7 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 		bool is_ref = (param_ast->attr & ZEND_PARAM_REF) != 0;
 		bool is_variadic = (param_ast->attr & ZEND_PARAM_VARIADIC) != 0;
 		bool is_widened = (param_ast->attr & ZEND_PARAM_WIDENED) != 0;
-		uint32_t property_flags = param_ast->attr & promotion_flags;
+		uint32_t property_flags = zend_sharp_member_flags(param_ast->attr) & promotion_flags;
 		bool is_promoted = property_flags || hooks_ast;
 
 		CG(zend_lineno) = param_ast->lineno;
@@ -8566,7 +8579,7 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 		zend_ast *param_ast = list->child[i];
 		zend_ast *hooks_ast = param_ast->child[5];
 		bool is_ref = (param_ast->attr & ZEND_PARAM_REF) != 0;
-		uint32_t flags = param_ast->attr & promotion_flags;
+		uint32_t flags = zend_sharp_member_flags(param_ast->attr) & promotion_flags;
 		bool is_promoted = flags || hooks_ast;
 		if (!is_promoted) {
 			continue;
@@ -9626,7 +9639,7 @@ static void zend_compile_prop_group(zend_ast *ast) /* {{{ */
 	zend_string *sharp_type = NULL;
 	zend_ast *type_ast = zend_sharp_declared_type(ast->child[0], &sharp_type);
 
-	zend_compile_prop_decl(prop_ast, type_ast, ast->attr, attr_ast, sharp_type);
+	zend_compile_prop_decl(prop_ast, type_ast, zend_sharp_member_flags(ast->attr), attr_ast, sharp_type);
 	if (sharp_type) {
 		zend_string_release(sharp_type);
 	}
@@ -9713,7 +9726,7 @@ static void zend_compile_class_const_group(zend_ast *ast) /* {{{ */
 	zend_ast *attr_ast = ast->child[1];
 	zend_ast *type_ast = ast->child[2];
 
-	zend_compile_class_const_decl(const_ast, ast->attr, attr_ast, type_ast);
+	zend_compile_class_const_decl(const_ast, zend_sharp_member_flags(ast->attr), attr_ast, type_ast);
 }
 /* }}} */
 
@@ -9949,11 +9962,16 @@ static void zend_compile_class_decl(znode *result, zend_ast *ast, bool toplevel)
 	}
 	/* PHP# names are case-sensitive, spec section 24, so a class of a .sharp file keys its methods by exact name, and the
 	 * class table keys a named one by its exact name. Its objects are built only through its constructor, spec section
-	 * 9. */
+	 * 9. An `internal` class comes with ZEND_ACC_SHARP_INTERNAL, which ce_flags has no bit for, so it becomes
+	 * SHARP_CLASS_INTERNAL. */
 	if (zend_compiling_sharp_file()) {
 		ce->sharp_flags |= SHARP_CLASS_EXACT_NAMES | SHARP_CLASS_BUILT_BY_CONSTRUCTOR;
 		if (!(decl->flags & ZEND_ACC_ANON_CLASS)) {
 			ce->sharp_flags |= SHARP_CLASS_EXACT_KEY;
+		}
+		if (decl->flags & ZEND_ACC_SHARP_INTERNAL) {
+			ce->sharp_flags |= SHARP_CLASS_INTERNAL;
+			decl->flags &= ~ZEND_ACC_SHARP_INTERNAL;
 		}
 	}
 

@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Ticker
+public class Ticker
 {
     public int ticks { get; private set; } = 0;
 

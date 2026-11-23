@@ -2,7 +2,7 @@ namespace Demo;
 
 import Lib.Slots;
 
-class Cart
+public class Cart
 {
     public List<Item> items { get; private set; } = [];
     private Map<string, int> counts = [:];

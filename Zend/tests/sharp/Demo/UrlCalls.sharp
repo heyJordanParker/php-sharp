@@ -2,7 +2,7 @@ namespace Demo;
 
 import Sharp.Net.Url;
 
-class UrlCalls
+public class UrlCalls
 {
     public static string encode(string text) => Url.encode(text);
 

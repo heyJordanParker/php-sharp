@@ -7,22 +7,13 @@ description: >-
   drifts: the ASAN job's left out liblzma-dev and libedit-dev, and every link check of its configure failed from
   "checking for curl_easy_perform in -lcurl... no" on.
 
-inputs:
-  extra:
-    description: The job's own packages besides the engine's, separated by spaces, such as ccache.
-    required: false
-    default: ''
-
 runs:
   using: composite
   steps:
     - name: apt
       shell: bash
-      env:
-        EXTRA: ${{ inputs.extra }}
       run: |
         sudo apt-get update
-        # shellcheck disable=SC2086 # EXTRA is a list of packages.
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
           autoconf bison cmake pkg-config re2c libedit-dev libicu-dev liblzma-dev libsodium-dev libsqlite3-dev libssl-dev \
-          libxml2-dev zlib1g-dev $EXTRA
+          libxml2-dev zlib1g-dev

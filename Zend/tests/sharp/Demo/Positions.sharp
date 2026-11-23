@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Positions
+public class Positions
 {
     public Position here()
     {

@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Order
+public class Order
 {
     private int count = 0;
     protected float rate = 1.5 * 2;

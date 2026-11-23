@@ -2,7 +2,7 @@ namespace Demo;
 
 import Sharp.Encoding.Compression;
 
-class CompressionCalls
+public class CompressionCalls
 {
     public static Bytes compress(Bytes data) => Compression.compress(data);
 

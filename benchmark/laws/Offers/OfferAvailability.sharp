@@ -39,4 +39,19 @@ public machine OfferAvailability : Variant
     law anOfferNotStartedComesBeforeItsEnd(Instant now, Instant starts, Instant ends, int claims)
         when now < starts
         => OfferAvailability.at(OfferAvailability.of(true, true, starts, ends, null, claims, null, null), now) is OfferAvailability.NotStarted;
+
+    law anOfferPastItsEndHasEnded(Instant now, Instant starts, Instant ends, int claims)
+        when starts <= now && ends <= now
+        => OfferAvailability.at(OfferAvailability.of(true, true, starts, ends, null, claims, null, null), now) is OfferAvailability.Ended;
+
+    law aStartedOfferBeforeItsEndIsAvailable(Instant now, Instant starts, Instant ends, int claims)
+        when starts <= now && now < ends
+        => OfferAvailability.at(OfferAvailability.of(true, true, starts, ends, null, claims, null, null), now) is OfferAvailability.Available;
+
+    law anInactiveOfferStaysInactive(Instant now, Instant starts, Instant ends, int claims)
+        => OfferAvailability.at(OfferAvailability.of(false, true, starts, ends, null, claims, null, null), now) is OfferAvailability.Inactive;
+
+    law aSoldOutOfferNotStartedComesBeforeItsEnd(Instant now, Instant starts, Instant ends, int buyers, int claims)
+        when now < starts && claims >= buyers
+        => OfferAvailability.at(OfferAvailability.of(true, true, starts, ends, buyers, claims, null, null), now) is OfferAvailability.NotStarted;
 }
