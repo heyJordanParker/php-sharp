@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2329 # start_part runs each part's function by its name.
 set -euo pipefail
 
 usage() {
@@ -73,15 +74,16 @@ build_dir="$root/sharp/build/$os-$(uname -m)"
 jobs="$("$root/sharp/bin/jobs")"
 
 # Each run keeps its own files in a temporary folder of its own and removes it when it ends, so no run reads what
-# another run wrote. A test command runs in a process group of its own, so a run that ends early, as on SIGTERM, first
-# stops it, its workers and their tests, which would go on writing in the folder.
+# another run wrote. Each part of a run runs in a process group of its own, so a run that ends early, as on SIGTERM,
+# first stops every part still running, with its workers and their tests, which would go on writing in the folder.
 TMPDIR="$(mktemp -d)"
 export TMPDIR
 # Each `mago` a test starts runs on one thread, so a run's load is its test threads. A test about threads passes
 # --threads, which wins over MAGO_THREADS.
 export MAGO_THREADS=1
-tests_group=
-trap 'if [[ -n $tests_group ]]; then kill -KILL -- "-$tests_group" || true; wait "$tests_group" || true; fi; rm -rf "$TMPDIR"' EXIT
+declare -A parts=() part_names=()
+part_count=0
+trap 'for group in "${!parts[@]}"; do kill -KILL -- "-$group" 2> /dev/null || true; done; wait || true; rm -rf "$TMPDIR"' EXIT
 
 # Every step runs, and the script fails at the end if any step failed.
 failed=()
@@ -115,24 +117,21 @@ stale_seconds() {
   fi
 }
 
-# Runs the command from the folder, in a process group of its own, and records the step as failed when it fails.
+# Runs the command from the folder, in the process group of the part that runs it, and records the step as failed when
+# it fails.
 run_step() {
   local step="$1" folder="$2"
   shift 2
-  set -m
-  (cd "$folder" && exec "$@") &
-  tests_group=$!
-  set +m
-  if ! wait "$tests_group"; then
+  if ! (cd "$folder" && exec "$@"); then
     failed+=("$step")
   fi
-  tests_group=
 }
 
 # Ends the part of the run under way with its wall seconds and the CPU-seconds the shell and the processes it waited
 # for used in it, as bash's times counts them, so a change to one part is judged by that part whatever else the machine
 # runs, and writes its line to the build record, as failed when a step of it failed. Then it starts the part its heading
-# names, if any, from after that write, so the recorder's own time counts in neither part.
+# names, if any, from after that write, so the recorder's own time counts in neither part. Each part of a run runs in a
+# shell of its own, whose times count only what that part ran, so the parts that run at once each count their own.
 part_heading=''
 part_started=0
 part_cpu=0
@@ -141,8 +140,8 @@ part_clock() {
   local time
   now="${EPOCHREALTIME/[^0-9]/}"
   cpu=0
-  times > "$TMPDIR/sharp-bin-test-times"
-  for time in $(< "$TMPDIR/sharp-bin-test-times"); do
+  times > "$TMPDIR/sharp-bin-test-times.$BASHPID"
+  for time in $(< "$TMPDIR/sharp-bin-test-times.$BASHPID"); do
     [[ $time =~ ^([0-9]+)m([0-9]+)[.,]([0-9]{3})s$ ]]
     cpu=$((cpu + (BASH_REMATCH[1] * 60 + BASH_REMATCH[2]) * 1000 + 10#${BASH_REMATCH[3]}))
   done
@@ -167,8 +166,62 @@ part() {
   fi
 }
 
+# Starts the command, a function of this script or a program, as a part of the run that runs at once beside the others:
+# in a shell of its own, in a process group of its own, with its output in a file that wait_parts prints whole when the
+# part ends, so two parts' lines never mix. The part's failed steps join the run's when it ends, and a part that stops
+# before it ends fails as `name`. As GNU make -j and cargo-nextest start each item, so the run ends with its longest
+# part, where one after another it took the sum of them: the Mac's test step took 1,251 to 1,442 s on runs 45199121625,
+# 45192466849 and 45199338468, while each part kept 1.1 to 3.5 of its 12 cores busy.
+start_part() {
+  local name="$1" output="$TMPDIR/part-$part_count"
+  shift
+  part_count=$((part_count + 1))
+  set -m
+  (
+    # shellcheck disable=SC2030 # The part's own failed steps, which wait_parts reads from its file.
+    failed=()
+    "$@"
+    part
+    if ((${#failed[@]})); then
+      printf '%s\n' "${failed[@]}"
+    fi > "$output.failed"
+  ) > "$output" 2>&1 &
+  set +m
+  parts[$!]=$output
+  part_names[$!]=$name
+}
+
+# A part of one step, under its heading: the step's name and folder, then its command.
+step_part() {
+  part "$1"
+  shift
+  run_step "$@"
+}
+
+# Waits for every part started, and prints each one's output whole as it ends.
+wait_parts() {
+  local group status output reported
+  while ((${#parts[@]})); do
+    status=0
+    wait -n -p group "${!parts[@]}" || status=$?
+    output=${parts[$group]}
+    unset "parts[$group]"
+    cat "$output"
+    reported=()
+    if [[ -f $output.failed ]]; then
+      mapfile -t reported < "$output.failed"
+    fi
+    if ((${#reported[@]})); then
+      # shellcheck disable=SC2031 # The run's own failed steps, which the part's join.
+      failed+=("${reported[@]}")
+    elif ((status != 0)); then
+      failed+=("${part_names[$group]}")
+    fi
+  done
+}
+
 finish() {
-  part
+  wait_parts
   if [[ ${#failed[@]} -gt 0 ]]; then
     printf 'Failed: %s\n' "${failed[@]}" >&2
     exit 1
@@ -190,23 +243,30 @@ if $mago && ! $cargo_built; then
   # installing the pinned Lean first keeps the tests that run lake at once from each installing it. On Linux the tests
   # run in the sharp/docker image, which carries it in its ELAN_HOME, as sharp/docker/Dockerfile explains, so no run
   # downloads it.
-  part "composer install in sharp/mago, and the pinned Lean"
-  composer install --no-interaction --no-progress --quiet --working-dir="$root/sharp/mago"
-  toolchain="$(cat "$root/sharp/mago/crates/sharp-lean/lean/lean-toolchain")"
-  if [[ $os == linux ]]; then
-    folder=${toolchain//\//--}
-    if [[ ! -x ${ELAN_HOME:-}/toolchains/${folder//:/---}/bin/lake ]]; then
-      echo "The sharp/docker image carries no Lean $toolchain, which lean-toolchain pins. Pin it in sharp/docker/tools/Dockerfile." >&2
-      exit 1
+  prepare_workspace() {
+    local toolchain folder
+    part "composer install in sharp/mago, and the pinned Lean"
+    composer install --no-interaction --no-progress --quiet --working-dir="$root/sharp/mago"
+    toolchain="$(cat "$root/sharp/mago/crates/sharp-lean/lean/lean-toolchain")"
+    if [[ $os == linux ]]; then
+      folder=${toolchain//\//--}
+      if [[ ! -x ${ELAN_HOME:-}/toolchains/${folder//:/---}/bin/lake ]]; then
+        echo "The sharp/docker image carries no Lean $toolchain, which lean-toolchain pins. Pin it in sharp/docker/tools/Dockerfile." >&2
+        exit 1
+      fi
+    else
+      elan toolchain install "$toolchain"
     fi
-  else
-    elan toolchain install "$toolchain"
+    if $build; then
+      part "sharp/bin/build-mago"
+      "$root/sharp/bin/build-mago" --quiet
+    fi
+  }
+  start_part "composer install in sharp/mago, the pinned Lean and sharp/bin/build-mago" prepare_workspace
+  wait_parts
+  if ((${#failed[@]})); then
+    finish
   fi
-  if $build; then
-    part "sharp/bin/build-mago"
-    "$root/sharp/bin/build-mago" --quiet
-  fi
-  part
   messages="$build_dir/mago/build.json"
   if [[ ! -f $messages ]]; then
     echo "$messages is missing. Run sharp/bin/build-mago first." >&2
@@ -296,6 +356,9 @@ if $mago && ! $cargo_built; then
         }')
   fi
 
+  # Every binary starts at once, each on as many test threads as the run's jobs, so a binary's slowest tests run beside
+  # the other binaries' tests, where one binary after another left the Mac's cores idle while each one's last tests
+  # ran: the workspace lane kept 2.7 to 3.1 of 12 busy on the three runs start_part names.
   for ((b = 0; b < ${#binaries[@]}; b++)); do
     if [[ -z ${listed[$b]+listed} ]]; then
       continue
@@ -321,16 +384,17 @@ if $mago && ! $cargo_built; then
       if [[ $("$executable" --help) == *--report-time* ]]; then
         command=(env RUSTC_BOOTSTRAP=1 "$executable" -Z unstable-options --report-time)
       fi
-      part "$selected tests of ${executable##*/}, from ${folder#"$root"/}"
-      run_step "${executable##*/}" "$folder" "${command[@]}" --exact --test-threads "$jobs" "${skips[@]}"
-      part
+      start_part "${executable##*/}" step_part "$selected tests of ${executable##*/}, from ${folder#"$root"/}" \
+        "${executable##*/}" "$folder" "${command[@]}" --exact --test-threads "$jobs" "${skips[@]}"
     fi
   done
+  wait_parts
 fi
 if $mago; then
   if $build && [[ -z $shard ]]; then
-    part "the doc tests and mago-codex's property tests"
-    run_step "the doc tests and mago-codex's property tests" "$root" "$root/sharp/bin/build-mago" --cargo-tests
+    start_part "the doc tests and mago-codex's property tests" step_part \
+      "the doc tests and mago-codex's property tests" "the doc tests and mago-codex's property tests" "$root" \
+      "$root/sharp/bin/build-mago" --cargo-tests
   fi
   finish
 fi
@@ -341,7 +405,7 @@ if $upstream && [[ $os != linux ]]; then
   exit 2
 fi
 
-# The whole-project proof of mago convert runs after the PHP# suite, on this build's engine, with the fixture's
+# The whole-project proof of mago convert runs beside the PHP# suite, on this build's engine, with the fixture's
 # refinement worker on the php the PATH holds: in the run of the whole suite, and in the one slice the slices give it.
 run_proof=false
 if $upstream; then
@@ -433,7 +497,8 @@ run_tests() {
 if $upstream; then
   baseline=sharp/baseline/linux
   results="$build_dir/upstream-results"
-  run_tests "without opcache, compared with $baseline" -W "$results"
+  start_part "without opcache, compared with $baseline" run_tests "without opcache, compared with $baseline" -W "$results"
+  wait_parts
   awk -F '\t' -v OFS='\t' -v prefix="$root/" '
     $1 != "PASSED" {
       if (index($2, prefix) == 1) $2 = substr($2, length(prefix) + 1)
@@ -447,8 +512,11 @@ if $upstream; then
 fi
 
 if $build; then
-  part "sharp/bin/build-mago"
-  "$root/sharp/bin/build-mago" --quiet
+  start_part "sharp/bin/build-mago" step_part "sharp/bin/build-mago" "sharp/bin/build-mago" "$root" "$root/sharp/bin/build-mago" --quiet
+  wait_parts
+  if ((${#failed[@]})); then
+    finish
+  fi
 fi
 mago="$build_dir/mago/debug/mago"
 if [[ ! -x $mago ]]; then
@@ -463,8 +531,8 @@ fi
 # a copy that differs from sharp/composer in a file git tracks there is reinstalled first, and the install then dumps
 # the autoloader, which runs the package's plugin: composer reinstall runs no plugin. Build output in either folder,
 # such as the .sharp folder a compile writes, never counts: a local check that left sharp/composer/.sharp made every
-# later run in every lane reinstall the copy with it, and the tests then refused their fixtures.
-part "composer install in Zend/tests/sharp"
+# later run in every lane reinstall the copy with it, and the tests then refused their fixtures. Every other part reads
+# the fixtures the install and the compile write, so they run first, and a failed one ends the run.
 package="$root/Zend/tests/sharp/vendor/heyjordanparker/php-sharp-composer"
 differs_from_library() {
   local files file
@@ -479,21 +547,28 @@ differs_from_library() {
   done <<< "$files"
   return 1
 }
-if [[ -d $package ]] && differs_from_library \
-  && ! composer reinstall --no-interaction --no-progress --quiet --no-autoloader \
-    --working-dir="$root/Zend/tests/sharp" heyjordanparker/php-sharp-composer; then
-  echo "composer reinstall of heyjordanparker/php-sharp-composer failed in Zend/tests/sharp." >&2
-  exit 1
-fi
-if ! composer install --no-interaction --no-progress --quiet --working-dir="$root/Zend/tests/sharp"; then
-  echo "composer install failed in Zend/tests/sharp, and the tests load their fixtures through its autoloader." >&2
-  exit 1
-fi
-
-part "mago compile, built from sharp/mago"
-if ! "$mago" --no-version-check --colors never --workspace "$root/Zend/tests/sharp" compile; then
-  echo "mago compile refused a PHP# test fixture, and the engine runs only compiled files." >&2
-  exit 1
+prepare_suite() {
+  part "composer install in Zend/tests/sharp"
+  if [[ -d $package ]] && differs_from_library \
+    && ! composer reinstall --no-interaction --no-progress --quiet --no-autoloader \
+      --working-dir="$root/Zend/tests/sharp" heyjordanparker/php-sharp-composer; then
+    echo "composer reinstall of heyjordanparker/php-sharp-composer failed in Zend/tests/sharp." >&2
+    exit 1
+  fi
+  if ! composer install --no-interaction --no-progress --quiet --working-dir="$root/Zend/tests/sharp"; then
+    echo "composer install failed in Zend/tests/sharp, and the tests load their fixtures through its autoloader." >&2
+    exit 1
+  fi
+  part "mago compile, built from sharp/mago"
+  if ! "$mago" --no-version-check --colors never --workspace "$root/Zend/tests/sharp" compile; then
+    echo "mago compile refused a PHP# test fixture, and the engine runs only compiled files." >&2
+    exit 1
+  fi
+}
+start_part "composer install and mago compile in Zend/tests/sharp" prepare_suite
+wait_parts
+if ((${#failed[@]})); then
+  finish
 fi
 
 export TEST_MAGO_EXECUTABLE="$mago"
@@ -502,25 +577,32 @@ export TEST_MAGO_EXECUTABLE="$mago"
 # test twice in one process, under the function JIT, which compiles each function of a file as the file loads, and
 # under the tracing JIT, with every hot counter at 1, so it compiles the code the tests run as soon as it runs. Each
 # expects the output of the run without opcache. macOS runs the first two, since Apple silicon has no thread-safe JIT,
-# as ext/opcache/config.m4 warns.
-run_tests "without opcache"
-run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
-if [[ $os == linux ]]; then
-  run_tests "with the function JIT" -d opcache.enable_cli=1 -d opcache.jit=function -d opcache.jit_buffer_size=32M
-  run_tests "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
-    -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
-fi
+# as ext/opcache/config.m4 warns. The modes run one after another, as one part beside the others: run-tests.php writes
+# the .php file of each test in the test's own folder, and deletes it before and after the test runs, so two modes at
+# once would delete each other's.
+run_modes() {
+  run_tests "without opcache"
+  run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
+  if [[ $os == linux ]]; then
+    run_tests "with the function JIT" -d opcache.enable_cli=1 -d opcache.jit=function -d opcache.jit_buffer_size=32M
+    run_tests "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
+      -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
+  fi
+}
+start_part "the PHP# suite's modes" run_modes
 
 if $census; then
-  part "every write and comparison of a field that holds a PHP# mark"
-  run_step "the census of PHP# marks" "$root" "$php" sharp/bin/census
+  start_part "the census of PHP# marks" step_part "every write and comparison of a field that holds a PHP# mark" \
+    "the census of PHP# marks" "$root" "$php" sharp/bin/census
 fi
 
 if $spec; then
-  part "every rule of sharp/bin/spec, on the examples of sharp/spec-self-test.md"
-  run_step "the self-test of sharp/bin/spec" "$root" "$php" sharp/bin/spec --self-test
-  part "every code example in docs/spec.md and README.md, compared with sharp/baseline/spec"
-  run_step "the code examples of docs/spec.md and README.md" "$root" "$php" sharp/bin/spec
+  start_part "the self-test of sharp/bin/spec" step_part \
+    "every rule of sharp/bin/spec, on the examples of sharp/spec-self-test.md" \
+    "the self-test of sharp/bin/spec" "$root" "$php" sharp/bin/spec --self-test
+  start_part "the code examples of docs/spec.md and README.md" step_part \
+    "every code example in docs/spec.md and README.md, compared with sharp/baseline/spec" \
+    "the code examples of docs/spec.md and README.md" "$root" "$php" sharp/bin/spec
 fi
 
 # One php -l lints every fixture, each file in a request of its own, and ends each file's output with the line that
@@ -557,7 +639,7 @@ check_differential() {
 }
 
 if $differential; then
-  check_differential
+  start_part "every file mago compile accepted against php -l" check_differential
 fi
 
 # A PHP# test class runs with its file's test module under real PHPUnit, at the version sharp/phpunit/composer.lock
@@ -577,20 +659,21 @@ check_phpunit() {
   fi
   for isolation in "" --process-isolation; do
     if ! "$php" -d opcache.jit=disable "$project/vendor/bin/phpunit" --configuration "$project/phpunit.xml" \
-      --testdox $isolation; then
+      --testdox ${isolation:+"$isolation"}; then
       failed+=("PHPUnit ${isolation:-in one process}")
     fi
   done
 }
 
 if $phpunit; then
-  check_phpunit
+  start_part "the PHPUnit fixture" check_phpunit
 fi
 
 if $run_proof; then
-  part "mago convert on sharp/mago/crates/converter/tests/project"
   mkdir "$TMPDIR/convert" "$TMPDIR/convert/project"
-  run_step "the whole-project proof of mago convert" "$root" "$proof" "$TMPDIR/convert/project"
+  start_part "the whole-project proof of mago convert" step_part \
+    "mago convert on sharp/mago/crates/converter/tests/project" \
+    "the whole-project proof of mago convert" "$root" "$proof" "$TMPDIR/convert/project"
 fi
 
 finish
