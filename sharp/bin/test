@@ -182,10 +182,18 @@ if $mago && ! $cargo_built; then
     exit 1
   fi
   # --binary runs only the test binaries whose crate roots it names, as MACOS runs only those whose code differs on
-  # macOS and leaves the rest to Linux's MAGO slices. A name that matches no binary fails the run, so a misspelled one
-  # can't drop its tests unseen.
+  # macOS and leaves the rest to Linux's MAGO slices, and --binary <crate root>::<prefix> runs only that binary's tests
+  # whose names start with a prefix it names, as MACOS runs those of tests/main.rs that read Lean's processes, file
+  # watching and the file system. A crate root or a prefix that matches nothing fails the run, so a misspelled or a
+  # renamed one can't drop its tests unseen.
+  declare -A named=() prefixes=() found=()
+  for binary in "${chosen_binaries[@]}"; do
+    named[${binary%%::*}]=1
+    if [[ $binary == *::* ]]; then
+      prefixes[${binary%%::*}]+="${binary#*::}"$'\n'
+    fi
+  done
   binaries=()
-  declare -A chosen=()
   while read -r line; do
     if [[ $line == *'"reason":"compiler-artifact"'* && $line =~ \"profile\":\{[^}]*\"test\":true &&
       $line =~ \"executable\":\"([^\"]+)\" ]]; then
@@ -194,17 +202,17 @@ if $mago && ! $cargo_built; then
       folder="$(dirname "${BASH_REMATCH[1]}")"
       [[ $line =~ \"src_path\":\"([^\"]+)\" ]]
       source="${BASH_REMATCH[1]#"$root"/}"
-      if [[ ${#chosen_binaries[@]} -gt 0 ]]; then
-        if [[ " ${chosen_binaries[*]} " != *" $source "* ]]; then
+      if [[ ${#named[@]} -gt 0 ]]; then
+        if [[ -z ${named[$source]:-} ]]; then
           continue
         fi
-        chosen[$source]=1
+        found[$source]=1
       fi
       binaries+=("$executable"$'\t'"$folder"$'\t'"$source")
     fi
   done < "$messages"
-  for source in "${chosen_binaries[@]}"; do
-    if [[ -z ${chosen[$source]:-} ]]; then
+  for source in "${!named[@]}"; do
+    if [[ -z ${found[$source]:-} ]]; then
       echo "--binary $source names no test binary of $messages." >&2
       exit 2
     fi
@@ -226,6 +234,22 @@ if $mago && ! $cargo_built; then
       continue
     fi
     listed[$b]="$(sed -n 's/: test$//p' <<< "$names")"
+    while IFS= read -r prefix; do
+      if [[ -z $prefix ]]; then
+        continue
+      fi
+      starts=false
+      while IFS= read -r name; do
+        if [[ $name == "$prefix"* ]]; then
+          starts=true
+          break
+        fi
+      done <<< "${listed[$b]}"
+      if ! $starts; then
+        echo "--binary $source::$prefix names no test of $source." >&2
+        exit 2
+      fi
+    done <<< "${prefixes[$source]:-}"
   done
 
   # With --shard, each test weighs the seconds sharp/baseline/seconds lists under its binary's source file and its
@@ -289,7 +313,18 @@ if $mago && ! $cargo_built; then
     while IFS= read -r name; do
       if [[ -z $name ]]; then
         continue
-      elif [[ -z $shard || -n ${chosen[$b$'\t'$name]:-} ]]; then
+      fi
+      wanted=true
+      if [[ -n ${prefixes[$source]:-} ]]; then
+        wanted=false
+        while IFS= read -r prefix; do
+          if [[ -n $prefix && $name == "$prefix"* ]]; then
+            wanted=true
+            break
+          fi
+        done <<< "${prefixes[$source]}"
+      fi
+      if $wanted && [[ -z $shard || -n ${chosen[$b$'\t'$name]:-} ]]; then
         selected=$((selected + 1))
       else
         skips+=(--skip "$name")
