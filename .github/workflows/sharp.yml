@@ -958,8 +958,9 @@ jobs:
       EXTENSIONS: bcmath calendar exif ftp gd igbinary imagick intl pcntl pdo_mysql pdo_pgsql pgsql redis shmop sockets sysvmsg sysvsem sysvshm zip
       # The extensions the -dev image adds to those.
       DEV_EXTENSIONS: excimer
-      # The builds' platform and SBOM scanner.
+      # The builds' platform, BuildKit and SBOM scanner.
       PLATFORM: ${{ matrix.platform }}
+      BUILDKIT: ghcr.io/heyjordanparker/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
       SBOM: generator=ghcr.io/heyjordanparker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
     steps:
       # The builds' context, and .github/actions/boot-image and sharp/bin/php-extensions.
@@ -973,11 +974,15 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Buildx's docker-container driver pulls BuildKit's image again, and starts from the local one when that pull
+      # fails, so this pull, which sharp/bin/network runs again when the network drops it, covers both.
+      - name: Pull BuildKit's image
+        run: sharp/bin/network docker pull --quiet "$BUILDKIT"
       # The job's runner is discarded with its builder, which the cleanup took 35 to 47 s to remove at each job's end.
       - name: Set up Buildx with BuildKit from ghcr.io
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
-          driver-opts: image=ghcr.io/heyjordanparker/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
+          driver-opts: image=${{ env.BUILDKIT }}
           cleanup: false
       # The engine's ccache, the cache mount the Dockerfile's php-base stage compiles through, as .github/actions/mago-cache
       # keeps a target: next's own pull request and a push to master save it under the commit, since their own later
