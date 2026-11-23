@@ -63,6 +63,7 @@ use mago_database::watcher::WatchOptions;
 use mago_database::watcher::start_watcher;
 use mago_orchestrator::Orchestrator;
 use mago_orchestrator::service::incremental_analysis::Scans;
+use mago_orchestrator::service::phase::Phase;
 use mago_prelude::Prelude;
 use mago_reporting::CompiledIgnoreSet;
 use mago_reporting::Issue;
@@ -317,9 +318,8 @@ impl AnalyzeCommand {
         // A run over the whole project compiles it too, as an agent's save needs: into the `.sharp` folder and the
         // hosts' folder, from one analysis and one lowering. With no host enabled, a run that reads the files as the
         // compile reads them, without `--no-stubs` or `--substitute`, reports that analysis. Otherwise the hosts start
-        // beside the compile, and the run reports that analysis too when they register return-type providers and
-        // nothing else, or an analysis with them of the files the compile loaded. A run on named files, staged files
-        // or standard input, or one that only scans, compiles only the hosts' folder.
+        // beside the compile, and the run reports that analysis as the hosts take it over. A run on named files, staged
+        // files or standard input, or one that only scans, compiles only the hosts' folder.
         let (external_analyzer, compiled, loaded) = if scope.is_some() || self.stdin_input || self.scan_only {
             let extension_hosts = compile_for_hosts(&configuration)?.0;
             let external_analyzer = start_external_analyzer(
@@ -340,16 +340,8 @@ impl AnalyzeCommand {
         if let Some(external_analyzer) = external_analyzer {
             orchestrator.set_external_analyzer_handle(external_analyzer);
         }
-        // Hosts that register return-type providers and nothing else change only the files whose requests a provider
-        // answers, so the run reports from the compile's analysis with those files analyzed again with the hosts.
-        let loaded = match loaded {
-            Loaded::Hosted { mut server, requests } => {
-                let issues = server.analyze_with_hosts(orchestrator.get_analyzer_plugin_registry(), &requests)?.issues;
-                Loaded::Analysis(server, issues)
-            }
-            loaded => loaded,
-        };
-        let (mut server, mut issues) = match loaded {
+        // The run reports from the compile's analysis, which the hosts take over with the stubs they declare.
+        let (mut server, mut issues) = match loaded.taken_over(&orchestrator)? {
             Loaded::Analysis(server, issues) => {
                 load_inputs_duration = load_inputs_start.map(|s| s.elapsed());
                 service_run_start = trace_enabled.then(Instant::now);
@@ -361,6 +353,7 @@ impl AnalyzeCommand {
                     _ => (None, Scans::default()),
                 };
 
+                let load = Phase::start("load");
                 let (prelude_database, database) = rayon::join(
                     || {
                         let start = trace_enabled.then(Instant::now);
@@ -387,6 +380,7 @@ impl AnalyzeCommand {
                 substitute(&substitutions, &mut database, workspace)?;
                 database.merge_base(prelude_database);
                 load_inputs_duration = load_inputs_start.map(|s| s.elapsed());
+                load.end();
 
                 if !database.files().any(|f| f.file_type == FileType::Host) {
                     tracing::warn!("No files found to analyze.");
@@ -407,6 +401,7 @@ impl AnalyzeCommand {
                 (server, issues)
             }
         };
+        let report = Phase::start("report");
         issues.extend(server.law_refusals()?);
         // Each issue that refused a file of the compile and that the analysis did not report, as a law left unproven.
         let refused: Vec<Issue> = match &compiled {
@@ -417,7 +412,6 @@ impl AnalyzeCommand {
         };
         issues.extend(refused);
         let service_run_duration = service_run_start.map(|s| s.elapsed());
-        let report_start = trace_enabled.then(Instant::now);
         let ignore_set = self.compile_ignore_set(&configuration);
         let database = server.database_mut();
 
@@ -443,7 +437,7 @@ impl AnalyzeCommand {
             exit_code = ExitCode::FAILURE;
         }
         let outcome = CommandOutcome::with_changes(exit_code, database, changed_file_ids.iter().copied())?;
-        let report_duration = report_start.map(|s| s.elapsed());
+        report.end();
 
         if self.staged && !changed_file_ids.is_empty() {
             git::stage_files(&configuration.source.workspace, database, changed_file_ids)?;
@@ -463,7 +457,6 @@ impl AnalyzeCommand {
             tracing::trace!("Database loaded in {:?} (concurrent task).", load_database_duration.unwrap_or_default());
             tracing::trace!("Prelude and database loaded in {:?}.", load_inputs_duration.unwrap_or_default());
             tracing::trace!("Analysis server ran in {:?}.", service_run_duration.unwrap_or_default());
-            tracing::trace!("Issues filtered and reported in {:?}.", report_duration.unwrap_or_default());
             tracing::trace!("Server dropped in {:?}.", drop_server_duration.unwrap_or_default());
             tracing::trace!("Orchestrator dropped in {:?}.", drop_orchestrator_duration.unwrap_or_default());
             tracing::trace!("Analyze command finished in {:?}.", start.elapsed());

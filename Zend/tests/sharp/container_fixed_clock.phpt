@@ -31,13 +31,14 @@ namespace App.Billing;
 import Sharp.Testing.FakeClock;
 import Sharp.Time.Clock;
 import Sharp.Time.Instant;
+import PHPUnit.Framework.TestCase;
 
 module : App.Billing
 {
     singleton Clock = new FakeClock(Instant.parse("2026-10-22T18:30:00Z"));
 }
 
-public class InvoiceTest
+public class InvoiceTest : TestCase
 {
 }
 SHARP,

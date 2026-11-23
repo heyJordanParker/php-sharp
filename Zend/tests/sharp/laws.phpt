@@ -66,4 +66,5 @@ ran
 CompileError: app/Shared/Money.sharp has 1 error:
 line 10: law timesIsZero is not proven
   when n > 0, still to show: m.add(m.times(n - 1)).amount == 0
+  fails for: m = new Money(1, ""), n = 1
   help: the law for a smaller n is the call Money.timesIsZero(m, n - 1)

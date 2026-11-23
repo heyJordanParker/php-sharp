@@ -32,7 +32,7 @@ SHARP;
 
 // An application whose Composer vendor folder is $vendor, composer.json's config.vendor-dir unless it is `vendor`, with
 // the PHP# package installed in it, Composer's loader serving App\ from app/ and Sharp\ from the package's library, and
-// Import.sharp beside $files. Returns the project's folder, compiled.
+// Import.sharp, each file of $files written over the file of its path. Returns the project's folder, compiled.
 function program_project(string $name, string $vendor, array $files = []): string
 {
     $package = dirname(__DIR__, 3) . '/sharp/composer';
@@ -43,7 +43,7 @@ function program_project(string $name, string $vendor, array $files = []): strin
     }
     $config = $vendor === 'vendor' ? '' : ', "config": {"vendor-dir": "' . $vendor . '"}';
 
-    return compile_project($name, $installed + [
+    return compile_project($name, array_replace($installed + [
         'composer.json' => '{"type": "project", "autoload": {"psr-4": {"App\\\\": "app/"}}' . $config . "}\n",
         'mago.toml' => "[source]\npaths = [\"app\"]\nincludes = [\"$vendor\"]\n",
         "$library/composer.json" => '{"name": "heyjordanparker/php-sharp-composer"}',
@@ -125,7 +125,7 @@ require_once __DIR__ . '/composer/autoload_real.php';
 require_once __DIR__ . '/heyjordanparker/php-sharp-composer/autoload.php';
 PHP,
         'app/Console/Import.sharp' => IMPORT,
-    ] + $files);
+    ], $files));
 }
 
 // Runs $command in the project at $root with the PHP of the test, and prints what it wrote and its exit status.

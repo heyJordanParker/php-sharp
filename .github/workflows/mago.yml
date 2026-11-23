@@ -7,11 +7,11 @@ on:
   pull_request:
     branches: [master]
 
-# A pull request, and master, runs one push at a time, and only the newest push waits, as sharp.yml's concurrency
-# explains.
+# A pull request, and master, runs one push at a time, and only the newest push waits, and a push cancels the run in
+# progress of a pull request other than next's, as sharp.yml's concurrency explains.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || (github.event_name == 'push' && github.ref) || github.run_id }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.head_ref != 'next' }}
 
 permissions:
   contents: read
@@ -237,7 +237,7 @@ jobs:
       # As .github/actions/cancel-failed-run explains.
       - &cancel-failed-run
         name: Cancel the run, which can no longer pass
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && github.head_ref != 'next'
         uses: ./.github/actions/cancel-failed-run
 
       - name: Write the job's CPU-seconds and peak memory

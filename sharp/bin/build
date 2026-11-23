@@ -30,7 +30,7 @@ if $release; then
 fi
 
 # PHP# runs on FrankenPHP alone, so the engine is thread-safe, with the embed SAPI's libphp, which sharp/bin/hosts links
-# FrankenPHP against from the installed build, and without Zend signals, which FrankenPHP refuses, as docker-library's
+# FrankenPHP against from Linux's installed build, and without Zend signals, which FrankenPHP refuses, as docker-library's
 # zts images and sharp/docker/runtime/configure-options build it.
 flags=(
   --prefix="$build_dir/install"
@@ -111,6 +111,15 @@ fi
 # The cargo build of ext/sharp's Rust library, which make runs, reads CARGO_BUILD_JOBS as its jobs.
 CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")"
 export CARGO_BUILD_JOBS
-make -C "$build_dir" -j"$CARGO_BUILD_JOBS" >/dev/null
-make -C "$build_dir" install >/dev/null
+# sharp/bin/hosts runs on Linux alone and links FrankenPHP against the libphp the build installs, so only Linux builds
+# every target and installs. Elsewhere make builds the two binaries the suites run and nothing else reads: sharp_build_id.h
+# holds the commit, so every commit relinks what holds ext/sharp, and on MACOS run 45051337556 libphp.so's link took 84
+# s, libphp.dylib's 169 s and the install 123 s of the step's 392 s. configure takes the same flags everywhere, since
+# other flags would rebuild a Mac's engine from nothing.
+if [[ "$(uname -s)" == Linux ]]; then
+  make -C "$build_dir" -j"$CARGO_BUILD_JOBS" >/dev/null
+  make -C "$build_dir" install >/dev/null
+else
+  make -C "$build_dir" -j"$CARGO_BUILD_JOBS" sapi/cli/php sapi/phpdbg/phpdbg >/dev/null
+fi
 "$build_dir/sapi/cli/php" -v

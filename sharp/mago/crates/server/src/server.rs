@@ -22,12 +22,12 @@ use mago_orchestrator::error::OrchestratorError;
 use mago_orchestrator::service::incremental_analysis::IncrementalAnalysisService;
 use mago_orchestrator::service::incremental_analysis::Scans;
 use mago_orchestrator::service::incremental_analysis::compile::Compiled;
-use mago_orchestrator::service::incremental_analysis::compile::DispatcherModule;
 use mago_orchestrator::service::incremental_analysis::compile::ExternAttributes;
 use mago_orchestrator::service::incremental_analysis::compile::ExternEffects;
 use mago_orchestrator::service::incremental_analysis::compile::Family;
 use mago_orchestrator::service::incremental_analysis::compile::Folder;
 use mago_orchestrator::service::incremental_analysis::compile::Listener;
+use mago_orchestrator::service::incremental_analysis::compile::RecordedModule;
 use mago_reporting::Issue;
 use mago_reporting::IssueCollection;
 use mago_sharp_bridge::InlineForms;
@@ -198,10 +198,9 @@ impl Server {
         }
     }
 
-    /// Analyze with the extension hosts of `plugin_registry`, which register return-type providers and nothing else,
-    /// from the last analysis, which ran without them and recorded `requests`, as
-    /// [`IncrementalAnalysisService::analyze_with_hosts`] does: only the files whose requests a provider answers are
-    /// analyzed again.
+    /// Analyze the database, with the stubs the hosts declare in it, with the extension hosts of `plugin_registry`, from
+    /// the last analysis, which ran without them and recorded `requests`, as
+    /// [`IncrementalAnalysisService::analyze_with_hosts`] does.
     ///
     /// # Errors
     ///
@@ -211,6 +210,7 @@ impl Server {
         plugin_registry: Arc<PluginRegistry>,
         requests: &ReturnTypeRequests,
     ) -> Result<AnalysisResult, ServerError> {
+        self.service.update_database(self.database.read_only());
         self.pass(|service| service.analyze_with_hosts(plugin_registry, requests))
     }
 
@@ -311,10 +311,17 @@ impl Server {
         self.service.families()
     }
 
-    /// The app's module whose binding of the dispatcher serves the whole app.
+    /// The namespace of the app's modules whose binding of the dispatcher serves the whole app.
     #[must_use]
-    pub fn dispatcher_module(&self) -> Option<DispatcherModule> {
-        self.service.dispatcher_module()
+    pub fn dispatcher_namespace(&self) -> Option<Word> {
+        self.service.dispatcher_namespace()
+    }
+
+    /// Every base and environment module of the last analysis but the standard library's, by namespace, then by
+    /// environment, then by file.
+    #[must_use]
+    pub fn modules(&self) -> Vec<RecordedModule> {
+        self.service.modules()
     }
 
     /// Every `extern` line of the last analysis that gives a class, a method or a function attributes, by what it

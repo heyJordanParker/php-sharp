@@ -108,7 +108,8 @@ build_engine() {
   if [[ "$(uname -s)" == Darwin ]]; then
     # PHP's configure keeps only the -l and -L flags of a library's pkg-config flags, so the frameworks curl's archive
     # needs reach the engine through LIBS, which php-config --libs names too.
-    export LIBS="$($PKG_CONFIG --libs-only-other libcurl)"
+    LIBS="$($PKG_CONFIG --libs-only-other libcurl)"
+    export LIBS
   fi
 
   # A build configured with other options builds from nothing, for the reasons sharp/bin/build gives.
@@ -119,12 +120,26 @@ build_engine() {
   if [[ ! -f "$root/configure" ]]; then
     (cd "$root" && ./buildconf --force)
   fi
-  # A change to an input configure reads configures again, as in sharp/bin/build: an extension's Makefile.frag is copied
-  # into the Makefile only when configure runs.
-  if [[ ! -f "$status" || "$root/configure" -nt "$status" || "$root/sharp/docker/runtime/configure-options" -nt "$status" || -n "$(find "$root" \( -path "$root/.git" -o -path "$root/sharp" \) -prune -o \( -name configure.ac -o -name '*.m4' -o -name '*.in' -o -name Makefile.frag -o -name Makefile.global \) -newer "$status" -print -quit)" ]]; then
+  # The build configures again when what configure reads changed, as in sharp/bin/build: its options, the compilers in
+  # CC and CXX, which configure writes into the Makefile, so ccache joins a build only through a configure, and the
+  # content of each tracked file configure reads, such as an extension's Makefile.frag, which configure copies into the
+  # Makefile. The content counts, not the time, since a checkout gives every file it rewrites a new time. The Mac's
+  # runner builds master's tree for a release and next's for the next run, so each switch recompiles every source file
+  # that differs between the trees: 314 s of make on run 45025617782 after a release, where CI's Mac jobs build the
+  # engine through ccache, which compiles a file that changes back from its cache.
+  inputs=(configure.ac '*.m4' '*.in' '*Makefile.frag' '*Makefile.global' Zend/zend_modules.h ':(exclude)sharp')
+  configured="$(
+    printf '%s\n' "${options[@]}" "CC=${CC:-}" "CXX=${CXX:-}"
+    cd "$root"
+    git ls-files -- "${inputs[@]}"
+    git ls-files -z -- "${inputs[@]}" | xargs -0 git hash-object --
+  )"
+  stamp="$engine/configured-from"
+  if [[ ! -f "$status" || ! -f "$stamp" || "$(< "$stamp")" != "$configured" ]]; then
     (cd "$root" && ./buildconf --force)
     mkdir -p "$engine"
     (cd "$engine" && "$root/configure" "${options[@]}")
+    printf '%s\n' "$configured" > "$stamp"
   fi
 
   # make builds only what the libphp link names, each .lo with its .o, and ext/sharp's libsharp.a among them, never the
@@ -132,6 +147,7 @@ build_engine() {
   # and drops the rest, and nothing of mago runs the engine's CLI, phpdbg, CGI or phar.phar. Making that archive took 16
   # of the 24 minutes of this step on run 44770028227, on a commit whose only changed object was the build id's.
   # The cargo build of ext/sharp's Rust library, which make runs, reads CARGO_BUILD_JOBS as its jobs.
+  # shellcheck disable=SC2016 # The variables are make's, which make expands.
   read -r -a linked <<< "$(make -s -C "$engine" -f Makefile -f - print-objects <<< 'print-objects: ; @echo $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS)')"
   CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")" make -C "$engine" -j"$("$root/sharp/bin/jobs")" "${linked[@]}" >/dev/null
   make -C "$engine" install-headers install-programs >/dev/null
@@ -182,7 +198,7 @@ build_engine() {
       case "$flag" in
         -framework) echo "framework=${libs[++index]}" >> "$library/system-libs.part.$$"; continue ;;
         # -l:<file> names the archive's own file, as OpenSSL 3.5's libcrypto names jitterentropy's.
-        -l:*) name= file=${flag#-l:} ;;
+        -l:*) name='' file=${flag#-l:} ;;
         -l*) name=${flag#-l} file=lib${flag#-l}.a ;;
         *) continue ;;
       esac

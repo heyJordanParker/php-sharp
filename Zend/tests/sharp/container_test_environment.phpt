@@ -12,13 +12,14 @@ namespace App.Shop;
 
 import App.Pricing.PriceRule;
 import App.Pricing.TaxRule;
+import PHPUnit.Framework.TestCase;
 
 module : App.Shop
 {
     transient List<PriceRule> = [TaxRule];
 }
 
-public class CheckoutTest
+public class CheckoutTest : TestCase
 {
 }
 SHARP,

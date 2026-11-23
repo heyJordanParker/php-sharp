@@ -99,11 +99,15 @@ COPY --from=source /usr/src/php.tar.xz /usr/src/
 
 COPY sharp/docker/runtime/docker-php-source /usr/local/bin/
 
-RUN set -eux; \
+# PHP#: the engine compiles through ccache, whose folder is a cache mount, so a build keeps the objects of the build
+# before it and compiles only the files that changed. The IMAGE job of .github/workflows/sharp.yml carries the folder
+# from one job to the next: its make took 272 of the arm64 image's 714 seconds on run 45080049483.
+RUN --mount=type=cache,id=sharp-engine-ccache,target=/root/.cache/ccache set -eux; \
 	\
 	savedAptMark="$(apt-mark showmanual)"; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
+		ccache \
 		git \
 		libargon2-dev \
 		libcurl4-openssl-dev \
@@ -126,7 +130,13 @@ RUN set -eux; \
 # https://github.com/php/php-src/blob/d6299206dd828382753453befd1b915491b741c6/configure.ac#L1496-L1511
 		PHP_BUILD_PROVIDER='https://github.com/heyJordanParker/php-sharp' \
 		PHP_UNAME='Linux - Docker' \
+# PHP#: ccache keys an object by the compiler's content, since each build installs gcc anew, and keeps at most 1 GB.
+		CC='ccache gcc' \
+		CXX='ccache g++' \
+		CCACHE_COMPILERCHECK=content \
+		CCACHE_MAXSIZE=1G \
 	; \
+	ccache --zero-stats; \
 	docker-php-source extract; \
 	cd /usr/src/php; \
 	gnuArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)"; \
@@ -158,6 +168,7 @@ RUN set -eux; \
 		$options \
 	; \
 	make -j "$(nproc)"; \
+	ccache --show-stats; \
 	find -type f -name '*.a' -delete; \
 # PHP#: the PEAR installer comes from the PEAR project's own repository at a fixed commit, so an outage of pear.php.net,
 # which make install downloads it from by default, can't stop a release.
@@ -230,6 +241,11 @@ ADD https://github.com/Imagick/imagick.git#70087bab33eab913e99ac77d64d04d1a2fd0b
 # A git source brings phpredis's liblzf submodule, which GitHub's tag archive leaves out.
 FROM scratch AS phpredis-source
 ADD https://github.com/phpredis/phpredis.git#df4fab2de7fc327c54c94a13af2b9542e4fbd720 /
+
+# The -dev image's. excimer 1.2.6 is its first release that runs on a thread-safe engine, as FrankenPHP's, and its last
+# with the package.xml install-php-extensions builds a source folder from: 1.2.7 removed it for PIE and changed no code.
+FROM scratch AS excimer-source
+ADD https://github.com/wikimedia/mediawiki-php-excimer.git#cc87c1e297cc39398ca786c41a486a3c1f17c8c3 /
 
 FROM ${GOLANG_IMAGE} AS golang-base
 
@@ -417,8 +433,15 @@ RUN set -eux; \
 	chmod -R a+rwX /cache/mago
 
 # ghcr.io/heyjordanparker/php-sharp:<version>-dev: the runtime image with the law checker's Lean installed, so a compile
-# with laws in it downloads nothing. Mago's cache folder is /var/cache/mago for every user.
+# with laws in it downloads nothing, and excimer, the sampling profiler a framework app's development image installs.
+# Mago's cache folder is /var/cache/mago for every user.
 FROM runner AS dev
+
+# PHP#: excimer, built as common builds imagick, so an app's development image builds it again on no release.
+RUN --mount=type=bind,from=excimer-source,target=/usr/src/excimer,rw \
+	install-php-extensions /usr/src/excimer && \
+	# Remove files with non-deterministic content (embedded timestamps and mtimes) to keep image digests reproducible
+	rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache
 
 ENV XDG_CACHE_HOME=/var/cache
 # The folder's contents, so the copy keeps the mode of mago/ too.

@@ -245,11 +245,17 @@ jobs:
         run: composer install --ignore-platform-reqs --no-interaction --no-progress
 
       # The PHP# engine mago links, which sharp/bin/build-mago --engine builds for the runner's own platform, each
-      # release from nothing but on the self-hosted Mac runner, which keeps the engine builds.
+      # release from nothing but on the self-hosted Mac runner, which keeps the engine builds. There it builds through
+      # ccache with the CC and CXX sharp.yml's MACOS builds the same engine with, so neither job's build configures again
+      # for the other's, and each compiles a file the other changed back from the cache.
       - name: Build the engine mago links
         shell: bash
         working-directory: ${{ github.workspace }}
-        run: sharp/bin/build-mago --engine
+        run: |
+          if [[ $RUNNER_ENVIRONMENT == self-hosted ]]; then
+            export CC='ccache cc' CXX='ccache c++'
+          fi
+          sharp/bin/build-mago --engine
 
       # The law checker's build for the job's platform, which mago embeds and unpacks on the first compile that
       # proves a law, so no machine builds the checker with lake and a binary runs only its own checker.
