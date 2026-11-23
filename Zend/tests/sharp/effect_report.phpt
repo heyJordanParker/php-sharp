@@ -1,14 +1,16 @@
 --TEST--
-Spec section 29: under sharp.effect_report, each call of a plain PHP method an `extern` line declares records the built-ins it runs, past PHP# code it calls back, the autoload it starts and its package's own files, and `mago effects` refuses a `uses none` line whose call ran PDO::query and gives a `uses any` line that ran no effect `uses none`
+Spec section 29: under sharp.effect_report, each call of a plain PHP method an `extern` line declares records the built-ins it runs, past PHP# code it calls back, the autoload it starts and the files of its package, installed under the project's config.vendor-dir, and `mago effects` refuses a `uses none` line whose call ran PDO::query and gives a `uses any` line that ran no effect `uses none`
 --FILE--
 <?php
 require __DIR__ . '/project.inc';
 
-$library = 'vendor/heyjordanparker/php-sharp-composer';
+$library = 'libs/heyjordanparker/php-sharp-composer';
 $files = [
     'mago.toml' => "[source]\npaths = [\".\"]\nextensions = [\"sharp\", \"php\"]\n",
+    // The project installs its packages in libs/, as its config.vendor-dir says.
+    'composer.json' => '{"type": "library", "require": {"acme/libs": "*", "heyjordanparker/php-sharp-composer": "*"}, "config": {"vendor-dir": "libs"}}',
     "$library/composer.json" => '{"name": "heyjordanparker/php-sharp-composer"}',
-    'vendor/acme/libs/src/Validator.php' => <<<'PHP'
+    'libs/acme/libs/src/Validator.php' => <<<'PHP'
         <?php
 
         namespace Acme\Libs;
@@ -21,7 +23,7 @@ $files = [
             }
         }
         PHP,
-    'vendor/acme/libs/src/Formatter.php' => <<<'PHP'
+    'libs/acme/libs/src/Formatter.php' => <<<'PHP'
         <?php
 
         namespace Acme\Libs;
@@ -36,7 +38,7 @@ $files = [
             }
         }
         PHP,
-    'vendor/acme/libs/src/Helper.php' => <<<'PHP'
+    'libs/acme/libs/src/Helper.php' => <<<'PHP'
         <?php
 
         namespace Acme\Libs;
@@ -49,7 +51,7 @@ $files = [
             }
         }
         PHP,
-    'vendor/acme/libs/src/template.txt' => '<%s>',
+    'libs/acme/libs/src/template.txt' => '<%s>',
     'app/Stubs/Libraries.sharp' => <<<'SHARP'
         namespace App.Stubs;
 
@@ -72,14 +74,14 @@ $files = [
 
         // Helper loads on demand, inside Formatter.format, and the built-ins the loader runs record nothing.
         spl_autoload_register(function (string $class): void {
-            $file = __DIR__ . '/vendor/acme/libs/src/' . substr($class, strlen('Acme\\Libs\\')) . '.php';
+            $file = __DIR__ . '/libs/acme/libs/src/' . substr($class, strlen('Acme\\Libs\\')) . '.php';
             if (file_exists($file)) {
                 require $file;
             }
         });
-        require __DIR__ . '/vendor/acme/libs/src/Validator.php';
-        require __DIR__ . '/vendor/acme/libs/src/Formatter.php';
-        require __DIR__ . '/vendor/heyjordanparker/php-sharp-composer/library/Sharp/Text/StringMembers.sharp';
+        require __DIR__ . '/libs/acme/libs/src/Validator.php';
+        require __DIR__ . '/libs/acme/libs/src/Formatter.php';
+        require __DIR__ . '/libs/heyjordanparker/php-sharp-composer/library/Sharp/Text/StringMembers.sharp';
         require __DIR__ . '/app/Demo/Caller.sharp';
 
         (new Acme\Libs\Validator())->check(new PDO('sqlite::memory:'));
