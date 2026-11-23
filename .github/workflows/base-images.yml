@@ -80,9 +80,10 @@ jobs:
   # security updates, and on each change to the Dockerfile. A pull request's run builds it and pushes nothing.
   #
   # The same job first builds the tools image, sharp/docker/tools/Dockerfile, the pinned PHP-Parser and Lean the
-  # development image and sharp.yml's IMAGE copy, for linux/amd64 and linux/arm64, and pushes it under its
-  # Dockerfile's blob hash, where IMAGE pulls it. The development image copies the tools image this job built, so its
-  # tag is the blob hash of both Dockerfiles, as sharp/docker/run computes it.
+  # development image and sharp.yml's IMAGE copy, and the sources and scripts IMAGE builds the runtime image from, for
+  # linux/amd64 and linux/arm64, and pushes it under its Dockerfile's blob hash, where IMAGE pulls it. The development
+  # image copies the tools image this job built, so its tag is the blob hash of both Dockerfiles, as sharp/docker/run
+  # computes it.
   DEVELOPMENT:
     needs: MIRROR
     if: ${{ !cancelled() }}

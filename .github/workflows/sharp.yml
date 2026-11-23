@@ -865,10 +865,10 @@ jobs:
         with:
           driver-opts: image=${{ env.BUILDKIT }}
           cleanup: false
-      # The Dockerfile's tools stage, which the images copy PHP-Parser and Lean from, is the tools image base-images.yml
-      # pushes for both platforms under the blob hash of sharp/docker/tools/Dockerfile. A Dockerfile with no pushed
-      # image yet, as on the pull request that changes it, builds here from the same base, as sharp/docker/run builds it
-      # then.
+      # The Dockerfile's tools stage, which gives the images PHP-Parser, Lean and the sources and scripts they build, is
+      # the tools image base-images.yml pushes for both platforms under the blob hash of sharp/docker/tools/Dockerfile.
+      # A Dockerfile with no pushed image yet, as on the pull request that changes it, builds here from the same base, as
+      # sharp/docker/run builds it then.
       - name: Take the tools image for the tools stage
         run: |
           image="ghcr.io/heyjordanparker/php-sharp-tools:$(git hash-object sharp/docker/tools/Dockerfile)"

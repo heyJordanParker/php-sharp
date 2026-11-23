@@ -15,8 +15,9 @@ ARG BASE_IMAGE=${REGISTRY}/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b57
 # Go 1.27.4 builds FrankenPHP, which fixes CVE-2026-97054 in 1.27.3's net/http.
 ARG GOLANG_IMAGE=${REGISTRY}/golang:1.27-trixie@sha256:f18c3d73a184fb0582828510722e723b63a93f7188d11dd223d9be6f6880e65d
 
-# The tools image sharp/docker/tools/Dockerfile builds, the one place that pins each tool a build would otherwise
-# download, so the image ships the PHP-Parser and the Lean its tests ran with. A local build tags it php-sharp-tools,
+# The tools image sharp/docker/tools/Dockerfile builds, the one place that pins each file a build would otherwise
+# download from github.com, so the image ships the PHP-Parser and the Lean its tests ran with, and builds from the
+# sources and scripts its /runtime holds with no download from github.com. A local build tags it php-sharp-tools,
 # as sharp/README.md shows, and the IMAGE job of .github/workflows/sharp.yml replaces this stage with
 # --build-context tools=…, the image base-images.yml pushes under the blob hash of sharp/docker/tools/Dockerfile.
 FROM php-sharp-tools AS tools
@@ -106,7 +107,8 @@ COPY --from=source /usr/src/php.tar.xz /usr/src/
 
 COPY sharp/docker/runtime/docker-php-source /usr/local/bin/
 
-RUN set -eux; \
+RUN --mount=type=bind,from=tools,source=/runtime/install-pear-nozlib.phar,target=/tmp/install-pear-nozlib.phar \
+	set -eux; \
 	\
 	savedAptMark="$(apt-mark showmanual)"; \
 	apt-get update; \
@@ -166,11 +168,10 @@ RUN set -eux; \
 	; \
 	make -j "$(nproc)"; \
 	find -type f -name '*.a' -delete; \
-# PHP#: the PEAR installer comes from the PEAR project's own repository at a fixed commit, so an outage of pear.php.net,
-# which make install downloads it from by default, can't stop a release.
-	make install \
-		PEAR_INSTALLER_URL=https://raw.githubusercontent.com/pear/pearweb_phars/72aa5f771f56aaf826641b21159453f993e44450/install-pear-nozlib.phar \
-	; \
+# PHP#: the PEAR installer is the tools image's, which make install reads from pear/ in place of downloading it from
+# pear.php.net, so no outage can stop a release.
+	cp /tmp/install-pear-nozlib.phar pear/; \
+	make install; \
 	find \
 		/usr/local \
 		-type f \
@@ -220,35 +221,12 @@ RUN docker-php-ext-enable sodium
 
 ENTRYPOINT ["docker-php-entrypoint"]
 
-FROM scratch AS frankenphp-source
-
-# v1.13.5 takes golang.org/x/net v0.62.0, which fixes CVE-2026-78661 in v1.13.4's v0.61.0. The source is fetched by
-# the commit its v1.13.5 tag names, so a moved tag builds nothing else.
-ADD https://github.com/php/frankenphp.git#a3663e9e2cc4c258018a28ee068e50cc12f3ed2d /
-
-# The PECL extensions the image installs, each fetched by the commit its release tag names, so an outage of
-# pecl.php.net can't stop a release. igbinary 3.2.17RC1 is its first release that builds on PHP 8.5.
-FROM scratch AS igbinary-source
-ADD https://github.com/igbinary/igbinary.git#edda7101adf583df047d028a154abf3bf04ced61 /
-
-FROM scratch AS imagick-source
-ADD https://github.com/Imagick/imagick.git#70087bab33eab913e99ac77d64d04d1a2fd0b7b0 /
-
-# A git source brings phpredis's liblzf submodule, which GitHub's tag archive leaves out.
-FROM scratch AS phpredis-source
-ADD https://github.com/phpredis/phpredis.git#df4fab2de7fc327c54c94a13af2b9542e4fbd720 /
-
-# The -dev image's. excimer 1.2.6 is its first release that runs on a thread-safe engine, as FrankenPHP's, and its last
-# with the package.xml install-php-extensions builds a source folder from: 1.2.7 removed it for PIE and changed no code.
-FROM scratch AS excimer-source
-ADD https://github.com/wikimedia/mediawiki-php-excimer.git#cc87c1e297cc39398ca786c41a486a3c1f17c8c3 /
-
 FROM ${GOLANG_IMAGE} AS golang-base
 
 #
-# FrankenPHP v1.13.5's Dockerfile, with e-dant/watcher and install-php-extensions at fixed releases, each checked
-# against its SHA-256. Its brotli build and the runner's libbrotli copy run only on Bookworm, which ships libbrotli
-# 1.0.9, so they are left out: trixie ships 1.1.0.
+# FrankenPHP v1.13.5's Dockerfile, with its source, e-dant/watcher's and install-php-extensions at the fixed releases
+# the tools image's /runtime holds. Its brotli build and the runner's libbrotli copy run only on Bookworm, which ships
+# libbrotli 1.0.9, so they are left out: trixie ships 1.1.0.
 #
 
 FROM php-base AS common
@@ -275,14 +253,10 @@ RUN set -eux; \
 		/etc/frankenphp; \
 	sed -i 's/php/frankenphp run/g' /usr/local/bin/docker-php-entrypoint
 
-COPY --link --from=frankenphp-source /caddy/frankenphp/Caddyfile /etc/caddy/Caddyfile
-COPY --link --from=frankenphp-source /package/content/index.php /app/public/index.php
-RUN ln /etc/caddy/Caddyfile /etc/frankenphp/Caddyfile && \
-	curl -sSLf \
-		-o /usr/local/bin/install-php-extensions \
-		https://github.com/mlocati/docker-php-extension-installer/releases/download/2.13.2/install-php-extensions && \
-	echo '27fa8d80bd4e22feb9ddcadff1ca40c8f3e8ea942eb2dd8f446ed1afd2f2f0ab  /usr/local/bin/install-php-extensions' | sha256sum -c && \
-	chmod +x /usr/local/bin/install-php-extensions
+COPY --link --from=tools /runtime/frankenphp/caddy/frankenphp/Caddyfile /etc/caddy/Caddyfile
+COPY --link --from=tools /runtime/frankenphp/package/content/index.php /app/public/index.php
+COPY --link --from=tools /runtime/install-php-extensions /usr/local/bin/install-php-extensions
+RUN ln /etc/caddy/Caddyfile /etc/frankenphp/Caddyfile
 
 # PHP#: the extensions beside PHP's own that link outside libraries and that framework images ship, so an app's image
 # builds none of them again on each release: the PostgreSQL drivers, gd, imagick, and redis with igbinary as its
@@ -291,9 +265,9 @@ RUN ln /etc/caddy/Caddyfile /etc/frankenphp/Caddyfile && \
 # imagick's `make install` generates its arginfo headers again with the gen_stub.php phpize copies into
 # /tmp/pear/temp/imagick/build, which downloads the PHP-Parser it pins when that folder lacks it. So the folder links
 # the tools stage's copy of that version first, and pecl deletes the link with its build folder.
-RUN --mount=type=bind,from=igbinary-source,target=/usr/src/igbinary,rw \
-	--mount=type=bind,from=imagick-source,target=/usr/src/imagick,rw \
-	--mount=type=bind,from=phpredis-source,target=/usr/src/phpredis,rw \
+RUN --mount=type=bind,from=tools,source=/runtime/igbinary,target=/usr/src/igbinary,rw \
+	--mount=type=bind,from=tools,source=/runtime/imagick,target=/usr/src/imagick,rw \
+	--mount=type=bind,from=tools,source=/runtime/phpredis,target=/usr/src/phpredis,rw \
 	--mount=type=bind,from=tools,source=/opt,target=/opt/tools \
 	version=$(sed -n 's/^ *[$]version = "\(.*\)";$/\1/p' /usr/local/lib/php/build/gen_stub.php) && \
 	if [ ! -d "/opt/tools/PHP-Parser-$version" ]; then \
@@ -348,13 +322,11 @@ RUN apt-get update && \
 	&& \
 	apt-get clean
 
-# Install e-dant/watcher (necessary for file watching), at the release FrankenPHP v1.13.5's go.mod pins
+# Install e-dant/watcher (necessary for file watching), at the release FrankenPHP v1.13.5's go.mod pins, from the
+# tools image's source
+COPY --from=tools /runtime/watcher/ /usr/local/src/watcher/
 WORKDIR /usr/local/src/watcher
 RUN set -eux; \
-	curl -fsSL -o /tmp/watcher.tar.gz https://github.com/e-dant/watcher/archive/refs/tags/0.14.5.tar.gz; \
-	echo '190bbe5e19923083db2beb3aa68f4e99a563c8f685d8037b0536780b0116c4d3  /tmp/watcher.tar.gz' | sha256sum -c; \
-	tar xzf /tmp/watcher.tar.gz --strip-components 1; \
-	rm /tmp/watcher.tar.gz; \
 	# -Wno-error=use-after-free: GCC 12 on Bookworm i386 emits a spurious warning in libstdc++ basic_string.h
 	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-Wno-error=use-after-free"; \
 	cmake --build build; \
@@ -362,7 +334,7 @@ RUN set -eux; \
 	ldconfig
 
 WORKDIR /go/src/app
-COPY --link --from=frankenphp-source / ./
+COPY --link --from=tools /runtime/frankenphp/ ./
 # A fetch from proxy.golang.org can fail on the network alone, as 0.6.25's arm64 build failed with "stream error:
 # stream ID 1; INTERNAL_ERROR; received from peer", so the download retries, as .github/actions/setup-lean retries
 # Lean's. go.sum checks every module it fetched, and a retry fetches only the modules still missing.
@@ -453,7 +425,7 @@ RUN --mount=type=bind,from=tools,source=/opt,target=/opt/tools \
 FROM runner AS dev
 
 # PHP#: excimer, built as common builds imagick, so an app's development image builds it again on no release.
-RUN --mount=type=bind,from=excimer-source,target=/usr/src/excimer,rw \
+RUN --mount=type=bind,from=tools,source=/runtime/excimer,target=/usr/src/excimer,rw \
 	install-php-extensions /usr/src/excimer && \
 	# Remove files with non-deterministic content (embedded timestamps and mtimes) to keep image digests reproducible
 	rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache
