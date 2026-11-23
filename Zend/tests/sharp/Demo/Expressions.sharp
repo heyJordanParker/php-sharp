@@ -7,7 +7,7 @@ import LogicException;
 import RuntimeException;
 import Throwable;
 
-class Expressions
+public class Expressions
 {
     public static int positive(int value)
     {

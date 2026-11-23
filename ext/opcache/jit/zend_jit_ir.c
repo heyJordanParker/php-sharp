@@ -9351,7 +9351,8 @@ static int zend_jit_init_static_method_call(zend_jit_ctx         *jit,
 		zend_function *fn = zend_class_find_method_spelled(ce, Z_STR_P(zv));
 		if (fn) {
 			if (fn->common.scope == op_array->scope
-			 || (fn->common.fn_flags & ZEND_ACC_PUBLIC)
+			 || ((fn->common.fn_flags & ZEND_ACC_PUBLIC)
+			  && zend_sharp_compiled_reaches(fn->common.fn_flags, fn->common.scope, op_array->scope))
 			 || ((fn->common.fn_flags & ZEND_ACC_PROTECTED)
 			  && op_array->scope
 			  && instanceof_function_slow(op_array->scope, fn->common.scope))) {

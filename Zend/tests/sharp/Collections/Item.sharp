@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Item
+public class Item
 {
     public Item(public string name { get; }, public int cents { get; })
     {

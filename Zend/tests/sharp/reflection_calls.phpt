@@ -81,7 +81,7 @@ get amounts: array (
 )
 get count from plain PHP: Error: Cannot access private property App\Calls\Till::$count
 get total on another class: TypeError: `get` takes a receiver of `App\Calls\Till`, and was given `stdClass`.
-stock from plain PHP: 3
+stock from plain PHP: Error: Cannot access internal property App\Calls\Till::$stock from global scope, outside namespace App\Calls
 stock from App.Calls: 3
 stock from App.Elsewhere: Error: Cannot access internal property App\Calls\Till::$stock from App\Elsewhere\Outside, outside namespace App\Calls
 restock from App.Elsewhere: Error: Cannot access internal property App\Calls\Till::$stock from App\Elsewhere\Outside, outside namespace App\Calls

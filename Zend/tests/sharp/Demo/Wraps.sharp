@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Wraps
+public class Wraps
 {
     public static List<Map<string, int>> counts(Map<string, int> counts) => List.wrap(counts);
 

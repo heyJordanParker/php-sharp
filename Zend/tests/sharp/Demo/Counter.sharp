@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Counter
+public class Counter
 {
     private int count = 0;
     protected float rate = 1.5 * 2;

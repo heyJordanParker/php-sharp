@@ -2,7 +2,7 @@ namespace Demo;
 
 import Sharp.Text.Regex;
 
-class RegexCalls
+public class RegexCalls
 {
     public static bool matches(string pattern, string text) => Regex.parse(pattern).matches(text);
 

@@ -2,7 +2,7 @@ namespace Demo;
 
 import Countable;
 
-class Link
+public class Link
 {
     public Link(public int value { get; })
     {

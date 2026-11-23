@@ -1,6 +1,6 @@
 namespace Demo;
 
-class NumberQueries
+public class NumberQueries
 {
     public static bool tenthsAddUp() => Decimal.parse("0.1") + Decimal.parse("0.2") == Decimal.parse("0.3");
 

@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Nulls
+public class Nulls
 {
     public static Nulls? none()
     {

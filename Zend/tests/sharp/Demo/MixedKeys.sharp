@@ -2,7 +2,7 @@ namespace Demo;
 
 import Lib.Standing;
 
-class MixedKeys
+public class MixedKeys
 {
     public static Map<string|Standing, int> tally()
     {

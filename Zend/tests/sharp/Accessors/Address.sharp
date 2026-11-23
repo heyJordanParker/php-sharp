@@ -2,7 +2,7 @@ namespace Store;
 
 import Lib.Words;
 
-class Address
+public class Address
 {
     protected string region { get => field.uppercase(); }
     public string city { get; set => field = Words.capitalized(value.trim()); }

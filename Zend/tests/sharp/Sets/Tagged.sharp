@@ -4,7 +4,7 @@ import Lib.Probe;
 import Lib.Size;
 import Lib.Standing;
 
-class Tagged
+public class Tagged
 {
     public Set<string> tags { get; set; } = ["new"];
     public Set<Standing> states { get => field; set { this.writes += 1; field = value; } } = [];

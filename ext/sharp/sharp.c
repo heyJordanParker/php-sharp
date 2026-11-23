@@ -226,9 +226,15 @@ static zend_ast *sharp_translate_zval(const sharp_unit *unit, const sharp_node *
 	return zend_ast_create_zval_ex(&value, node->attr);
 }
 
+/* The attr of a node of `kind` whose unit gives it `attr`: an operator's with the syntax PHP# flags it with, and a
+ * member's with ZEND_SHARP_INTERNAL_MEMBER for its ZEND_ACC_SHARP_INTERNAL, which the 16 bits of an attr can't hold. */
 static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
 {
 	switch (kind) {
+		case ZEND_AST_PROP_GROUP:
+		case ZEND_AST_CLASS_CONST_GROUP:
+		case ZEND_AST_PARAM:
+			return attr & ZEND_ACC_SHARP_INTERNAL ? (attr & ~ZEND_ACC_SHARP_INTERNAL) | ZEND_SHARP_INTERNAL_MEMBER : attr;
 		case ZEND_AST_BINARY_OP:
 		case ZEND_AST_ASSIGN_OP:
 			return attr == ZEND_ADD || attr == ZEND_SUB || attr == ZEND_MUL || attr == ZEND_POW
@@ -5740,16 +5746,15 @@ static bool sharp_has_constant_default(const zend_function *func, uint32_t offse
 	return constant;
 }
 
-/* Adds to `entry` the access modifier that declares a member of the PHP flags `flags` and the attributes `attributes`,
- * spec section 5. PHP has no namespace reach, so an `internal` member runs as public, and the bridge marks it with
- * #[\Sharp\Internal\Internal]. */
-static void sharp_add_visibility(zval *entry, uint32_t flags, HashTable *attributes)
+/* Adds to `entry` the access modifier that declares a member of the PHP flags `flags`, spec section 5, an `internal`
+ * one by its ZEND_ACC_SHARP_INTERNAL. */
+static void sharp_add_visibility(zval *entry, uint32_t flags)
 {
 	if (flags & ZEND_ACC_PRIVATE) {
 		add_next_index_string(entry, "private");
 	} else if (flags & ZEND_ACC_PROTECTED) {
 		add_next_index_string(entry, "protected");
-	} else if (attributes && zend_get_attribute_str(attributes, ZEND_STRL("sharp\\internal\\internal"))) {
+	} else if (flags & ZEND_ACC_SHARP_INTERNAL) {
 		add_next_index_string(entry, "internal");
 	} else {
 		add_next_index_string(entry, "public");
@@ -5782,7 +5787,7 @@ static bool sharp_method_row(zval *method, const zend_function *func, const zend
 	sharp_add_declared_type(&declared, types->members[0]);
 	smart_str_0(&words);
 	add_next_index_str(&declared, words.s ? words.s : ZSTR_EMPTY_ALLOC());
-	sharp_add_visibility(&declared, func->common.fn_flags, func->common.attributes);
+	sharp_add_visibility(&declared, func->common.fn_flags);
 	zend_hash_next_index_insert_new(Z_ARRVAL_P(method), &declared);
 	for (uint32_t i = 0; i < count; i++) {
 		zval parameter;
@@ -5873,8 +5878,7 @@ static bool sharp_add_static_accessor_row(zval *properties, const zend_function 
 	add_next_index_str(&property, zend_string_copy(get->common.scope->name));
 	add_next_index_string(&property, name);
 	sharp_add_declared_type(&property, type);
-	sharp_add_visibility(&property, get->common.fn_flags,
-		storage && storage->attributes ? storage->attributes : get->common.attributes);
+	sharp_add_visibility(&property, get->common.fn_flags | (storage ? storage->flags & ZEND_ACC_SHARP_INTERNAL : 0));
 	smart_str_0(&writer);
 	add_next_index_str(&property, writer.s ? writer.s : ZSTR_EMPTY_ALLOC());
 	zend_hash_next_index_insert_new(Z_ARRVAL_P(properties), &property);
@@ -5954,7 +5958,7 @@ static bool sharp_add_extern_row(
 	add_next_index_str(&property, zend_string_copy(carrier->ce->name));
 	add_next_index_str(&property, name);
 	sharp_add_declared_type(&property, type);
-	sharp_add_visibility(&property, carrier->flags, carrier->attributes);
+	sharp_add_visibility(&property, carrier->flags);
 	add_next_index_stringl(&property, line.words, line.words_length);
 	zend_hash_next_index_insert_new(Z_ARRVAL_P(properties), &property);
 
@@ -6024,7 +6028,7 @@ ZEND_FUNCTION(Sharp_Internal_properties)
 		add_next_index_str(&property, zend_string_copy(info->ce->name));
 		add_next_index_string(&property, zend_get_unmangled_property_name(info->name));
 		sharp_add_declared_type(&property, type);
-		sharp_add_visibility(&property, info->flags, info->attributes);
+		sharp_add_visibility(&property, info->flags);
 		smart_str_0(&writer);
 		add_next_index_str(&property, writer.s ? writer.s : ZSTR_EMPTY_ALLOC());
 		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &property);
@@ -6138,10 +6142,9 @@ ZEND_FUNCTION(Sharp_Internal_accessors)
 		if (kind == ZEND_PROPERTY_HOOK_SET && setter) {
 			add_next_index_stringl(&declared, setter, setter_length);
 		} else if (get) {
-			sharp_add_visibility(&declared, get->common.fn_flags,
-				info && info->attributes ? info->attributes : get->common.attributes);
+			sharp_add_visibility(&declared, get->common.fn_flags | (info ? info->flags & ZEND_ACC_SHARP_INTERNAL : 0));
 		} else {
-			sharp_add_visibility(&declared, info->flags, info->attributes);
+			sharp_add_visibility(&declared, info->flags);
 		}
 		zend_hash_next_index_insert_new(Z_ARRVAL(row), &declared);
 		if (kind == ZEND_PROPERTY_HOOK_SET) {
@@ -6270,36 +6273,6 @@ static const zend_execute_data *sharp_reflection_caller(const zend_execute_data 
 	return frame;
 }
 
-/* The class or function whose code `caller` runs, as an Error names it, or "global scope". */
-static const char *sharp_code_name(const zend_execute_data *caller)
-{
-	const zend_string *name = !caller ? NULL
-		: caller->func->common.scope ? caller->func->common.scope->name : caller->func->common.function_name;
-
-	return name ? ZSTR_VAL(name) : "global scope";
-}
-
-/* The length of the namespace of the class `ce`, 0 in PHP's root namespace. */
-static int sharp_namespace_length(const zend_class_entry *ce)
-{
-	const char *separator = zend_memrchr(ZSTR_VAL(ce->name), '\\', ZSTR_LEN(ce->name));
-
-	return separator ? (int) (separator - ZSTR_VAL(ce->name)) : 0;
-}
-
-/* Whether `caller` reaches a member that `ce` declares `internal`, spec section 5, as a direct use does: plain PHP
- * reaches it as a public member, and PHP# code only from the class's namespace or one below it. Namespaces compare in
- * any case, spec section 24. */
-static bool sharp_reaches_internal(const zend_execute_data *caller, const zend_class_entry *ce)
-{
-	size_t length = sharp_namespace_length(ce);
-	const char *code = sharp_code_name(caller);
-
-	return !caller || !sharp_function_is_sharp(caller->func) || length == 0
-		|| (strlen(code) > length && code[length] == '\\'
-			&& zend_binary_strncasecmp(code, length, ZSTR_VAL(ce->name), length, length) == 0);
-}
-
 /* Whether the code `caller` runs reaches the method `func`, named `name`, as a direct call would, by its access
  * modifier, spec section 5: a private one only from its class, and an `internal` one only from its namespace and those
  * below it. False with the Error PHP gives a call it can't make. */
@@ -6312,12 +6285,12 @@ static bool sharp_reaches_method(const zend_execute_data *caller, const zend_fun
 		zend_bad_method_call(func, name, scope);
 		return false;
 	}
-	if (!(flags & (ZEND_ACC_PRIVATE | ZEND_ACC_PROTECTED)) && func->common.attributes
-			&& zend_get_attribute_str(func->common.attributes, ZEND_STRL("sharp\\internal\\internal"))
-			&& !sharp_reaches_internal(caller, func->common.scope)) {
-		zend_throw_error(NULL, "Call to internal method %s::%s() from %s, outside namespace %.*s",
-			ZSTR_VAL(func->common.scope->name), ZSTR_VAL(name), sharp_code_name(caller),
-			sharp_namespace_length(func->common.scope), ZSTR_VAL(func->common.scope->name));
+	const zend_string *code = zend_sharp_frame_code_name(caller);
+	if ((flags & ZEND_ACC_SHARP_INTERNAL) && !zend_sharp_code_reaches_internal(func->common.scope, code)) {
+		zend_string *outside = zend_sharp_code_outside_namespace(func->common.scope, code);
+		zend_throw_error(NULL, "Call to internal method %s::%s()%s", ZSTR_VAL(func->common.scope->name),
+			ZSTR_VAL(name), ZSTR_VAL(outside));
+		zend_string_release_ex(outside, false);
 		return false;
 	}
 
@@ -6371,12 +6344,12 @@ static bool sharp_reaches_property(const zend_execute_data *caller, const zend_c
 	if (!info) {
 		info = sharp_extern_carrier(ce, name);
 	}
-	if (info && !(info->flags & (ZEND_ACC_PRIVATE | ZEND_ACC_PROTECTED)) && info->attributes
-			&& zend_get_attribute_str(info->attributes, ZEND_STRL("sharp\\internal\\internal"))
-			&& !sharp_reaches_internal(caller, info->ce)) {
-		zend_throw_error(NULL, "Cannot access internal property %s::$%s from %s, outside namespace %.*s",
-			ZSTR_VAL(info->ce->name), ZSTR_VAL(name), sharp_code_name(caller), sharp_namespace_length(info->ce),
-			ZSTR_VAL(info->ce->name));
+	const zend_string *code = zend_sharp_frame_code_name(caller);
+	if (info && (info->flags & ZEND_ACC_SHARP_INTERNAL) && !zend_sharp_code_reaches_internal(info->ce, code)) {
+		zend_string *outside = zend_sharp_code_outside_namespace(info->ce, code);
+		zend_throw_error(NULL, "Cannot access internal property %s::$%s%s", ZSTR_VAL(info->ce->name), ZSTR_VAL(name),
+			ZSTR_VAL(outside));
+		zend_string_release_ex(outside, false);
 		return false;
 	}
 
@@ -6506,10 +6479,14 @@ static void sharp_extern_call(const zend_execute_data *caller, zend_object *rece
 		bool internal;
 		flags = sharp_extern_set_flags(
 			line.words + strlen("set "), line.words_length - strlen("set "), &internal);
-		if (internal && !sharp_reaches_internal(caller, carrier->ce)) {
-			zend_throw_error(NULL, "Cannot modify internal(set) property %s::$%s from %s, outside namespace %.*s",
-				ZSTR_VAL(carrier->ce->name), ZSTR_VAL(name), sharp_code_name(caller),
-				sharp_namespace_length(carrier->ce), ZSTR_VAL(carrier->ce->name));
+		/* Plain PHP writes an `internal set` as public, as the engine runs one, see ZEND_ACC_SHARP_INTERNAL. */
+		const zend_string *code = zend_sharp_frame_code_name(caller);
+		if (internal && caller && sharp_function_is_sharp(caller->func)
+				&& !zend_sharp_code_reaches_internal(carrier->ce, code)) {
+			zend_string *outside = zend_sharp_code_outside_namespace(carrier->ce, code);
+			zend_throw_error(NULL, "Cannot modify internal(set) property %s::$%s%s", ZSTR_VAL(carrier->ce->name),
+				ZSTR_VAL(name), ZSTR_VAL(outside));
+			zend_string_release_ex(outside, false);
 			return;
 		}
 	}
@@ -16771,25 +16748,6 @@ static void register_class_Sharp_Crossing(void)
 	ZVAL_LONG(&attribute->args[0].value, ZEND_ATTRIBUTE_TARGET_PROPERTY);
 }
 
-/* #[\Sharp\Internal\Internal], the mark the bridge puts on a member written `internal`, spec section 5, which runs as
- * public, so `methods()` and `properties()` give its `Visibility.Internal`, spec section 25. The engine declares it, as
- * #[\Sharp\Crossing], so plain PHP that makes an object of each attribute it reads makes one of it too, and reading
- * attributes of a class finds it without an autoloader. A parameter a constructor promotes carries it as PHP gives it
- * the property's attributes. */
-static void register_class_Sharp_Internal_Internal(void)
-{
-	zend_class_entry ce;
-
-	INIT_NS_CLASS_ENTRY(ce, "Sharp\\Internal", "Internal", NULL);
-	zend_class_entry *internal = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL);
-
-	zend_string *attribute_name = zend_string_init_interned("Attribute", sizeof("Attribute") - 1, true);
-	zend_attribute *attribute = zend_add_class_attribute(internal, attribute_name, 1);
-	zend_string_release(attribute_name);
-	ZVAL_LONG(&attribute->args[0].value,
-		ZEND_ATTRIBUTE_TARGET_METHOD | ZEND_ATTRIBUTE_TARGET_PROPERTY | ZEND_ATTRIBUTE_TARGET_PARAMETER);
-}
-
 /* Keeps the text of an error a call inside a ZEND_SHARP_SILENCE raises, which no error handler sees, for
  * Sharp_Internal_silencedWarning. */
 static void sharp_observe_error(int type, zend_string *file, uint32_t line, zend_string *message)
@@ -16835,7 +16793,6 @@ static PHP_MINIT_FUNCTION(sharp)
 	sharp_ce_struct = register_class_Sharp_Struct();
 	register_sharp_tables();
 	register_class_Sharp_Crossing();
-	register_class_Sharp_Internal_Internal();
 
 	register_class_Sharp_Container();
 	sharp_ce_container_error = register_class_Sharp_ContainerError(zend_ce_error);

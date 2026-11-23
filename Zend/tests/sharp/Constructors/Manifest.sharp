@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Manifest
+public class Manifest
 {
     public Manifest(public string name { get; }) { }
 

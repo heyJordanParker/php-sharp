@@ -13,7 +13,7 @@ import Lib.Probe;
 import Sharp.Interop.Import;
 import Symfony.Component.EventDispatcher.EventDispatcher;
 
-class Crossings
+public class Crossings
 {
     // Arr::isAssoc declares array, Arr::query declares no type and documents array, and Arr::wrap documents mixed.
     public static List<string> outward(Map<string, int> prices, Set<string> tags)

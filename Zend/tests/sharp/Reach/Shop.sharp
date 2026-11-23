@@ -1,6 +1,6 @@
 namespace Reach;
 
-class Shop
+public class Shop
 {
     public int views { get; internal set; } = 0;
     internal int stock { get; set; } = 0;

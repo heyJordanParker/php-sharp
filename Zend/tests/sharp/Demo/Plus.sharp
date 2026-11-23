@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Plus
+public class Plus
 {
     private string log = "log:";
 

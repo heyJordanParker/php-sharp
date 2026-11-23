@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Archive
+public class Archive
 {
     private static List<string> titles = [];
     private static Map<string, int> stock = [:];

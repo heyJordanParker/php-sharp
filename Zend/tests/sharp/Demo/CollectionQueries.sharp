@@ -2,7 +2,7 @@ namespace Demo;
 
 import Billing.Money;
 
-class CollectionQueries
+public class CollectionQueries
 {
     public static int? firstEven(List<int> values) => values.firstOrNull(value => value % 2 == 0);
 

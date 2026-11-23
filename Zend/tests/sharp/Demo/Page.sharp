@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Page
+public class Page
 {
     private string name = "";
     private int views = 0;

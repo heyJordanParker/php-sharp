@@ -2,7 +2,7 @@ namespace Demo;
 
 import Sharp.Encoding.Base64;
 
-class Base64Calls
+public class Base64Calls
 {
     public static string encode(Bytes data) => Base64.encode(data);
 

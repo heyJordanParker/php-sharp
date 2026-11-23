@@ -2,7 +2,7 @@ namespace Demo;
 
 import Lib.RowSet;
 
-class Grid
+public class Grid
 {
     public List<List<int>> rows { get; set; } = [[1, 2], [3]];
     public int writes { get; private set; } = 0;

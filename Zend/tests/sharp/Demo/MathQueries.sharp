@@ -1,6 +1,6 @@
 namespace Demo;
 
-class MathQueries
+public class MathQueries
 {
     public static List<float> logs(float x) => [Math.log10(x), Math.exp(x)];
 

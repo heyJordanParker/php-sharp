@@ -342,6 +342,16 @@ ZEND_API int zend_objects_not_comparable(zval *o1, zval *o2);
 
 ZEND_API bool zend_check_protected(const zend_class_entry *ce, const zend_class_entry *scope);
 
+/* PHP#: spec section 5's `internal`, see ZEND_ACC_SHARP_INTERNAL. */
+ZEND_API const zend_string *zend_sharp_frame_code_name(const zend_execute_data *frame);
+ZEND_API const zend_string *zend_sharp_code_name(const zend_class_entry *scope);
+ZEND_API bool zend_sharp_code_reaches_internal(const zend_class_entry *ce, const zend_string *code);
+ZEND_API bool zend_sharp_reaches_internal(const zend_class_entry *ce, const zend_class_entry *scope);
+ZEND_API ZEND_COLD zend_string *zend_sharp_code_outside_namespace(const zend_class_entry *ce, const zend_string *code);
+ZEND_API ZEND_COLD zend_string *zend_sharp_outside_namespace(const zend_class_entry *ce, const zend_class_entry *scope);
+ZEND_API bool zend_sharp_compiled_reaches(uint32_t flags, const zend_class_entry *ce, const zend_class_entry *scope);
+ZEND_API bool zend_sharp_creates(const zend_class_entry *ce, const zend_class_entry *scope);
+
 ZEND_API zend_result zend_check_property_access(const zend_object *zobj, zend_string *prop_info_name, bool is_dynamic);
 
 ZEND_API zend_function *zend_get_call_trampoline_func(const zend_class_entry *ce, zend_string *method_name, bool is_static);

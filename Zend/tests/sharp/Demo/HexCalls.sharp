@@ -2,7 +2,7 @@ namespace Demo;
 
 import Sharp.Encoding.Hex;
 
-class HexCalls
+public class HexCalls
 {
     public static string encode(Bytes data) => Hex.encode(data);
 

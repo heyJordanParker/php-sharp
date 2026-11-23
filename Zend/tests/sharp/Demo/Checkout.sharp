@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Checkout
+public class Checkout
 {
     public static string? host(string host)
     {

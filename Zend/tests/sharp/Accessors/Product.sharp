@@ -2,7 +2,7 @@ namespace Store;
 
 import InvalidArgumentException;
 
-class Product
+public class Product
 {
     public string sku { get; set; } = "";
     public string name { get => field; set => field = value.trim(); } = "";

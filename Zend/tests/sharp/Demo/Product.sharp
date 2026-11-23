@@ -6,7 +6,7 @@ import Lib.Field;
 
 [Entity(label: "Products", order: 2 * 3), Searchable]
 [Entity("Stock")]
-class Product
+public class Product
 {
     [Field] private int stock = 0;
     [Field(label: "Name", limit: Int.MAX)] public string name { get; set; } = "";

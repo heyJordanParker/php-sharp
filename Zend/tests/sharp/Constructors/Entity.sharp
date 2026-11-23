@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Entity
+public class Entity
 {
     public Entity(public string name { get; }) { }
 

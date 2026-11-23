@@ -146,7 +146,8 @@ static zend_always_inline bool zend_check_method_accessible(const zend_function 
 		return false;
 	}
 
-	return true;
+	/* PHP#: an `internal` method is public to PHP, and only code of its namespace and those below it reaches it. */
+	return !(fn->common.fn_flags & ZEND_ACC_SHARP_INTERNAL) || zend_sharp_reaches_internal(fn->common.scope, scope);
 }
 
 #endif /* ZEND_OBJECTS_H */

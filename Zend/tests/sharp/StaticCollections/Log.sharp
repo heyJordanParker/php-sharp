@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Log
+public class Log
 {
     private static List<string> events = [];
 

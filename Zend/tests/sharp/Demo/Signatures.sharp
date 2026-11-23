@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Signatures
+public class Signatures
 {
     private int|string receipt = "unpaid";
     public int|float amount { get; set; } = 0;

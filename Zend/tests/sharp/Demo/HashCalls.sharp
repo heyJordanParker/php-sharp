@@ -3,7 +3,7 @@ namespace Demo;
 import Sharp.Security.Hash;
 import Sharp.Security.Hmac;
 
-class HashCalls
+public class HashCalls
 {
     public static string of(string algorithm, Bytes data) => Hash.of(algorithm, data);
 

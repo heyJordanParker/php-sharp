@@ -1,6 +1,6 @@
 namespace Demo;
 
-enum Rank : int
+public enum Rank : int
 {
     case Low = -1;
     case Mid = 0;

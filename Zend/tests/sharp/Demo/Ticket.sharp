@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Ticket
+public class Ticket
 {
     public Ticket(private int price, public string code { get; }, public int seats { get; private set; }, int discount)
     {

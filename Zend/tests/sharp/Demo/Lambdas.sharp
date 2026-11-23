@@ -4,7 +4,7 @@ import Lib.Callbacks;
 import Lib.Probe;
 import OutOfRangeException;
 
-class Lambdas
+public class Lambdas
 {
     private int base = 10;
 

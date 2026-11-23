@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Shop
+public class Shop
 {
     public static float run(int amount)
     {

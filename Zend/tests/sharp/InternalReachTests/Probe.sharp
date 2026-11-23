@@ -1,0 +1,14 @@
+namespace Demo.InternalReach;
+
+// A class of a test folder that declares the namespace it tests, which reaches its internal members as code of that
+// namespace does, spec section 5.
+public final class Probe
+{
+    public static List<int> uses()
+    {
+        const ledger = new Ledger();
+        ledger.balance = 8;
+
+        return [ledger.total(), ledger.balance, Ledger.LIMIT, Ledger.doubled(6)];
+    }
+}

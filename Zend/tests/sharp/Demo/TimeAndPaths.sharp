@@ -6,7 +6,7 @@ import Sharp.Time.Instant;
 import Sharp.Time.TimeOfDay;
 import Sharp.Time.TimeZone;
 
-class TimeAndPaths
+public class TimeAndPaths
 {
     public static string written(int hour, int minute, int second, int nanosecond) => new TimeOfDay(hour, minute, second, nanosecond).toString();
 

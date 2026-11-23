@@ -3,7 +3,7 @@ namespace Demo;
 import Lib.Probe;
 import Lib.Standing;
 
-class Roster
+public class Roster
 {
     public static List<string> report(Map<Standing, int> members)
     {

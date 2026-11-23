@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Point
+public class Point
 {
     public int x { get; set; } = 0;
     public List<Point?> near { get; set; } = [];

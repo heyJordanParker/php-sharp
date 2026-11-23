@@ -4023,12 +4023,12 @@ static zend_always_inline bool zend_is_callable_check_func(zval *callable, zend_
 				}
 			}
 		}
-		if (!(fcc->function_handler->common.fn_flags & ZEND_ACC_PUBLIC) &&
+		if ((!(fcc->function_handler->common.fn_flags & ZEND_ACC_PUBLIC)
+		     || UNEXPECTED(fcc->function_handler->common.fn_flags & ZEND_ACC_SHARP_INTERNAL)) &&
 		    (fcc->calling_scope &&
 		     ((fcc->object && fcc->calling_scope->__call) ||
 		      (!fcc->object && fcc->calling_scope->__callstatic)))) {
 			scope = get_scope(frame);
-			ZEND_ASSERT(!(fcc->function_handler->common.fn_flags & ZEND_ACC_PUBLIC));
 			if (!zend_check_method_accessible(fcc->function_handler, scope)) {
 				retval = 0;
 				fcc->function_handler = NULL;
@@ -4089,15 +4089,23 @@ get_function_via_handler:
 				}
 			}
 			if (retval
-			 && !(fcc->function_handler->common.fn_flags & ZEND_ACC_PUBLIC)) {
+			 && (!(fcc->function_handler->common.fn_flags & ZEND_ACC_PUBLIC)
+			  || UNEXPECTED(fcc->function_handler->common.fn_flags & ZEND_ACC_SHARP_INTERNAL))) {
 				scope = get_scope(frame);
-				ZEND_ASSERT(!(fcc->function_handler->common.fn_flags & ZEND_ACC_PUBLIC));
 				if (!zend_check_method_accessible(fcc->function_handler, scope)) {
 					if (error) {
 						if (*error) {
 							efree(*error);
 						}
-						zend_spprintf(error, 0, "cannot access %s method %s::%s()", zend_visibility_string(fcc->function_handler->common.fn_flags), ZSTR_VAL(fcc->calling_scope->name), ZSTR_VAL(fcc->function_handler->common.function_name));
+						if (fcc->function_handler->common.fn_flags & ZEND_ACC_SHARP_INTERNAL) {
+							zend_string *outside = zend_sharp_outside_namespace(fcc->function_handler->common.scope, scope);
+							zend_spprintf(error, 0, "cannot access internal method %s::%s()%s",
+								ZSTR_VAL(fcc->function_handler->common.scope->name),
+								ZSTR_VAL(fcc->function_handler->common.function_name), ZSTR_VAL(outside));
+							zend_string_release_ex(outside, false);
+						} else {
+							zend_spprintf(error, 0, "cannot access %s method %s::%s()", zend_visibility_string(fcc->function_handler->common.fn_flags), ZSTR_VAL(fcc->calling_scope->name), ZSTR_VAL(fcc->function_handler->common.function_name));
+						}
 					}
 					retval = 0;
 				}

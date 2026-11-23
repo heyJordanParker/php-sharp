@@ -1,5 +1,5 @@
 --TEST--
-Class<T>.methods(), properties() and fields() give each member's declaring class and visibility, a method's `isStatic`, and a parameter's `isVariadic`, `hasConstantDefault` and a default that runs no code, refusing one that runs code with no object created, for a PHP# class and a plain PHP class, inherited members included, fields() gives each of a plain PHP class's properties that declares no hook at every visibility, a Field refuses a receiver whose class declares its property again with hooks and runs neither, and plain PHP still reaches an `internal` member as public
+Class<T>.methods(), properties() and fields() give each member's declaring class and visibility, a method's `isStatic`, and a parameter's `isVariadic`, `hasConstantDefault` and a default that runs no code, refusing one that runs code with no object created, for a PHP# class and a plain PHP class, inherited members included, fields() gives each of a plain PHP class's properties that declares no hook at every visibility, a Field refuses a receiver whose class declares its property again with hooks and runs neither, and PHP gives an `internal` member as public with no attribute, while plain PHP outside its namespace can't call it
 --FILE--
 <?php
 require __DIR__ . '/harness/MemberFacts.inc';
@@ -16,11 +16,15 @@ var_dump(App\Facts\Facts::refusedDefaults());try {
     echo $error->getMessage(), "\n";
 }
 
-// `internal` is a rule of the checker, so plain PHP reaches the member as public, and reads its mark.
+// PHP runs an `internal` member as public, and the engine holds it to its namespace by its flag, spec section 5.
 $total = new ReflectionMethod(App\Facts\Ledger::class, 'total');
 var_dump($total->isPublic(), (new ReflectionProperty(App\Facts\Ledger::class, 'code'))->isPublic());
-var_dump(array_map(static fn (ReflectionAttribute $attribute): string => $attribute->getName(), $total->getAttributes()));
-var_dump($total->getAttributes()[0]->newInstance() instanceof Sharp\Internal\Internal);
+var_dump($total->getAttributes());
+try {
+    App\Facts\Ledger::open()->total();
+} catch (Error $error) {
+    echo $error->getMessage(), "\n";
+}
 ?>
 --EXPECT--
 property App.Facts.Ledger.code Internal
@@ -62,8 +66,6 @@ array(3) {
 `defaultValue` reads a parameter that has a default, and `depth` of `reset` has none.
 bool(true)
 bool(true)
-array(1) {
-  [0]=>
-  string(23) "Sharp\Internal\Internal"
+array(0) {
 }
-bool(true)
+Call to internal method App\Facts\Ledger::total() from global scope, outside namespace App\Facts

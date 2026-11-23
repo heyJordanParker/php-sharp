@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Calc
+public class Calc
 {
     public static int make(int start)
     {

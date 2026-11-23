@@ -263,7 +263,11 @@ typedef struct _zend_oparray_context {
 /* has #[\Override] attribute                             |     |     |     */
 #define ZEND_ACC_OVERRIDE                (1 << 28) /*     |  X  |  X  |     */
 /*                                                        |     |     |     */
-/* Property Flags (unused: 17-27,29-31)                   |     |     |     */
+/* PHP#: an `internal` member, public to PHP, which only  |     |     |     */
+/* code of its namespace and those below it reaches       |     |     |     */
+#define ZEND_ACC_SHARP_INTERNAL          (1 << 30) /*     |  X  |  X  |  X  */
+/*                                                        |     |     |     */
+/* Property Flags (unused: 17-27,29,31)                   |     |     |     */
 /* ===========                                            |     |     |     */
 /*                                                        |     |     |     */
 /* Promoted property / parameter                          |     |     |     */
@@ -365,7 +369,7 @@ typedef struct _zend_oparray_context {
 /* are the SHARP_CLASS_* of Zend/zend.h, which            |     |     |     */
 /* zend_object_handlers.h reads before this file          |     |     |     */
 /*                                                        |     |     |     */
-/* Function Flags (unused: 30)                            |     |     |     */
+/* Function Flags (unused: none)                          |     |     |     */
 /* ==============                                         |     |     |     */
 /*                                                        |     |     |     */
 /* Function returning by reference                        |     |     |     */
@@ -1195,6 +1199,17 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  * static a generic PHP# class keeps each type argument's own statics in.
  *   flags of zend_property_info                              upstream: the ZEND_ACC_* property flags
  *
+ * ZEND_ACC_SHARP_INTERNAL: a member written `internal`, spec section 5, which PHP runs as public. Only code of its
+ * class's namespace and of the namespaces below it reaches it: a method, a property or a constant lookup, a callable
+ * and `new` check it where they check `private`, through zend_sharp_reaches_internal, and cache the lookup as they
+ * cache a private one, so a lookup the engine already made pays nothing.
+ *   fn_flags of zend_function, flags of zend_property_info,
+ *   and the flags of zend_class_constant                       upstream: the ZEND_ACC_* member flags
+ *
+ * ZEND_SHARP_INTERNAL_MEMBER: the ZEND_ACC_SHARP_INTERNAL of a property, a constant or a promoted parameter, which
+ * sharp_translate gives the 16 bits of the node's attr in its place, and the compiler turns back into it.
+ *   attr of ZEND_AST_PROP_GROUP, ZEND_AST_CLASS_CONST_GROUP and ZEND_AST_PARAM   upstream: no such flag
+ *
  * ZEND_ACC_SHARP_TYPED: the property has a PHP# type, its sharp_type, which every write from plain PHP checks. A write
  * tests this flag before it looks for the object, and the JIT's helpers test it with readonly and asymmetric visibility
  * in one test, so a plain PHP property pays at most one bit test for the check. A write into what the property holds,
@@ -1237,6 +1252,13 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
 #define ZEND_SHARP_OPERATOR	(1<<30)
 #define ZEND_SHARP_RESULT_CROSSES	(1<<0)
 #define ZEND_SHARP_RESULT_CALLER_CHECKED	(1<<1)
+#define ZEND_SHARP_INTERNAL_MEMBER	(1<<14)
+
+ZEND_STATIC_ASSERT(ZEND_SHARP_INTERNAL_MEMBER <= UINT16_MAX, "ZEND_SHARP_INTERNAL_MEMBER fits the attr of a zend_ast");
+ZEND_STATIC_ASSERT(!(ZEND_SHARP_INTERNAL_MEMBER & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_SET_MASK|ZEND_ACC_STATIC|ZEND_ACC_FINAL
+		|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_FIELD|ZEND_ACC_SHARP_HIDDEN|ZEND_PARAM_REF|ZEND_PARAM_VARIADIC
+		|ZEND_PARAM_WIDENED)),
+	"ZEND_SHARP_INTERNAL_MEMBER overlaps a flag of the attr of ZEND_AST_PROP_GROUP, ZEND_AST_CLASS_CONST_GROUP or ZEND_AST_PARAM");
 
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR_SYNTAX & UINT8_MAX),
 	"ZEND_SHARP_OPERATOR_SYNTAX overlaps the opcode in the attr of ZEND_AST_BINARY_OP");
@@ -1268,6 +1290,22 @@ ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_CROSSING & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_S
 		|ZEND_ACC_FINAL|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_PROMOTED|ZEND_ACC_VIRTUAL|ZEND_ACC_DEPRECATED
 		|ZEND_ACC_OVERRIDE|ZEND_ACC_SHARP_HIDDEN|ZEND_ACC_SHARP_TYPED|ZEND_ACC_FIELD)),
 	"ZEND_ACC_SHARP_CROSSING overlaps a ZEND_ACC_* flag in the flags of zend_property_info");
+ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_INTERNAL & (ZEND_ACC_PPP_MASK|ZEND_ACC_CHANGED|ZEND_ACC_STATIC|ZEND_ACC_FINAL
+		|ZEND_ACC_ABSTRACT|ZEND_ACC_DEPRECATED|ZEND_ACC_OVERRIDE|ZEND_ACC_RETURN_REFERENCE|ZEND_ACC_HAS_RETURN_TYPE
+		|ZEND_ACC_VARIADIC|ZEND_ACC_HAS_FINALLY_BLOCK|ZEND_ACC_EARLY_BINDING|ZEND_ACC_USES_THIS
+		|ZEND_ACC_CALL_VIA_TRAMPOLINE|ZEND_ACC_NEVER_CACHE|ZEND_ACC_TRAIT_CLONE|ZEND_ACC_CTOR|ZEND_ACC_CLOSURE
+		|ZEND_ACC_FAKE_CLOSURE|ZEND_ACC_GENERATOR|ZEND_ACC_DONE_PASS_TWO|ZEND_ACC_HEAP_RT_CACHE
+		|ZEND_ACC_COMPILE_TIME_EVAL|ZEND_ACC_PTR_OPS|ZEND_ACC_NODISCARD|ZEND_ACC_STRICT_TYPES|ZEND_ACC_IMMUTABLE
+		|ZEND_ACC_HAS_TYPE_HINTS|ZEND_ACC_TOP_LEVEL|ZEND_ACC_PRELOADED)),
+	"ZEND_ACC_SHARP_INTERNAL overlaps a ZEND_ACC_* flag in the fn_flags of zend_function");
+ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_INTERNAL & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_SET_MASK
+		|ZEND_ACC_CHANGED|ZEND_ACC_STATIC|ZEND_ACC_FINAL|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_PROMOTED
+		|ZEND_ACC_VIRTUAL|ZEND_ACC_DEPRECATED|ZEND_ACC_OVERRIDE|ZEND_ACC_SHARP_HIDDEN|ZEND_ACC_SHARP_TYPED
+		|ZEND_ACC_FIELD|ZEND_ACC_SHARP_CROSSING)),
+	"ZEND_ACC_SHARP_INTERNAL overlaps a ZEND_ACC_* flag in the flags of zend_property_info");
+ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_INTERNAL & (ZEND_ACC_PPP_MASK|ZEND_ACC_FINAL|ZEND_CLASS_CONST_IS_CASE
+		|ZEND_ACC_DEPRECATED)),
+	"ZEND_ACC_SHARP_INTERNAL overlaps a ZEND_ACC_* flag in the flags of zend_class_constant");
 ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_GENERIC & (ZEND_ACC_INTERFACE|ZEND_ACC_TRAIT|ZEND_ACC_ANON_CLASS|ZEND_ACC_LINKED
 		|ZEND_ACC_IMPLICIT_ABSTRACT_CLASS|ZEND_ACC_FINAL|ZEND_ACC_EXPLICIT_ABSTRACT_CLASS|ZEND_ACC_IMMUTABLE
 		|ZEND_ACC_HAS_TYPE_HINTS|ZEND_ACC_TOP_LEVEL|ZEND_ACC_PRELOADED|ZEND_ACC_DEPRECATED|ZEND_ACC_CONSTANTS_UPDATED

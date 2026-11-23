@@ -2,7 +2,7 @@ namespace Demo;
 
 import Illuminate.Support.Collection;
 
-class SalesReport : Collection<int, int>
+public class SalesReport : Collection<int, int>
 {
     public SalesReport(int id) : super([id]) { }
 }

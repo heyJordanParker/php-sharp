@@ -8025,7 +8025,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_CLASS_C
 			c = Z_PTR_P(zv);
 			scope = EX(func)->op_array.scope;
 			if (!zend_verify_const_access(c, scope)) {
-				zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)), ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
+				zend_bad_class_constant_access(c, ce->name, constant_name, scope);
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 
 
@@ -9319,7 +9319,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_CLASS_C
 			c = Z_PTR_P(zv);
 			scope = EX(func)->op_array.scope;
 			if (!zend_verify_const_access(c, scope)) {
-				zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)), ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
+				zend_bad_class_constant_access(c, ce->name, constant_name, scope);
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				FREE_OP(opline->op2_type, opline->op2.var);
 				HANDLE_EXCEPTION();
@@ -11087,7 +11087,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_CONS
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
 			ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-			if (UNEXPECTED(ce == NULL)) {
+			/* PHP#: the code of an opline never changes, so a class it reaches is cached once checked. */
+			if (UNEXPECTED(ce == NULL) || UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				HANDLE_EXCEPTION();
 			}
@@ -11106,6 +11107,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_CONS
 	}
 
 	result = EX_VAR(opline->result.var);
+	if (IS_CONST != IS_CONST && UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
+		ZVAL_UNDEF(result);
+		HANDLE_EXCEPTION();
+	}
 	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
@@ -11722,7 +11727,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_CONS
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
 			ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-			if (UNEXPECTED(ce == NULL)) {
+			/* PHP#: the code of an opline never changes, so a class it reaches is cached once checked. */
+			if (UNEXPECTED(ce == NULL) || UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				HANDLE_EXCEPTION();
 			}
@@ -11741,6 +11747,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_CONS
 	}
 
 	result = EX_VAR(opline->result.var);
+	if (IS_CONST != IS_CONST && UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
+		ZVAL_UNDEF(result);
+		HANDLE_EXCEPTION();
+	}
 	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
@@ -27429,7 +27439,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_CLASS_C
 			c = Z_PTR_P(zv);
 			scope = EX(func)->op_array.scope;
 			if (!zend_verify_const_access(c, scope)) {
-				zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)), ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
+				zend_bad_class_constant_access(c, ce->name, constant_name, scope);
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 
 
@@ -28068,7 +28078,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_CLASS_C
 			c = Z_PTR_P(zv);
 			scope = EX(func)->op_array.scope;
 			if (!zend_verify_const_access(c, scope)) {
-				zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)), ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
+				zend_bad_class_constant_access(c, ce->name, constant_name, scope);
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				FREE_OP(opline->op2_type, opline->op2.var);
 				HANDLE_EXCEPTION();
@@ -30633,7 +30643,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_VAR_
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
 			ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-			if (UNEXPECTED(ce == NULL)) {
+			/* PHP#: the code of an opline never changes, so a class it reaches is cached once checked. */
+			if (UNEXPECTED(ce == NULL) || UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				HANDLE_EXCEPTION();
 			}
@@ -30652,6 +30663,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_VAR_
 	}
 
 	result = EX_VAR(opline->result.var);
+	if (IS_VAR != IS_CONST && UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
+		ZVAL_UNDEF(result);
+		HANDLE_EXCEPTION();
+	}
 	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
@@ -32336,7 +32351,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_VAR_
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
 			ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-			if (UNEXPECTED(ce == NULL)) {
+			/* PHP#: the code of an opline never changes, so a class it reaches is cached once checked. */
+			if (UNEXPECTED(ce == NULL) || UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				HANDLE_EXCEPTION();
 			}
@@ -32355,6 +32371,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_VAR_
 	}
 
 	result = EX_VAR(opline->result.var);
+	if (IS_VAR != IS_CONST && UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
+		ZVAL_UNDEF(result);
+		HANDLE_EXCEPTION();
+	}
 	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
@@ -37485,7 +37505,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_CLASS_C
 			c = Z_PTR_P(zv);
 			scope = EX(func)->op_array.scope;
 			if (!zend_verify_const_access(c, scope)) {
-				zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)), ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
+				zend_bad_class_constant_access(c, ce->name, constant_name, scope);
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 
 
@@ -37866,7 +37886,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_CLASS_C
 			c = Z_PTR_P(zv);
 			scope = EX(func)->op_array.scope;
 			if (!zend_verify_const_access(c, scope)) {
-				zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)), ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
+				zend_bad_class_constant_access(c, ce->name, constant_name, scope);
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				FREE_OP(opline->op2_type, opline->op2.var);
 				HANDLE_EXCEPTION();
@@ -39869,7 +39889,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_UNUS
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
 			ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-			if (UNEXPECTED(ce == NULL)) {
+			/* PHP#: the code of an opline never changes, so a class it reaches is cached once checked. */
+			if (UNEXPECTED(ce == NULL) || UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				HANDLE_EXCEPTION();
 			}
@@ -39888,6 +39909,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_UNUS
 	}
 
 	result = EX_VAR(opline->result.var);
+	if (IS_UNUSED != IS_CONST && UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
+		ZVAL_UNDEF(result);
+		HANDLE_EXCEPTION();
+	}
 	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
@@ -40301,7 +40326,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_UNUS
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
 			ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-			if (UNEXPECTED(ce == NULL)) {
+			/* PHP#: the code of an opline never changes, so a class it reaches is cached once checked. */
+			if (UNEXPECTED(ce == NULL) || UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				HANDLE_EXCEPTION();
 			}
@@ -40320,6 +40346,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_UNUS
 	}
 
 	result = EX_VAR(opline->result.var);
+	if (IS_UNUSED != IS_CONST && UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
+		ZVAL_UNDEF(result);
+		HANDLE_EXCEPTION();
+	}
 	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
@@ -65700,7 +65730,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_CLASS_CONSTA
 			c = Z_PTR_P(zv);
 			scope = EX(func)->op_array.scope;
 			if (!zend_verify_const_access(c, scope)) {
-				zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)), ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
+				zend_bad_class_constant_access(c, ce->name, constant_name, scope);
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 
 
@@ -66994,7 +67024,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_CLASS_CONSTA
 			c = Z_PTR_P(zv);
 			scope = EX(func)->op_array.scope;
 			if (!zend_verify_const_access(c, scope)) {
-				zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)), ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
+				zend_bad_class_constant_access(c, ce->name, constant_name, scope);
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				FREE_OP(opline->op2_type, opline->op2.var);
 				HANDLE_EXCEPTION();
@@ -68762,7 +68792,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_CONST_TMP
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
 			ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-			if (UNEXPECTED(ce == NULL)) {
+			/* PHP#: the code of an opline never changes, so a class it reaches is cached once checked. */
+			if (UNEXPECTED(ce == NULL) || UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				HANDLE_EXCEPTION();
 			}
@@ -68781,6 +68812,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_CONST_TMP
 	}
 
 	result = EX_VAR(opline->result.var);
+	if (IS_CONST != IS_CONST && UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
+		ZVAL_UNDEF(result);
+		HANDLE_EXCEPTION();
+	}
 	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
@@ -69295,7 +69330,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_CONST_UNU
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
 			ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-			if (UNEXPECTED(ce == NULL)) {
+			/* PHP#: the code of an opline never changes, so a class it reaches is cached once checked. */
+			if (UNEXPECTED(ce == NULL) || UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				HANDLE_EXCEPTION();
 			}
@@ -69314,6 +69350,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_CONST_UNU
 	}
 
 	result = EX_VAR(opline->result.var);
+	if (IS_CONST != IS_CONST && UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
+		ZVAL_UNDEF(result);
+		HANDLE_EXCEPTION();
+	}
 	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
@@ -84902,7 +84942,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_CLASS_CONSTA
 			c = Z_PTR_P(zv);
 			scope = EX(func)->op_array.scope;
 			if (!zend_verify_const_access(c, scope)) {
-				zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)), ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
+				zend_bad_class_constant_access(c, ce->name, constant_name, scope);
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 
 
@@ -85541,7 +85581,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_CLASS_CONSTA
 			c = Z_PTR_P(zv);
 			scope = EX(func)->op_array.scope;
 			if (!zend_verify_const_access(c, scope)) {
-				zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)), ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
+				zend_bad_class_constant_access(c, ce->name, constant_name, scope);
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				FREE_OP(opline->op2_type, opline->op2.var);
 				HANDLE_EXCEPTION();
@@ -88106,7 +88146,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_VAR_TMP_T
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
 			ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-			if (UNEXPECTED(ce == NULL)) {
+			/* PHP#: the code of an opline never changes, so a class it reaches is cached once checked. */
+			if (UNEXPECTED(ce == NULL) || UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				HANDLE_EXCEPTION();
 			}
@@ -88125,6 +88166,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_VAR_TMP_T
 	}
 
 	result = EX_VAR(opline->result.var);
+	if (IS_VAR != IS_CONST && UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
+		ZVAL_UNDEF(result);
+		HANDLE_EXCEPTION();
+	}
 	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
@@ -89809,7 +89854,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_VAR_UNUSE
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
 			ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-			if (UNEXPECTED(ce == NULL)) {
+			/* PHP#: the code of an opline never changes, so a class it reaches is cached once checked. */
+			if (UNEXPECTED(ce == NULL) || UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				HANDLE_EXCEPTION();
 			}
@@ -89828,6 +89874,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_VAR_UNUSE
 	}
 
 	result = EX_VAR(opline->result.var);
+	if (IS_VAR != IS_CONST && UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
+		ZVAL_UNDEF(result);
+		HANDLE_EXCEPTION();
+	}
 	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
@@ -94958,7 +95008,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_CLASS_CONSTA
 			c = Z_PTR_P(zv);
 			scope = EX(func)->op_array.scope;
 			if (!zend_verify_const_access(c, scope)) {
-				zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)), ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
+				zend_bad_class_constant_access(c, ce->name, constant_name, scope);
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 
 
@@ -95339,7 +95389,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_CLASS_CONSTA
 			c = Z_PTR_P(zv);
 			scope = EX(func)->op_array.scope;
 			if (!zend_verify_const_access(c, scope)) {
-				zend_throw_error(NULL, "Cannot access %s constant %s::%s", zend_visibility_string(ZEND_CLASS_CONST_FLAGS(c)), ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
+				zend_bad_class_constant_access(c, ce->name, constant_name, scope);
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				FREE_OP(opline->op2_type, opline->op2.var);
 				HANDLE_EXCEPTION();
@@ -97342,7 +97392,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_UNUSED_TM
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
 			ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-			if (UNEXPECTED(ce == NULL)) {
+			/* PHP#: the code of an opline never changes, so a class it reaches is cached once checked. */
+			if (UNEXPECTED(ce == NULL) || UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				HANDLE_EXCEPTION();
 			}
@@ -97361,6 +97412,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_UNUSED_TM
 	}
 
 	result = EX_VAR(opline->result.var);
+	if (IS_UNUSED != IS_CONST && UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
+		ZVAL_UNDEF(result);
+		HANDLE_EXCEPTION();
+	}
 	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
@@ -97774,7 +97829,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_UNUSED_UN
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
 			ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
-			if (UNEXPECTED(ce == NULL)) {
+			/* PHP#: the code of an opline never changes, so a class it reaches is cached once checked. */
+			if (UNEXPECTED(ce == NULL) || UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
 				HANDLE_EXCEPTION();
 			}
@@ -97793,6 +97849,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_UNUSED_UN
 	}
 
 	result = EX_VAR(opline->result.var);
+	if (IS_UNUSED != IS_CONST && UNEXPECTED(!zend_sharp_creates(ce, EX(func)->op_array.scope))) {
+		ZVAL_UNDEF(result);
+		HANDLE_EXCEPTION();
+	}
 	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();

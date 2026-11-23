@@ -4,10 +4,19 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Upgrading from 0.6.53
+
+- Write `public` each class that plain PHP outside its namespace creates or calls, a test's top-level code and a framework that resolves a method by name included, and each `internal` member such code uses, or move that code into the namespace: the engine now refuses such a use with `Error`, where 0.6.53 ran it as public.
+- Require the project's Composer autoloader first in a preload file you write yourself, as the `.sharp/preload.php` that `mago compile` writes does: preloaded code that calls `toBytes()` on a `string`, an `int` or a `List<int>` now runs a method of the standard library, which the autoloader loads, where 0.6.53 ran a copy of its body.
+
 ### Fixed
 
 - A law over a machine's `match (this)` whose last arm names the other cases with `or` proves within its time again, spec sections 20 and 28, as in 0.6.49. So beside a machine of seven cases with `public bool charges() => match (this) { PlanState.Trial => true, PlanState.Live live => !live.stopsAtEnd, PlanState.Draft or PlanState.Held or PlanState.Overdue or PlanState.Lapsed or PlanState.Closed => false };` and a `chargeable()` whose `or` arm calls `this.charges()`, `law anOverduePlanIsChargeable(Instant chargeAt, Instant retryAt, string why, Instant failedAt) => PlanState.enter().start(chargeAt).lapse(retryAt, 2, why, failedAt).chargeable();` proves with 8,682 thousand heartbeats, where 0.6.52 refused it with "the proof ran out of time before it finished". Each case of an `or` arm is an arm of the `match` on its own, with the arm's branch, where 0.6.52 wrote the whole `or` again for each case an arm before it left out, so `charges` took 12,826 characters of Lean, where 0.6.49's took 940 and now 537. A law over a 9-case `match` of the same shape proves with 4,653 thousand heartbeats, where the translation before this fix took 61,513.
 - A compile proves each law on a thread of its own, so a file's laws prove beside each other, where 0.6.52 proved a file's laws one after another, and a compile whose slowest laws shared a few files proved on about one core. So the 13 laws of four machines, five of them over one machine's `at`, prove in a laws phase of 52 to 80 s, where 0.6.52 took 101 to 197 s and refused one machine, and the 11 of them that 0.6.49 proves take 38 to 45 processor seconds where 0.6.49 took 75 to 78, in alternating rounds.
+
+### Changed
+
+- The engine holds `internal` when the code runs, spec section 5: a call, a property read or write, a constant, and a callable string or array that `call_user_func` or `Closure::fromCallable` resolves reach an `internal` member only from its namespace and the namespaces below it, plain PHP and PHP# alike, and so does `new` of an `internal` class, where 0.6.53 ran them as public and only the checker refused a use. A member written `internal` is held, and so is a `public` member of an `internal` class, unless it replaces a member of a parent class or an interface that reaches further. A file's top-level code counts as the global namespace. So plain PHP's `$ledger->total()` from outside `App.Billing` throws "Call to internal method App\Billing\Ledger::total() from global scope, outside namespace App\Billing", and `new Ledger()` throws "Cannot instantiate internal class App\Billing\Ledger from global scope, outside namespace App\Billing", as does a PHP# name the checker can't follow that plain PHP calls. The engine checks where it checks `private` and keeps the outcome where it keeps that one's, so a use it already allowed costs nothing more. `Property.get` and `set`, and `Method.createInvoker` and `createDelegate`, refuse plain PHP outside the namespace too. The `#[\Sharp\Internal\Internal]` attribute is gone: reflection reads `Visibility.Internal` from the member's flag. An `internal set` still runs as a public one.
 
 ## [0.6.53] - 2026-11-23
 

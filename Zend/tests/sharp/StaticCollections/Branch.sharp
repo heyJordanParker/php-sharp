@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Branch : Archive
+public class Branch : Archive
 {
     public static List<string> stack(string title)
     {

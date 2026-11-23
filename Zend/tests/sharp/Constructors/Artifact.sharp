@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Artifact : Entity
+public class Artifact : Entity
 {
     public string seen { get; set; } = "";
 

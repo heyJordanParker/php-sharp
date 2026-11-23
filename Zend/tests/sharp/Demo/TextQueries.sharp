@@ -2,7 +2,7 @@ namespace Demo;
 
 import Sharp.Text.NormalizationForm;
 
-class TextQueries
+public class TextQueries
 {
     public static List<int> compared(string text, string other)
         => [text.compareTo(other), text.compareTo(other, ignoreCase: true)];

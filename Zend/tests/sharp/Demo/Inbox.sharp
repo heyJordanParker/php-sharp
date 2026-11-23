@@ -4,7 +4,7 @@ import Illuminate.Database.Eloquent.Casts.Json;
 import Illuminate.Support.Arr;
 
 // Arr::get() and Json::encode() take and give mixed.
-class Inbox
+public class Inbox
 {
     private Any first = "none";
     private Map<string, Any?> saved = [:];

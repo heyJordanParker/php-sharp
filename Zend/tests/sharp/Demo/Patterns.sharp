@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Patterns
+public class Patterns
 {
     public float area(Figure shape)
     {

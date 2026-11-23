@@ -9,7 +9,7 @@ import Sharp.Time.Instant;
 import Sharp.Time.TimeZone;
 import Symfony.Component.Clock.MockClock;
 
-class DateCalls
+public class DateCalls
 {
     public static string day(int year, int month, int day) => new Date(year, month, day).toString();
 

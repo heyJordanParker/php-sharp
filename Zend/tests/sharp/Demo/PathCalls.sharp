@@ -2,7 +2,7 @@ namespace Demo;
 
 import Sharp.IO.Path;
 
-class PathCalls
+public class PathCalls
 {
     public static string fileName(string path) => Path.fileName(path);
 

@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Inventory
+public class Inventory
 {
     private Stock first = new Stock(Stock.start());
     public int size { get; } = Stock.start() * 2;

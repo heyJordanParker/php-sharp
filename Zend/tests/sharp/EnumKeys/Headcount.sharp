@@ -4,7 +4,7 @@ import Lib.Code;
 import Lib.Size;
 import Lib.Standing;
 
-class Headcount
+public class Headcount
 {
     private Map<Standing, int> counts = [:];
     private Map<Standing, int> seeded = [Standing.Active: 0];

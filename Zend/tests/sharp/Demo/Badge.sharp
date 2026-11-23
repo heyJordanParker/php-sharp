@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Badge
+public class Badge
 {
     public string label { get; } = "new";
 

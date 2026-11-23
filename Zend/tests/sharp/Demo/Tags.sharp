@@ -1,6 +1,6 @@
 namespace Demo;
 
-class Tags
+public class Tags
 {
     public static List<string> of(string|List<string> value)
     {
