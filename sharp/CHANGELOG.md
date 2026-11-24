@@ -4,6 +4,12 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.56] - 2026-11-24
+
+### Fixed
+
+- A union of PHP# types that share one PHP type loads, spec section 24: a `Map<string, Any?>|List<Any?>` result, a `List<int>|List<string>` parameter or field and a `Bytes|string` parameter compile to a type that names PHP's `array` or `string` once, where 0.6.54 compiled them and loading the class failed with "Duplicate type array is redundant" or "Duplicate type string is redundant". Plain PHP passes either PHP type, and PHP# checks each member as written.
+
 ## [0.6.55] - 2026-11-24
 
 ### Upgrading from 0.6.54
@@ -1852,7 +1858,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.55...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.56...HEAD
+[0.6.56]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.55...v0.6.56
 [0.6.55]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.54...v0.6.55
 [0.6.54]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.53...v0.6.54
 [0.6.53]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.52...v0.6.53
