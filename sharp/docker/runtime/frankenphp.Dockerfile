@@ -335,7 +335,7 @@ RUN set -eux; \
 
 WORKDIR /go/src/app
 COPY --link --from=tools /runtime/frankenphp/ ./
-# A fetch from proxy.golang.org can fail on the network alone, as 0.6.25's arm64 build failed with "stream error:
+# A fetch from proxy.golang.org can fail on the network alone, as a release's arm64 build failed with "stream error:
 # stream ID 1; INTERNAL_ERROR; received from peer", so the download retries, as .github/actions/setup-lean retries
 # Lean's. go.sum checks every module it fetched, and a retry fetches only the modules still missing.
 RUN for attempt in 1 2 3; do \

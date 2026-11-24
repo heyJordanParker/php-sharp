@@ -7,7 +7,7 @@ require __DIR__ . '/vendor/autoload.php';
 
 use Demo\Library;
 
-// 0.6.41 let each result in unchecked, and Cache.set failed reading `.data` of it. A string crosses into `Bytes` as
+// A release let each result in unchecked, and Cache.set failed reading `.data` of it. A string crosses into `Bytes` as
 // its bytes, as an argument does, and a closure kept for `() => string` is checked for `() => Bytes` where it crosses
 // again.
 $path = sys_get_temp_dir() . '/sharp-closure-crossing-' . getmypid() . '.sqlite';
@@ -23,7 +23,7 @@ var_dump($cache->getOrCreate('text', fn () => 'text'));
 unset($cache);
 unlink($path);
 
-// 0.6.41 kept the byte E9, so the text was not UTF-8.
+// That release kept the byte E9, so the text was not UTF-8.
 $made = Library::made(fn () => "caf\xE9");
 var_dump(mb_strlen($made), bin2hex($made), Library::made(fn (): string => 'café'));
 ?>

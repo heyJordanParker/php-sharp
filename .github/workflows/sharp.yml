@@ -18,24 +18,22 @@ permissions:
 # Every lane pushes the checkout's master tip to its branch, so the newest lane pull request's run tests every commit
 # below it. So every lane pull request's run joins one group, lanes, where GitHub keeps one run in progress and only the
 # newest pending one: a push cancels the run it replaced while that run waits, and no lower pull request's run waits for
-# the Mac, which was busy 99% of 12 hours while 0.6.54's path from green to published held 6 Mac jobs one after another.
+# the Mac, which was busy 99% of 12 hours while a release's path from green to published held 6 Mac jobs one after another.
 # A run in progress finishes and lands every commit below it: four lanes push about every half hour, and the Mac job
-# runs 35 to 50 minutes, so a push that cancelled it would let no landing run finish. A release/ pull request's run joins
-# release, and a spec/ pull request's, off origin/master and on no stack, a group of its own, where a push cancels its
-# run in progress, since each holds only its own change. master runs one push at a time, and only the newest push waits,
+# runs 35 to 50 minutes, so a push that cancelled it would let no landing run finish. A spec/ pull request's run, off
+# origin/master and on no stack, joins a group of its own, where a push cancels its run in progress, since it holds only
+# its own change. master runs one push at a time, and only the newest push waits,
 # since its tree holds every commit before it, and a push lets its run finish, since the run publishes. A failed job
 # cancels a pull request's run and a merge queue's run, which can no longer pass, as .github/actions/cancel-failed-run
 # explains. Each merge queue entry, schedule and dispatch runs in a group of its own.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event_name == 'pull_request'
-      && (startsWith(github.head_ref, 'release/') && 'release'
-        || startsWith(github.head_ref, 'spec/') && github.event.pull_request.url
-        || 'lanes')
+      && (startsWith(github.head_ref, 'spec/') && github.event.pull_request.url || 'lanes')
       || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: >-
     ${{ github.event_name == 'pull_request'
-      && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'spec/')) }}
+      && startsWith(github.head_ref, 'spec/') }}
 jobs:
   # CI_PASSED is this workflow's one required check. Every pull request's push and every merge queue entry runs every
   # check, whatever it changed: the Linux suites, each job on 4 cores, the Mac's and the runtime image, so every check
@@ -44,8 +42,8 @@ jobs:
   #
   # Every run builds and tests everything from source, with no cache and no result of an earlier run, so its length is
   # what building and testing PHP# costs (#721): a pull request, its merge queue entry and the push to master each run
-  # every check, the Mac's among them. Only a push to master whose version has no tag builds the release, and publishes it
-  # once every check passed. A red push opens an issue, as CI_PASSED does, for a pull request that fixes it forward.
+  # every check, the Mac's among them. Only a push to master builds a release, the next version, and publishes it once
+  # every check passed. A red push opens an issue, as CI_PASSED does, for a pull request that fixes it forward.
   CHANGES:
     if: &checked ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
     runs-on: ubuntu-24.04
@@ -58,6 +56,7 @@ jobs:
       base: ${{ steps.base.outputs.sha }}
       bump: ${{ steps.version.outputs.bump }}
       missing: ${{ steps.version.outputs.missing }}
+      pulls: ${{ steps.version.outputs.pulls }}
       tagged: ${{ steps.version.outputs.tagged }}
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -65,10 +64,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-      # sharp/bin/check --release prints sharp/mago/Cargo.toml's version, the commit its tag names, which
-      # sharp/bin/tag creates, and each part of its release not published yet, which RELEASE publishes, as
-      # sharp/bin/check --release explains. Pushes to master run one at a time, so the next push looks once this one has
-      # published.
+      # sharp/bin/check --release prints the version this push releases: its tag's, when a tag already names the commit,
+      # or else the newest tag's plus one, and the pull requests merged since that tag, and each part of the release not
+      # published yet, which RELEASE publishes, as sharp/bin/check --release explains. Pushes to master run one at a
+      # time, so the next push looks once this one has published.
       - name: Find the version, and what of its release is missing
         id: version
         if: github.event_name == 'push'
@@ -505,8 +504,7 @@ jobs:
   # `# syntax=` frontend, which BuildKit pulls from Docker Hub with no login (#86), and actionlint, at the version
   # sharp/docker/tools/Dockerfile pins, passes over every workflow, with the runner labels .github/actionlint.yaml sets.
   # It runs in the sharp/docker image, which carries that actionlint and shellcheck, which actionlint checks each
-  # workflow's scripts with. It also checks that each released version in sharp/CHANGELOG.md keeps the lines its release
-  # published, so a pull request that edits them fails before it merges.
+  # workflow's scripts with.
   WORKFLOWS:
     if: *checked
     runs-on: ubuntu-24.04
@@ -514,7 +512,6 @@ jobs:
       actions: write
       contents: read
       packages: read
-      pull-requests: read
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
@@ -530,109 +527,36 @@ jobs:
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
       - name: The actions are pinned, no Dockerfile names a syntax frontend, and actionlint passes
         run: sharp/docker/run sharp/bin/check workflows
-      # sharp/bin/check changelog reads master's sharp/CHANGELOG.md and an open release pull request's through the API.
-      - name: Every released version in sharp/CHANGELOG.md keeps the lines its release published
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: sharp/bin/check changelog
       - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
         with:
           end: true
-  # The run's one Mac job, on the Mac's one build of the engine, the debug engine, which mago links and the PHP# suite
-  # runs on, the one arm64 build of it, and the dev build of mago and every test binary, on a disk that ignores case. It runs every test LINUX, MAGO,
-  # SPEC and UPSTREAM's spec self-test run: the PHP# suite without opcache and in opcache's shared memory, mago
-  # convert's whole-project proof, the census, the differential, PHPUnit, the spec's self-test and examples, every
-  # workspace test, tests/laws.rs among them, the doc tests and the property tests, then plain-php. Three Linux checks
-  # can't run on macOS: the JIT, which Apple silicon has no thread-safe build of, as ext/opcache/config.m4 warns, the
-  # upstream tests, whose sharp/baseline/linux holds Linux's results, and sharp/bin/hosts, which builds FrankenPHP in the
-  # sharp/docker image. As four jobs, MACOS, tests (macOS), release-build and the release's macOS build, they queued
-  # one after another on the Mac, and three of them ran the engine step: 700, 1,443 and 940 s on 0.6.40's green run
-  # 44740612180.
+  # The run's one Mac job, which release.yml defines, so in a release's push the Mac's binary builds in it after the
+  # tests, as release.yml explains. assets is true only in a push to master whose version's GitHub release isn't
+  # published, as sharp/bin/check --release finds. Each attestation names the run's commit as the one it was built from,
+  # which is the commit RELEASE tags, and RELEASE publishes what that call built. A pull request's run never builds them,
+  # so the Mac job's checks set its length. A called workflow's jobs may ask only for permissions its caller grants:
+  # actions to cancel a failed run, id-token and attestations to attest the release's assets, and pull-requests to read
+  # the release's notes.
   MACOS:
     needs: CHANGES
-    runs-on: macos-arm64-local
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      # actions/checkout's clean removes every file an earlier job of the runner's one work folder left, sharp/build
-      # among them, so the job builds everything from its tree.
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Measure the job's CPU-seconds and peak memory
-        uses: ./.github/actions/usage
-      # mago's cache folder, where the law checker builds its Lean library, in the checkout's build folder, as
-      # sharp/docker/run puts it on Linux, so no job reads a build an earlier job left in the runner's home.
-      - name: Keep mago's cache folder in the checkout
-        run: echo "XDG_CACHE_HOME=$GITHUB_WORKSPACE/sharp/build/cache" >> "$GITHUB_ENV"
-      # A job never installs on the self-hosted Mac, so it checks that Homebrew already has the build's formulae.
-      - name: Homebrew has the build's formulae
-        env:
-          FORMULAE: autoconf bison re2c pkgconf icu4c libsodium oniguruma
-        run: |
-          # shellcheck disable=SC2086 # FORMULAE is a list of formulae.
-          brew list --versions $FORMULAE
-      # One engine, the debug one: only a debug engine runs ZEND_ASSERT and reports a leak, so mago's tests run on it as
-      # the PHP# suite does, where the job built a -O2 engine for mago beside it, 4.0 to 6.2 minutes of each run.
-      # RELEASE_ASSETS still builds the -O2 engine users get.
-      - name: Build the debug engine mago links and the PHP# suite runs on
-        run: sharp/bin/build-mago --engine --debug
-      # mago and every test binary of the workspace, in the dev profile, which keeps the debug assertions and overflow
-      # checks the tests need, linked with the engine the step before last built, as BUILD_LINUX builds them.
-      - name: Build mago and its test binaries
-        env:
-          MAGO_ENGINE: ${{ github.workspace }}/sharp/build/darwin-arm64/install
-        run: sharp/bin/build-mago --quiet
-      - name: Install elan and Lean
-        uses: ./.github/actions/setup-lean
-      # One sharp/bin/test runs the PHP# suite and mago's workspace tests in one pool of the Mac's cores, the
-      # whole-project proof of mago convert among them, as sharp/bin/test explains. The doc tests and the property tests,
-      # which cargo builds on every core in the target the step before last built, run after it, alone.
-      - name: Test PHP# and mago's workspace
-        env:
-          MAGO_ENGINE: ${{ github.workspace }}/sharp/build/darwin-arm64/install
-        run: |
-          status=0
-          sharp/bin/test --no-build --mago --census --spec --differential --phpunit || status=$?
-          sharp/bin/test --mago --cargo-built || status=$?
-          echo "The test step took $SECONDS s."
-          exit "$status"
-      # sharp/bin/check plain-php on the Mac's Homebrew PHP, with the dev build the suites ran, in the folder that check
-      # reads the test-run mago from.
-      - name: Run mago from Composer on plain PHP, and stop sharp/phpunit's tests on it
-        run: |
-          mkdir -p "$RUNNER_TEMP/target/test-run"
-          cp sharp/build/darwin-arm64/mago/debug/mago "$RUNNER_TEMP/target/test-run/mago"
-          CARGO_TARGET_DIR="$RUNNER_TEMP/target" sharp/bin/check plain-php
-      - *cancel-failed-run
-      - name: Write the job's CPU-seconds and peak memory
-        if: always()
-        uses: ./.github/actions/usage
-        with:
-          end: true
-  # release.yml builds Mago's binaries, the macOS one with profile-guided optimization, their attestations, Mago's source
-  # archives, their SHA-256s and the release's notes, in the push of the release's commit while its GitHub release isn't
-  # published, and RELEASE publishes them as they are once every check of the push passed. Only that commit's own run
-  # builds them, since each attestation names the run's commit as the one it was built from. A pull request's run never
-  # builds them, so the Mac job's checks set its length. A called workflow's jobs may ask only for permissions its
-  # caller grants, and release.yml's red-master job opens the red-master issue when one of its builds failed.
-  RELEASE_ASSETS:
-    needs: CHANGES
-    if: contains(needs.CHANGES.outputs.missing, 'assets') && (needs.CHANGES.outputs.tagged || github.sha) == github.sha
     uses: ./.github/workflows/release.yml
     with:
-      range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
+      assets: ${{ contains(needs.CHANGES.outputs.missing, 'assets') }}
+      version: ${{ needs.CHANGES.outputs.version }}
+      pulls: ${{ needs.CHANGES.outputs.pulls }}
     permissions:
+      actions: write
       attestations: write
       contents: read
       id-token: write
-      issues: write
+      pull-requests: read
   # This workflow's one required check. It needs every job that runs on every push and pull request, and fails unless
   # each of them passed. mago.yml's ci-passed is the other required check, and its plain-php job runs mago from Composer
-  # on plain PHP, and its SPEED job counts what proving and compiling cost. RELEASE_ASSETS, RELEASE and COMPOSER run
+  # on plain PHP, and its SPEED job counts what proving and compiling cost. In a release's push MACOS also builds the
+  # release's assets, so a failed build fails CI_PASSED, which opens the red-master issue. RELEASE and COMPOSER run
   # only on a push to master, after the checks, so each opens the red-master issue itself when it fails.
   CI_PASSED:
     if: always() && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'merge_group')
@@ -685,7 +609,7 @@ jobs:
   # heyJordanParker/mago-sharp, whose webhooks tell Packagist, once every check of the push passed: it needs RELEASE,
   # and a job's failure() counts every job before it. For a release, it then pushes tag v<version> to each mirror that
   # lacks it, once RELEASE made the GitHub release public: the split of the release's commit, which tag v<version>
-  # names, so a later push that finishes a release tags what the release holds. The pushes never force, so a mistake
+  # names, so a rerun that finishes a release tags what the release holds. The pushes never force, so a mistake
   # can't rewind a published package.
   COMPOSER:
     needs: [CHANGES, RELEASE]
@@ -842,6 +766,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
+      # A push's images are its release's, so the engine they build names the release's version, which
+      # sharp/bin/set-version writes into the context. Every other run's images carry the tree's 0.0.0.
+      - name: Write the release's version into the checkout
+        if: needs.CHANGES.outputs.version
+        env:
+          VERSION: ${{ needs.CHANGES.outputs.version }}
+        run: sharp/bin/set-version "$VERSION"
       - name: Log in to ghcr.io
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -993,17 +924,15 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
-  # Publishes what sharp/bin/check --release finds missing of the release of sharp/mago/Cargo.toml's version, once
-  # every job before it passed, and mago.yml's run of the same push: the GitHub release of the files RELEASE_ASSETS
-  # built, and the runtime image as ghcr.io/heyjordanparker/php-sharp:<version>, never as latest, with its -dev image as
-  # <version>-dev, both from this run's IMAGE. COMPOSER then pushes the Composer packages' tags.
-  # The release is the commit tag v<version> names, which sharp/bin/tag creates with the language owner's login on the
-  # merge commit that first holds the version: GitHub refuses GITHUB_TOKEN a tag on a commit whose workflows differ from
-  # master's, and runs 45025602373 and 45027728255 failed to create v0.6.50 so. Each part publishes once, as
-  # sharp/bin/check --release explains, and a rerun leaves what an earlier attempt published. It opens the red-master
-  # issue when it fails, since CI_PASSED doesn't need it.
+  # Publishes what sharp/bin/check --release finds missing of the release of the version CHANGES found, once every job
+  # before it passed, and mago.yml's run of the same push: tag v<version> on this run's commit, the GitHub release of
+  # the files MACOS's call of release.yml built, and the runtime image as ghcr.io/heyjordanparker/php-sharp:<version>
+  # and <major>.<minor>, never as latest, with its -dev image as <version>-dev and <major>.<minor>-dev, all from this
+  # run's IMAGE. COMPOSER then pushes the Composer packages' tags. Each part publishes once, as sharp/bin/check
+  # --release explains, and a rerun leaves what an earlier attempt published. It opens the red-master issue when it
+  # fails, since CI_PASSED doesn't need it.
   RELEASE:
-    needs: [CHANGES, BUILD_LINUX, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, WORKFLOWS, MACOS, RELEASE_ASSETS, IMAGE]
+    needs: [CHANGES, BUILD_LINUX, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, WORKFLOWS, MACOS, IMAGE]
     if: ${{ !failure() && !cancelled() && needs.CHANGES.outputs.bump == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
@@ -1014,7 +943,6 @@ jobs:
       issues: write
       packages: write
     outputs:
-      commit: ${{ steps.run.outputs.commit }}
       version: ${{ needs.CHANGES.outputs.version }}
     env:
       GH_TOKEN: ${{ github.token }}
@@ -1022,25 +950,14 @@ jobs:
       VERSION: ${{ needs.CHANGES.outputs.version }}
       MISSING: ${{ needs.CHANGES.outputs.missing }}
     steps:
-      # The tag is read again, since CHANGES can run before sharp/bin/tag created it, and then took this commit for
-      # the release's. Only the release commit's own push run builds what the release publishes: RELEASE_ASSETS, since
-      # each attestation names the run's commit as the one it was built from, and IMAGE, which this run's RELEASE tags.
-      - name: Find the release's commit
+      # The release is this run's commit, whose run built what the release publishes: MACOS's call of release.yml,
+      # since each attestation names the run's commit as the one it was built from, and IMAGE, which this run's RELEASE
+      # tags.
+      - name: Find the release's tree
         id: run
         run: |
-          if ! commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/v$VERSION" --jq .sha 2> /dev/null); then
-            echo "::error::Tag v$VERSION doesn't exist yet, so nothing of release $VERSION is published. sharp/bin/tag creates it on the merge commit that first holds the version, and a rerun of this run publishes what is missing."
-            exit 1
-          fi
-          if [[ $MISSING == *assets* || $MISSING == *images* ]] && [[ $commit != "$GITHUB_SHA" ]]; then
-            echo "::error::Release v$VERSION lacks its ${MISSING// / and }, and only the push run of $commit builds them. Rerun the failed jobs of the push run of $commit."
-            exit 1
-          fi
-          {
-            echo "commit=$commit"
-            echo "tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)"
-          } >> "$GITHUB_OUTPUT"
-          echo "Release $VERSION is commit $commit, and publishes:${MISSING:+ $MISSING}."
+          echo "tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)" >> "$GITHUB_OUTPUT"
+          echo "Release $VERSION is commit $GITHUB_SHA, and publishes:${MISSING:+ $MISSING}."
       # This push's run of mago.yml runs every Mago check.
       - name: Mago CI passed on this push
         run: |
@@ -1135,7 +1052,24 @@ jobs:
             done
           done
           echo "Every asset matches its SHA-256 and its attestation, and was built from tree $TREE."
-      # The release takes the tag sharp/bin/tag created, as it is, and creates no ref.
+      # The tag is the version, made once every check of the run passed and the assets are the run's, so a red run makes
+      # no tag and takes no version. A published tag never moves and is never deleted, since Composer and every mirror
+      # read it once. master's push runs run one at a time, so no other run takes this version meanwhile. GitHub refuses
+      # GITHUB_TOKEN a tag on a commit whose workflows differ from master's, and master moves while a release builds:
+      # runs 45025602373 and 45027728255 failed to create a release's tag so, with HTTP 403. So the tag goes over SSH
+      # with the repository's deploy key, kept in the PHP_SHARP_DEPLOY_KEY secret, as COMPOSER pushes the mirrors with
+      # theirs.
+      - name: git checkout, with the deploy key that pushes the tag
+        if: ${{ !needs.CHANGES.outputs.tagged }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ssh-key: ${{ secrets.PHP_SHARP_DEPLOY_KEY }}
+          sparse-checkout: .github/actions
+      - name: Tag this run's commit v<version>
+        if: ${{ !needs.CHANGES.outputs.tagged }}
+        run: |
+          git tag "v$VERSION" "$GITHUB_SHA"
+          git push origin "refs/tags/v$VERSION"
       - name: Upload every asset to the draft release, check it, then publish it
         if: contains(env.MISSING, 'assets')
         env:
@@ -1202,18 +1136,37 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # Each digest's file holds the commit IMAGE built it from: the runtime image's in runtime/, tagged <version>, and the
-      # -dev image's in dev/, tagged <version>-dev. A download that found no digest leaves its folder out.
+      # -dev image's in dev/, tagged <version>-dev. A download that found no digest leaves its folder out. Each also
+      # takes <major>.<minor>, which a project names to get every fix of that minor, unless a newer patch of the minor
+      # has a tag already, as when a rerun finishes an older release.
+      - name: Find whether this is its minor's newest version
+        id: minor
+        if: contains(env.MISSING, 'images')
+        run: |
+          newest=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v${VERSION%.*}." --jq '.[].ref' \
+            | sed -n 's#^refs/tags/v\([0-9]*\.[0-9]*\.[0-9]*\)$#\1#p' | sort -t . -k 3,3n | tail -n 1)
+          if [[ -z $newest || $newest == "$VERSION" ]]; then
+            echo "tag=${VERSION%.*}" >> "$GITHUB_OUTPUT"
+          else
+            echo "$newest is newer than $VERSION, so ${VERSION%.*} stays on $newest."
+          fi
       - name: Tag the platforms' images as one image each
         id: tag
         if: contains(env.MISSING, 'images')
         env:
           TREE: ${{ steps.run.outputs.tree }}
+          MINOR: ${{ steps.minor.outputs.tag }}
         run: |
           image=ghcr.io/heyjordanparker/php-sharp
           for kind in runtime dev; do
-            tag="$image:$VERSION"
+            suffix=''
             if [[ $kind == dev ]]; then
-              tag+=-dev
+              suffix=-dev
+            fi
+            tag="$image:$VERSION$suffix"
+            tags=(--tag "$tag")
+            if [[ -n $MINOR ]]; then
+              tags+=(--tag "$image:$MINOR$suffix")
             fi
             sources=()
             for file in "$RUNNER_TEMP/digests/$kind"/*; do
@@ -1234,7 +1187,7 @@ jobs:
               echo "::error::IMAGE pushed ${#sources[@]} platform images for $tag, not linux/amd64's and linux/arm64's."
               exit 1
             fi
-            docker buildx imagetools create --tag "$tag" "${sources[@]}"
+            docker buildx imagetools create "${tags[@]}" "${sources[@]}"
             docker buildx imagetools inspect "$tag"
             echo "$kind=$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_OUTPUT"
           done

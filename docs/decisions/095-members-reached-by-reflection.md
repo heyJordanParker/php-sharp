@@ -4,7 +4,7 @@ Superseded: [section 5, Access modifiers](../spec.md#5-access-modifiers) holds t
 
 The language owner's ruling of 11-13. Spec section 5's too-wide warning skipped any member with an attribute. It now skips only a member whose attribute says a framework reaches it by reflection.
 
-0.6.13 renamed the mark `[DynamicallyAccessed]`, and made too wide a compile error in an application. A marked attribute on a class now covers every public member of the class, and the mark on a member is a compile error. The decision below still holds under the new name.
+A release renamed the mark `[DynamicallyAccessed]`, and made too wide a compile error in an application. A marked attribute on a class now covers every public member of the class, and the mark on a member is a compile error. The decision below still holds under the new name.
 
 ## Decision
 
