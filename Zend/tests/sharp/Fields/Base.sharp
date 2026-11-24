@@ -1,0 +1,6 @@
+namespace Fields;
+
+public abstract class Base
+{
+    public abstract string content { get; }
+}

@@ -719,6 +719,30 @@ public class Order : Model
 - **The initial value runs before the parent's constructor and can't read `this`** (section 6), so a parent's constructor that reads the property, as Eloquent's does, sees it.
 - **A PHP# parent's `protected` field is overridden the same way,** by a property measured against that field. A PHP# property is closed unless it is `virtual` or `abstract`, as a method is (section 22), and a field has no `virtual`, so a `protected` field is always open.
 
+**An override stays open to the subclasses below it until `final override` closes it,** as an override method does (section 22), since a class is open unless it is `final`. `final` goes on a property only with `override`, and on no field, which overrides nothing. No subclass replaces a closed override, so `fields()` gives its storage (section 25), and an override of it below is a compile error: "`OpenLeaf.content` is `final`, so no subclass replaces it."
+
+<!-- example final-override-property -->
+```csharp
+// app/Base.sharp
+namespace App;
+
+public abstract class Base
+{
+    public abstract string content { get; }
+}
+```
+
+<!-- example final-override-property -->
+```csharp
+// app/OpenLeaf.sharp
+namespace App;
+
+public class OpenLeaf : Base
+{
+    public final override string content { get; set; } = "x";   // typeof(OpenLeaf).fields() gives its storage
+}
+```
+
 ### 6.2 Change observers
 
 `willSet` runs before a write, and `didSet` runs after it.
@@ -6440,7 +6464,7 @@ Class.of(row).name();              // "App.Orders.Counted"
 typeof(Counted).name();            // "App.Orders.Counted"
 ```
 
-**`properties()` reads the properties a class declares, `fields()` what its objects store, and `typeArguments()` a type's type arguments,** so an ORM, a serializer or a form builder reads a class's declared types without plain PHP reflection. A property is the class's API and a field is storage, so a form builder reads `properties()` and a storage layer reads `fields()`. `properties()` gives a `List<Property>` of every property, at every visibility, its statics included, an auto-property, a computed one and one with accessors, whose `get` and `set` run its accessors, and no field, the class's own first and then those it inherits, in the order they are declared. `fields()` gives a `List<Field>` of every value the class's objects and the class store, in the same order: each field, and the storage of each auto-property that is neither `virtual` nor `abstract` (section 6.1), which has no accessor body, as `{ get; set; }`, `{ get; private set; }`, `{ get; init; }` and a constructor-promoted one, and each property of a plain PHP class that declares no hook, at every visibility, whether or not a subclass may replace it. A computed property, one with an accessor body and a PHP# `virtual` or `abstract` one store nothing a `Field` reads, so they have none. The class value of a type that is no class, as `typeof(Object)`, `typeof(int)` or `typeof(List<int>)`, has no properties, methods or attributes. A `Property` has its `name`, its `type`, the declared type whole as a `Class<Any?>`, the `declaringClass` that declares it, its `visibility`, its `setVisibility`, the access modifier that reaches its `set` or `init`, or null for a get-only one, `isInitOnly`, which holds for one with an `init`, `isStatic`, `isExtern`, which holds for an `extern` one (section 14.3), `isVirtual`, which holds when a subclass may replace it, `isAbstract`, `isOverride`, `hasDefaultValue`, which holds for a declared initial value, constant or not, and `defaultValue()`, which evaluates it on each read, as `Parameter.defaultValue()` does, so `= new Draft()` gives a new `Draft` each time, and throws `OutOfRangeException` for a property without one, and `attributes<TAttribute : Object>()`, as `Class<T>`'s own. A `Field` has its `name`, `type`, `declaringClass`, `visibility`, `isStatic`, `hasDefaultValue`, `defaultValue()` and `attributes<TAttribute : Object>()`, as a `Property` has them, an auto-property's those of the property, and `isInitialized(receiver)`, `get(receiver)` and `set(receiver, value)`, which read and write the storage. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member (section 5), so an `internal` member reads `Internal`:
+**`properties()` reads the properties a class declares, `fields()` what its objects store, and `typeArguments()` a type's type arguments,** so an ORM, a serializer or a form builder reads a class's declared types without plain PHP reflection. A property is the class's API and a field is storage, so a form builder reads `properties()` and a storage layer reads `fields()`. `properties()` gives a `List<Property>` of every property, at every visibility, its statics included, an auto-property, a computed one and one with accessors, whose `get` and `set` run its accessors, and no field, the class's own first and then those it inherits, in the order they are declared. `fields()` gives a `List<Field>` of every value the class's objects and the class store, in the same order: each field, and the storage of each auto-property no subclass may replace (section 6.1), one neither `virtual` nor `abstract`, and in a class open to subclasses no override but a `final override`, which has no accessor body, as `{ get; set; }`, `{ get; private set; }`, `{ get; init; }` and a constructor-promoted one, and each property of a plain PHP class that declares no hook, at every visibility, whether or not a subclass may replace it. A computed property, one with an accessor body and a PHP# `virtual` or `abstract` one store nothing a `Field` reads, so they have none, and an override a subclass may still replace has none, as a `virtual` property has none. The class value of a type that is no class, as `typeof(Object)`, `typeof(int)` or `typeof(List<int>)`, has no properties, methods or attributes. A `Property` has its `name`, its `type`, the declared type whole as a `Class<Any?>`, the `declaringClass` that declares it, its `visibility`, its `setVisibility`, the access modifier that reaches its `set` or `init`, or null for a get-only one, `isInitOnly`, which holds for one with an `init`, `isStatic`, `isExtern`, which holds for an `extern` one (section 14.3), `isVirtual`, which holds when a subclass may replace it, `isAbstract`, `isOverride`, `hasDefaultValue`, which holds for a declared initial value, constant or not, and `defaultValue()`, which evaluates it on each read, as `Parameter.defaultValue()` does, so `= new Draft()` gives a new `Draft` each time, and throws `OutOfRangeException` for a property without one, and `attributes<TAttribute : Object>()`, as `Class<T>`'s own. A `Field` has its `name`, `type`, `declaringClass`, `visibility`, `isStatic`, `hasDefaultValue`, `defaultValue()` and `attributes<TAttribute : Object>()`, as a `Property` has them, an auto-property's those of the property, and `isInitialized(receiver)`, `get(receiver)` and `set(receiver, value)`, which read and write the storage. A `Visibility` is `Public`, `Internal`, `Protected` or `Private`, the access modifier that declares the member (section 5), so an `internal` member reads `Internal`:
 
 <!-- example declared-types -->
 ```csharp
