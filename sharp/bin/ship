@@ -4,10 +4,12 @@ set -euo pipefail
 # Builds a branch off origin/master that holds only the commits it names, so a fix ships alone however red the stack
 # it was committed in is. `sharp/bin/ship <commit>…` releases them as release/<version>, with the bump the first step
 # of .claude/skills/maintain/SHIP.md describes, and `sharp/bin/ship --land <commit>…` lands them as land/<first commit>,
-# with no bump. It applies each commit's diff, in the order named, to a private index read from origin/master, and
-# fails naming the first commit whose diff doesn't apply, before it creates anything. Every lane commits on the
-# checkout's one branch, whose git refuses `git commit-tree` and a branch switch, so the branch's one commit, whose
-# parent is origin/master, is created through the GitHub API, and its pull request opens with auto-merge.
+# with no bump. It applies each commit's diff but its sharp/CHANGELOG.md, in the order named, to a private index read
+# from origin/master, and writes the lines each commit adds under ## [Unreleased] into origin/master's CHANGELOG, each
+# under its ### heading there. It fails naming the first commit whose diff doesn't apply, or whose added CHANGELOG line
+# no such heading holds, before it creates anything. Every lane commits on the checkout's one branch, whose git
+# refuses `git commit-tree` and a branch switch, so the branch's one commit, whose parent is origin/master, is created
+# through the GitHub API, and its pull request opens with auto-merge.
 # Each run leaves its line in the build record, see sharp/bin/record.
 [[ ${SHARP_RECORDED:-} == sharp/bin/ship ]] || exec "$(dirname "$0")/record" sharp/bin/ship -- "$0" "$@"
 
@@ -47,12 +49,69 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 export GIT_INDEX_FILE=$work/index
 git read-tree "$base"
+changelog=sharp/CHANGELOG.md
+mkdir -p "$work/tree/${changelog%/*}"
+git show ":$changelog" > "$work/tree/$changelog"
+
+# A commit's CHANGELOG change is the lines it adds under ## [Unreleased], each under the ### heading above it there,
+# which this prints, a heading and a line to a row, and never a hunk, whose context holds other lanes' lines. A hunk
+# that also removes lines edits a note already there, as a lane's edit of another lane's line, so its lines aren't
+# the commit's notes.
+added_notes() {
+  git diff --no-color --unified=0 "$1^" "$1" -- "$changelog" \
+    | awk '/^@@ / && $2 ~ /,0$/ {split($3, range, ","); count = range[2] == "" ? 1 : range[2]
+      for (i = 0; i < count; i++) print substr(range[1], 2) + i}' > "$work/added"
+  if [[ ! -s $work/added ]]; then
+    return 0
+  fi
+  git show "$1:$changelog" | awk '
+    NR == FNR {added[$1]; next}
+    /^## / {section = $0; heading = ""}
+    /^### / {heading = $0}
+    FNR in added && !/^#/ && !/^[[:space:]]*$/ {
+      if (section != "## [Unreleased]" || heading == "") {refused = 1; exit}
+      print heading "\t" $0
+    }
+    END {exit refused}
+  ' "$work/added" -
+}
+# Writes one line into the CHANGELOG under its ### heading of ## [Unreleased], after that heading's last line, or under
+# the heading added at the section's end when the section lacks it.
+add_note() {
+  HEADING=$1 NOTE=$2 awk '
+    {line[NR] = $0}
+    END {
+      heading = ENVIRON["HEADING"]; note = ENVIRON["NOTE"]
+      for (i = 1; i <= NR; i++) if (line[i] == "## [Unreleased]") {start = i; break}
+      end = NR + 1
+      for (i = start + 1; i <= NR; i++) if (line[i] ~ /^## /) {end = i; break}
+      for (i = start + 1; i < end; i++) if (line[i] == heading) {at = i; break}
+      last = at
+      for (i = at + 1; at && i < end && line[i] !~ /^###? /; i++) if (line[i] != "") last = i
+      for (i = 1; i <= NR; i++) {
+        if (!at && i == end) {print heading; print ""; print note; print ""}
+        print line[i]
+        if (at && i == last) {if (last == at) print ""; print note}
+      }
+    }
+  ' "$work/tree/$changelog" > "$work/notes"
+  mv "$work/notes" "$work/tree/$changelog"
+}
+
 for commit in "${commits[@]}"; do
-  if ! git diff --binary "$commit^" "$commit" | git apply --cached --3way > "$work/applied" 2>&1; then
+  if ! git diff --binary "$commit^" "$commit" -- . ":(exclude)$changelog" \
+    | git apply --cached --3way --allow-empty > "$work/applied" 2>&1; then
     echo "$(named "$commit") doesn't apply on origin/master, $(git rev-parse --short "$base"):" >&2
     cat "$work/applied" >&2
     exit 1
   fi
+  if ! added_notes "$commit" > "$work/notes-of-commit"; then
+    echo "$(named "$commit") adds a $changelog line that no ### heading of ## [Unreleased] holds." >&2
+    exit 1
+  fi
+  while IFS=$'\t' read -r heading note; do
+    add_note "$heading" "$note"
+  done < "$work/notes-of-commit"
 done
 
 # The content each changed path ends with: its mode, its blob's SHA, and the file that holds it, or none for a blob of
@@ -84,8 +143,9 @@ fi
 
 # The bump: set-version.php's edits to the root package's version, its line in Cargo.lock and the versioned docs, run
 # on the private index's copies of the files it reads, and the CHANGELOG's heading over the notes and its links.
+bumped=()
 if ! $land; then
-  bumped=(sharp/mago/Cargo.toml sharp/mago/Cargo.lock sharp/CHANGELOG.md)
+  bumped=(sharp/mago/Cargo.toml sharp/mago/Cargo.lock)
   while IFS= read -r doc; do
     path=sharp/mago/$doc
     while [[ $path == */../* ]]; do
@@ -111,19 +171,19 @@ if ! $land; then
     }
     {print}
     END {exit !(heading && link)}
-  ' "$work/tree/sharp/CHANGELOG.md" > "$work/changelog"; then
-    echo "sharp/CHANGELOG.md has no ## [Unreleased] heading or no [Unreleased] compare link from a tag." >&2
+  ' "$work/tree/$changelog" > "$work/changelog"; then
+    echo "$changelog has no ## [Unreleased] heading or no [Unreleased] compare link from a tag." >&2
     exit 1
   fi
-  mv "$work/changelog" "$work/tree/sharp/CHANGELOG.md"
-  for path in "${bumped[@]}"; do
-    if ! git show ":$path" | cmp -s - "$work/tree/$path"; then
-      mode[$path]=$(git ls-files --stage -- "$path" | cut -d ' ' -f 1)
-      sha[$path]=$(git hash-object "$work/tree/$path")
-      file[$path]=$work/tree/$path
-    fi
-  done
+  mv "$work/changelog" "$work/tree/$changelog"
 fi
+for path in "${bumped[@]}" "$changelog"; do
+  if ! git show ":$path" | cmp -s - "$work/tree/$path"; then
+    mode[$path]=$(git ls-files --stage -- "$path" | cut -d ' ' -f 1)
+    sha[$path]=$(git hash-object "$work/tree/$path")
+    file[$path]=$work/tree/$path
+  fi
+done
 if ((${#mode[@]} == 0)); then
   echo "The commits change nothing on origin/master." >&2
   exit 1
