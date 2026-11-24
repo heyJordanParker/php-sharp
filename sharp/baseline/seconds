@@ -231,7 +231,7 @@
 5	sharp/mago/tests/laws.rs::compile_refuses_a_law_an_edit_of_the_operator_its_lists_compare_by_breaks
 5	sharp/mago/tests/laws.rs::compile_refuses_a_module_outside_module_sharp_on_its_own_file_and_proves_module_sharp
 5	sharp/mago/tests/main.rs::compile::compile_hides_the_host_errors_an_ignore_entry_or_the_baseline_hides_from_analyze
-5	sharp/mago/tests/main.rs::external_analyzer_lifecycle::an_after_analysis_hook_that_never_finishes_fails_at_the_deadline_naming_its_plugin
+5	sharp/mago/tests/main.rs::external_analyzer_lifecycle::an_after_analysis_hook_that_never_finishes_fails_at_the_deadline_naming_its_hook
 5	sharp/mago/tests/main.rs::fix::fixes_dependent_rules_in_order_and_is_idempotent
 5	sharp/mago/tests/main.rs::fix::unfixable_issues_do_not_stop_other_fixes
 5	sharp/mago/tests/main.rs::sharp::a_mago_ignore_or_mago_expect_comment_hides_nothing_in_a_php_or_a_sharp_file
@@ -342,7 +342,7 @@
 3	sharp/mago/tests/main.rs::compile::compile_reports_a_sharp_folder_that_appeared_inside_a_package
 3	sharp/mago/tests/main.rs::compile::compile_writes_a_deleted_compiled_file_again
 3	sharp/mago/tests/main.rs::compile::compile_writes_every_listener_of_an_accepted_file_in_order
-3	sharp/mago/tests/main.rs::external_analyzer_lifecycle::an_after_file_hook_that_never_finishes_fails_at_the_deadline_naming_its_file
+3	sharp/mago/tests/main.rs::external_analyzer_lifecycle::an_after_file_hook_that_never_finishes_fails_at_the_deadline_naming_its_hook_and_file
 3	sharp/mago/tests/main.rs::external_analyzer_lifecycle::an_issue_filter_that_never_finishes_fails_at_the_deadline_naming_its_file
 3	sharp/mago/tests/main.rs::sharp::a_tuple_a_collection_local_holds_unpacks_into_its_element_types
 3	sharp/mago/tests/main.rs::sharp::analyze_reports_only_the_second_extern_of_a_class
