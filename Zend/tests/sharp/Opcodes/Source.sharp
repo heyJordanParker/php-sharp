@@ -1,8 +1,0 @@
-namespace Opcodes;
-
-public interface Source
-{
-    Map<string, int> counts();
-
-    T first<T>(List<T> items);
-}

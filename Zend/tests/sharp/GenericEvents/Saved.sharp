@@ -1,3 +1,0 @@
-namespace GenericEvents;
-
-public event Saved<T : Entity>(T entity) : EntityEvent;

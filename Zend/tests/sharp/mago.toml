@@ -1,4 +1,0 @@
-[source]
-paths = ["*/*.sharp", "harness"]
-includes = ["vendor"]
-extensions = ["sharp", "php", "inc"]

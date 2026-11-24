@@ -1,7 +1,0 @@
-namespace AttributeObjects;
-
-// A PHP# object an attribute argument creates.
-public class Window
-{
-    public Window(public int seconds { get; }) { }
-}

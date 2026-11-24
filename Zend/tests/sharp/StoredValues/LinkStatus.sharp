@@ -1,8 +1,0 @@
-namespace StoredValues;
-
-public machine LinkStatus : string
-{
-    case Draft = "draft" { public LinkStatus.Published publish() => LinkStatus.Published; }
-    final case Published = "published";
-    public static LinkStatus.Draft enter() => LinkStatus.Draft;
-}

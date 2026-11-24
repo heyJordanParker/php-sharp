@@ -1,6 +1,0 @@
-namespace App;
-
-public class ResponseBody
-{
-    public string type { get; set; } = "json";
-}

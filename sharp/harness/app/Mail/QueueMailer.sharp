@@ -1,5 +1,0 @@
-namespace App.Mail;
-
-public class QueueMailer : Mailer
-{
-}

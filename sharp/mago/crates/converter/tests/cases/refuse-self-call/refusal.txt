@@ -1,2 +1,0 @@
-16:16: `self::label` forwards the class PHP called, which late static binding in `label` reads, and `Shape.label` doesn't, so on a subclass `label` would read `Shape` where PHP reads the subclass
-22:16: `self::label` forwards the class PHP called, which late static binding in `label` reads, and `Shape.label` doesn't, so on a subclass `label` would read `Shape` where PHP reads the subclass

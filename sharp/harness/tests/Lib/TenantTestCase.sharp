@@ -1,5 +1,0 @@
-namespace Tests.Lib;
-
-public class TenantTestCase
-{
-}

@@ -1,5 +1,0 @@
-namespace App.Stubs;
-
-import App.Support.Translator;
-
-extern Translator.get uses Http;

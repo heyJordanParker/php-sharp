@@ -1,6 +1,0 @@
-namespace App;
-
-public class Image
-{
-    public void resize(int width, int height) { }
-}

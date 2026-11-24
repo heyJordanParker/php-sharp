@@ -1,6 +1,0 @@
-namespace App;
-
-public class Square
-{
-    public float side { get; set; } = 1.0;
-}

@@ -1,6 +1,0 @@
-namespace App.Stubs;
-
-import App.Order;
-
-extern Order.find uses none;
-extern Order.code uses none;

@@ -1,2 +1,0 @@
-15:17: this cast has no PHP# form (spec section 24)
-16:19: this cast has no PHP# form (spec section 24)

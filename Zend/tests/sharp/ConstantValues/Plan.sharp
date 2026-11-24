@@ -1,7 +1,0 @@
-namespace ConstantValues;
-
-public enum Plan : string
-{
-    case Free = "free";
-    case Pro = "pro";
-}

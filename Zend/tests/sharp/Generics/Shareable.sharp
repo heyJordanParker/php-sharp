@@ -1,6 +1,0 @@
-namespace Paging;
-
-public interface Shareable
-{
-    string link();
-}

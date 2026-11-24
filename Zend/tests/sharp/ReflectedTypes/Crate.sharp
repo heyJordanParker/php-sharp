@@ -1,8 +1,0 @@
-namespace ReflectedTypes;
-
-public class Crate<TItem : Mark>
-{
-    public TItem? item { get; set; } = null;
-
-    public TItem? first(List<TItem> items) => null;
-}

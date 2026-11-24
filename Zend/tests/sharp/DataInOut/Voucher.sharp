@@ -1,6 +1,0 @@
-namespace DataInOut;
-
-public struct Voucher
-{
-    public Voucher(public string code { get; }) { }
-}

@@ -1,6 +1,0 @@
-namespace App.Invokers;
-
-public class Subscription
-{
-    public Subscription(public string name { get; }) { }
-}

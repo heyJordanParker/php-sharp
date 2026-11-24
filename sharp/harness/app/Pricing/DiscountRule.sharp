@@ -1,5 +1,0 @@
-namespace App.Pricing;
-
-public class DiscountRule : PriceRule
-{
-}

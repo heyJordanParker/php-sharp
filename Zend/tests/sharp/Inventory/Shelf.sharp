@@ -1,6 +1,0 @@
-namespace Demo;
-
-public class Shelf
-{
-    public Stock stock { get; } = new Stock(7);
-}

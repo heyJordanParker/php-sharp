@@ -1,6 +1,0 @@
-namespace Fields;
-
-public abstract class Entry
-{
-    protected int depth = 1;
-}

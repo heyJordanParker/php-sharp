@@ -1,9 +1,0 @@
-namespace Sharp.Net;
-
-// The addresses a host name resolves to. A module binds `SystemDns`, the system resolver, and a test passes a
-// `Sharp.Testing.FakeDns`.
-public effect abstract class Dns
-{
-    // Each IPv4 and IPv6 address of the host, once. A host that can't be found throws `RuntimeException`.
-    public abstract List<IpAddress> addresses(string host);
-}

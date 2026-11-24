@@ -1,6 +1,0 @@
-namespace Demo;
-
-public enum Mood : Told
-{
-    case Calm;
-}

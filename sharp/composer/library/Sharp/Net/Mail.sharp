@@ -1,8 +1,0 @@
-namespace Sharp.Net;
-
-// Sends mail. A module binds `SystemMail`, which hands the message to the local mail program, and a test passes a
-// `Sharp.Testing.FakeMail`.
-public effect abstract class Mail
-{
-    public abstract void send(MailMessage message);
-}

@@ -1,6 +1,0 @@
-namespace DataInOut;
-
-public struct Search
-{
-    public Search(public string q { get; }, public int page { get; } = 1) { }
-}
