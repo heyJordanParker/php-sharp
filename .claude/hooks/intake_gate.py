@@ -13,6 +13,9 @@ INTAKE = Path.home() / ".claude/orchestrate/php-sharp/intake.md"
 FACTS = INTAKE.parent / "facts.py"
 LEDGER = Path.home() / ".claude/orchestrate/php-sharp/sop-reads.json"
 REQUIRED = ("issue", "verified", "root cause", "outcome", "design")
+# A contract a builder reads as a history: on 11-24 the tracker held 626 Brief updates on 154 issues, 53 on #359 and 52
+# on #516, so the sixth update since an issue's last Agent Brief is refused and a whole new brief replaces them.
+UPDATES = 5
 
 
 def deny(reason: str) -> None:
@@ -105,8 +108,23 @@ def main() -> None:
         check(event, match, body_of(invocation))
 
 
+def require_few_updates(issue: str) -> None:
+    """Refuses a Brief update once the issue holds UPDATES of them since its last Agent Brief (AGENT-BRIEF.md: a changed
+    goal gets a whole new brief)."""
+    out = subprocess.run(["gh", "issue", "view", issue, "--repo", "heyJordanParker/php-sharp", "--json", "comments"],
+                         capture_output=True, text=True, timeout=30)
+    comments = json.loads(out.stdout or "{}").get("comments", [])
+    last = max((at for at, comment in enumerate(comments) if "## Agent Brief" in comment["body"]), default=-1)
+    updates = sum("Brief update:" in comment["body"] for comment in comments[last + 1:])
+    if updates >= UPDATES:
+        deny(f"#{issue} holds {updates} Brief updates since its last Agent Brief. Post a whole new `## Agent Brief` that "
+             "states the contract as it is now, instead of another update (AGENT-BRIEF.md).")
+
+
 def check(event: dict, match: re.Match, text: str) -> None:
     """Refuses one `gh issue` call that posts a brief or a ready-for-agent label before its intake entry is ready."""
+    if match.group(1) == "comment" and match.group(2) and "Brief update:" in text and "## Agent Brief" not in text:
+        require_few_updates(match.group(2))
     briefs = "## Agent Brief" in text or "## Research brief" in text or "ready-for-agent" in text
     if not briefs:
         return
