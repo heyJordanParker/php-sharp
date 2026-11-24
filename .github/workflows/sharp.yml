@@ -16,14 +16,16 @@ on:
 permissions:
   contents: read
 # Every lane pushes the checkout's master tip to its branch, so the newest lane pull request's run tests every commit
-# below it. So every lane pull request's run joins one group, lanes, and a new run cancels the one in progress: no lower
-# pull request's run holds the Mac for a tree the newest one tests too, where the Mac was busy 99% of 12 hours while
-# 0.6.54's path from green to published held 6 Mac jobs one after another. A release/ pull request's run joins release,
-# and a spec/ pull request's, off origin/master and on no stack, a group of its own, where a push cancels its run in
-# progress too. master runs one push at a time, and only the newest push waits, since its tree holds every commit before
-# it, and a push lets its run finish, since the run publishes. A failed job cancels a pull request's run and a merge
-# queue's run, which can no longer pass, as .github/actions/cancel-failed-run explains. Each merge queue entry, schedule
-# and dispatch runs in a group of its own.
+# below it. So every lane pull request's run joins one group, lanes, where GitHub keeps one run in progress and only the
+# newest pending one: a push cancels the run it replaced while that run waits, and no lower pull request's run waits for
+# the Mac, which was busy 99% of 12 hours while 0.6.54's path from green to published held 6 Mac jobs one after another.
+# A run in progress finishes and lands every commit below it: four lanes push about every half hour, and the Mac job
+# runs 35 to 50 minutes, so a push that cancelled it would let no landing run finish. A release/ pull request's run joins
+# release, and a spec/ pull request's, off origin/master and on no stack, a group of its own, where a push cancels its
+# run in progress, since each holds only its own change. master runs one push at a time, and only the newest push waits,
+# since its tree holds every commit before it, and a push lets its run finish, since the run publishes. A failed job
+# cancels a pull request's run and a merge queue's run, which can no longer pass, as .github/actions/cancel-failed-run
+# explains. Each merge queue entry, schedule and dispatch runs in a group of its own.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event_name == 'pull_request'
@@ -31,7 +33,9 @@ concurrency:
         || startsWith(github.head_ref, 'spec/') && github.event.pull_request.url
         || 'lanes')
       || (github.event_name == 'push' && github.ref) || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: >-
+    ${{ github.event_name == 'pull_request'
+      && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'spec/')) }}
 jobs:
   # CI_PASSED is this workflow's one required check. Every pull request's push and every merge queue entry runs every
   # check, whatever it changed: the Linux suites, each job on 4 cores, the Mac's and the runtime image, so every check
