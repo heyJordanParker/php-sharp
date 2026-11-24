@@ -1,0 +1,7 @@
+namespace Fields;
+
+// An override with an accessor body, which PHP runs as a `get` hook.
+public class BodyMid : Base
+{
+    public override string content => "mid";
+}
