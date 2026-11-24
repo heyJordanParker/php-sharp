@@ -20,7 +20,7 @@
 #ifndef ZEND_H
 #define ZEND_H
 
-#define ZEND_VERSION "4.5.12"
+#define ZEND_VERSION "4.5.13"
 
 #define ZEND_ENGINE_3
 
@@ -144,30 +144,8 @@ struct _zend_inheritance_cache_entry {
 	zend_class_entry             *traits_and_interfaces[1];
 };
 
-/* PHP#: PHP#'s own class flags, in sharp_flags of zend_class_entry (unused: 7). */
-/* A property of the class, its own or inherited, has ZEND_ACC_SHARP_CROSSING. */
-#define SHARP_CLASS_HAS_CROSSING_PROPS (1 << 0)
-/* A property of the class, its own or inherited, has ZEND_ACC_SHARP_TYPED. */
-#define SHARP_CLASS_HAS_TYPED_PROPS    (1 << 1)
-/* The class or an ancestor of it is declared in a .sharp file, so it keys its methods by exact name. */
-#define SHARP_CLASS_EXACT_NAMES        (1 << 2)
-/* The class is declared in a .sharp file, so the class table keys it by its exact name, as zend_class_table_find()
- * finds it. */
-#define SHARP_CLASS_EXACT_KEY          (1 << 3)
-/* The class is declared in a .sharp file, or extends one that is, so an object of it is built only through its
- * constructor, spec section 9: object_init_ex refuses it, and only object_init_to_build creates one. */
-#define SHARP_CLASS_BUILT_BY_CONSTRUCTOR (1 << 4)
-/* The class is `internal`, spec section 5, so only code of its namespace, or of a namespace below it, runs `new` of it. */
-#define SHARP_CLASS_INTERNAL           (1 << 5)
-/* A property of the class, its own or inherited, has ZEND_ACC_SHARP_INTERNAL, so a listing of an object's properties
- * that plain PHP makes can leave it out, see zend_std_get_properties_for. */
-#define SHARP_CLASS_HAS_INTERNAL_PROPS (1 << 6)
-
 struct _zend_class_entry {
 	char type;
-	/* PHP#: PHP#'s own class flags, the SHARP_CLASS_* above. ce_flags has no free bit, so they sit in the padding
-	 * before name, and every upstream field keeps its offset. */
-	uint8_t sharp_flags;
 	zend_string *name;
 	/* class_entry or string depending on ZEND_ACC_LINKED */
 	union {
@@ -250,18 +228,6 @@ struct _zend_class_entry {
 			zend_string *filename;
 			uint32_t line_start;
 			uint32_t line_end;
-			/* PHP#: a PHP# class-like's metadata, see ext/sharp/php_sharp.h. sharp_bounds is the type text of the
-			 * bounds of its type parameters, or NULL when it declares none. sharp_header is the type text of the type
-			 * arguments its header gives each generic parent and interface, or NULL. sharp_variance is one `+`
-			 * (`out`), `-` (`in`) or `=` per type parameter, or NULL when none has `in` or `out`. sharp_declared is what
-			 * reflection reads, spec section 25: a first line of its type parameters' names, then a line per member
-			 * the class-like declares, `$name: T` for a property and `name: Function<R(P1, P2)>` for a method, each type
-			 * as declared, tuple element names included. Between a name and its `: ` stand the words of what writes a
-			 * property, `set private`, and its `virtual` and `override`. NULL for a class-like plain PHP declares. */
-			zend_string *sharp_bounds;
-			zend_string *sharp_header;
-			zend_string *sharp_variance;
-			zend_string *sharp_declared;
 		} user;
 		struct {
 			const struct _zend_function_entry *builtin_functions;
@@ -425,8 +391,6 @@ ZEND_API ZEND_COLD void zend_error_at(int type, zend_string *filename, uint32_t 
 ZEND_API ZEND_COLD ZEND_NORETURN void zend_error_at_noreturn(int type, zend_string *filename, uint32_t lineno, const char *format, ...) ZEND_ATTRIBUTE_FORMAT(printf, 4, 5);
 ZEND_API ZEND_COLD void zend_error_zstr(int type, zend_string *message);
 ZEND_API ZEND_COLD void zend_error_zstr_at(int type, zend_string *filename, uint32_t lineno, zend_string *message);
-/* PHP#: whether the error being raised comes from a call inside a ZEND_SHARP_SILENCE, which no error handler sees. */
-ZEND_API ZEND_COLD bool zend_sharp_silenced(void);
 
 ZEND_API ZEND_COLD void zend_throw_error(zend_class_entry *exception_ce, const char *format, ...) ZEND_ATTRIBUTE_FORMAT(printf, 2, 3);
 ZEND_API ZEND_COLD void zend_type_error(const char *format, ...) ZEND_ATTRIBUTE_FORMAT(printf, 1, 2);
