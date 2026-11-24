@@ -5,7 +5,7 @@ import { defineRule } from '@cmodjs/rulebook'
 // back the moment the owner's own work needs it. Measurements count instructions and heartbeats (benchmark/speed.php),
 // which priority doesn't change.
 const HEAVY = new Set(['cargo', 'rustc', 'mago', 'lake', 'lean', 'composer', 'docker'])
-const SCRIPTS = /(^|\/)(sharp\/bin\/(test|check|spec|bench)|benchmark\/speed\.php|time)$/
+const SCRIPTS = /(^|\/)(sharp\/bin\/(test|check|spec|bench)|benchmark\/speed\.php)$|^\/usr\/bin\/time$/
 
 export default defineRule({
   description: 'Run every build, test and measurement under nice.',
