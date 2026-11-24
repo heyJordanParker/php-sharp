@@ -5074,7 +5074,10 @@ static void cleanup_live_var(zend_execute_data *execute_data, const zend_live_ra
 	zval *var = EX_VAR(var_num);
 
 	if (kind == ZEND_LIVE_TMPVAR) {
-		zval_ptr_dtor_nogc(var);
+		zval tmp;
+		ZVAL_COPY_VALUE(&tmp, var);
+		ZVAL_UNDEF(var);
+		zval_ptr_dtor_nogc(&tmp);
 	} else if (kind == ZEND_LIVE_NEW) {
 		zend_object *obj;
 		ZEND_ASSERT(Z_TYPE_P(var) == IS_OBJECT);
@@ -5085,7 +5088,10 @@ static void cleanup_live_var(zend_execute_data *execute_data, const zend_live_ra
 		if (Z_TYPE_P(var) != IS_ARRAY && Z_FE_ITER_P(var) != (uint32_t)-1) {
 			zend_hash_iterator_del(Z_FE_ITER_P(var));
 		}
-		zval_ptr_dtor_nogc(var);
+		zval tmp;
+		ZVAL_COPY_VALUE(&tmp, var);
+		ZVAL_UNDEF(var);
+		zval_ptr_dtor_nogc(&tmp);
 	} else if (kind == ZEND_LIVE_ROPE) {
 		zend_string **rope = (zend_string **)var;
 		zend_op *last = EX(func)->op_array.opcodes + op_num;
