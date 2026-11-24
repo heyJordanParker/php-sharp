@@ -15,14 +15,21 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-# A pull request merges only its newest commit, so a push cancels its run in progress, where release #675's run on
-# 75c9837da5a waited 38 minutes behind the run on a commit it replaced. master runs one push at a time, and only the
-# newest push waits, since its tree holds every commit before it, and a push lets its run finish, since the run
+# Every lane's pull request stacks on the one local master, so the top of the stack holds every commit below it, and
+# its run tests the whole batch. So every lane pull request's run joins one group, lanes, where GitHub keeps one run in
+# progress and only the newest pending one: a push cancels the run it replaced while that run waits, and no lower
+# pull request's run waits for the Mac, which was busy 99% of 12 hours while 0.6.54's path from green to published
+# held 6 Mac jobs one after another. A run in progress finishes. A release/ pull request's run joins release, where a
+# push cancels its run in progress, since a release holds only its own bump. master runs one push at a time, and only
+# the newest push waits, since its tree holds every commit before it, and a push lets its run finish, since the run
 # publishes. A failed job cancels a pull request's run and a merge queue's run, which can no longer pass, as
 # .github/actions/cancel-failed-run explains. Each merge queue entry, schedule and dispatch runs in a group of its own.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.url || (github.event_name == 'push' && github.ref) || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: >-
+    ${{ github.workflow }}-${{ github.event_name == 'pull_request'
+      && (startsWith(github.head_ref, 'release/') && 'release' || 'lanes')
+      || (github.event_name == 'push' && github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/') }}
 jobs:
   # CI_PASSED is this workflow's one required check. Every pull request's push and every merge queue entry runs every
   # check, whatever it changed: the Linux suites, each job on 4 cores, the Mac's and the runtime image, so every check
