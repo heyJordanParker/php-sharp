@@ -14,6 +14,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - A union of PHP# types that share one PHP type loads, spec section 24: a `Map<string, Any?>|List<Any?>` result, a `List<int>|List<string>` parameter or field and a `Bytes|string` parameter compile to a type that names PHP's `array` or `string` once, where 0.6.54 compiled them and loading the class failed with "Duplicate type array is redundant" or "Duplicate type string is redundant". Plain PHP passes either PHP type, and PHP# checks each member as written.
 - A lambda passed to a plain PHP call takes a class a module binds as its parameter, spec section 32, whatever the code does with the call's result: `kernel.call((Runtime runtime) => Report.print(runtime)) as int ?? throw new LogicException("no exit code")` compiles, where 0.6.54 refused it with "`Runtime` is bound in `App`'s module, so it reaches code through a constructor or a parameter." because an `as`, an `is` or a `match` on the result counted the lambda's parameter type as a type it narrowed to. Narrowing a plain PHP call's result to a bound class, as `as Runtime` or `as List<Runtime>`, is still refused.
 
+### Changed
+
+- A compile checks the services of a module, spec section 32, from an index of each namespace's bindings by service, and resolves the services each binding's class takes once for each module it checks, where 0.6.54 searched every module of the project for each parameter it reached and made each parameter's service id again on each visit. It refuses and reports the same bindings. A compile after an edit to one file of a project of 2,445 PHP# files takes 12.3 processor seconds and retires 67.1 G instructions, where 0.6.54 took 14.1 s and 77.9 G, the medians of 5 alternating rounds.
+
 ## [0.6.55] - 2026-11-24
 
 ### Upgrading from 0.6.54
