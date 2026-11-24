@@ -104,7 +104,10 @@ def report():
     if out.startswith("TICK INPUT MISSING"):
         return out
     lines = out.splitlines()
-    box = next(line.split("box: ", 1)[1] for line in lines if line.strip().startswith("box: "))
+    # The box headlines the next release's estimate, the one date the language owner asks for first.
+    eta = next((re.match(r"\s*release ETA: (\S+) (\d\d-\d\d \d\d:\d\d)", line) for line in lines
+                if line.strip().startswith("release ETA: ")), None)
+    box = f"{eta.group(1)} ships {eta.group(2)}" if eta else "No release in flight"
     block = [f"Disk  {free_gib()} GiB free", "", "Progress"]
     for line in lines:
         found = re.match(r"\s+(ALL|\S+) (\[[^\]]+\])\s+(.*)", line)
