@@ -608,16 +608,17 @@ jobs:
   # Splits sharp/composer and sharp/mago and pushes them to master of heyJordanParker/php-sharp-composer and
   # heyJordanParker/mago-sharp, whose webhooks tell Packagist, once every check of the push passed: it needs RELEASE,
   # and a job's failure() counts every job before it. For a release, it then pushes tag v<version> to each mirror that
-  # lacks it, once RELEASE made the GitHub release public: the split of the release's commit, which tag v<version>
-  # names, so a rerun that finishes a release tags what the release holds. The pushes never force, so a mistake
-  # can't rewind a published package.
+  # lacks it, while the GitHub release RELEASE filled is still a draft, which only a token that may write reads: the
+  # split of the release's commit, which tag v<version> names, so a rerun that finishes a release tags what the
+  # release holds. The pushes never force, so a mistake can't rewind a published package. A needed job that ended
+  # cancelled, as one past its timeout does, stops it, as RELEASE's if explains.
   COMPOSER:
     needs: [CHANGES, RELEASE]
-    if: ${{ !failure() && !cancelled() && github.event_name == 'push' }}
+    if: ${{ !failure() && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     concurrency: composer-${{ github.ref }}
     permissions:
-      contents: read
+      contents: write
       issues: write
     env:
       VERSION: ${{ needs.RELEASE.outputs.version }}
@@ -692,9 +693,9 @@ jobs:
       # A release's heyjordanparker/mago-sharp version is the split plus a commit that adds the release's SHA-256s as
       # composer/sha256sums.txt. The Composer wrapper refuses an archive whose SHA-256 differs, so the package version
       # pins the exact binary, as esbuild's and Biome's npm packages do. The tag pins them for good, so they are the
-      # published release's sums file, which install.sh checks a download against, and every asset a user downloads from
-      # the release must match them.
-      - name: The published assets match the release's SHA-256s
+      # release's sums file, which install.sh checks a download against, and every asset a user downloads from the
+      # release must match them, as the draft PUBLISH makes public holds them.
+      - name: The release's assets match its SHA-256s
         if: env.VERSION
         env:
           GH_TOKEN: ${{ github.token }}
@@ -722,6 +723,39 @@ jobs:
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit --message "The SHA-256 of every mago $VERSION release asset"
           git push origin "HEAD:refs/tags/v$VERSION"
+      - *red-master-issue
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+  # Makes the release RELEASE filled public, last, once RELEASE tagged and attested both images and COMPOSER pushed both
+  # Composer tags, so a release is public only with every part it publishes. Run 45455237056 made its release public
+  # before its images, which then never came, and no Composer tag followed.
+  PUBLISH:
+    needs: [CHANGES, RELEASE, COMPOSER]
+    if: ${{ !failure() && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && needs.RELEASE.result == 'success' && contains(needs.CHANGES.outputs.missing, 'assets') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.RELEASE.outputs.version }}
+    steps:
+      # Only for the actions below, and sharp/bin/record, which the usage action writes the job's line in the build
+      # record with.
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            .github/actions
+            sharp/bin
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+      - name: Publish the release
+        run: gh release edit "v$VERSION" --draft=false
       - *red-master-issue
       - name: Write the job's CPU-seconds and peak memory
         if: always()
@@ -933,7 +967,10 @@ jobs:
   # fails, since CI_PASSED doesn't need it.
   RELEASE:
     needs: [CHANGES, BUILD_LINUX, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, WORKFLOWS, MACOS, IMAGE]
-    if: ${{ !failure() && !cancelled() && needs.CHANGES.outputs.bump == 'true' }}
+    # failure() and cancelled() count no needed job that ended cancelled: cancelled() is true only when the run is
+    # cancelled, and a job past its timeout-minutes ends cancelled. Run 45455237056's IMAGE (linux/arm64) did, and
+    # RELEASE then made its release public with no image and no Composer tag. So it also reads each needed job's result.
+    if: ${{ !failure() && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && needs.CHANGES.outputs.bump == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -1072,7 +1109,9 @@ jobs:
         run: |
           git tag "v$VERSION" "$GITHUB_SHA"
           git push origin "refs/tags/v$VERSION"
-      - name: Upload every asset to the draft release, check it, then publish it
+      # The release stays a draft until PUBLISH, once the images are tagged and both Composer tags pushed, so a failure
+      # anywhere leaves a draft and nothing public.
+      - name: Upload every asset to the draft release, check it, and write its notes
         if: contains(env.MISSING, 'assets')
         env:
           NOTES: ${{ runner.temp }}/release-notes.md
@@ -1093,7 +1132,7 @@ jobs:
             echo "::error::Draft release $tag holds different assets than expected, so it stays a draft."
             exit 1
           }
-          gh release edit "$tag" --notes-file "$NOTES" --draft=false
+          gh release edit "$tag" --notes-file "$NOTES"
       - name: Download the platforms' digests
         id: digests
         if: contains(env.MISSING, 'images')
