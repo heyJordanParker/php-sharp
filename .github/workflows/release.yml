@@ -391,7 +391,10 @@ jobs:
           echo "MAGO_CHECKER_ARCHIVE=$RUNNER_TEMP/checker.tar.zst" >> "$GITHUB_ENV"
 
       # mago exits 1 when the analysis finds issues, which the corpus holds, and any other exit, a crash, a kill or a
-      # tool error, fails the build, so no binary ships built from a broken profile.
+      # tool error, fails the build, so no binary ships built from a broken profile. The instrumented mago only analyzes
+      # corpus/ once to write the profile and never ships, so it compiles without [profile.release]'s fat LTO in one
+      # codegen unit, which made the build step 1,535 to 1,740 s on the release runs of 11-24. The optimized build that
+      # ships keeps [profile.release] (#797).
       - name: build
         if: inputs.assets
         shell: bash
@@ -401,7 +404,8 @@ jobs:
             exit
           fi
           rm -rf "$CARGO_TARGET_DIR/pgo-profiles"
-          cargo pgo build -- --target=${{ matrix.job.target }}
+          CARGO_PROFILE_RELEASE_LTO=off CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
+            cargo pgo build -- --target=${{ matrix.job.target }}
           status=0
           LLVM_PROFILE_FILE="$CARGO_TARGET_DIR/pgo-profiles/mago_%m_%p.profraw" \
             "$CARGO_TARGET_DIR/${{ matrix.job.target }}/release/mago" --workspace corpus/ analyze --reporting-format count || status=$?
