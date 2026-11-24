@@ -125,6 +125,30 @@ def speed_entries(measured):
     return "\n".join(lines) or "SPEED: every speed target off its goal has its intake entry."
 
 
+def upstream_engine():
+    """The engine's php version against upstream's newest patch release of the same minor version.
+
+    The engine takes upstream by merging each patch release's tag, for its security fixes (proposals/engine-8-5-13.md),
+    so a newer tag is a problem the tick names until an intake entry merges it."""
+    with open("main/php_version.h", encoding="utf-8") as fh:
+        ours = re.search(r'#define PHP_VERSION "(\d+)\.(\d+)\.(\d+)"', fh.read())
+    minor = f"{ours.group(1)}.{ours.group(2)}"
+    listed = subprocess.run(["git", "ls-remote", "--tags", "https://github.com/php/php-src.git", f"php-{minor}.*"],
+                            capture_output=True, text=True, timeout=30).stdout
+    patches = [int(m.group(1)) for m in re.finditer(rf"refs/tags/php-{re.escape(minor)}\.(\d+)$", listed, re.M)]
+    if not patches:
+        return f"UPSTREAM ENGINE: no php-{minor} release tag read from php/php-src."
+    newest = max(patches)
+    if newest <= int(ours.group(3)):
+        return f"UPSTREAM ENGINE: the engine is php {minor}.{ours.group(3)}, upstream's newest patch release."
+    with open(os.path.expanduser("~/.claude/orchestrate/php-sharp/intake.md"), encoding="utf-8") as fh:
+        entered = re.search(rf"^## .*\b{re.escape(minor)}\.{newest}\b", fh.read(), re.M)
+    if entered:
+        return f"UPSTREAM ENGINE: php {minor}.{newest} is released and in intake; the engine is {minor}.{ours.group(3)}."
+    return (f"UPSTREAM ENGINE, ACT FIRST: upstream released php {minor}.{newest}; the engine is {minor}.{ours.group(3)}. "
+            f"Enter an intake entry that merges its tag, as #785 merges 8.5.13.")
+
+
 def archive_finished():
     """Moves each intake entry that left intake to intake-archive.md, so intake holds only the queue: on 11-24 it held
     150 entries, 89 of them finished (TRIAGE.md: an entry leaves intake when every box that applies is checked). An
@@ -231,7 +255,7 @@ def main():
         except OSError as error:
             bench = f"SPEED NUMBERS: ~/.claude/orchestrate/php-sharp/bench.md could not be read: {error}."
         measured = targets()
-        context = f"{lanes()}\n\n{measured}\n\n{speed_entries(measured)}\n\n{bench}"
+        context = f"{lanes()}\n\n{measured}\n\n{speed_entries(measured)}\n{upstream_engine()}\n\n{bench}"
     else:
         # `sop <file>` injects one file of the maintain Skill that every tick follows, SKILL.md unless another is named,
         # so a tick never runs from memory of it.
