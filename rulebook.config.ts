@@ -14,5 +14,6 @@ export default defineConfig({
     'sharp/block-plumbing-commits': 'error',
     'sharp/block-auto-merge-off': 'error',
     'sharp/block-intake-shell-writes': 'error',
+    'sharp/require-nice-builds': 'error',
   },
 })
