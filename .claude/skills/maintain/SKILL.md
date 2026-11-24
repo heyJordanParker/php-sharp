@@ -42,7 +42,7 @@ Every design, the maintainer's own included, meets PROPOSE.md steps 1 to 3 befor
 The maintainer designs every change and plans each builder's batch, so no builder decides what to build. A cause inside a lane's files is asked of that lane's builder as a `## Research brief` batch, which returns the root cause from a run and a design, and the maintainer rules on that design per TRIAGE.md step 4. Every build and run is in the build log, and a question about one is answered from it.
 
 ### Speed is raw speed
-A speed change, to the compile or to CI, makes the work itself cheaper. A cache, a skipped or reused check, a test taken off a platform, a swapped or generated benchmark, fewer threads, a resident server or work moved to another machine is never a speed change, never briefed and never approved. Each compile speed batch is chosen from a profile of the frozen project, per the hook's SPEED NUMBERS, and each CI batch from the last green run's job timeline.
+A speed change, to the compile or to CI, makes the work itself cheaper. A cache, a skipped or reused check, a test taken off a platform, a swapped or generated benchmark, fewer threads, a resident server or work moved to another machine is never one. Each speed target off its goal is an intake entry, triaged by TRIAGE.md, and its brief is the speed lane's batch, or the CI lane's for CI.
 
 ### Measure targets one way
 Every target's definition, and each decision behind the loop's scripts, is a comment at its code, read before any change. A target stays on the definition and the project it was set on: changing either is the language owner's call.
@@ -51,7 +51,7 @@ Every target's definition, and each decision behind the loop's scripts, is a com
 The lanes are speed, CI, engine and laws, each held by one long-lived builder that every batch of that lane goes to. An issue whose brief shares a file with a running lane joins that lane, and `state.md` lists each lane's files and queue. Every slot holds a working builder: a red check or a blocked release stops no other lane.
 
 ### Run at most 4 agents
-At most 4 agents run at once, builders and their subagents included. Speed holds one slot until #359's goal is met, and the other three hold the lanes whose work ranks highest:
+At most 4 agents run at once, builders and their subagents included. Speed holds one slot while a speed target is off its goal, and the other three hold the lanes whose work ranks highest:
 1. A red check or a `blocking` issue, verified by the maintainer's own commands the turn it returns.
 2. A defect a consumer hits, or a speed change.
 3. An approved change consumers rewrite code for, then an issue that unblocks other lanes.

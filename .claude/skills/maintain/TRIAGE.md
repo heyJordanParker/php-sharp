@@ -51,9 +51,11 @@ Every triaged issue carries exactly one category and one state label. A new issu
 
 ## Triage one problem
 
-A question about how to use PHP#, an audit of a consumer's own rules, or a request to pick a form for a consumer's code is not a problem. It gets no issue and no answer, because the spec answers it and the maintainer's time goes to PHP#. Only a defect, with a repro, or a missing capability enters triage. A defect enters only when a project, a user or CI hit it. A defect a builder or a tool found by exploring, which nothing hit, gets no issue.
+A question about how to use PHP#, an audit of a consumer's own rules, or a request to pick a form for a consumer's code is not a problem. It gets no issue and no answer, because the spec answers it and the maintainer's time goes to PHP#. Only a defect, with a repro, a missing capability, or a speed target off its goal enters triage. A defect enters only when a project, a user or CI hit it. A defect a builder or a tool found by exploring, which nothing hit, gets no issue.
 
 The language owner's feedback is a problem like any other: it runs all five steps, and a builder gets the Solution the maintainer designed from the code, never his words.
+
+A speed target off its goal is a problem like a defect a consumer hits, and ranks with one. Its entry's heading is `## Speed: <target>`, as the hook names it. Step 3 verifies it by its count: the frozen project's, as `benchmark/speed.php` counts, or the last green run's job timeline. Step 4's root cause is the function or the step that a profile of that count shows costing most. Its brief makes that work cheaper, and once it is briefed, the next cost enters as a new entry.
 
 Run all five steps on the entry in progress before starting another. Filing is only step 1: nothing else in the loop verifies an issue left at `needs-triage`.
 

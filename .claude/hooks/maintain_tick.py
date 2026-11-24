@@ -95,6 +95,26 @@ def targets():
     return out.stdout.strip()
 
 
+# The speed targets, by the name targets.py prints. The language owner set speed as a standing priority on 11-24,
+# triaged like any other problem: each one off its goal is an intake entry headed `## Speed: <name>` (TRIAGE.md).
+SPEED_TARGETS = ("edit CPU", "edit peak memory", "Mac job, last green", "longest CI job, last green")
+
+
+def speed_entries(measured):
+    """Each speed target that `measured`, targets.py's output, shows off its goal with no intake entry for it."""
+    with open(os.path.expanduser("~/.claude/orchestrate/php-sharp/intake.md"), encoding="utf-8") as fh:
+        headings = [line for line in fh if line.startswith("## Speed: ")]
+    missing = [
+        name for name in SPEED_TARGETS
+        if re.search(rf"^  {re.escape(name)}: .* x\d", measured, re.M)
+        and not any(heading.startswith(f"## Speed: {name}") for heading in headings)
+    ]
+    if not missing:
+        return "SPEED: every speed target off its goal has its intake entry."
+    return "SPEED, ACT FIRST: " + "; ".join(missing) + (
+        " off its goal with no intake entry. Enter each as `## Speed: <target>` at a consumer defect's rank (TRIAGE.md).")
+
+
 def archive_finished():
     """Moves each intake entry that left intake to intake-archive.md, so intake holds only the queue: on 11-24 it held
     150 entries, 89 of them finished (TRIAGE.md: an entry leaves intake when every box that applies is checked). An
@@ -200,7 +220,8 @@ def main():
                 bench = fh.read().strip()
         except OSError as error:
             bench = f"SPEED NUMBERS: ~/.claude/orchestrate/php-sharp/bench.md could not be read: {error}."
-        context = f"{lanes()}\n\n{targets()}\n\n{bench}"
+        measured = targets()
+        context = f"{lanes()}\n\n{measured}\n\n{speed_entries(measured)}\n\n{bench}"
     else:
         # `sop <file>` injects one file of the maintain Skill that every tick follows, SKILL.md unless another is named,
         # so a tick never runs from memory of it.
