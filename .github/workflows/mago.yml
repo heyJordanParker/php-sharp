@@ -8,15 +8,18 @@ on:
     branches: [master]
   merge_group:
 
-# Every lane pull request's run joins lanes, which keeps one run in progress and the newest pending one, a release/
-# pull request's joins release, where a push cancels its run in progress, master runs one push at a time and lets it
-# finish, and each merge queue entry runs in a group of its own, as sharp.yml's concurrency explains.
+# Every lane pull request's run joins lanes, where a new run cancels the one in progress, a release/ pull request's
+# joins release and a spec/ pull request's a group of its own, each cancelling its run in progress too, master runs
+# one push at a time and lets it finish, and each merge queue entry runs in a group of its own, as sharp.yml's
+# concurrency explains.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event_name == 'pull_request'
-      && (startsWith(github.head_ref, 'release/') && 'release' || 'lanes')
+      && (startsWith(github.head_ref, 'release/') && 'release'
+        || startsWith(github.head_ref, 'spec/') && github.event.pull_request.url
+        || 'lanes')
       || (github.event_name == 'push' && github.ref) || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/') }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
