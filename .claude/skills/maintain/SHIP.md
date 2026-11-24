@@ -10,8 +10,6 @@ The stack lands whole when its top pull request's run is green. When that run is
 
 A change to `sharp/bin/spec` goes in a PR that carries nothing else but Markdown, which `SPEC_GUARD` requires. Open it from a branch `spec/<sha>` off `master`, created through the GitHub API, so the shared checkout never switches branch, and merge it first: until it merges, every pull request that carries the change fails `SPEC_GUARD`. `SPEC_GUARD` compares the head's files with `master`'s tip, so the `spec/` branch carries the checkout's file byte for byte, and an `origin/master` copy that differs from the checkout's goes onto the local `master` from a private index the moment it merges.
 
-A CI commit, touching only `.github/` and `sharp/bin/`, runs on every pull request, so it lands alone the same way, before any lane runs it: the CI lane commits it in `worktrees/ci` after `git merge --ff-only origin/master`, pushes `HEAD:refs/heads/ci/<issue>`, opens its pull request into `master` with auto-merge, and once it merges runs `git merge --no-edit origin/master` in the shared checkout.
-
 ## 1. Bump the version
 
 These files change, and nothing else:

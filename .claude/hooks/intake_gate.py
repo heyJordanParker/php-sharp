@@ -76,6 +76,16 @@ def require_one_in_progress(event: dict) -> None:
     if in_progress(after) > 1 and in_progress(after) >= in_progress(before):
         deny(f"This edit leaves {in_progress(after)} intake entries marked (in progress). One entry is worked at a time: "
              "mark the others (waiting on …) or (paused at …) with where each stopped (TRIAGE.md).")
+    if proposed_red_checks(after) > proposed_red_checks(before):
+        deny("A red check is PHP#'s own build, CI or process, which the maintainer decides: it takes no proposal box. "
+             "Only a change to what a PHP# program says or means goes to the language owner (TRIAGE.md).")
+
+
+def proposed_red_checks(text: str) -> int:
+    """Red-check entries that carry a proposal box. On 11-24 the maintainer filed the Mac runner's cost and the lanes'
+    split as proposals for the language owner, who owns the specimen, while CI and the process are the maintainer's."""
+    entries = re.split(r"^(?=## )", text, flags=re.MULTILINE)
+    return sum(1 for entry in entries if "(red check)" in entry.split("\n", 1)[0] and re.search(r"^- \[.\] proposal:", entry, re.MULTILINE))
 
 
 def main() -> None:
