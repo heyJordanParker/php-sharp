@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls Sharp.Encoding.Serialized, which allows no classes by default and gives null for text it cannot read or with data after the value, with no warning, and Sharp.Encoding.PhpLiteral, which writes a Map, and each Map it holds, as a PHP array literal
+A PHP# class calls Sharp.Encoding.Serialized, which allows no classes by default and gives null for text it cannot read or with data after the value, with no warning, and Sharp.Interop.PhpLiteral, which writes a Map, and each Map it holds, as a PHP array literal
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';

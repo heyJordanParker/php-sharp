@@ -5626,15 +5626,15 @@ public class Layout
 **The standard library lives under one root, `Sharp`,** with one standard library namespace per domain:
 
 - `Sharp.Text` holds the members of `string`, `Regex` and `Html`.
-- `Sharp.Time` holds `Clock`, `Instant`, `Duration`, `Date`, `DateTime`, `TimeZone`, `Weekday` and `Month`, and the members of a plain PHP date in `DateTimeInterfaceMembers`.
+- `Sharp.Time` holds `Clock`, `Instant`, `Duration`, `Date`, `DateTime`, `TimeZone`, `Weekday` and `Month`.
 - `Sharp.IO` holds `Files`, `Path`, `Console` and `ZipArchive`.
 - `Sharp.System` holds `Process`, `ProcessResult`, `ChildProcess` and `Environment`.
 - `Sharp.Net` holds `Http`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `Url`, `Ip`, `IpAddress`, `IpFamily`, `Dns`, `Mail`, `MailMessage` and `MailAddress`.
 - `Sharp.Collections` holds `SortedMap`, `SortedSet` and `PriorityQueue`.
 - `Sharp.Data` holds `Database` and `Cache`.
-- `Sharp.Encoding` holds `Json`, `Serialized`, `PhpLiteral`, `Base64`, `Hex` and `Compression`.
+- `Sharp.Encoding` holds `Json`, `Serialized`, `Base64`, `Hex` and `Compression`.
 - `Sharp.Security` holds `Hash`, `Hmac`, `Secret` and `Hashed`.
-- `Sharp.Interop` holds `PhpGlobals` and `Superglobal`.
+- `Sharp.Interop` holds every API that names PHP, which a program imports only to work with plain PHP: `PhpGlobals` and `Superglobal`, the members of a plain PHP date and `toPhpDateTime()` in `PhpDates` and `PhpDateTimes`, and `PhpLiteral`.
 
 **`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`. A bare `Int` is `Sharp.Int`, a bare `Math` is `Sharp.Math`, a bare `Decimal` is `Sharp.Decimal`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. `Sharp` holds the number types and their enums, and `Bytes` (section 18): `Int`, `Float`, `Math`, `Decimal`, `BigInteger`, `RoundingMode`, `ByteOrder` and `Bytes`. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, `Error` included (section 31):
 
@@ -6072,7 +6072,7 @@ Instant.tryParse("yesterday");                            // null
 new Date(2026, 2, 29);                                    // throws ValueError
 ```
 
-Two `Date`s, `Instant`s, `Duration`s or `DateTime`s order with `<`, `<=`, `>` and `>=`. A `DateTime` orders by its instant and then by its zone's name, so its `<=>` is 0 exactly when `==` is true. A zone's name is spelled exactly as the time zone database spells it, so `EEST` and `europe/sofia` name no zone. A name of the database names a zone only when PHP runs it with the database's rules, so `CET`, `GMT` and `EST`, which PHP reads as a fixed abbreviation, name no zone, and `TimeZone.names()` leaves them out: name the region, as `Europe/Brussels`. A fixed offset from `-18:00` to `+18:00`, written as `+03:00`, names a zone. A test module binds `new FakeClock(instant)`, from `Sharp.Testing`, in place of the `SystemClock` the standard library's module binds, and its `now()` is that instant until the test moves it with `advance(duration)` (section 29). After `import Sharp.Time.DateTimeInterfaceMembers;`, a plain PHP date, such as a Carbon, becomes an `Instant` with `toInstant()` or a `DateTime` with `toDateTime()`. `toPhpDateTime()` turns an `Instant` or a `DateTime` back into a plain PHP date. None of these four reads the clock.
+Two `Date`s, `Instant`s, `Duration`s or `DateTime`s order with `<`, `<=`, `>` and `>=`. A `DateTime` orders by its instant and then by its zone's name, so its `<=>` is 0 exactly when `==` is true. A zone's name is spelled exactly as the time zone database spells it, so `EEST` and `europe/sofia` name no zone. A name of the database names a zone only when PHP runs it with the database's rules, so `CET`, `GMT` and `EST`, which PHP reads as a fixed abbreviation, name no zone, and `TimeZone.names()` leaves them out: name the region, as `Europe/Brussels`. A fixed offset from `-18:00` to `+18:00`, written as `+03:00`, names a zone. A test module binds `new FakeClock(instant)`, from `Sharp.Testing`, in place of the `SystemClock` the standard library's module binds, and its `now()` is that instant until the test moves it with `advance(duration)` (section 29). After `import Sharp.Interop.PhpDates;`, a plain PHP date, such as a Carbon, becomes an `Instant` with `toInstant()` or a `DateTime` with `toDateTime()`, and `toPhpDateTime()` turns an `Instant` back into a plain PHP date. After `import Sharp.Interop.PhpDateTimes;`, `toPhpDateTime()` turns a `DateTime` back into one. None of these four reads the clock.
 
 A zone's `fixedOffset` is the offset of a zone whose clocks never change, read from the zone's rules and never from its name: a fixed offset, as `+03:00`, `UTC` and `Etc/GMT-3` each have one. A zone the database gives any change of offset, as `Europe/Sofia`, has none. A type that takes only a zone whose clocks follow a region's daylight saving refuses any zone that never changes its clocks in its constructor:
 

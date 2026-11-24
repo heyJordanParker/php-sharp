@@ -91,7 +91,7 @@ The standard library covers what modern standard libraries cover (decision 96). 
 | A date and time in a zone, time zones | `DateTime`, `instant.inZone(zone)`, `TimeZone.tryOf`, `TimeZone.names()`, `TimeZone.utc`, `zone.offsetAt(instant)` | `DateTimeZone`, `timezone_identifiers_list` |
 | Parse and write ISO 8601, SQL and HTTP dates | `parse`, `tryParse`, `toString()`, `toOffsetString()`, `toSqlString()`, `DateTime.parseLocal`, `instant.toHttpDate()` | |
 | Write with a custom pattern | a template of the fields, by design (spec section 24): a named format or a typed template writes a date, and a pattern string would be a second, untyped way | |
-| Plain PHP dates | `toInstant()`, `toDateTime()` on a `DateTimeInterface`, `toPhpDateTime()` back | |
+| Plain PHP dates | `toInstant()`, `toDateTime()` on a `DateTimeInterface` and `toPhpDateTime()` on an `Instant` from `Sharp.Interop.PhpDates`, `toPhpDateTime()` on a `DateTime` from `Sharp.Interop.PhpDateTimes` | `DateTimeImmutable` |
 
 ## Math and random
 
@@ -122,7 +122,7 @@ The standard library covers what modern standard libraries cover (decision 96). 
 | Integers to and from bytes | `n.toBytes(order)`, `Int.fromBytes(bytes, order)`, with `ByteOrder` | `pack`, `unpack` |
 | XML | **missing** | |
 | CSV | `text.parseCsv()`, `fields.toCsv()` on a `List<string>` | `str_getcsv` |
-| PHP's own formats | `Serialized.encode`, `Serialized.decode(text, allowedClasses)`, `PhpLiteral.of(value)` | `serialize`, `var_export` |
+| PHP's own formats | `Serialized.encode`, `Serialized.decode(text, allowedClasses)`, `PhpLiteral.of(value)` from `Sharp.Interop` | `serialize`, `var_export` |
 | Hash, compare in constant time | `Hash.of(algorithm, data)`, `Hash.equals` | `hash`, `hash_equals` |
 | HMAC | `Hmac.of(algorithm, data, key)`, `Hmac.verify` | `hash_hmac` |
 | Password hashing | `Password.hash`, `Password.verify` | `password_hash` |

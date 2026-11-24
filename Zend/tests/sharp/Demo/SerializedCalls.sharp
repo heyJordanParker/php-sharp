@@ -1,6 +1,6 @@
 namespace Demo;
 
-import Sharp.Encoding.PhpLiteral;
+import Sharp.Interop.PhpLiteral;
 import Sharp.Encoding.Serialized;
 
 public class SerializedCalls

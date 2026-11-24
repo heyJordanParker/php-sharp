@@ -56,8 +56,10 @@ var_dump(DateCalls::phpZoned('2026-10-22 18:30:00', '+00:00'), DateCalls::phpIns
 var_dump(DateCalls::phpZoned('2026-10-22 21:30:00', '+03:00'), DateCalls::phpZoned('2026-01-22 12:00:00', 'Europe/London'));
 var_dump(DateCalls::zonedCrossedBack('2026-10-22T21:30:00+03:00[Europe/Sofia]'), DateCalls::zonedCrossedBack('2026-10-22T21:30:00.123456789+03:00[Europe/Sofia]'));
 var_dump(DateCalls::instantCrossedBack('2026-10-22T18:30:00Z'), DateCalls::instantCrossedBack('1969-12-31T23:59:59.5Z'));
-foreach ([Sharp\Time\DateTime::parse('2026-10-22T21:30:00.25+03:00[Europe/Sofia]'), Sharp\Time\Instant::parse('2026-10-22T18:30:00Z')] as $value) {
-    $php = $value->toPhpDateTime();
+foreach ([
+    Sharp\Interop\PhpDateTimes::toPhpDateTime(Sharp\Time\DateTime::parse('2026-10-22T21:30:00.25+03:00[Europe/Sofia]')),
+    Sharp\Interop\PhpDates::toPhpDateTime(Sharp\Time\Instant::parse('2026-10-22T18:30:00Z')),
+] as $php) {
     echo get_class($php), ' ', $php->format('Y-m-d H:i:s.u e P'), "\n";
 }
 
