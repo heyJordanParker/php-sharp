@@ -77,57 +77,43 @@ const PROOF_STEPS: &str = "Sharp.Lean.Proof";
 /// The module of the runtime library that states a law, all a theorem in the [`Form::Steps`] form needs.
 const LAW_STATEMENT: &str = "Sharp.Lean.Law";
 
-/// The lemmas the fixed steps of a case rewrite with, beside the definitions the law uses: an `if` on a condition that
-/// decides, the monad's steps, a law's claim, the int operations and comparisons, an int literal's value, and a value
-/// a nullable side holds.
-const STEP_LEMMAS: &[&str] = &[
-    "↓reduceIte",
+/// The rewrites of the fixed steps' first two passes, beside the definitions the law uses: `sharp_step`, the simp set of
+/// `Sharp/Lean/Steps.lean` whose lemmas `Sharp/Lean/Law.lean` tags, so the library builds its index once, and the
+/// simprocs that decide an `if`'s condition and a case no value reaches. The set holds the monad's steps, a law's claim
+/// and each choice it makes, a fact about the values a step binds, which a law's `when` and a body's `sharp_call%` state
+/// and `Sharp/Lean/Proof.lean`'s search reads one by one too, a goal over a value one of several branches gives, which
+/// holds when it holds for each, the facts a case holds, split one by one, the comparisons, `b ≤ a` as `¬ a < b` on an
+/// `int` and on the exact `Int` a condition computes, so a fact that one comparison states decides a test that the other
+/// writes, and a value a nullable side holds or lacks. An int step stays folded, so two steps that compute from the same
+/// values stay one term, which `simp_all` reads as one value, as a law that runs a method twice needs, as `at.plus(d)` in
+/// a claim and in a method it calls.
+const MERGING_REWRITES: &[&str] = &["sharp_step", "↓reduceIte", "reduceCtorEq"];
+
+/// The rewrites of the fixed steps' third pass and of their last rewrite of a goal the passes leave open: `sharp_full`,
+/// the lemmas of `sharp_step` and the ones that read an int step as the `Int` it gives, and the simprocs of
+/// [`MERGING_REWRITES`] and of an int literal's value.
+const FULL_REWRITES: &[&str] = &["sharp_full", "↓reduceIte", "reduceCtorEq", "Int64.reduceToInt"];
+
+/// The lemmas that read a law's `when` as one fact for each step it computes, in each case of each branch it takes,
+/// as `holds_bind` reads the law's claim, so the claim's own steps are those facts.
+const CONDITION_LEMMAS: &[&str] = &[
+    "bind_eq_pure",
     "bind_assoc",
     "pure_bind",
-    "holds_bind",
-    "holds_pure",
-    "pure_inj",
-    "int.add_eq_pure",
-    "int.sub_eq_pure",
-    "int.toInt_max",
-    "beq_iff_eq",
-    "beq_self_eq_true",
-    "decide_eq_true_eq",
-    "Bool.and_eq_true",
-    "Int64.le_iff_toInt_le",
-    "Int64.lt_iff_toInt_lt",
-    "Int64.toInt_zero",
-    "Int64.reduceToInt",
-    "Option.isSome_some",
-    "Option.getD_some",
-];
-
-/// The lemmas of [`STEP_LEMMAS`] that read an int step as facts about the `Int` it gives. The fixed steps first rewrite
-/// without them, so two steps that compute from the same values stay one term, which `simp_all` reads as one value, as
-/// a law that runs a method twice needs, as `at.plus(d)` in a claim and in a method it calls.
-const VALUE_LEMMAS: &[&str] = &[
-    "int.add_eq_pure",
-    "int.sub_eq_pure",
-    "int.toInt_max",
-    "Int64.le_iff_toInt_le",
-    "Int64.lt_iff_toInt_lt",
-    "Int64.toInt_zero",
-    "Int64.reduceToInt",
-];
-
-/// The lemmas the fixed steps of a case of a body rewrite with too: a fact `sharp_call%` states about the values a
-/// step binds, which `Sharp/Lean/Proof.lean` reads one by one, as its search does, and a goal over a value one of
-/// several branches gives, which holds when it holds for each.
-const CASE_LEMMAS: &[&str] = &[
-    "bind_eq_pure",
-    "map_eq_pure",
     "ite_eq_pure",
-    "throw_eq_pure",
     "or_imp",
     "forall_and",
     "forall_exists_index",
     "and_imp",
+    "pure_inj",
+    "decide_eq_true_eq",
+    "← Int64.not_lt",
+    "← Int.not_lt",
 ];
+
+/// How the Lean name of each declaration of the standard library starts. The first pass of the fixed steps leaves them
+/// folded, so a value a law's `when` and its claim both compute with them is one value.
+const LIBRARY: &str = "«Sharp».";
 
 /// The record in the `.sharp` folder of how each law's proof ended, by the proof's key.
 pub const PROOFS: &str = "proofs.json";
@@ -500,50 +486,74 @@ fn proof_key(
 }
 
 /// The theorem of `law` with its fixed steps, which close it with the definitions its statement uses: a law without a
-/// body closed by [`steps`] with [`STEP_LEMMAS`], and a law with one with each case closed by them with
-/// [`CASE_LEMMAS`] and the statement of each law whose fact a case can hold too. An invariant of a machine has none.
+/// body closed by [`steps`], and a law with one with each case closed by them with the statement of each law whose fact
+/// a case can hold too. An invariant of a machine has none.
+/// A law without a body that states a `when`, which its one case holds as its first condition, first reads it with
+/// [`CONDITION_LEMMAS`] and the program's own definitions it uses, then closes each case of each branch it takes.
 fn scripted(law: &Law, program: &Program<'_>) -> Option<String> {
     let (plain, recursive) = program.definitions(&law.statement);
     if let Some(opening) = &law.proof.opening {
-        return Some(format!("{opening}{}", steps(STEP_LEMMAS, &plain, &recursive)));
+        let steps = steps(&[], &plain, &recursive);
+        if law.proof.cases.first().is_none_or(|case| case.conditions.is_empty()) {
+            return Some(format!("{opening}{steps}"));
+        }
+        let condition: Vec<&str> = CONDITION_LEMMAS.iter().copied().chain(own(&plain)).collect();
+
+        return Some(format!(
+            "{opening}revert «when»\n  simp only [{}]\n  and_intros\n  all_goals (intros; subst_vars)\n  all_goals ({steps})",
+            condition.join(", ")
+        ));
     }
     if law.proof.closes.is_empty() {
         return None;
     }
-    let lemmas: Vec<&str> = STEP_LEMMAS
-        .iter()
-        .chain(CASE_LEMMAS)
-        .copied()
-        .chain(std::iter::once(law.statement.as_str()))
+    let statements: Vec<&str> = std::iter::once(law.statement.as_str())
         .chain(law.proof.laws.iter().map(|(statement, ..)| statement.as_str()))
         .collect();
 
-    let closed = format!("({})", steps(&lemmas, &plain, &recursive));
+    let closed = format!("({})", steps(&statements, &plain, &recursive));
 
     Some(law.proof.closes.iter().fold(law.proof.text.clone(), |text, close| text.replace(close.as_str(), &closed)))
 }
 
-/// The fixed steps that close a case: `simp_all` with `lemmas` and the definitions `plain` as rewrites, first without
-/// [`VALUE_LEMMAS`] and then with them, then `omega` or `decide` on each goal it leaves. With `recursive` definitions,
-/// the steps first unfold each of them once, as a recursion on a value the case does not know needs, and else rewrite
-/// with them too, until each recursion ends, as one on values the law writes out needs.
-fn steps(lemmas: &[&str], plain: &[&str], recursive: &[&str]) -> String {
-    let simp = |definitions: &[&[&str]]| {
-        let pass = |lemmas: Vec<&str>| {
-            let lemmas: Vec<&str> = lemmas.into_iter().chain(definitions.iter().copied().flatten().copied()).collect();
-            format!("(try simp_all (config := {{ decide := true }}) only [{}])", lemmas.join(", "))
+/// The fixed steps that close a case: `sharp_simp_all` with the `statements` of the laws a case holds and the definitions
+/// `plain` as rewrites, first with [`MERGING_REWRITES`] and the program's own definitions alone, which rewrites the goal
+/// with the facts that the standard library's calls give, then with [`MERGING_REWRITES`] and every definition, then with
+/// [`FULL_REWRITES`], then `omega` or `decide` on each goal it leaves, or that rewrite again once each
+/// value a fact names is in its place, as a case's value is where a fact names the constructor that built it. With
+/// `recursive` definitions, the steps first unfold each of them once, as a recursion on a value the case does not know
+/// needs, and else rewrite with them too, until each recursion ends, as one on values the law writes out needs.
+fn steps(statements: &[&str], plain: &[&str], recursive: &[&str]) -> String {
+    let closed = |definitions: &[&[&str]]| {
+        let pass = |rewrites: &[&str], definitions: &[&str]| {
+            let rewrites = [rewrites, statements, definitions].concat();
+            format!("(try sharp_simp_all (config := {{ decide := true }}) only [{}])", rewrites.join(", "))
         };
-        let merging = lemmas.iter().copied().filter(|lemma| !VALUE_LEMMAS.contains(lemma)).collect();
+        let reached: Vec<&str> = definitions.concat();
+        let own: Vec<&str> = own(&reached).collect();
+        let close = format!(
+            "all_goals (intros; and_intros; all_goals (intros; subst_vars; first | rfl | omega | decide | ({}; done)))",
+            pass(FULL_REWRITES, &reached)
+        );
 
-        format!("{}; {}", pass(merging), pass(lemmas.to_vec()))
+        format!(
+            "({}; {}; {}; {close}; done)",
+            pass(MERGING_REWRITES, &own),
+            pass(MERGING_REWRITES, &reached),
+            pass(FULL_REWRITES, &reached)
+        )
     };
-    let close = "all_goals (intros; subst_vars; first | rfl | omega | decide)";
-    let rewritten = format!("({}; {close}; done)", simp(&[plain, recursive]));
+    let rewritten = closed(&[plain, recursive]);
     if recursive.is_empty() {
         return rewritten;
     }
 
-    format!("first | (unfold {}; {}; {close}; done) | {rewritten}", recursive.join(" "), simp(&[plain]))
+    format!("first | (unfold {}; {}) | {rewritten}", recursive.join(" "), closed(&[plain]))
+}
+
+/// Each of `definitions` that the program declares, outside the standard library.
+fn own<'definition>(definitions: &[&'definition str]) -> impl Iterator<Item = &'definition str> {
+    definitions.iter().copied().filter(|definition| !definition.starts_with(LIBRARY))
 }
 
 /// `laws`, each with the translation that states it, one law to an entry, in order, so each is a check of its own,

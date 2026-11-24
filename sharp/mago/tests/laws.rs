@@ -1324,6 +1324,24 @@ fn compile_proves_a_law_over_a_state_beside_one_that_holds_an_instant() {
     assert!(compiled(root, "app/Delivery/Pending.sharp").exists());
 }
 
+/// A theorem rewrites with the equations Lean built for a match of its module's own definitions, as the module holds
+/// them, and builds none again: Lean refuses a second constant of one name with a panic, whose backtrace costs the law
+/// checker more than the proof. `LEAN_ABORT_ON_PANIC` ends the runner at a panic, so the compile fails where one is
+/// raised.
+#[test]
+fn a_machine_s_laws_prove_with_no_panic_in_the_law_checker() {
+    let directory = library_project(&[(
+        "app/Seats/SeatStatus.sharp",
+        include_str!("../../../benchmark/laws/Seats/SeatStatus.sharp"),
+    )]);
+    let root = directory.path();
+
+    let output = process::output(command(root, "never").env("LEAN_ABORT_ON_PANIC", "1")).unwrap();
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Seats/SeatStatus.sharp").exists());
+}
+
 /// Spec section 28: a state of a sealed family passes where an open interface it implements is expected, so a law
 /// proves that passes one there, and two states that implement the same open interface both pass as it.
 #[test]
@@ -1637,7 +1655,7 @@ fn a_false_law_over_an_instant_its_constructor_builds_is_not_proven() {
 const OFFER_AVAILABILITY: &str = "namespace App.Offers;\n\nimport Sharp.Time.Instant;\n\npublic machine OfferAvailability : Variant\n{\n    final case Available(Instant? startsAt, Instant? endsAt, int? spotsRemaining);\n    final case Inactive;\n    final case Undeliverable;\n    final case NotStarted;\n    final case Ended(Instant endedAt);\n    final case SoldOut(Instant? startsAt, Instant? endsAt);\n    final case Purchased(Instant? startsAt, Instant? endsAt);\n\n    public static OfferAvailability of(bool active, bool deliverable, Instant? startsAt, Instant? deadline, int? maxBuyers, int claims, int? maxPerCustomer, int? customerClaims) {\n        if (!active) { return OfferAvailability.Inactive; }\n        if (!deliverable) { return OfferAvailability.Undeliverable; }\n        if (maxBuyers != null && claims >= maxBuyers) { return OfferAvailability.SoldOut(startsAt, deadline); }\n        if (maxPerCustomer != null && customerClaims != null && customerClaims >= maxPerCustomer) { return OfferAvailability.Purchased(startsAt, deadline); }\n        if (maxBuyers == null) { return OfferAvailability.Available(startsAt, deadline, null); }\n        return OfferAvailability.Available(startsAt, deadline, maxBuyers - claims);\n    }\n\n    public static OfferAvailability at(OfferAvailability status, Instant now)\n        => status is OfferAvailability.Available available\n            ? OfferAvailability.timed(available, available.startsAt, available.endsAt, now)\n            : (status is OfferAvailability.SoldOut soldOut\n                ? OfferAvailability.timed(soldOut, soldOut.startsAt, soldOut.endsAt, now)\n                : (status is OfferAvailability.Purchased purchased ? OfferAvailability.timed(purchased, purchased.startsAt, purchased.endsAt, now) : status));\n\n    private static OfferAvailability timed(OfferAvailability open, Instant? startsAt, Instant? endsAt, Instant now)\n        => startsAt is Instant starts\n            ? (now < starts ? OfferAvailability.NotStarted : OfferAvailability.ended(open, endsAt, now))\n            : OfferAvailability.ended(open, endsAt, now);\n\n    private static OfferAvailability ended(OfferAvailability open, Instant? endsAt, Instant now)\n        => endsAt is Instant ends ? (now >= ends ? OfferAvailability.Ended(ends) : open) : open;\n\n    law anOfferNotStartedComesBeforeItsEnd(Instant now, Instant starts, Instant ends, int claims)\n        when now < starts\n        => OfferAvailability.at(OfferAvailability.of(true, true, starts, ends, null, claims, null, null), now) is OfferAvailability.NotStarted;\n}\n";
 
 /// A law over a machine's `Instant`s, compared through `Instant`'s `operator <=>` under the `if`s of the machine's code,
-/// proves within its time, as it did in 0.6.49.
+/// proves within its time, as it did before a regression.
 #[test]
 fn a_law_over_instants_a_machine_compares_under_its_ifs_proves_in_time() {
     let directory = library_project(&[
@@ -1685,7 +1703,7 @@ fn a_false_law_over_a_chain_of_tests_on_one_value_is_not_proven() {
 const PLAN_STATE: &str = "namespace App.Plans;\n\nimport Sharp.Key;\nimport Sharp.Tag;\nimport Sharp.Time.Instant;\n\n[Tag(\"state\")]\npublic machine PlanState\n{\n    [Key(\"draft\")]\n    case Draft\n    {\n        public PlanState.Live start(Instant chargeAt) => PlanState.Live(false, chargeAt);\n\n        public PlanState.Trial try(Instant chargeAt, Instant trialEndsAt) => PlanState.Trial(chargeAt, trialEndsAt);\n    }\n\n    [Key(\"trial\")]\n    case Trial([Key(\"charge_at\")] Instant chargeAt, [Key(\"trial_ends_at\")] Instant trialEndsAt)\n    {\n        public PlanState.Live convert() => PlanState.Live(false, this.chargeAt);\n    }\n\n    [Key(\"live\")]\n    case Live([Key(\"stops_at_end\")] bool stopsAtEnd, [Key(\"charge_at\")] Instant chargeAt)\n    {\n        public PlanState.Overdue|PlanState.Lapsed lapse(Instant retryAt, int maxTries, string why, Instant failedAt)\n            => PlanState.triesLeft(0, maxTries) ? PlanState.Overdue(1, retryAt, why, failedAt) : PlanState.Lapsed(failedAt);\n\n        public PlanState.Held hold(Instant? resumesAt) => PlanState.Held(resumesAt);\n\n        public PlanState.Closed close(Instant at) => PlanState.Closed(at);\n    }\n\n    [Key(\"held\")]\n    case Held([Key(\"resumes_at\")] Instant? resumesAt)\n    {\n        public PlanState.Live resume(Instant chargeAt) => PlanState.Live(false, chargeAt);\n    }\n\n    [Key(\"overdue\")]\n    case Overdue(\n        [Key(\"tries\")] int tries,\n        [Key(\"retry_at\")] Instant retryAt,\n        [Key(\"why\")] string why,\n        [Key(\"failed_at\")] Instant failedAt,\n    ) {\n        public PlanState.Live recover(Instant chargeAt) => PlanState.Live(false, chargeAt);\n\n        public PlanState.Lapsed lapse(Instant at) => PlanState.Lapsed(at);\n    }\n\n    [Key(\"lapsed\")]\n    case Lapsed([Key(\"lapsed_at\")] Instant lapsedAt)\n    {\n        public PlanState.Closed close(Instant at) => PlanState.Closed(at);\n    }\n\n    [Key(\"closed\")]\n    final case Closed([Key(\"closed_at\")] Instant closedAt);\n\n    public static PlanState.Draft enter() => PlanState.Draft;\n\n    public bool charges() => match (this) {\n        PlanState.Trial => true,\n        PlanState.Live live => !live.stopsAtEnd,\n        PlanState.Draft or PlanState.Held or PlanState.Overdue or PlanState.Lapsed or PlanState.Closed => false,\n    };\n\n    public bool chargeable() => match (this) {\n        PlanState.Overdue => true,\n        PlanState.Draft or PlanState.Trial or PlanState.Live or PlanState.Held or PlanState.Lapsed or PlanState.Closed => this.charges(),\n    };\n\n    law anOverduePlanIsChargeable(Instant chargeAt, Instant retryAt, string why, Instant failedAt)\n        => PlanState.enter().start(chargeAt).lapse(retryAt, 2, why, failedAt).chargeable();\n\n    public static bool triesLeft(int tries, int maxTries) => maxTries >= 1 && tries < maxTries - 1;\n}\n";
 
 /// A law that walks a machine's entry point through two moves and ends in a predicate whose `match` names its last
-/// cases with `or` proves within its time, as it did in 0.6.49, where 0.6.52 wrote that arm again for each case an arm
+/// cases with `or` proves within its time, as it did before a release wrote that arm again for each case an arm
 /// before it left out, and ran out of time.
 #[test]
 fn a_law_over_a_match_whose_last_arm_names_each_other_case_with_or_proves_in_time() {
@@ -4635,4 +4653,195 @@ fn a_false_law_over_a_join_is_not_proven() {
         printed(&output)
     );
     assert!(printed(&output).contains(" = fails for: a = \"\", b = \"\"\n"), "{}", printed(&output));
+}
+
+const VISIT: &str = "namespace App.Visits;\n\nimport Sharp.Time.Duration;\nimport Sharp.Time.Instant;\n\npublic machine Visit\n{\n    final case Live(Instant idleAt, Instant endsAt);\n    final case Idle(Instant endsAt);\n    final case Ended;\n\n    public const int IDLE_MINUTES = 5;\n    public const int LIFETIME_MINUTES = 30;\n    public const int MAX_HOURS = 24;\n\n    internal static Visit.Live seen(Instant started, Instant lastSeen)\n    {\n        const lapses = lastSeen.plus(Duration.ofMinutes(Visit.LIFETIME_MINUTES));\n        const ends = started.plus(Duration.ofHours(Visit.MAX_HOURS));\n        return Visit.Live(lastSeen.plus(Duration.ofMinutes(Visit.IDLE_MINUTES)), lapses < ends ? lapses : ends);\n    }\n\n    internal static Visit at(Visit status, Instant now)\n        => status is Visit.Live live\n            ? (now >= live.endsAt ? Visit.Ended : now >= live.idleAt ? Visit.Idle(live.endsAt) : live)\n            : status is Visit.Idle idle\n                ? (now >= idle.endsAt ? Visit.Ended : idle)\n                : status;\n\n    law aVisitEndsItsLifetimeAfterTheSighting(Instant started, Instant lastSeen)\n        when lastSeen.plus(Duration.ofMinutes(Visit.LIFETIME_MINUTES)) < started.plus(Duration.ofHours(Visit.MAX_HOURS))\n        => Visit.seen(started, lastSeen).endsAt == lastSeen.plus(Duration.ofMinutes(Visit.LIFETIME_MINUTES));\n    law aVisitNeverOutlivesItsLongestLength(Instant started, Instant lastSeen)\n        when lastSeen.plus(Duration.ofMinutes(Visit.LIFETIME_MINUTES)) >= started.plus(Duration.ofHours(Visit.MAX_HOURS))\n        => Visit.seen(started, lastSeen).endsAt == started.plus(Duration.ofHours(Visit.MAX_HOURS));\n    law aSightingBeforeTheEndStaysInTheVisit(Instant started, Instant lastSeen, Instant now)\n        when now < Visit.seen(started, lastSeen).endsAt\n        => !(Visit.at(Visit.seen(started, lastSeen), now) is Visit.Ended);\n    law aSightingAtTheEndOrAfterEndsTheVisit(Instant started, Instant lastSeen, Instant now)\n        when now >= Visit.seen(started, lastSeen).endsAt\n        => Visit.at(Visit.seen(started, lastSeen), now) is Visit.Ended;\n}\n";
+
+/// A law over `Instant.plus` of a `Duration` a constant gives, compared with another `Instant`, proves within its time,
+/// and so does a law over the case a `?:` between two `Instant`s chooses.
+#[test]
+fn a_law_over_instant_plus_a_constant_duration_proves() {
+    let directory = library_project(&[("app/Visits/Visit.sharp", VISIT)]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Visits/Visit.sharp").exists());
+}
+
+const RECEIPT: &str = "namespace App.Store;\n\npublic class Receipt\n{\n    public Receipt(\n        public string holder { get; set; },\n        public string? gateway { get; set; } = null,\n        public string? last4 { get; set; } = null,\n        public string? brand { get; set; } = null,\n        public string? transactionId { get; set; } = null,\n        public bool isTest { get; set; } = false,\n    ) : super() {\n    }\n}\n";
+
+const VARIANT: &str = "namespace App.Store;\n\npublic class Variant\n{\n}\n";
+
+/// `app/Store/OrderStatus.sharp`, a machine of nine cases whose moves pay, refund and dispute an order, with `laws` and
+/// the invariant `aPartlyRefundedOrderHoldsARefund` in its body, which reads `Receipt` and `Variant`.
+fn refunding_order(laws: &str) -> String {
+    format!(
+        r#"namespace App.Store;
+
+import Sharp.Key;
+import Sharp.Tag;
+
+[Tag("status")]
+public machine OrderStatus : Variant
+{{
+    [Key("pending")] case Pending([Key("payment")] Receipt payment)
+    {{
+        public OrderStatus.Paid pay(Receipt payment) => OrderStatus.Paid(payment);
+        public OrderStatus.Reserved reserve(Receipt payment) => OrderStatus.Reserved(payment);
+        public OrderStatus.Failed fail(string? failureReason) => OrderStatus.Failed(failureReason, this.payment);
+        public OrderStatus.Abandoned abandon(string? failureReason) => OrderStatus.Abandoned(failureReason, this.payment);
+        public OrderStatus.Canceled cancel(string? failureReason) => OrderStatus.Canceled(failureReason, this.payment);
+    }}
+    [Key("reserved")] case Reserved([Key("payment")] Receipt payment)
+    {{
+        public OrderStatus.Paid pay(Receipt payment) => OrderStatus.Paid(payment);
+        public OrderStatus.Failed fail(string? failureReason) => OrderStatus.Failed(failureReason, this.payment);
+    }}
+    [Key("paid")] case Paid([Key("payment")] Receipt payment)
+    {{
+        public OrderStatus.PartiallyRefunded|OrderStatus.Refunded refund(int cents, int amount)
+        {{
+            if (cents <= 0 || cents > amount) {{ throw new ValueError(`A refund takes between 1 and ${{amount}}, not ${{cents}}.`); }}
+            return cents == amount ? OrderStatus.Refunded(this.payment) : OrderStatus.PartiallyRefunded(cents, this.payment);
+        }}
+        public OrderStatus.Disputed dispute() => OrderStatus.Disputed(0, this.payment);
+        public OrderStatus.Paid pay(Receipt payment) => this;
+    }}
+    [Key("partiallyRefunded")] case PartiallyRefunded([Key("refunded_amount")] int refundedCents, [Key("payment")] Receipt payment)
+    {{
+        public OrderStatus.PartiallyRefunded|OrderStatus.Refunded refund(int cents, int amount)
+        {{
+            if (cents <= 0 || this.refundedCents + cents > amount) {{ throw new ValueError(`A refund takes between 1 and ${{amount - this.refundedCents}}, not ${{cents}}.`); }}
+            return this.refundedCents + cents == amount ? OrderStatus.Refunded(this.payment) : OrderStatus.PartiallyRefunded(this.refundedCents + cents, this.payment);
+        }}
+        public OrderStatus.Disputed dispute()
+            => this.refundedCents >= 0 ? OrderStatus.Disputed(this.refundedCents, this.payment) : throw new ValueError(`${{this.refundedCents}} is below 0.`);
+        public OrderStatus.PartiallyRefunded pay(Receipt payment) => this;
+    }}
+    [Key("disputed")] case Disputed([Key("refunded_amount")] int refundedCents, [Key("payment")] Receipt payment)
+    {{
+        public OrderStatus.Paid|OrderStatus.PartiallyRefunded win()
+            => this.refundedCents > 0 ? OrderStatus.PartiallyRefunded(this.refundedCents, this.payment) : OrderStatus.Paid(this.payment);
+        public OrderStatus.Refunded lose(int cents, int amount)
+            => this.refundedCents + cents == amount ? OrderStatus.Refunded(this.payment) : throw new ValueError(`A lost dispute takes all ${{amount - this.refundedCents}}, not ${{cents}}.`);
+        public OrderStatus.Disputed pay(Receipt payment) => this;
+    }}
+    [Key("failed")] case Failed([Key("failure_reason")] string? failureReason, [Key("payment")] Receipt payment)
+    {{ public OrderStatus.Paid pay(Receipt payment) => OrderStatus.Paid(payment); }}
+    [Key("abandoned")] case Abandoned([Key("failure_reason")] string? failureReason, [Key("payment")] Receipt payment)
+    {{ public OrderStatus.Paid pay(Receipt payment) => OrderStatus.Paid(payment); }}
+    [Key("canceled")] case Canceled([Key("failure_reason")] string? failureReason, [Key("payment")] Receipt payment)
+    {{
+        public OrderStatus.Canceled receiveLatePayment(Receipt payment) => OrderStatus.Canceled(this.failureReason, payment);
+        public OrderStatus.Refunded refund(int cents, int amount)
+            => cents == amount ? OrderStatus.Refunded(this.payment) : throw new ValueError(`Refunded only in full, ${{amount}}, not ${{cents}}.`);
+    }}
+    [Key("refunded")] case Refunded([Key("payment")] Receipt payment)
+    {{ public OrderStatus.Refunded pay(Receipt payment) => this; }}
+
+    public static OrderStatus.Pending placed(Receipt payment) => OrderStatus.Pending(payment);
+
+    public int refunded(int amount) => match (this) {{
+        OrderStatus.PartiallyRefunded partly => partly.refundedCents,
+        OrderStatus.Disputed disputed => disputed.refundedCents,
+        OrderStatus.Refunded => amount,
+        OrderStatus.Pending or OrderStatus.Reserved or OrderStatus.Paid or OrderStatus.Failed or OrderStatus.Abandoned or OrderStatus.Canceled => 0,
+    }};
+    public bool settled() => match (this) {{
+        OrderStatus.Refunded => true,
+        OrderStatus.Pending or OrderStatus.Reserved or OrderStatus.Paid or OrderStatus.PartiallyRefunded or OrderStatus.Disputed or OrderStatus.Failed or OrderStatus.Abandoned or OrderStatus.Canceled => false,
+    }};
+    public Receipt snapshot() => match (this) {{
+        OrderStatus.Pending pending => pending.payment,
+        OrderStatus.Reserved reserved => reserved.payment,
+        OrderStatus.Paid paid => paid.payment,
+        OrderStatus.PartiallyRefunded partly => partly.payment,
+        OrderStatus.Disputed disputed => disputed.payment,
+        OrderStatus.Failed failed => failed.payment,
+        OrderStatus.Abandoned abandoned => abandoned.payment,
+        OrderStatus.Canceled canceled => canceled.payment,
+        OrderStatus.Refunded refunded => refunded.payment,
+    }};
+
+    law aPartlyRefundedOrderHoldsARefund(OrderStatus.PartiallyRefunded partly) => partly.refundedCents > 0;
+
+{laws}}}
+"#
+    )
+}
+
+/// Spec sections 20.2 and 28: a law over one case of a machine and another value holds for each value of that case
+/// that keeps the case's invariants, so a law true of `Refunded` alone proves, and so does one whose claim needs the
+/// invariant of `PartiallyRefunded`.
+#[test]
+fn a_law_over_one_case_of_a_machine_beside_another_parameter_holds_for_each_value_of_that_case() {
+    let laws = "    law aFurtherRefundKeepsThePayment(OrderStatus.PartiallyRefunded partly, int cents, int amount) when cents > 0 && partly.refundedCents + cents <= amount\n        => partly.refund(cents, amount).snapshot().transactionId == partly.payment.transactionId;\n\n    law aRefundedOrderRefundsTheAmount(OrderStatus.Refunded refunded, int amount) => refunded.refunded(amount) == amount;\n";
+    let order = refunding_order(laws);
+    let directory = library_project(&[
+        ("app/Store/OrderStatus.sharp", &order),
+        ("app/Store/Receipt.sharp", RECEIPT),
+        ("app/Store/Variant.sharp", VARIANT),
+    ]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Store/OrderStatus.sharp").exists());
+}
+
+/// Spec sections 20.2 and 28: a law in a file of its own over one case of a machine another file declares holds for each
+/// value of that case, as a law of the machine does.
+#[test]
+fn a_law_over_one_case_of_a_machine_another_file_declares_holds_for_each_value_of_that_case() {
+    let refunds = "namespace App.Store;\n\npublic final class Refunds\n{\n    law aRefundedOrderRefundsTheAmount(OrderStatus.Refunded refunded, int amount) => refunded.refunded(amount) == amount;\n}\n";
+    let order = refunding_order("");
+    let directory = library_project(&[
+        ("app/Store/OrderStatus.sharp", &order),
+        ("app/Store/Receipt.sharp", RECEIPT),
+        ("app/Store/Refunds.sharp", refunds),
+        ("app/Store/Variant.sharp", VARIANT),
+    ]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Store/Refunds.sharp").exists());
+}
+
+/// Spec sections 20.2 and 28: a law over two cases of a machine holds for each pair of their values that keep their
+/// cases' invariants.
+#[test]
+fn a_law_over_two_cases_of_a_machine_holds_for_each_pair_of_their_values() {
+    let laws = "    law aRefundedOrderSettlesWhereAPartlyRefundedOneHoldsARefund(OrderStatus.Refunded refunded, OrderStatus.PartiallyRefunded partly)\n        => refunded.settled() && !partly.settled() && partly.refundedCents > 0;\n";
+    let order = refunding_order(laws);
+    let directory = library_project(&[
+        ("app/Store/OrderStatus.sharp", &order),
+        ("app/Store/Receipt.sharp", RECEIPT),
+        ("app/Store/Variant.sharp", VARIANT),
+    ]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Store/OrderStatus.sharp").exists());
+}
+
+/// Spec section 20.2: `Json.decode` builds a case that keeps its invariants, whatever value a move gives, so a law
+/// true of the one value every move builds, `Paid(5)`, is not proven, and the small values that break it keep the
+/// case's invariants: `Paid(0)` breaks `paidIsPositive`, so it names `Paid(1)`.
+#[test]
+fn a_law_true_after_every_move_but_false_of_a_decoded_case_is_not_proven_and_names_a_value_its_case_keeps() {
+    let order = "namespace App;\n\nimport Sharp.Key;\nimport Sharp.Tag;\n\n[Tag(\"status\")]\npublic machine Order\n{\n    [Key(\"open\")] case Open\n    {\n        public Order.Paid pay() => Order.Paid(5);\n    }\n\n    [Key(\"paid\")] final case Paid(int cents);\n\n    public static Order.Open open() => Order.Open;\n\n    law paidIsPositive(Order.Paid paid) => paid.cents > 0;\n\n    law paidIsFive(Order.Paid paid, int x) => paid.cents == 5;\n}\n";
+    let directory = library_project(&[("app/Order.sharp", order)]);
+
+    let output = compile(directory.path());
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(printed(&output).contains("error[law-unproven]: law paidIsFive is not proven\n"), "{}", printed(&output));
+    assert!(printed(&output).contains(" = fails for: paid = Order.Paid(1), x = 0\n"), "{}", printed(&output));
 }

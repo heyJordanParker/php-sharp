@@ -1,5 +1,5 @@
 --TEST--
-A worker of a mago extension host, which mago starts with SHARP_ROOT and SHARP_COMPILED, loads the project's .sharp files from the folder outside the project that mago compiled them into for its hosts, with no .sharp folder in the project, refuses a file that folder's report.json refuses with the checker's errors, and refuses a file the folder doesn't hold yet naming why a host's file can't construct it as it starts
+A worker of a mago extension host, which mago starts with SHARP_ROOT and SHARP_COMPILED, loads the project's .sharp files from the folder outside the project that mago compiled them into for its hosts, with no .sharp folder in the project, refuses a file that folder's report.json refuses with the checker's errors, and refuses a file the folder doesn't hold yet naming the host's code, which compiles before the host starts
 --FILE--
 <?php
 require __DIR__ . '/project.inc';
@@ -41,6 +41,6 @@ ran
 ran
 CompileError: Broken.sharp has 1 error:
 line 5: Invalid return type for method `Broken.run`: expected `int`, but found `string`.
-CompileError: Later.sharp isn't compiled for the extension hosts yet: a host's file runs as its worker starts, before mago compiles the project's own files, so there it can construct only the PHP# library's classes. Construct it in a hook instead.
+CompileError: Later.sharp isn't compiled for the extension hosts yet: a host's file runs as its worker starts, before mago compiles the files outside the host's code, which is the folder of the host's file and every file named from there. Move it under that folder or name it from the host's code.
 2
 CompileError: /%s/sharp-test-host-compiled-%d/Counter.sharp isn't compiled. Run vendor/bin/mago compile.

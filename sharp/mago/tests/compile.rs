@@ -700,32 +700,208 @@ fn a_host_that_constructs_a_standard_library_class_starts_on_a_clean_tree_and_th
     assert_eq!(written_at(), written, "the compile wrote nothing");
 }
 
-/// The refusal of a project class a host's file constructs as it loads, before the compile wrote it for the hosts.
-const NOT_COMPILED_FOR_THE_HOSTS: &str = "app/Order.sharp isn't compiled for the extension hosts yet: a host's file runs \
-    as its worker starts, before mago compiles the project's own files, so there it can construct only the PHP# \
-    library's classes. Construct it in a hook instead.";
+/// An extension host whose file asks the project's PHP# rule `App\Rules\Naming` for its message as it loads, through
+/// an autoloader that maps `Sharp\` to the installed library and `App\` to `app/`, and appends that message to
+/// `host.log` before each analysis, as a host that builds its rules at its start runs the rules' code.
+const HOST_ASKING_A_RULE_AS_IT_LOADS: &str = r#"<?php
 
-/// A host's file that constructs a class of the project as it loads, on a clean tree, runs before the compile wrote
-/// that class for the hosts, so it can't load, and the refusal says why and what to do instead of naming the command
-/// that just failed. The run still writes both folders, so the next run loads the host with no other step.
+declare(strict_types=1);
+
+use Mago\Sdk\Analyzer\BeforeAnalysisContext;
+use Mago\Sdk\Analyzer\BeforeAnalysisHook;
+use Mago\Sdk\Analyzer\Plugin;
+use Mago\Sdk\Analyzer\PluginDefinition;
+use Mago\Sdk\Analyzer\PluginRegistry;
+use Mago\Sdk\Extension;
+use Mago\Sdk\Worker;
+
+spl_autoload_register(static function (string $class): void {
+    $folders = ['Sharp\\' => '/vendor/heyjordanparker/php-sharp-composer/library/Sharp/', 'App\\' => '/app/'];
+    foreach ($folders as $prefix => $folder) {
+        if (str_starts_with($class, $prefix)) {
+            require dirname(__DIR__) . $folder . str_replace('\\', '/', substr($class, strlen($prefix))) . '.sharp';
+        }
+    }
+});
+
+final class LogsTheRule implements Plugin, BeforeAnalysisHook
+{
+    public function __construct(private readonly string $message) {}
+
+    public function getDefinition(): PluginDefinition
+    {
+        return new PluginDefinition('logs-the-rule', 'Logs the rule', 'Logs the message of App\Rules\Naming.');
+    }
+
+    public function register(PluginRegistry $registry): void
+    {
+        $registry->registerBeforeAnalysisHook($this);
+    }
+
+    public function beforeAnalysis(BeforeAnalysisContext $context): void
+    {
+        file_put_contents('host.log', "{$this->message}\n", FILE_APPEND);
+    }
+}
+
+(new Worker(new Extension('rules', 'Rules', '0.0.0', analyzerPlugins: [new LogsTheRule(App\Rules\Naming::message())])))->run();
+"#;
+
+/// The rule [`HOST_ASKING_A_RULE_AS_IT_LOADS`] asks, whose message is `message`.
+fn naming(message: &str) -> String {
+    format!(
+        "namespace App.Rules;\n\npublic class Naming\n{{\n    public static string message() => \"{message}\";\n}}\n"
+    )
+}
+
+/// A project that installs the standard library, with the rule [`naming`] of the message `first` and the host
+/// [`HOST_ASKING_A_RULE_AS_IT_LOADS`].
+fn project_with_a_host_asking_a_rule() -> tempfile::TempDir {
+    let directory = library_project(&[
+        ("app/Rules/Naming.sharp", &naming("first")),
+        ("tools/host.php", HOST_ASKING_A_RULE_AS_IT_LOADS),
+    ]);
+    write(
+        directory.path(),
+        "mago.toml",
+        "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n\n[extension-hosts.rules]\nfile = \"tools/host.php\"\n",
+    );
+    directory
+}
+
+/// `mago analyze` of the project at `root`, with mago's cache in `cache`.
+fn analyze_with_cache(root: &Path, cache: &Path) -> Output {
+    process::output(
+        Command::new(env!("CARGO_BIN_EXE_mago"))
+            .args(["--no-version-check", "--colors", "never", "analyze"])
+            .env("XDG_CACHE_HOME", cache)
+            .current_dir(root),
+    )
+    .unwrap()
+}
+
+/// A host's file that asks a rule of the project as it loads starts on the rule as it is now on every run, the first
+/// run after an edit of the rule included: the host's file names the rule, so the rule compiles before the hosts start.
 #[test]
-fn a_host_that_constructs_a_project_class_as_it_loads_fails_once_naming_why_and_loads_on_the_next_run() {
+fn a_host_starts_on_the_edited_rule_it_asks_as_it_loads_on_the_first_analyze_after_the_edit() {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
-    if !common::php_sdk_is_available(repository, "the host compile test") {
+    if !common::php_sdk_is_available(repository, "the edited rule host test") {
         return;
     }
-    let directory = project_with_a_host_constructing_system_files();
+    let directory = project_with_a_host_asking_a_rule();
     let root = directory.path();
-    let host = HOST_CONSTRUCTING_SYSTEM_FILES.replace("new Sharp\\IO\\SystemFiles();\n", "new App\\Order();\n");
-    write(root, "tools/host.php", &host);
+    let cache = tempfile::tempdir().unwrap();
 
-    let failed = compile(root);
+    let first = analyze_with_cache(root, cache.path());
+    write(root, "app/Rules/Naming.sharp", &naming("second"));
+    let edited = analyze_with_cache(root, cache.path());
 
-    assert!(!failed.status.success(), "{}", printed(&failed));
-    assert!(printed(&failed).contains(NOT_COMPILED_FOR_THE_HOSTS), "{}", printed(&failed));
-    assert!(!printed(&failed).contains("Run vendor/bin/mago compile"), "{}", printed(&failed));
-    assert!(compiled(root, "app/Order.sharp").is_file(), "the failed run wrote the .sharp folder");
-    compile_succeeds(root);
+    assert!(edited.status.success(), "{}", printed(&edited));
+    assert!(first.status.success(), "{}", printed(&first));
+    assert_eq!(std::fs::read_to_string(root.join("host.log")).unwrap(), "first\nsecond\n");
+}
+
+/// A host's file that finds its rules as it loads by scanning `app/Rules/`, which the PHP expression `rules` gives,
+/// building each rule's class from its file's name, as a host that discovers its rules does, and asks each for its
+/// message. The PHP expression `root` gives the project's root.
+fn host_scanning(rules: &str, root: &str) -> String {
+    HOST_ASKING_A_RULE_AS_IT_LOADS.replace("dirname(__DIR__) . $folder", &format!("{root} . $folder")).replace(
+        "new LogsTheRule(App\\Rules\\Naming::message())",
+        &format!(
+            "new LogsTheRule(implode(',', array_map(static function (string $file): string {{
+    $class = 'App\\\\Rules\\\\' . basename($file, '.sharp');
+
+    return $class::message();
+}}, glob({rules} . '/*.sharp'))))"
+        ),
+    )
+}
+
+/// A project with the rules `Naming` and `Spacing` in `app/Rules/` and the host [`host_scanning`] them, whose file is
+/// `host`, which the project's own files leave out.
+fn project_with_a_host_scanning(host: &str, rules: &str, root: &str) -> tempfile::TempDir {
+    let directory = library_project(&[
+        ("app/Rules/Naming.sharp", &naming("first")),
+        ("app/Rules/Spacing.sharp", &naming("second").replace("Naming", "Spacing")),
+        (host, &host_scanning(rules, root)),
+    ]);
+    write(
+        directory.path(),
+        "mago.toml",
+        &format!(
+            "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\nexcludes = [\"{host}\"]\n\n[extension-hosts.rules]\nfile = \"{host}\"\n"
+        ),
+    );
+    directory
+}
+
+/// A host's code is the folder that holds its file, as a package is its folder, so every PHP# file under it compiles
+/// before the hosts start: a host that finds its rules by scanning a folder under its own, by names its code never
+/// writes, starts on every rule on a clean tree.
+#[test]
+fn a_host_that_finds_its_rules_by_scanning_a_folder_under_its_own_gets_every_rule_s_result_on_a_clean_tree() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the scanning host test") {
+        return;
+    }
+    let directory = project_with_a_host_scanning("app/Rules/host.php", "__DIR__", "dirname(__DIR__, 2)");
+    let root = directory.path();
+    let cache = tempfile::tempdir().unwrap();
+
+    let analyzed = analyze_with_cache(root, cache.path());
+
+    assert!(analyzed.status.success(), "{}", printed(&analyzed));
+    assert_eq!(std::fs::read_to_string(root.join("host.log")).unwrap(), "first,second\n");
+}
+
+/// A class a host loads as it starts from outside its folder, which nothing the host's code reaches names, compiles
+/// only once the host started, so loading it fails with an error that names the class, the host and the rule, and
+/// never asks for a longer wait.
+#[test]
+fn a_host_that_loads_a_class_outside_its_folder_that_nothing_names_fails_naming_the_class_the_host_and_the_rule() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the outside class host test") {
+        return;
+    }
+    let directory =
+        project_with_a_host_scanning("tools/host.php", "dirname(__DIR__) . '/app/Rules'", "dirname(__DIR__)");
+    let root = directory.path();
+    let cache = tempfile::tempdir().unwrap();
+
+    let analyzed = analyze_with_cache(root, cache.path());
+
+    assert!(!analyzed.status.success(), "{}", printed(&analyzed));
+    assert!(
+        printed(&analyzed).contains(
+            "extension host `rules` could not load: `App.Rules.Naming` isn't in extension host `rules`'s folder \
+             `tools/` or named from it, so it isn't compiled before the host starts. Move it under `tools/` or name it \
+             from the host's code."
+        ),
+        "{}",
+        printed(&analyzed)
+    );
+}
+
+/// A compile error in a file no host reaches never stops the hosts: on a clean tree, `mago analyze` reports that
+/// file's own error, and the host starts on the rule it asks as it loads and runs its hook.
+#[test]
+fn a_compile_error_in_a_file_no_host_reaches_reports_that_file_and_every_host_runs() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the unreached error host test") {
+        return;
+    }
+    let directory = project_with_a_host_asking_a_rule();
+    let root = directory.path();
+    let broken = "namespace App;\n\npublic class Broken\n{\n    public int count() => \"none\";\n}\n";
+    write(root, "app/Broken.sharp", broken);
+    let cache = tempfile::tempdir().unwrap();
+
+    let analyzed = analyze_with_cache(root, cache.path());
+
+    assert_eq!(analyzed.status.code(), Some(1), "{}", printed(&analyzed));
+    assert!(printed(&analyzed).contains("app/Broken.sharp"), "{}", printed(&analyzed));
+    assert!(!printed(&analyzed).contains("extension host"), "{}", printed(&analyzed));
+    assert_eq!(std::fs::read_to_string(root.join("host.log")).unwrap(), "first\n");
 }
 
 /// `mago analyze` compiles the project's `.sharp` folder and the hosts' folder from one analysis without the hosts and
@@ -1658,7 +1834,7 @@ fn a_watch_keeps_a_worker_that_never_loaded_the_edited_class() {
 
 /// A watch reports what the one-shot command reports where an issue points into a vendor file Composer's autoload maps
 /// served, and keeps watching: the report renders each file the analysis read, and the watch's own tree holds only
-/// the files it watches. 0.6.26 stopped the watch after its first analysis with "Files error: file missing".
+/// the files it watches. A release stopped the watch after its first analysis with "Files error: file missing".
 #[test]
 fn a_watch_reports_an_issue_that_points_into_a_vendor_file_the_autoload_maps_served() {
     let directory = tempfile::tempdir().unwrap();
@@ -1717,7 +1893,7 @@ fn a_watch_reports_an_issue_that_points_into_a_vendor_file_the_autoload_maps_ser
 
 /// `mago analyze --watch` keeps reporting the issues that point into a vendor file Composer's autoload maps served, round
 /// after round, while files are deleted, created, renamed and edited, as agents change a tree. Deleting a class's file
-/// analyzes the project from scratch inside the round, and 0.6.27's watch then lost the served files and stopped with
+/// analyzes the project from scratch inside the round, and the next release's watch then lost the served files and stopped with
 /// "Files error: file missing". Each round's report is the one-shot command's on the same tree.
 #[test]
 fn a_watch_reports_the_vendor_files_the_autoload_maps_served_through_deletes_creates_renames_and_edits() {
@@ -4601,7 +4777,7 @@ fn a_signal_that_ends_a_compile_ends_the_lean_it_waits_on() {
 }
 
 /// Spec section 23: a call only `__call` or `__callStatic` answers, instance or static, is a missing method in a library
-/// and in a project alike, where 0.6.45 compiled it.
+/// and in a project alike, where a release compiled it.
 #[test]
 fn a_call_only_a_magic_method_answers_is_refused_in_a_library_and_a_project() {
     let bag = "<?php\n\nnamespace Lib;\n\nfinal class Bag\n{\n    /** @param list<mixed> $arguments */\n    public function __call(string $name, array $arguments): mixed\n    {\n        return null;\n    }\n\n    /** @param list<mixed> $arguments */\n    public static function __callStatic(string $name, array $arguments): mixed\n    {\n        return null;\n    }\n}\n";
@@ -4631,4 +4807,52 @@ fn a_call_only_a_magic_method_answers_is_refused_in_a_library_and_a_project() {
             printed(&output)
         );
     }
+}
+
+/// Spec section 9: a named constructor takes any name but a magic method's, which the engine calls itself. One named
+/// `__construct` is refused at its name, and the lowering, which runs on a refused file too, lowers it without a panic.
+#[test]
+fn a_named_constructor_named_construct_is_refused_and_lowers_without_a_panic() {
+    let maker = "namespace App.Shop;\n\npublic class Maker\n{\n    public Maker(public int sides { get; }) { }\n\n    public Maker.__construct(int sides) : this(sides) { }\n}\n";
+    let directory = library_project(&[("app/Shop/Maker.sharp", maker)]);
+
+    let output = compile_lines(directory.path());
+
+    assert_eq!(
+        issue_lines(&output),
+        [
+            "app/Shop/Maker.sharp:7:18:error - semantics: A named constructor cannot be named `__construct`: the engine calls `__construct` itself."
+        ],
+        "{}",
+        printed(&output)
+    );
+}
+
+/// An `Instant` that crosses to a plain PHP date, as a plain PHP library takes one, written as PHP's `date("c")` writes it.
+fn stamp_of_an_instant(imports: &str) -> String {
+    format!(
+        "namespace App;\n\n{imports}import Sharp.Time.Instant;\n\npublic class Stamp\n{{\n    public static string of(Instant at) => at.toPhpDateTime().format(\"c\");\n}}\n"
+    )
+}
+
+/// `toPhpDateTime()` names PHP, so it lives in `Sharp.Interop`, which a program imports only to work with plain PHP: an
+/// `Instant` has it after `import Sharp.Interop.PhpDates;`, and without the import the call is the error any member the
+/// type lacks gets.
+#[test]
+fn an_instant_crosses_to_a_plain_php_date_only_after_the_interop_import() {
+    let without = library_project(&[("app/Stamp.sharp", &stamp_of_an_instant(""))]);
+    let with = library_project(&[("app/Stamp.sharp", &stamp_of_an_instant("import Sharp.Interop.PhpDates;\n"))]);
+
+    let refused = compile_lines(without.path());
+    let compiled = compile_lines(with.path());
+
+    assert_eq!(
+        issue_lines(&refused),
+        [
+            "app/Stamp.sharp:7:47:error - non-existent-method: `toPhpDateTime` is an extension this file does not import. Add `import Sharp.Interop.PhpDates;` to the file."
+        ],
+        "{}",
+        printed(&refused)
+    );
+    assert!(compiled.status.success(), "{}", printed(&compiled));
 }

@@ -1,0 +1,12 @@
+namespace LoweredAround;
+
+// A property whose type is a type parameter, which erases to `mixed`.
+public class Holder<T>
+{
+    public virtual T value { get; set; }
+
+    public Holder(T value)
+    {
+        this.value = value;
+    }
+}

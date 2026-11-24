@@ -7,7 +7,7 @@ require __DIR__ . '/harness/Witness.inc';
 
 use Demo\Library;
 
-// 0.6.40 counted 4 and threw JsonException "Malformed UTF-8 characters" from the second.
+// A release counted 4 and threw JsonException "Malformed UTF-8 characters" from the second.
 var_dump(Library::textLength("caf\xE9"), Library::textJson("caf\xE9"), Library::textLength('café'));
 echo json_encode(Library::textLengths(["caf\xE9", "\xFF", 'ok'])), ' ', json_encode(Library::eachLength("caf\xE9", 'ok')), "\n";
 echo json_encode(Library::keyLengths(["caf\xE9" => 1, 'ok' => 2])), "\n";

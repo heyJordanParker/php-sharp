@@ -1,4 +1,5 @@
 import Sharp.Lean.Int
+import Sharp.Lean.Steps
 
 /-!
 The statement of a PHP# law.
@@ -8,8 +9,9 @@ it, so it does not break the law: `a.add(b)` throws `ArithmeticError` on overflo
 
 The law's claim and its condition compute ints exactly (decision 057).
 
-A law's statement is the one definition of the project's code whose type is a `Prop`, so this module imports nothing of
-Lean's own beyond `Init`, and a runner that checks laws imports no more of Lean than they reach.
+A law's statement is the one definition of the project's code whose type is a `Prop`. This module imports Lean's own
+modules beyond `Init` only for `Sharp/Lean/Steps.lean`: its simp sets, which this module's end tags the fixed steps'
+lemmas with, and `sharp_simp_all`, which the fixed steps run.
 -/
 
 namespace Sharp
@@ -53,6 +55,41 @@ private theorem eq_pure {α : Type} (x : M α) (a : α) : x = pure a ↔ x.run =
   cases hx : x.run with
   | none => simp
   | some r => cases r <;> simp [Except.map]
+
+/-- A fact about the values code computes, as a law's `when` and a body's facts state, reads them one by one, as
+`holds_bind` reads a law's claim. -/
+@[simp] theorem bind_eq_pure {α β : Type} (x : M α) (f : α → M β) (b : β) :
+    x >>= f = pure b ↔ ∃ a, x = pure a ∧ f a = pure b := by
+  simp only [eq_pure, ExceptT.run_bind]
+  cases hx : x.run with
+  | none => simp
+  | some r => cases r <;> simp
+
+/-- A step that maps what it reads, as a template of an element a list read gives, gives a value only when the read
+does. `grind` reads it too, in each case of an `if` it splits in a fact. -/
+@[simp, grind =] theorem map_eq_pure {α β : Type} (f : α → β) (x : M α) (b : β) :
+    f <$> x = pure b ↔ ∃ a, x = pure a ∧ f a = b := by
+  rw [← bind_pure_comp, bind_eq_pure]
+  simp
+
+@[simp] theorem throw_eq_pure {α : Type} (e : Throwable) (b : α) : (throw e : M α) = pure b ↔ False := by
+  constructor
+  · intro h
+    have := congrArg ExceptT.run h
+    simp [ExceptT.run_pure] at this
+  · intro h
+    exact h.elim
+
+/-- A value one of two branches gives, as `? :` gives it, is the one each branch gives where its condition holds. The
+value comes first, so a step that binds it reads as that value in each case. -/
+@[simp] theorem ite_eq_pure {α : Type} (c : Prop) [Decidable c] (x y : M α) (b : α) :
+    (if c then x else y) = pure b ↔ (x = pure b ∧ c) ∨ (y = pure b ∧ ¬c) := by
+  by_cases h : c <;> simp [h]
+
+/-- A claim that chooses, as `||` and `? :` do, holds when each choice holds where it is made. -/
+@[simp] theorem holds_ite (c : Prop) [Decidable c] (x y : M Bool) :
+    holds (if c then x else y) ↔ (c → holds x) ∧ (¬c → holds y) := by
+  by_cases h : c <;> simp [h]
 
 /-! A counting loop is `List.countP` of its list, so a law over it reads that it counts no more than the list holds. -/
 
@@ -123,6 +160,20 @@ def broken (claim : M Bool) : Option String :=
   if Machine.breaks claim then some "" else none
 
 end Law
+
+/-! The lemmas the fixed steps rewrite with, each in the simp set of each pass that rewrites with it, as `src/lean.rs`
+names the sets. -/
+
+attribute [sharp_step, sharp_full] bind_assoc pure_bind holds_bind holds_pure holds_ite pure_inj
+  bind_eq_pure map_eq_pure ite_eq_pure throw_eq_pure bne_iff_ne ne_eq beq_iff_eq beq_self_eq_true decide_eq_true_eq
+  Bool.and_eq_true Option.isSome_some Option.getD_some
+
+attribute [sharp_step ←, sharp_full ←] Int64.not_lt Int.not_lt
+
+attribute [sharp_step, sharp_full] or_imp forall_and forall_exists_index and_imp forall_eq' implies_true false_implies
+
+attribute [sharp_full] int.add_eq_pure int.sub_eq_pure int.toInt_max Int64.le_iff_toInt_le
+  Int64.lt_iff_toInt_lt Int64.toInt_zero
 
 end Sharp
 

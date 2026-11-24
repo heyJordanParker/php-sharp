@@ -60,12 +60,13 @@ pub enum EngineError {
     Setting { name: String, value: String },
     /// A script failed while the interpreter ran it at its start, with what it threw or printed.
     Script { script: PathBuf, message: String },
-    /// The called function threw, as `Class: message in file:line`.
-    Threw(String),
+    /// The called function threw `Thrown`.
+    Threw(Thrown),
     /// The call stopped on a fatal error, with what the engine printed. The interpreter is reset.
     Failed(String),
-    /// The call ran past its deadline. The interpreter is reset.
-    Deadline(Duration),
+    /// The call ran past its deadline `duration`, stopped in `frames`, the functions it was running, innermost first.
+    /// The interpreter is reset.
+    Deadline { duration: Duration, frames: Vec<Frame> },
     /// The call returned a value of this engine type, which no [`Value`] holds.
     Value(u8),
     /// An argument or an answer holds a [`Value::Object`] or a [`Value::Case`] the interpreter can't build, and why.
@@ -81,10 +82,10 @@ impl fmt::Display for EngineError {
             Self::Interpreter => write!(formatter, "a PHP# interpreter could not start a request"),
             Self::Setting { name, value } => write!(formatter, "PHP refused the setting `{name}` = `{value}`"),
             Self::Script { script, message } => write!(formatter, "{} failed: {message}", script.display()),
-            Self::Threw(message) => write!(formatter, "{message}"),
+            Self::Threw(thrown) => write!(formatter, "{thrown}"),
             Self::Failed(message) => write!(formatter, "{}", message.trim()),
-            Self::Deadline(deadline) => {
-                write!(formatter, "the call ran past its deadline of {} ms", deadline.as_millis())
+            Self::Deadline { duration, .. } => {
+                write!(formatter, "the call ran past its deadline of {} ms", duration.as_millis())
             }
             Self::Value(kind) => {
                 write!(formatter, "the call returned a value of engine type {kind}, which Mago can't read")
@@ -96,6 +97,79 @@ impl fmt::Display for EngineError {
 }
 
 impl std::error::Error for EngineError {}
+
+/// An exception a call or a script threw: its class, its message, and the file and line it was thrown at.
+///
+/// A `CompileError` the engine throws for a PHP# file it refuses to load names that file. It displays as
+/// `Class: message in file:line`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Thrown {
+    pub class: String,
+    pub message: String,
+    pub file: PathBuf,
+    pub line: i64,
+}
+
+impl Thrown {
+    /// The exception the engine wrote as `read`, the list of its class, message, file and line, or else, when the
+    /// engine could write none, an exception of no class whose message is what the interpreter printed.
+    fn of(read: Result<Value, EngineError>) -> Self {
+        let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
+        match read {
+            Ok(Value::List(fields)) => match fields.as_slice() {
+                [Value::String(class), Value::String(message), Value::String(file), Value::Int(line)] => {
+                    Self { class: text(class), message: text(message), file: PathBuf::from(text(file)), line: *line }
+                }
+                _ => Self::printed(),
+            },
+            _ => Self::printed(),
+        }
+    }
+
+    fn printed() -> Self {
+        Self { class: String::new(), message: output(), file: PathBuf::new(), line: 0 }
+    }
+}
+
+impl fmt::Display for Thrown {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.class.is_empty() {
+            return write!(formatter, "{}", self.message);
+        }
+
+        write!(formatter, "{}: {} in {}:{}", self.class, self.message, self.file.display(), self.line)
+    }
+}
+
+/// A function a call was running: the class it belongs to, empty for a function of no class, and its name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Frame {
+    pub class: String,
+    pub function: String,
+}
+
+impl Frame {
+    /// The frames the engine wrote as `read`, each the list of its class and function, or none when it wrote none.
+    fn all(read: Result<Value, EngineError>) -> Vec<Self> {
+        let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
+        let Ok(Value::List(frames)) = read else {
+            return Vec::new();
+        };
+
+        frames
+            .iter()
+            .filter_map(|frame| match frame {
+                Value::List(fields) => match fields.as_slice() {
+                    [Value::String(class), Value::String(function)] => {
+                        Some(Self { class: text(class), function: text(function) })
+                    }
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect()
+    }
+}
 
 const DONE: i32 = 0;
 const THREW: i32 = 1;
@@ -273,12 +347,13 @@ impl Engine {
 
             let deadlines = Deadlines::get();
             deadlines.watch(deadline, globals);
-            let result = self.run(function, arguments, answer);
+            let mut frames = Vec::new();
+            let result = self.run(function, arguments, answer, &mut frames);
             let fired = deadlines.finish(globals);
             match result {
                 Err(EngineError::Failed(_)) if fired => {
                     drop(thread.interpreter.take());
-                    Err(EngineError::Deadline(deadline))
+                    Err(EngineError::Deadline { duration: deadline, frames })
                 }
                 Err(EngineError::Failed(message)) => {
                     drop(thread.interpreter.take());
@@ -297,6 +372,8 @@ impl Engine {
         reset.len() != before
     }
 
+    /// Calls `function` with `arguments` in the thread's interpreter, answering what it asks with `answer`. A call that
+    /// fails on a fatal error gives `frames` the functions it was running, innermost first.
     #[allow(
         clippy::multiple_unsafe_ops_per_block,
         clippy::transmute_ptr_to_ptr,
@@ -307,6 +384,7 @@ impl Engine {
         function: &str,
         arguments: &[Value],
         answer: &mut dyn FnMut(Vec<Value>) -> Answer,
+        frames: &mut Vec<Frame>,
     ) -> Result<Value, EngineError> {
         let mut slots: Vec<Zval> = arguments.iter().map(|_| Zval::new()).collect();
         let mut result = Zval::new();
@@ -341,13 +419,12 @@ impl Engine {
             engine_value_release(&raw mut result);
             match status {
                 DONE => read,
-                THREW => match read {
-                    Ok(Value::String(message)) => {
-                        Err(EngineError::Threw(String::from_utf8_lossy(&message).into_owned()))
-                    }
-                    _ => Err(EngineError::Threw(output())),
-                },
-                _ => Err(EngineError::Failed(output())),
+                THREW => Err(EngineError::Threw(Thrown::of(read))),
+                _ => {
+                    *frames = Frame::all(read);
+
+                    Err(EngineError::Failed(output()))
+                }
             }
         }
     }
@@ -390,9 +467,9 @@ impl Engine {
                 let status = engine_run_script(path.as_ptr(), &raw mut result);
                 let read = Value::read(&raw const result);
                 engine_value_release(&raw mut result);
-                let message = match (status, read) {
-                    (DONE, _) => continue,
-                    (THREW, Ok(Value::String(message))) => String::from_utf8_lossy(&message).into_owned(),
+                let message = match status {
+                    DONE => continue,
+                    THREW => Thrown::of(read).to_string(),
                     _ => output(),
                 };
 

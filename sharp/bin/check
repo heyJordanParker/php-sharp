@@ -7,12 +7,17 @@ set -euo pipefail
 # each check meets the platform it meets in CI. CI's jobs run the gates no other script holds through this script:
 # BUILD_LINUX the generated files, WORKFLOWS the workflows, and mago.yml's checks and plain-php theirs.
 #
-# With --release, it prints what CI's CHANGES jobs write to $GITHUB_OUTPUT about sharp/mago/Cargo.toml's version: the
-# version; tagged, the commit tag v<version> names on origin, empty until sharp/bin/tag creates it; missing, each part
-# of the release not published yet; and bump, whether any is, so a push to master publishes what is missing.
+# With --release, it prints what CI's CHANGES jobs write to $GITHUB_OUTPUT about the release the checked-out commit
+# publishes: the version; tagged, the commit when tag v<version> already names it, empty until RELEASE creates it;
+# pulls, the pull requests merged since the newest tag, whose ## Changelog sections are the release's notes; missing,
+# each part of the release not published yet; and bump, whether any is. A pull request title after --release counts as
+# one more merged pull request, which is a dry run of the version.
+#
+# With --speed-baseline, it downloads the speed.json the SPEED gate compares with into the folder it names.
 usage() {
-  echo "usage: sharp/bin/check [workflows | changelog | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php | speed]..." >&2
-  echo "       sharp/bin/check --release" >&2
+  echo "usage: sharp/bin/check [workflows | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php | speed]..." >&2
+  echo "       sharp/bin/check --release [<pull request title>]" >&2
+  echo "       sharp/bin/check --speed-baseline <folder>" >&2
   exit 2
 }
 
@@ -25,27 +30,66 @@ rust="$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' "$root/sharp/mago/Cargo.toml")
 CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")"
 export CARGO_BUILD_JOBS
 
-# A release publishes three parts, each once, so a part an earlier run left missing is what a later run publishes, and
-# a published one stays: assets, the GitHub release v<version> with mago's files, images, the runtime image
-# ghcr.io/heyjordanparker/php-sharp:<version> and its <version>-dev, and composer, tag v<version> of
-# heyJordanParker/php-sharp-composer and heyJordanParker/mago-sharp. Only a rerun of the release commit's push run
-# publishes its assets and images, which that run built, and the next push to master pushes the Composer tags. Run 45033462105 published 0.6.50's GitHub release
-# and failed before its images and its Composer tags, which a check of the tag alone then counted as released. The image
-# and the mirrors are public, so their checks need no login. git ls-remote --exit-code exits 2 when a remote has no such
-# ref, and with another code when it can't ask.
+# A release publishes three parts, each once, and a published one stays: assets, the GitHub release v<version> with
+# mago's files, images, the runtime image ghcr.io/heyjordanparker/php-sharp:<version> and its <version>-dev, and
+# composer, tag v<version> of heyJordanParker/php-sharp-composer and heyJordanParker/mago-sharp. A rerun of the push run
+# whose commit the tag names publishes what an earlier attempt left missing, since only that run built its assets and
+# images. Run 45033462105 published a GitHub release and failed before its images and its Composer tags, which a check
+# of the tag alone then counted as released. The image and the mirrors are public, so their checks need no login. git
+# ls-remote --exit-code exits 2 when a remote has no such ref, and with another code when it can't ask.
+#
+# A version lives in its tag alone. A commit a tag already names publishes that tag's version, so a rerun finishes the
+# release it started. Any other commit publishes the newest tag's version plus one patch, or one minor when the title of
+# a pull request merged since that tag has `!` before its colon. Each such merge is a first-parent commit of master,
+# whose subject names the pull request and whose body is its title. RELEASE tags the commit once every check passed,
+# and master's push runs run one at a time, so a red run makes no tag and two runs never take one version. CI's checkout
+# holds one commit, so the release fetches the commits since the newest tag, without their trees, in 3.5 s on a test.
 release() {
-  local version refs status=0 tagged='' missing=() published token tag code mirror
-  version="$(sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q;}' "$root/sharp/mago/Cargo.toml")"
-  # An annotated tag lists its commit on a second line, ^{}, which sorts last.
-  refs="$(git -C "$root" ls-remote --exit-code --tags origin "refs/tags/v$version" "refs/tags/v$version^{}")" || status=$?
-  case "$status" in
-    0) tagged="$(awk 'END {print $1}' <<< "$refs")" ;;
-    2) ;;
-    *)
-      echo "git ls-remote couldn't ask origin for tag v$version: it exited $status." >&2
+  local title=${1:-} head refs newest commit major minor patch version='' tagged='' pulls=() titles=() range
+  local missing=() published token tag code mirror status
+  head="$(git -C "$root" rev-parse HEAD)"
+  if ! refs="$(git -C "$root" ls-remote --tags origin 'refs/tags/v*')"; then
+    echo "git ls-remote couldn't list origin's tags." >&2
+    exit 1
+  fi
+  # An annotated tag lists its commit on a second line, the tag's name with ^{}, which sorts after the tag's own.
+  version="$(awk -v head="$head" '$1 == head {sub(/^refs\/tags\/v/, "", $2); sub(/\^\{\}$/, "", $2); print $2; exit}' \
+    <<< "$refs")"
+  if [[ -n $version ]]; then
+    tagged=$head
+  else
+    newest="$(sed -n 's#.*refs/tags/v\([0-9]*\.[0-9]*\.[0-9]*\)$#\1#p' <<< "$refs" \
+      | sort -t . -k 1,1n -k 2,2n -k 3,3n | tail -n 1)"
+    if [[ -z $newest ]]; then
+      echo "origin has no tag v<major>.<minor>.<patch>, so there is no version to add one to." >&2
       exit 1
-      ;;
-  esac
+    fi
+    commit="$(awk -v tag="refs/tags/v$newest" '$2 == tag || $2 == tag "^{}" {commit = $1} END {print commit}' <<< "$refs")"
+    range=("$head" "^$commit")
+    if [[ $(git -C "$root" rev-parse --is-shallow-repository) == true ]]; then
+      git -C "$root" fetch --quiet --filter=tree:0 --shallow-exclude="refs/tags/v$newest" origin "$head"
+      range=("$head")
+    fi
+    while IFS=$'\t' read -r pull merged; do
+      pulls+=("$pull")
+      titles+=("$merged")
+    done < <(git -C "$root" rev-list --first-parent --no-commit-header --format='%s%x09%b' "${range[@]}" \
+      | awk -F '\t' '$1 ~ /^Merge pull request #[0-9]+ from / {
+          pull = substr($1, 21)
+          sub(/ .*/, "", pull)
+          print pull "\t" $2
+        }')
+    if [[ -n $title ]]; then
+      titles+=("$title")
+    fi
+    IFS=. read -r major minor patch <<< "$newest"
+    version="$major.$minor.$((patch + 1))"
+    for title in "${titles[@]}"; do
+      if [[ $title == *:* && ${title%%:*} == *'!'* ]]; then
+        version="$major.$((minor + 1)).0"
+      fi
+    done
+  fi
   if ! published="$(cd "$root" && gh release view "v$version" --json isDraft --jq '.isDraft | not' 2>&1)"; then
     if [[ $published != *"release not found"* ]]; then
       echo "gh couldn't read release v$version: $published" >&2
@@ -91,6 +135,7 @@ release() {
   done
   echo "version=$version"
   echo "tagged=$tagged"
+  echo "pulls=${pulls[*]}"
   echo "missing=${missing[*]}"
   if ((${#missing[@]} > 0)); then
     echo "bump=true"
@@ -99,15 +144,39 @@ release() {
   fi
 }
 
-if [[ ${1:-} == --release ]]; then
-  if [[ $# -ne 1 ]]; then
-    usage
+# The SPEED gate's baseline is what master's newest green Mago CI push run counted, its speed artifact: the merge queue
+# merges only a change whose runs passed, so a change is compared with the master it merges into, and no file in the
+# tree holds a count.
+speed_baseline() {
+  local run
+  run="$(cd "$root" && gh run list --workflow mago.yml --branch master --event push --status success --limit 1 \
+    --json databaseId --jq '.[0].databaseId // empty')"
+  if [[ -z $run ]]; then
+    echo "master has no green Mago CI push run, so there is no speed baseline." >&2
+    exit 1
   fi
-  release
-  exit 0
-fi
+  (cd "$root" && gh run download "$run" --name speed --dir "$1")
+  echo "The speed baseline is run $run's."
+}
 
-all=(workflows changelog spec-guard mago-checks linux upstream hosts generated mago-tests plain-php speed)
+case "${1:-}" in
+  --release)
+    if [[ $# -gt 2 ]]; then
+      usage
+    fi
+    release "${2:-}"
+    exit 0
+    ;;
+  --speed-baseline)
+    if [[ $# -ne 2 ]]; then
+      usage
+    fi
+    speed_baseline "$2"
+    exit 0
+    ;;
+esac
+
+all=(workflows spec-guard mago-checks linux upstream hosts generated mago-tests plain-php speed)
 for gate in "$@"; do
   if [[ " ${all[*]} " != *" $gate "* ]]; then
     usage
@@ -199,43 +268,6 @@ gate_workflows() {
   step lint_workflows
 }
 
-# A released version's lines in sharp/CHANGELOG.md are the ones its release publishes: master's for each version master
-# holds, and those of the branch release/<version> of the open pull request that releases a version master doesn't hold
-# yet. Two lanes added lines under [0.6.51] after it was cut, b0fb4166be0 and 82720c8c872, where [Unreleased] had no
-# "### Added" heading and the first one in the file was 0.6.51's, and next then conflicted with master. So each such
-# version keeps its lines, from its heading to the next one, without the compare links under the oldest, which a bump
-# rewrites. A release bump passes: its version's lines are on its own branch alone.
-notes_of() {
-  awk -v heading="## [$1]" '/^## / {on = index($0, heading) == 1} on && !/^\[[^]]+\]: /'
-}
-released_notes() {
-  local repo ref published version versions lines changed=false
-  repo="$(cd "$root" && gh repo view --json nameWithOwner --jq .nameWithOwner)"
-  for ref in master $(gh api "repos/$repo/pulls?base=master&state=open&per_page=100" \
-    --jq '.[].head.ref | select(startswith("release/"))'); do
-    published="$(gh api -H 'Accept: application/vnd.github.raw+json' "repos/$repo/contents/sharp/CHANGELOG.md?ref=$ref")"
-    if [[ $ref == master ]]; then
-      versions="$(sed -n 's/^## \[\([0-9][^]]*\)\].*/\1/p' <<< "$published")"
-    else
-      versions="${ref#release/}"
-    fi
-    for version in $versions; do
-      if ! lines="$(diff <(notes_of "$version" <<< "$published") <(notes_of "$version" < "$root/sharp/CHANGELOG.md"))"; then
-        echo "sharp/CHANGELOG.md changes the lines of [$version], which $ref releases:" >&2
-        sed -n 's/^< /  removes: /p; s/^> /  adds: /p' <<< "$lines" >&2
-        changed=true
-      fi
-    done
-  done
-  if $changed; then
-    echo "A released version keeps the lines its release published. Write each change under [Unreleased]." >&2
-    return 1
-  fi
-}
-gate_changelog() {
-  step released_notes
-}
-
 # SPEC_GUARD and COMPLETES, with the merge base's sharp/bin/spec, as completes.yml runs them. COMPLETES reads the pull
 # request's body on its standard input, so it runs when BODY holds it.
 gate_spec_guard() {
@@ -265,9 +297,9 @@ no_notify() {
   fi
   grep -q "did not match any packages" <<< "$output"
 }
-# Every workspace crate keeps version 0.0.0, which a release never bumps, so a bump rebuilds only the root package and
-# mago-build-id, which only the root package reads. A crate's own CARGO_PKG_VERSION is that 0.0.0, so a crate takes the
-# release version from the mago binary instead.
+# Every workspace crate keeps version 0.0.0, which a release never changes, so a release's checkout rebuilds only the
+# root package, whose version it writes, and mago-build-id, which only the root package reads. A crate's own
+# CARGO_PKG_VERSION is that 0.0.0, so a crate takes the release version from the mago binary instead.
 no_crate_version() {
   if grep -rn --include='*.rs' CARGO_PKG_VERSION crates docs; then
     echo "A workspace crate reads its own version, always 0.0.0. Pass it the binary's version, crate::consts::VERSION." >&2
@@ -532,20 +564,24 @@ gate_plain_php() {
   step plain_phpunit
 }
 
-# SPEED: what proving and compiling cost, in counts no load changes, against sharp/baseline/speed.json, the last
-# release's: each law's Lean heartbeats, the law corpus's, and the instructions of a one-file edit, as
+# SPEED: what proving and compiling cost, in counts no load changes, against master's newest green Mago CI push run's,
+# as speed_baseline finds it: each law's Lean heartbeats, the law corpus's, and the instructions of a one-file edit, as
 # benchmark/speed.php explains. It measures the test-run mago that mago-checks builds, or that mago.yml's SPEED
 # downloads from its checks there, as plain-php does, which behaves as the release users run without its fat LTO, as
-# sharp/mago/Cargo.toml explains. A debug build's counts would move with code the optimizer removes. With SPEED_WRITE,
-# it also writes what it measured there, as the next baseline.
+# sharp/mago/Cargo.toml explains. A debug build's counts would move with code the optimizer removes. SPEED_BASELINE
+# names the folder of a baseline already downloaded, as mago.yml's SPEED downloads it outside the sharp/docker image,
+# which has no gh. With SPEED_WRITE, it also writes what it measured there, the run's speed artifact.
 speed() {
-  local mago="$target/test-run/mago"
+  local mago="$target/test-run/mago" baseline="${SPEED_BASELINE:-}"
   if [[ ! -f $mago ]]; then
     echo "$mago is missing. Run sharp/bin/check mago-checks first." >&2
     return 1
   fi
-  php "$root/benchmark/speed.php" "$mago" --baseline "$root/sharp/baseline/speed.json" \
-    ${SPEED_WRITE:+--write "$SPEED_WRITE"}
+  if [[ -z $baseline ]]; then
+    baseline="$TMPDIR/speed-baseline"
+    speed_baseline "$baseline"
+  fi
+  php "$root/benchmark/speed.php" "$mago" --baseline "$baseline/speed.json" ${SPEED_WRITE:+--write "$SPEED_WRITE"}
 }
 gate_speed() {
   step speed

@@ -15,10 +15,10 @@ use mago_codex::defaults_trait_name;
 use mago_codex::identifier::function_like::FunctionLikeIdentifier;
 use mago_codex::identifier::method::MethodIdentifier;
 use mago_codex::metadata::CodebaseMetadata;
+use mago_codex::metadata::Member;
 use mago_codex::metadata::attribute::ConstantExpression;
 use mago_codex::metadata::class_like::ClassLikeMetadata;
 use mago_codex::metadata::class_like::ParsedField;
-use mago_codex::metadata::flags::MetadataFlags;
 use mago_codex::metadata::function_like::FunctionLikeMetadata;
 use mago_codex::metadata::machine::MachineMetadata;
 use mago_codex::metadata::module::ModuleMetadata;
@@ -51,6 +51,7 @@ use mago_codex::ttype::get_array_parameters;
 use mago_codex::ttype::get_collection_object;
 use mago_codex::ttype::get_int_or_string;
 use mago_codex::ttype::get_mixed;
+use mago_codex::ttype::get_php_declared_type;
 use mago_codex::ttype::get_php_plain_form;
 use mago_codex::ttype::get_sharp_type;
 use mago_codex::ttype::get_void;
@@ -120,17 +121,9 @@ pub struct Declaration {
     /// The member's name, or a class's own name.
     pub name: Word,
     /// Whether code of any class and namespace may use it: a class, or a public member the engine doesn't hold to its
-    /// namespace, as [`Types::is_held_to_namespace`] says, so a copy of a call of it in any class reaches it, as an
+    /// namespace, as [`CodebaseMetadata::is_held_to_namespace`] says, so a copy of a call of it in any class reaches it, as an
     /// inline form's does.
     pub public: bool,
-}
-
-/// A member a class declares, by the name the codex keys it by: a property's with its `$`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Member {
-    Method(Word),
-    Property(Word),
-    Constant(Word),
 }
 
 /// The members a method call runs on a value that may hold more than one kind of collection, or a collection or an
@@ -1685,7 +1678,7 @@ impl<'analysis> Types<'analysis> {
         } else if let Some(constant) = self.codebase.get_class_constant(class, member) {
             Some(declared(
                 DeclarationKind::Constant,
-                constant.visibility.is_public() && !self.is_held_to_namespace(class, Member::Constant(member)),
+                constant.visibility.is_public() && !self.codebase.is_held_to_namespace(class, Member::Constant(member)),
             ))
         } else {
             self.property_declaration(class, member.as_bytes()).or_else(|| self.method_declaration(class, member))
@@ -2580,15 +2573,17 @@ impl<'analysis> Types<'analysis> {
             class: declaring,
             name: word(property),
             public: metadata.read_visibility.is_public()
-                && !self.is_held_to_namespace(declaring, Member::Property(word(&variable))),
+                && !self.codebase.is_held_to_namespace(declaring, Member::Property(word(&variable))),
         })
     }
 
-    /// The type the root declaration of the property `property` of the fully qualified class name `class` writes, when
-    /// that root is a typed plain PHP property and `class` declares the property with a narrower type, spec section
-    /// 6.1. PHP keeps a property's type through every override as the class links, so the property runs with it, and
-    /// its own type checks each write. None for any other property, which runs with the type it writes.
-    pub(crate) fn narrowed_root_type(&self, class: Word, property: &[u8]) -> Option<&'analysis TUnion> {
+    /// The type the root declaration of the property `property` of the fully qualified class name `class` runs with,
+    /// when `class` declares the property with a narrower type: a typed plain PHP root's own type, spec section 6.1,
+    /// and the type a PHP# root erases to, as `mixed` for the `T value` of a `Holder<T>` that a `Holder<string>`
+    /// overrides with `string value`. The engine keeps a property's type through every override as the class links,
+    /// so the property runs with it, and its own type checks each write, as a widened parameter's does. None for any
+    /// other property, which runs with the type it writes.
+    pub(crate) fn narrowed_root_type(&self, class: Word, property: &[u8]) -> Option<TUnion> {
         let variable = [b"$", property].concat();
         let own = &self
             .codebase
@@ -2598,18 +2593,21 @@ impl<'analysis> Types<'analysis> {
             .type_union;
         let (root_class, root) = self.root_property(class, word(&variable));
         let root_type = &root.type_declaration_metadata.as_ref()?.type_union;
-        let is_plain = !self.codebase.get_class_like(root_class)?.flags.is_sharp();
+        let (root_type, own) = if self.codebase.get_class_like(root_class)?.flags.is_sharp() {
+            (get_php_declared_type(root_type, self.codebase), get_php_declared_type(own, self.codebase))
+        } else {
+            (root_type.clone(), own.clone())
+        };
 
-        (is_plain
-            && !union_comparator::is_contained_by(
-                self.codebase,
-                root_type,
-                own,
-                false,
-                false,
-                false,
-                &mut ComparisonResult::new(),
-            ))
+        (!union_comparator::is_contained_by(
+            self.codebase,
+            &root_type,
+            &own,
+            false,
+            false,
+            false,
+            &mut ComparisonResult::new(),
+        ))
         .then_some(root_type)
     }
 
@@ -2772,51 +2770,13 @@ impl<'analysis> Types<'analysis> {
             class: declaring.get_class_name(),
             name: word(method),
             public: metadata.visibility.is_public()
-                && !self.is_held_to_namespace(declaring.get_class_name(), Member::Method(word(method))),
+                && !self.codebase.is_held_to_namespace(declaring.get_class_name(), Member::Method(word(method))),
         })
     }
 
     /// Whether the class-like `class` is `internal`, spec section 5, as a PHP# one is unless it is `public`.
     pub(crate) fn is_internal_class(&self, class: Word) -> bool {
         self.codebase.get_class_like(class).is_some_and(|metadata| metadata.flags.is_internal_reach())
-    }
-
-    /// Whether the engine holds `member`, which `class` declares, to the namespace of `class`, spec section 5: a
-    /// member written `internal`, or a `public` one of an `internal` class, unless it replaces a member of a parent
-    /// class or an interface that reaches further, through which code reaches it, as the checker lets it.
-    pub(crate) fn is_held_to_namespace(&self, class: Word, member: Member) -> bool {
-        let Some(metadata) = self.codebase.get_class_like(class) else {
-            return false;
-        };
-        let Some((flags, public)) = self.own_member(class, member) else {
-            return false;
-        };
-
-        flags.is_internal_reach()
-            || (public
-                && metadata.flags.is_internal_reach()
-                && !metadata.all_parent_classes.iter().chain(&metadata.all_parent_interfaces).any(|ancestor| {
-                    self.own_member(*ancestor, member).is_some() && !self.is_held_to_namespace(*ancestor, member)
-                }))
-    }
-
-    /// The flags of `member` as `class` itself declares it, and whether it is `public`, or none when `class` doesn't. The
-    /// codex keeps an `extern` property as a magic property, spec section 14.3.
-    fn own_member(&self, class: Word, member: Member) -> Option<(MetadataFlags, bool)> {
-        let codebase = self.codebase;
-
-        match member {
-            Member::Method(name) => codebase.get_method(class, name).map(|method| {
-                (method.flags, method.method_metadata.as_ref().is_some_and(|metadata| metadata.visibility.is_public()))
-            }),
-            Member::Property(name) => codebase
-                .get_property(class, name)
-                .or_else(|| codebase.get_magic_property(class, name))
-                .map(|property| (property.flags, property.read_visibility.is_public())),
-            Member::Constant(name) => codebase
-                .get_class_constant(class, name)
-                .map(|constant| (constant.flags, constant.visibility.is_public())),
-        }
     }
 }
 

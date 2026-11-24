@@ -36,11 +36,24 @@ docker tag "$image" php-sharp-linux
 state="${XDG_STATE_HOME:-$HOME/.local/state}"
 mkdir -p "$state/php-sharp"
 volumes+=(--volume "$state/php-sharp:$state/php-sharp")
+# The container's processes are no children of the record that runs this, so as the command ends the container appends
+# the CPU microseconds and the peak bytes its cgroup counted to the file SHARP_RECORD_USAGE names, which that record adds
+# to its line.
+read -r -d '' usage << 'SH' || true
+status=0
+"$@" || status=$?
+if [ -n "${SHARP_RECORD_USAGE:-}" ]; then
+  echo "$(awk '$1 == "usage_usec" {print $2}' /sys/fs/cgroup/cpu.stat) $(cat /sys/fs/cgroup/memory.peak)" >> "$SHARP_RECORD_USAGE"
+fi
+exit "$status"
+SH
 exec docker run --rm --init \
   --user "$(id -u):$(id -g)" \
   --ulimit stack=8388608:-1 \
   --env XDG_STATE_HOME="$state" \
   --env SHARP_RECORD_PARENT \
+  --env SHARP_RECORD_USAGE \
+  --env SHARP_RECORD_TREE \
   --env CARGO_HOME=/src/sharp/build/cargo \
   --env XDG_CACHE_HOME=/src/sharp/build/cache \
   --env COMPOSER_HOME=/src/sharp/build/composer-home \
@@ -50,4 +63,4 @@ exec docker run --rm --init \
   --env CXX \
   "${volumes[@]}" \
   --workdir /src \
-  "$image" "$@"
+  "$image" sh -c "$usage" sh "$@"

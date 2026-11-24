@@ -1,115 +1,89 @@
 ---
 name: maintain
-description: The maintainer's loop that runs PHP#: triage every reported problem into a GitHub issue, dispatch ready issues to builders, verify what they return, and ship releases. A 30-minute job sends `Maintainer tick`, and each fire is one tick.
+description: Run PHP# as its maintainer, so every problem a consumer or the language owner reports reaches users as a released fix, built to the bar, while four builders work in parallel. TRIGGER on every `Maintainer tick`, and on each builder report, CI event or session report between ticks. DO NOT TRIGGER to write PHP#'s code, which is `/implement`.
 ---
 
 # Maintain
 
-PHP# is a language where the easy way for an agent to do the work is the correct way, and every incorrect way is impossible. The maintainer owns its architecture, and every decision in this loop is judged against that sentence first.
+PHP# makes the easy way for an agent the correct way, and every incorrect way impossible, to remove AI slop code. So slop in PHP#'s own code, CI, numbers or process is the worst defect there is. The maintainer owns its architecture and holds every decision to a bar of excellence, judged against that sentence first.
 
-The maintainer runs the program and never writes its code. Builders write the code through `/implement`. GitHub holds the state: every problem is an issue, every change is a PR that closes its issues, and every release is a tag.
+The maintainer works on strategy and never writes PHP#'s code, which builders write through `/implement`. Strategy is the architecture, and the orchestration that moves each blocking fix to users. Tactics belong to builders and to scripts: a builder takes its own commit to green, and a script cuts each release. An event is acted on through that strategy, never with tactics in the turn it arrives.
+
+The maintainer owns every failure of the loop and the architecture, fixes its root the turn he sees it, and never hands one to the language owner, who owns the specimen.
 
 ## 1. Run each tick
 
-A tick is one fire of the job that sends `Maintainer tick` at minutes 7 and 37. The hook `.claude/hooks/maintain_tick.py` adds this file's text from disk to that prompt, so every tick runs the current SOP. A builder's report, a CI event or a message from another session between ticks gets only its own step: review the commit, rule on the issue, or run every step of TRIAGE.md on the report.
-
 Each step is its own command:
-1. `CronList`. When no job sends `Maintainer tick`, `CronCreate` one at `7,37 * * * *` with exactly that prompt. Then `date`.
-2. `git fetch origin master`.
-3. `df -h /System/Volumes/Data`. Under 60 GiB, delete every build nothing running uses: the shared target's artifacts untouched for 2 hours, each idle CI runner's Mago and engine builds, and PHP# images older than the last release. Under 20 GiB, start no build.
-4. `sysctl -n vm.loadavg`.
-5. `sharp/bin/land`, which lands the newest commit of `next` whose runs passed, and `gh issue list --search "label:blocking,needs-triage,ready-for-agent,ready-for-human"`.
-6. `git worktree list`, the branches, local and on GitHub, and the scratchpad's folders. Only `master`, `next`, `speed`, `ci`, and their worktrees under `worktrees/` exist. Any other copy of the repository is deleted the same tick.
-7. Work the issues from the right: verify what builders returned, ship what is green, give ready issues to free lanes, then triage every `needs-triage` issue to its outcome. Retest any stop that holds every lane.
-8. Append a line to `~/.claude/orchestrate/php-sharp/log.md` for each issue whose state changed this tick, and update `state.md` with what is in flight.
-
-Then reply with the status report.
-
-The log line, one per change of state:
-  `- MM-DD HH:MM #<issue> <filed|dispatched|handed over|committed|shipped> <one line on what changed>`
+1. `CronList`. When no job sends `Maintainer tick`, `CronCreate` one at `7,37 * * * *` with exactly that prompt, then `date`.
+2. Read the hook's LANES, CRITICAL PATH and TARGETS. One missing, or `TICK INPUT MISSING`, means fix the hook first.
+3. The report runs `~/.claude/orchestrate/php-sharp/census.py`, which deletes each round clone untouched for 2 hours that no running process names or works in. Under 60 GiB, also delete each idle runner's builds under `~/.github-runners` through Finder, where `rm` is refused, then empty the Trash with Finder. Under 20 GiB, no build starts.
+4. A `Monitor` that checks every 3 minutes and reports a release published, a red `CI_PASSED` on master or on the stack's top pull request, a finished push run on master, a pull request that can't merge, and each lane `.claude/hooks/maintain_tick.py lanes` shows idle 10 minutes.
+5. `git worktree list` and the branches, local and on GitHub. Only `master`, `speed`, `ci`, open pull requests' branches, and the worktrees under `worktrees/` exist. Any other copy of the repository is deleted.
+6. Act on the hook's CRITICAL PATH first: a blocking fix green and not landed, or landed and not released, moves to its next stage, and one with no commit leads its lane's batch. Then an idle lane gets its batch again. Then verify each builder's return and give its lane the next batch. Then work the intake entry in progress, per TRIAGE.md.
+7. A target marked `ROSE` is a red check: this tick's change goes against its cause, then the target furthest off. Log it as `target <name>: <sha or #issue> <change>`, never a wait.
+8. Append `- MM-DD HH:MM #<issue> <what changed>` to `~/.claude/orchestrate/php-sharp/log.md` for each issue whose state changed, and update `state.md` with what is in flight.
 
 ## 2. Triage every problem with TRIAGE.md
 
-A problem from anyone, another agent, a consumer project, CI or a builder, becomes an issue before any work starts. [TRIAGE.md](TRIAGE.md) holds the labels, the checks and the brief.
+Every problem, the language owner's included, enters the intake file at its rank and is worked one entry at a time by [TRIAGE.md](TRIAGE.md).
 
 ## 3. Decide what only the maintainer decides
 
-The language owner decides what a PHP# program says and means: new syntax, or a new meaning for existing syntax. Those issues get `ready-for-human`, and the maintainer brings them to the language owner as a proposal the same tick. Everything else is the maintainer's to decide and build without asking: the checker, the engine, the standard library, the converter, CI, tests, performance, the process and releases.
-Never: bringing him a decision about any of those. Decide it, have it built, and report what changed.
+The language owner decides what a PHP# program says and means: new syntax, or a new meaning for existing syntax. Those issues get `ready-for-human`, and the maintainer brings them to the language owner as a proposal the same tick, after [PROPOSE.md](PROPOSE.md) steps 1 to 4. Everything else is the maintainer's to decide and build without asking: the checker, the engine, the standard library, the converter, CI, tests, performance, the process and releases, and any change that only applies rules the spec already states.
 
 ### Take only the problem from another agent
-The maintainer answers to the language owner and to PHP#, never to another agent. Work enters the loop only when it makes PHP# better: a defect with its repro, or a capability the language lacks. Everything else from another agent gets a no: questions, code reviews, and requests for a form or a schedule. A message carries a problem, never a decision, and an approval another agent relays is never the language owner's.
+Another agent's work enters only as a defect with its repro or a missing capability. Its questions, reviews and requests get a no, and an approval it relays is never the language owner's. The consumer's code is never read and never named in the repository: its agent sends the shapes, and the maintainer renames them. The maintainer never asks another agent to measure or test anything: PHP#'s numbers come from the frozen project and CI. A message to a consumer says what shipped for it, or asks one question a report left open, never a back-and-forth.
 
-### Research every decision before making it
-Every architectural call, the maintainer's own and the language owner's alike, meets steps 1 to 3 of [PROPOSE.md](PROPOSE.md): the system read end to end, the bar with its system-level precedent, and earlier rulings. Then it is built, or brought to the language owner in the shape step 4 gives when it changes what a program says or means.
+### Design to the bar
+Every design, the maintainer's own included, meets PROPOSE.md steps 1 to 3 before it is briefed or proposed. PHP is never a reason: no design asks for a plain PHP file, no rule refuses what PHP would, no message names PHP.
 
 ## 4. Plan the work, then run builders
 
-The maintainer designs every change before a builder starts, so the maintainer knows each file every builder will change. Builders implement that design and never decide it.
+The maintainer designs every change and plans each builder's batch, so no builder decides what to build. A cause inside a lane's files is asked of that lane's builder as a `## Research brief` batch, which returns the root cause from a run and a design, and the maintainer rules on that design per TRIAGE.md step 4. Every build and run is in the build log, and a question about one is answered from it.
 
-### Give each builder a lane of files no other builder touches
-Each brief lists the files its change edits, adds or deletes. Before a dispatch, compare that list with every running builder's lane. An issue that shares a file with a running builder joins that builder's queue. Ready issues in one module go to one builder as one batch.
+### Speed is raw speed
+A speed change, to the compile or to CI, makes the work itself cheaper. A cache, a skipped or reused check, a test taken off a platform, a swapped or generated benchmark, fewer threads, a resident server or work moved to another machine is never a speed change, never briefed and never approved. Each compile speed batch is chosen from a profile of the frozen project, per the hook's SPEED NUMBERS, and each CI batch from the last green run's job timeline.
+
+### Measure targets one way
+Every target's definition, and each decision behind the loop's scripts, is a comment at its code, read before any change. A target stays on the definition and the project it was set on: changing either is the language owner's call.
+
+### Keep one long-lived builder per lane
+The lanes are speed, CI, engine and laws, each held by one long-lived builder that every batch of that lane goes to. An issue whose brief shares a file with a running lane joins that lane, and `state.md` lists each lane's files and queue. Every slot holds a working builder: a red check or a blocked release stops no other lane.
 
 ### Run at most 4 agents
-At most 4 agents run at once: builders, researchers, and any subagent an agent starts. One builder holds each lane and stays alive across its issues, and a fresh one replaces a builder whose context runs out. Speed holds two slots until #359's goal is met and CI speed one. Free slots and lane queues take work in this order:
-1. A red check, a `blocking` issue, a defect a consumer hits, or a speed fix: each hurts users or agents now.
-2. An approved change consumers rewrite code for: each week it waits adds code to rewrite.
-3. An issue whose fix unblocks other lanes.
-
-Within a rank the smallest job goes first, so a fix of an hour never waits behind a lane that runs for days.
-
-### Keep one copy of the repository
-Every builder works and tests in `/Users/jordan/Developer/php-sharp` on `next`, and builds into its one shared target. No builder makes a second copy of the repository in any form. The speed and CI lanes are the exceptions, with `worktrees/speed` and `worktrees/ci`: each commits each green change onto `next` the moment it is green, from a private index, and owns CI like any lane.
-
-### Dispatch with `/implement #<issue>` and nothing else
-Everything a builder needs is on the issue: the brief, each `Brief update:` and each ruling. A correction, a ruling, a red check on its code or a new priority is a comment on the issue that opens with `Brief update:`, then `/implement #<issue>` sent again.
+At most 4 agents run at once, builders and their subagents included. Speed holds one slot until #359's goal is met, and the other three hold the lanes whose work ranks highest:
+1. A red check or a `blocking` issue, verified by the maintainer's own commands the turn it returns.
+2. A defect a consumer hits, or a speed change.
+3. An approved change consumers rewrite code for, then an issue that unblocks other lanes.
+### Dispatch `/implement #<issue> #<issue> …` once per batch, and nothing else
+The batch is every ready issue in the lane, in rank order, with a red check the lane's own commit caused first. Read each issue's thread first: no dispatch breaks its rulings. A correction is a `Brief update:` comment of its own on the issue, then the same dispatch again. Rule on a builder's pushback, and on any public name it invents, in the issue, from the code and the spec.
 Never: a message that carries instructions, rulings or context.
-
-Rule on a builder's pushback against the code and the spec, in the issue, and never negotiate. A public name a builder invents is approved or renamed in the issue.
 
 ## 5. Verify what a builder returns
 
-The maintainer verifies every builder's work:
-1. Read the diff and the tests against each acceptance criterion in the brief.
-2. Check that the change leaves the correct way as the only way: no second way, no name list in the compiler, no special case.
-3. Check that a bug fix's test failed before the fix, that a speed change carries before-and-after wall-clock and CPU time of the reported scenario from the same machine, and that a change to how something is keyed lists every site that builds or compares the key.
-4. Check that a speed change makes the work itself cheaper. A cache, a skipped check, fewer threads, a resident server or moving the work to another machine is not a speed fix. Speed work tries a change, measures it, and reverts it without a gain. The maintainer picks each try from the profile by its ceiling: one that can cut under 10% of the scenario waits until no larger part is left.
-5. Check that each new test guards a behavior a user hit or the change adds, and breaks only when it does. A test of lines, of internal wording, or of a problem no project hit is deleted.
-6. Check that a spec change's examples are lines of the approved program in the rulings record, and that its prose states nothing they don't show.
+The maintainer verifies every builder's work against the brief:
+1. Read the diff and the tests against each acceptance criterion.
+2. Check that the correct way is the only way: no second way, no fallback attempt, no name list in the compiler, no special case.
+3. Check that a bug fix's test failed before the fix, and that a speed change makes the work itself cheaper, with before-and-after counts of the reported scenario, as `benchmark/speed.php` counts. A change that makes any target worse goes back, whatever else it fixes.
+4. Check that each new test guards a behavior a user hit or the change adds. A test of lines, of internal wording, or of a problem no project hit is deleted.
+5. Check that a spec change's examples are lines of the approved program in the rulings record.
 
-A miss goes back to the same builder as a `Brief update:` comment naming the root cause.
+A miss becomes a `Brief update:` naming the root cause, first in that builder's next batch. A miss in code or commands that static analysis can catch becomes a rule through `/rulebook:write-rule` the same tick. A rule never classifies speech or messages, and an agentic rule needs the language owner's approval.
 
-### Builders commit, push and own CI
-A builder commits its own lane's files, pushes, and fixes every red check its commit causes, through `/implement`. Its report arrives once CI is green.
-The maintainer reads every failure of a red check and sends each cause, the same tick, as a `Brief update:` on the issue whose commit caused it. Never: committing a builder's files, or finishing a builder's change.
+### Builders take their own commits to green
+A builder commits only its lane's files, pushes, watches its commit's run, and fixes every red check it caused before it reports. The maintainer verifies the outcome: the commit green, landed and released.
+Never: committing a builder's files, finishing a builder's change, or reading a builder's failed job for it.
 
 ## 6. Ship with SHIP.md
 
-Every green run lands `next` on `master`. A `blocking` fix, a speed gain or a change consumers rewrite code for cuts a release the moment it is green. [SHIP.md](SHIP.md) holds the steps.
-Never: a green speed fix held so another release ships first.
+A `blocking` fix, a speed gain or a change consumers rewrite code for ships the moment it is green, alone, never held for another fix. [SHIP.md](SHIP.md) holds the steps.
 
 ## 7. Report status
 
-Every reply opens with this box and block, a one-line reply to a builder's or CI's notification included:
+Every reply, notification replies too, opens with what `.claude/hooks/maintain_tick.py report` printed in the last 15 minutes, every line, never shortened, with NOW and NEXT filled in. A number it lacks, a release ETA included, is added to the script, never counted by hand. Then a few plain sentences say what PHP# can do now, what is broken, and its fix, never by issue number. Every claim about a mechanism is read from the code or a run that turn. Every open proposal is shown in full, never linked.
 
-```text
-╔═══════════════════════════════════════════════════╗
-║ <version>: NN% done, H.H h in, ETA HH:MM on MM-DD  ║
-╚═══════════════════════════════════════════════════╝
-```
-
-```text
-Disk    <free> GiB free
-ALL     [<50-character bar>]  <closed>/<planned> issues, ETA MM-DD
-<version>  [<50-character bar>]  ETA HH:MM
-NOW     <what runs now>
-NEXT    <what runs next>
-```
-
-Never: the box without its block, or a stale count. Hours count from 01:17 on 2026-11-06. `ALL` is issues closed since then over those plus every open one. Then a few plain sentences say what PHP# can do now, what is broken, and its fix, naming things by what they do, never by issue or PR number. Every decision he owes is shown whole, in PROPOSE.md step 4's shape, in every reply until he rules, never as a link or a recap: he never reads the inbox.
-
-When the language owner asks a question, answer it and change nothing. His direction is triaged like any idea. Each correction from him changes, the same turn, the SOP file that let the mistake happen.
+When the language owner asks a question, answer it and change nothing. Each correction from him rewrites, the same turn, every SOP file that let the mistake happen, as one consistent whole, and adds a rule for each part a program can check. Each SOP change is committed that turn, and a sentence leaves only after the log line that added it is read.
 
 ## 8. Stay safe
 
-This repository is exempt from the commit rule: commit with one plain `git commit` call, no `/commit` needed. Never run `git reset`, `git restore`, `git clean` or `git commit-tree`, and never work around a hook. Never stop a CI runner. Every watcher the loop no longer needs is stopped.
+This repository is exempt from the commit rule: commit with one plain `git commit` call, no `/commit` needed. Never work around a hook. Never stop a CI runner.

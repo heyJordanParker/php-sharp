@@ -13,7 +13,7 @@ const LIBRARY_MODULE = [
     'Testing/FakeDatabase', 'Testing/FakeCache',
     'System/Process', 'System/ProcessResult', 'System/ChildProcess', 'IO/Files', 'Net/Http', 'Net/Mail', 'Net/Dns', 'Net/IpAddress',
     'Net/IpFamily', 'Interop/PhpGlobals', 'Interop/Superglobal', 'Time/Duration', 'Time/Instant',
-    'Time/DateTime', 'Time/Date', 'Time/TimeOfDay', 'Time/TimeZone', 'Time/DateTimeInterfaceMembers', 'Time/Weekday', 'Time/Month', 'Int', 'ByteOrder', 'Bytes', 'Math', 'Net/HttpMethod', 'Net/HttpRequest',
+    'Time/DateTime', 'Time/Date', 'Time/TimeOfDay', 'Time/TimeZone', 'Interop/PhpDates', 'Time/Weekday', 'Time/Month', 'Int', 'ByteOrder', 'Bytes', 'Math', 'Net/HttpMethod', 'Net/HttpRequest',
     'Net/HttpResponse', 'Net/MailAddress', 'Net/MailMessage', 'Net/Url', 'Text/StringMembers', 'Text/NormalizationForm', 'ListMembers',
     'MapMembers', 'SetMembers', 'IterableMembers', 'Internal/Builtins', 'Data/Database', 'Data/Cache',
 ];

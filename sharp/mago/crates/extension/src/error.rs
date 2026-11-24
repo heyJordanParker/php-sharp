@@ -61,8 +61,9 @@ pub enum WorkerError {
     Start(mago_engine::EngineError),
     /// mago could not write its own SDK, which every interpreter loads, to its cache.
     Sdk(io::Error),
-    /// A host's file failed while an interpreter ran it.
-    Load { host: String, message: String },
+    /// A host's file failed while an interpreter ran it, with the exception it threw when it threw one, whose file is
+    /// the PHP# file the engine refused to load when the engine refused one.
+    Load { host: String, message: String, thrown: Option<Box<mago_engine::Thrown>> },
     /// Two hosts declare the class-like `class`, which PHP declares once.
     Clash { class: String, first: String, second: String },
     /// Two hosts set the environment variable `name` to different values.
@@ -72,8 +73,9 @@ pub enum WorkerError {
     /// The host's worker failed the request, with what it threw.
     Remote { host: String, message: String },
     /// A request made no progress within its deadline: `running` is the unit the worker last said the request started,
-    /// such as "the after-analysis hooks of plugin `routes`", or else what mago named the request, such as "the linter
-    /// rules of app/User.php".
+    /// such as "the after-analysis hooks of plugin `rules`", or else what mago named the request, such as "the linter
+    /// rules of app/User.php", with the hook the worker was running when the stopped call's stack names one, as "the
+    /// after-analysis hooks of plugin `rules`, in the hook `SpinsRule`".
     Timeout { host: String, running: Option<String>, duration: Duration },
     /// The engine stopped the request on a fatal error, with what it printed.
     Failed { host: String, message: String },
@@ -86,7 +88,7 @@ impl std::fmt::Display for WorkerError {
         match self {
             Self::Start(error) => write!(formatter, "the extension hosts could not start: {error}"),
             Self::Sdk(error) => write!(formatter, "mago could not write its extension SDK to its cache: {error}"),
-            Self::Load { host, message } => write!(formatter, "extension host `{host}` could not load: {message}"),
+            Self::Load { host, message, .. } => write!(formatter, "extension host `{host}` could not load: {message}"),
             Self::Clash { class, first, second } => write!(
                 formatter,
                 "extension hosts `{first}` and `{second}` both declare `{class}`, which PHP declares once: give one of them another name"
@@ -104,10 +106,10 @@ impl std::fmt::Display for WorkerError {
             }
             Self::Timeout { host, running, duration } => {
                 write!(formatter, "extension host `{host}` made no progress for {} ms", duration.as_millis())?;
-                if let Some(running) = running {
-                    write!(formatter, " on {running}")?;
+                match running {
+                    Some(running) => write!(formatter, " in {running}"),
+                    None => Ok(()),
                 }
-                write!(formatter, ": raise its `request-timeout-ms` for hooks that run that long")
             }
             Self::Failed { host, message } => write!(formatter, "extension host `{host}` failed: {message}"),
             Self::Reduction { message } => write!(formatter, "extension worker reduction failed: {message}"),

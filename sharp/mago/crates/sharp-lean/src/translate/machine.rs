@@ -9,6 +9,7 @@ use mago_syntax::cst::ClassLikeMember;
 use mago_syntax::cst::Enum;
 use mago_syntax::cst::EnumCase;
 use mago_syntax::cst::EnumCaseItem;
+use mago_syntax::cst::FunctionLikeParameter;
 use mago_syntax::cst::Hint;
 use mago_syntax::cst::Law as LawNode;
 use mago_syntax::cst::Method;
@@ -43,6 +44,46 @@ impl Translator<'_, '_> {
         let class = self.checked.names().get(identifier);
 
         metadata.cases.iter().map(|case| case.name).find(|case| case_class(machine, case.as_bytes()) == class)
+    }
+
+    /// The case of a machine that `parameter`'s type names, spec sections 20.2 and 28, whichever file declares the
+    /// machine, as [`HeldCase`] gives it. None for a parameter of any other type.
+    pub(super) fn held_case(&self, parameter: &FunctionLikeParameter) -> Option<HeldCase> {
+        let Some(Hint::Identifier(identifier)) = &parameter.hint else {
+            return None;
+        };
+        let class = self.checked.names().get(identifier);
+        let separator = class.iter().rposition(|&byte| byte == b'\\')?;
+        let (machine, case) = (&class[..separator], &class[separator + 1..]);
+        self.checked.types().machine(word(machine))?;
+        if !self.reach.cases(machine).iter().any(|known| known.as_bytes() == case) {
+            return None;
+        }
+        let reached = self.reach.class(machine)?;
+        let lean = names::full_name(reached.name.as_bytes());
+        let short = names::short_name(reached.name.as_bytes());
+        let value = parameter.variable.name.strip_prefix(b"$").unwrap_or(parameter.variable.name);
+        let fields = self
+            .checked
+            .types()
+            .constructor_parameters(word(class))
+            .iter()
+            .map(|field| {
+                let field = field.name.0.as_bytes();
+                names::identifier(&[value, b".", field.strip_prefix(b"$").unwrap_or(field)].concat())
+            })
+            .collect();
+        let use_in_machine =
+            |key: String, place: String| Use { key, file: Some(reached.file), place, smaller: None, names_only: false };
+        let mut uses = vec![use_in_machine(lean.clone(), short.clone())];
+        let mut invariants = Vec::new();
+        for law in self.reach.invariants(class) {
+            let claim = claim_of(&names::member(&lean, law.as_bytes()));
+            uses.push(use_in_machine(claim.clone(), format!("{short}.{law}")));
+            invariants.push(claim);
+        }
+
+        Some(HeldCase { constructor: names::member(&lean, case), fields, invariants, uses })
     }
 
     /// The invariants of the machine `r#enum`, spec section 20.2, each a law whose one parameter is one of its cases.
@@ -586,6 +627,34 @@ impl<'machine, 'ast, 'arena> Machine<'machine, 'ast, 'arena> {
         };
 
         (fields, value)
+    }
+}
+
+/// A value of one case of a machine, as a law that takes it states it, spec sections 20.2 and 28: built by the case's
+/// constructor from its fields, each its own binder, and keeping each invariant of the case, since a move gives only a
+/// value that keeps them and `Json.decode` checks them of each value it builds. So the law holds for each value a
+/// program holds, and its proof reads the case's fields, never another case.
+pub(super) struct HeldCase {
+    /// The Lean constructor of the case: `App.Store.OrderStatus.Refunded`.
+    constructor: String,
+    /// The binder of each field of the case, named by the parameter and the field: `«refunded.payment»`.
+    fields: Vec<String>,
+    /// The claim of each invariant of the case: `App.Store.OrderStatus.paidIsPositive.«$claim»`.
+    pub(super) invariants: Vec<String>,
+    /// The machine's type, whose constructor builds the value, and each claim.
+    pub(super) uses: Vec<Use>,
+}
+
+impl HeldCase {
+    /// The premises a law states of its parameter `value` of the case: the case's constructor built it from its fields,
+    /// `∀ «paid.cents», «paid» = Shop.Order.Paid «paid.cents»`, and it keeps each invariant of the case.
+    pub(super) fn premises(&self, value: &str) -> Vec<String> {
+        let built = match self.fields.as_slice() {
+            [] => format!("{value} = {}", self.constructor),
+            fields => format!("∀ {}, {value} = {} {}", fields.join(" "), self.constructor, fields.join(" ")),
+        };
+
+        std::iter::once(built).chain(self.invariants.iter().map(|claim| format!("holds ({claim} {value})"))).collect()
     }
 }
 

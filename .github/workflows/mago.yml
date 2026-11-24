@@ -8,11 +8,17 @@ on:
     branches: [master]
   merge_group:
 
-# A push cancels its pull request's run in progress, master runs one push at a time and lets it finish, and each
-# merge queue entry runs in a group of its own, as sharp.yml's concurrency explains.
+# Every lane pull request's run joins lanes, which keeps one run in progress and the newest pending one, a spec/ pull
+# request's joins a group of its own, where a push cancels its run in progress, master runs one push at a time and lets it finish, and each merge queue entry runs in a group of its own,
+# as sharp.yml's concurrency explains.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.url || (github.event_name == 'push' && github.ref) || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: >-
+    ${{ github.workflow }}-${{ github.event_name == 'pull_request'
+      && (startsWith(github.head_ref, 'spec/') && github.event.pull_request.url || 'lanes')
+      || (github.event_name == 'push' && github.ref) || github.run_id }}
+  cancel-in-progress: >-
+    ${{ github.event_name == 'pull_request'
+      && startsWith(github.head_ref, 'spec/') }}
 
 permissions:
   contents: read
@@ -176,7 +182,8 @@ jobs:
   # upstream's carthage-software/mago at the release this checker left from, as an extension host does,
   # installs no second checker, and one that requires a later release installs nothing. Then runs mago on
   # a one-class .sharp project with the binary checks built, and sharp/phpunit's tests, which stop. On macOS,
-  # sharp.yml's MACOS runs the same check on its dev build, and release.yml's macOS build on the release binary.
+  # the Mac's job, which release.yml defines, runs the same check on its dev build, and in a release's push on the
+  # release binary.
   plain-php:
     needs: [CHANGES, checks]
     runs-on: ubuntu-latest
@@ -232,15 +239,15 @@ jobs:
         with:
           end: true
 
-  # What proving and compiling cost, against sharp/baseline/speed.json, the last release's, in counts no load changes, as
+  # What proving and compiling cost, against what master's newest green push run counted, in counts no load changes, as
   # benchmark/speed.php explains: each law's Lean heartbeats, and the instructions mago's own process retires for a
   # one-file edit on one thread, under valgrind's cachegrind, since a hosted runner exposes no hardware counter to perf.
   # It counts the test-run mago checks built, which behaves as the release users run, as plain-php runs it, so it builds
   # nothing: in sharp.yml it built that mago again, for 272 of its 408 s on run 45122643706. The merge queue merges only
   # a change whose runs passed, so a commit that proves or compiles slower never reaches master. What it counted is the
-  # run's speed artifact, which the release bump commits as the next baseline. It runs in the sharp/docker image, which
-  # carries valgrind, Composer and the pinned Lean, so it downloads none of them. checks builds the binary against a
-  # glibc older than the image's, as its comment explains.
+  # run's speed artifact, and a push run's is the baseline of every change after it. It runs in the sharp/docker image,
+  # which carries valgrind, Composer and the pinned Lean, so it downloads none of them. checks builds the binary against
+  # a glibc older than the image's, as its comment explains.
   SPEED:
     needs: [CHANGES, checks]
     runs-on: ubuntu-latest
@@ -292,14 +299,20 @@ jobs:
       - name: Make the binary executable
         run: chmod +x sharp/build/speed/test-run/mago
 
-      - name: Count what proving and compiling cost, against the last release's
+      # Here, since the sharp/docker image has no gh.
+      - name: Download what master's newest green push run counted
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sharp/bin/check --speed-baseline sharp/build/speed/baseline
+
+      - name: Count what proving and compiling cost, against master's
         env:
           COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          sharp/docker/run env CARGO_TARGET_DIR=/src/sharp/build/speed SPEED_WRITE=/src/sharp/build/speed/speed.json \
-            SPEED_COMMIT="$COMMIT" sharp/bin/check speed
+          sharp/docker/run env CARGO_TARGET_DIR=/src/sharp/build/speed SPEED_BASELINE=/src/sharp/build/speed/baseline \
+            SPEED_WRITE=/src/sharp/build/speed/speed.json SPEED_COMMIT="$COMMIT" sharp/bin/check speed
 
-      - name: Upload what the run counted, the next release's baseline
+      - name: Upload what the run counted, a push run's the baseline of the changes after it
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

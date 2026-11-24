@@ -1,0 +1,9 @@
+namespace LoweredAround;
+
+// Overrides the erased `T value` with the type argument it fills, so it runs with `mixed` and checks `string` itself.
+public final class HolderChild : Holder<string>
+{
+    public HolderChild(string value) : super(value) { }
+
+    public override string value { get; set; } = "";
+}

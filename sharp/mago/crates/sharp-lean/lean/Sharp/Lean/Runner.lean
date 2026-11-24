@@ -19,7 +19,8 @@ elaborated on the runtime library with exactly the generated modules it imports,
 from its imports alone, so whether Lean accepts it does not depend on the other modules of its check or of the request.
 A check's theorems are elaborated with exactly the modules the check names, and what they import. A theorem is
 elaborated once per runner when it can be: a later check that calls it gets the declaration Lean added for it, when the
-check's environment holds every constant that declaration uses.
+check's environment holds every constant that declaration uses, and the check that elaborated it goes on with that
+declaration too, so each theorem's heartbeats are the same whichever check elaborated the theorems before it.
 
 The runner writes each check's answer as soon as it has it, with the check's index, and says on standard error what each
 check starts: `module <check> <module>` before it elaborates a generated module for it, and `theorems <check>` before it
@@ -328,16 +329,17 @@ def progress (line : String) : IO Unit := do
   stderr.putStr s!"{line}\n"
   stderr.flush
 
-/-- `env` with the generated `module` elaborated from its parsed source as the main module, with the linters off and no
-other option, as Lean elaborates a module it compiles. -/
+/-- `env` with the generated `module` elaborated from its parsed source, with the linters off and no other option. Each
+module and theorem elaborates under the one main module of `env`: Lean names the equations it builds for a `match` with
+the main module's private prefix, so a theorem finds the ones its modules built. Under another main module it builds
+them again under another prefix, and Lean refuses each such second constant of one name with a panic. -/
 def elaborateIn (env : Environment) (module : Name)
     (parsed : Parser.InputContext × Parser.ModuleParserState × MessageLog × Array Name) : ModulesM Environment := do
   let (input, parserState, messages, _) := parsed
-  let main := env.mainModule
-  let state ← elaborateCommands input parserState (Command.mkState (env.setMainModule module) messages unlinted)
+  let state ← elaborateCommands input parserState (Command.mkState env messages unlinted)
   if let some error := state.messages.toList.find? (·.severity == .error) then
     throwThe Refusal (.rejected module error.pos.line)
-  return state.env.setMainModule main
+  return state.env
 
 /-- `env`, which holds the generated modules `present`, with `module` and each generated module it imports,
 transitively, elaborated in it, each after the modules it imports, and the modules it then holds. Each of them was
@@ -418,18 +420,23 @@ def proved (env : Environment) (item : Theorem) (shared : Shared) : IO (Environm
   let (env, searched) ← elaborate env item.statement item.text shared.heartbeats
   return (env, { searched with heartbeats := before + searched.heartbeats })
 
+/-- `env` with the declaration Lean added for the theorem `elaborated` gave, when `env` holds each constant it uses. -/
+def declared (env : Environment) (elaborated : Elaborated) : Option Environment := do
+  let (declaration, uses) ← elaborated.declaration
+  guard (holdsAll env uses)
+  (env.addDeclCore 0 0 declaration none (doCheck := false)).toOption
+
 /-- `env` with `item`'s theorem, and what elaborating it gave: what a check of the runner gave before, when `env` holds
-each constant its declaration uses, so the runner adds the declaration Lean already checked, and else elaborated in
-`env`, as [`proved`] elaborates it. -/
+each constant its declaration uses, and else elaborated in `env`, as [`proved`] elaborates it. Either way the check goes
+on with the declaration Lean added for the theorem, when it has one, and not with the environment its elaboration left:
+elaborating a theorem leaves what a later theorem of the check can reuse, so a later theorem's heartbeats would depend
+on which check elaborated the earlier one first, as `isOne` beside `summed` counts 11,900 or 12,215. -/
 def withTheorem (env : Environment) (item : Theorem) (shared : Shared) : IO (Environment × Elaborated) := do
   if let some elaborated := (← shared.theorems.get).find? item.statement then
-    if let some (declaration, uses) := elaborated.declaration then
-      if holdsAll env uses then
-        if let .ok added := env.addDeclCore 0 0 declaration none (doCheck := false) then
-          return (added, elaborated)
-  let (env, elaborated) ← proved env item shared
+    if let some added := declared env elaborated then return (added, elaborated)
+  let (elaboratedEnv, elaborated) ← proved env item shared
   shared.theorems.modify (·.insert item.statement elaborated)
-  return (env, elaborated)
+  return ((declared env elaborated).getD elaboratedEnv, elaborated)
 
 /-! The search for the small values that break a law whose proof stays open, spec section 28: `<statement>.«$breaking»`,
 `Sharp.Law.breaking` of the law's claim on them, whose text the request holds beside the law's theorem, so only a law

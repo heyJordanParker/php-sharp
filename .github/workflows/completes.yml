@@ -18,17 +18,36 @@ jobs:
   SPEC_GUARD:
     runs-on: ubuntu-24.04
     steps:
+      # The checkout holds every object the jobs read, fetched with the run's token, so no later step fetches: a fetch
+      # without credentials got "The requested URL returned error: 403" on run 45383724694. From the merge commit, a
+      # pull request's commits reach back as many generations as it has commits, and the oldest one's parent is one
+      # further, which a shallow fetch keeps only at one generation more, so the guard reads each commit's change and
+      # the base's files. A merge queue's commit names no count, so its checkout fetches the whole history.
+      - &depth
+        name: The checkout reaches the parent of the pull request's oldest commit
+        id: depth
+        env:
+          COMMITS: ${{ github.event.pull_request.commits }}
+        run: |
+          echo "depth=$((${COMMITS:-0} > 0 ? ${COMMITS:-0} + 2 : 0))" >> "$GITHUB_OUTPUT"
       - &checkout
         name: git checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.event.merge_group.head_sha || format('refs/pull/{0}/merge', github.event.pull_request.number) }}
           persist-credentials: false
-      - name: The base branch's checker compares sharp/baseline/spec with the base
+          fetch-depth: ${{ steps.depth.outputs.depth }}
+      # A pull request's base is its merge commit's first parent, the master tip GitHub merged it onto. The event's
+      # pull_request.base.sha can name an older tip: on pull request #747's push of 226d046d0f1 it named 86d06f4bba3,
+      # while refs/pull/747/merge sat on 9a6e5a078e4, so the guard judged the commits master gained between them as the
+      # pull request's own. A merge queue's commit has the queue's base_sha.
+      - &base
+        name: The base is the commit the checked-out commit merges onto
         env:
-          BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+        run: echo "BASE=${QUEUE_BASE:-$(git rev-parse HEAD^1)}" >> "$GITHUB_ENV"
+      - name: The base branch's checker compares sharp/baseline/spec with the base
         run: |
-          git fetch --depth=1 origin "$BASE"
           if ! git cat-file -e "$BASE:sharp/bin/spec"; then
             echo "sharp/bin/spec does not exist at $BASE, so there is nothing to compare."
             exit 0
@@ -46,15 +65,15 @@ jobs:
   COMPLETES:
     runs-on: ubuntu-24.04
     steps:
+      - *depth
       - *checkout
+      - *base
       - name: Every section a commit message completes has its examples passing
         shell: bash
         env:
-          BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          git fetch --depth=1 origin "$BASE"
           if ! git cat-file -e "$BASE:sharp/bin/spec"; then
             echo "sharp/bin/spec does not exist at $BASE, so there is no Completes: check."
             exit 0

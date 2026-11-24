@@ -100,9 +100,9 @@ use effect_classes::LIST_MEMBERS;
 use effect_classes::MAP_MEMBERS;
 use effect_classes::SET_MEMBERS;
 
+use crate::PRELUDE;
 use crate::prelude_population::populate_on_prelude;
 
-static PRELUDE: LazyLock<Prelude> = LazyLock::new(Prelude::build);
 static PLUGIN_REGISTRY: LazyLock<PluginRegistry> = LazyLock::new(PluginRegistry::with_library_providers);
 
 /// The standard library's package in `vendor/`. A file under it is the standard library's, as the loader marks a file
@@ -692,6 +692,75 @@ fn a_plain_php_use_outside_the_namespace_keeps_a_public_member() {
             "src/App/Payments/Carts.sharp 7:19 `Carts.hidden` is public, and nothing outside `Carts` uses it. | Declare it `private`.",
         ]
     );
+}
+
+/// Spec sections 5 and 25: a class value handed out of the code that writes it, as `typeof(TaggedCast).name()` a
+/// framework builds the class by, is a use from outside the namespace, so `TaggedCast` stays `public`. A class value
+/// that receives a member, as `typeof(Reflected).fields()`, reflects where it is written, so `Reflected` is only its
+/// namespace's.
+#[test]
+fn a_class_value_that_leaves_its_code_keeps_its_class_public() {
+    let tagged = "namespace App.Store;\n\npublic final class TaggedCast\n{\n}\n";
+    let reflected = "namespace App.Store;\n\npublic final class Reflected\n{\n}\n";
+    let order = "namespace App.Store;\n\npublic final class Order\n{\n    public Map<string, string> casts() => [\"status\": typeof(TaggedCast).name(), \"fields\": `${typeof(Reflected).fields().count()}`];\n}\n";
+    let boot = "<?php\n\n(new \\App\\Store\\Order())->casts();\n";
+
+    assert_eq!(
+        too_wide(&[
+            ("src/App/Store/TaggedCast.sharp", tagged),
+            ("src/App/Store/Reflected.sharp", reflected),
+            ("src/App/Store/Order.sharp", order),
+            ("src/boot.php", boot),
+        ]),
+        [
+            "src/App/Store/Reflected.sharp 3:20 `Reflected` is public, and nothing outside `App.Store` uses it. | Declare it `internal`."
+        ]
+    );
+}
+
+/// Spec section 5: plain PHP code reaches what the engine holds to a namespace as the engine lets it when it runs. A
+/// framework class or a function outside `App.Store` that calls `Catalog.secret`, the `label` of the `internal` enum
+/// `Status`, or creates a `Till`, an `internal` class with no constructor, is refused in the engine's words, naming the
+/// caller the engine names. `Status.tryFrom` replaces the wider `BackedEnum::tryFrom`, so the engine holds it to no
+/// namespace.
+/// Top-level code of `App.Store` has no code name in the namespace, so the engine refuses it, and a class of `App.Store`
+/// reaches all of it.
+#[test]
+fn plain_php_outside_the_namespace_of_an_internal_member_is_refused() {
+    let catalog = (
+        "src/App/Store/Catalog.sharp",
+        "namespace App.Store;\n\npublic final class Catalog\n{\n    internal string secret() => \"secret\";\n}\n",
+    );
+    let till = ("src/App/Store/Till.sharp", "namespace App.Store;\n\nfinal class Till\n{\n}\n");
+    let status = (
+        "src/App/Store/Status.sharp",
+        "namespace App.Store;\n\nenum Status : string\n{\n    case Active = \"a\";\n\n    public string label() => this.name;\n}\n",
+    );
+    let store = [catalog, till, status];
+    let model = "<?php\n\nnamespace Illuminate\\Database\\Eloquent;\n\nfinal class Model\n{\n    public function cast(): void\n    {\n        (new \\App\\Store\\Catalog())->secret();\n        \\App\\Store\\Status::tryFrom('a')?->label();\n        new \\App\\Store\\Till();\n    }\n}\n";
+    let function = "<?php\n\nnamespace App\\Outside;\n\nfunction cast(): void\n{\n    (new \\App\\Store\\Catalog())->secret();\n}\n";
+    let boot = "<?php\n\nnamespace App\\Store;\n\n(new Catalog())->secret();\n";
+    let shelf = "<?php\n\nnamespace App\\Store;\n\nfinal class Shelf\n{\n    public function cast(): string\n    {\n        new Till();\n        return (new Catalog())->secret() . Status::tryFrom('a')?->label();\n    }\n}\n";
+
+    assert_eq!(
+        compile_errors(("src/Illuminate/Database/Eloquent/Model.php", model), &store),
+        [
+            "Call to internal method `App\\Store\\Catalog::secret()` from `Illuminate\\Database\\Eloquent\\Model`, outside namespace `App\\Store`.",
+            "Call to internal method `App\\Store\\Status::label()` from `Illuminate\\Database\\Eloquent\\Model`, outside namespace `App\\Store`.",
+            "Cannot instantiate internal class `App\\Store\\Till` from `Illuminate\\Database\\Eloquent\\Model`, outside namespace `App\\Store`.",
+        ]
+    );
+    assert_eq!(
+        compile_errors(("src/App/Outside/cast.php", function), &store),
+        [
+            "Call to internal method `App\\Store\\Catalog::secret()` from `App\\Outside\\cast`, outside namespace `App\\Store`."
+        ]
+    );
+    assert_eq!(
+        compile_errors(("src/App/Store/boot.php", boot), &store),
+        ["Call to internal method `App\\Store\\Catalog::secret()` from global scope, outside namespace `App\\Store`."]
+    );
+    assert_eq!(compile_errors(("src/App/Store/Shelf.php", shelf), &store), Vec::<String>::new());
 }
 
 /// Spec sections 5 and 15: an event's parameters are its payload, public get-only properties that take no modifier,
@@ -1397,8 +1466,7 @@ fn a_bare_constant_is_the_code_s_own_and_a_missing_one_is_refused_as_in_php() {
 
 #[test]
 fn php_calls_a_sharp_method_by_position_and_by_name() {
-    let sharp =
-        "namespace Demo;\n\nclass Report\n{\n    public int total(int extra)\n    {\n        return extra;\n    }\n}\n";
+    let sharp = "namespace Demo;\n\npublic class Report\n{\n    public int total(int extra)\n    {\n        return extra;\n    }\n}\n";
     let php = "<?php\n\nnamespace App;\n\nfunction run(\\Demo\\Report $report): int\n{\n    return $report->total(extra: 1) + $report->total(\"one\");\n}\n";
 
     let php_issues = issues(("src/App/run.php", php), &[("src/Demo/Report.sharp", sharp)]);
@@ -2091,7 +2159,7 @@ fn new_checks_the_constructor_arguments_as_in_php() {
 
 #[test]
 fn the_constructor_is_the_php_constructor() {
-    let sharp = "namespace Demo;\n\nclass Report\n{\n    private int count;\n\n    public Report(int start)\n    {\n        this.count = start;\n    }\n\n    public int total()\n    {\n        return this.count;\n    }\n\n    public static int make()\n    {\n        return new Report(\"one\").total() + new Report(start: 2).total();\n    }\n}\n";
+    let sharp = "namespace Demo;\n\npublic class Report\n{\n    private int count;\n\n    public Report(int start)\n    {\n        this.count = start;\n    }\n\n    public int total()\n    {\n        return this.count;\n    }\n\n    public static int make()\n    {\n        return new Report(\"one\").total() + new Report(start: 2).total();\n    }\n}\n";
     let php = "<?php\n\nnamespace Demo;\n\nclass Report\n{\n    private int $count;\n\n    public function __construct(int $start)\n    {\n        $this->count = $start;\n    }\n\n    public function total(): int\n    {\n        return $this->count;\n    }\n\n    public static function make(): int\n    {\n        return new Report(\"one\")->total() + new Report(start: 2)->total();\n    }\n}\n";
     let caller =
         "<?php\n\nnamespace App;\n\nfunction run(): int\n{\n    return (new \\Demo\\Report(\"one\"))->total();\n}\n";
@@ -2106,7 +2174,7 @@ fn the_constructor_is_the_php_constructor() {
 
 #[test]
 fn an_auto_property_is_the_php_property_with_its_set_visibility() {
-    let sharp = "namespace Demo;\n\nclass Report\n{\n    public int views { get; private set; } = 0;\n    public string name { get; set; }\n    public int id { get; }\n\n    public Report(int id)\n    {\n        this.id = id;\n        this.name = \"report\";\n    }\n\n    public int bump()\n    {\n        this.views++;\n        return this.views + this.id;\n    }\n}\n";
+    let sharp = "namespace Demo;\n\npublic class Report\n{\n    public int views { get; private set; } = 0;\n    public string name { get; set; }\n    public int id { get; }\n\n    public Report(int id)\n    {\n        this.id = id;\n        this.name = \"report\";\n    }\n\n    public int bump()\n    {\n        this.views++;\n        return this.views + this.id;\n    }\n}\n";
     let php = "<?php\n\nnamespace Demo;\n\nclass Report\n{\n    public private(set) int $views = 0;\n    public string $name;\n    public readonly int $id;\n\n    public function __construct(int $id)\n    {\n        $this->id = $id;\n        $this->name = \"report\";\n    }\n\n    public function bump(): int\n    {\n        $this->views++;\n        return $this->views + $this->id;\n    }\n}\n";
     let caller = "<?php\n\nnamespace App;\n\nfunction run(\\Demo\\Report $report): string\n{\n    $report->name = 'other';\n    $report->views = 2;\n    $report->id = 3;\n    return $report->name . $report->views . $report->id;\n}\n";
 
@@ -2125,7 +2193,7 @@ fn an_auto_property_is_the_php_property_with_its_set_visibility() {
 
 #[test]
 fn a_promoted_member_is_the_promoted_php_property() {
-    let sharp = "namespace Demo;\n\nclass Report\n{\n    public Report(private int count, public int id { get; }, public string name { get; private set; })\n    {\n    }\n\n    public int total()\n    {\n        return this.count + this.id;\n    }\n}\n";
+    let sharp = "namespace Demo;\n\npublic class Report\n{\n    public Report(private int count, public int id { get; }, public string name { get; private set; })\n    {\n    }\n\n    public int total()\n    {\n        return this.count + this.id;\n    }\n}\n";
     let php = "<?php\n\nnamespace Demo;\n\nclass Report\n{\n    public function __construct(private int $count, public readonly int $id, public private(set) string $name)\n    {\n    }\n\n    public function total(): int\n    {\n        return $this->count + $this->id;\n    }\n}\n";
     let caller = "<?php\n\nnamespace App;\n\nfunction run(\\Demo\\Report $report): string\n{\n    $report->id = 3;\n    $report->name = 'other';\n    return $report->name . $report->id;\n}\n";
 
@@ -4047,13 +4115,22 @@ fn internal_reaches_its_namespace_and_every_namespace_below_it() {
         );
     }
 
-    // Plain PHP has no namespace visibility, so a `.php` file reaches every PHP# class and member. A `set` still
-    // reaches its own namespace at most, spec section 6.1, since plain PHP that uses PHP# code follows its rules.
+    // Plain PHP that uses PHP# code is held to the same namespaces, as the engine holds it when it runs, and reads each
+    // refusal in the engine's words. A `set` reaches its own namespace at most, spec section 6.1.
     let php = "<?php\n\nnamespace App\\Tenant\\Other;\n\nuse App\\Tenant\\Store\\Hidden;\nuse App\\Tenant\\Store\\Shop;\n\nfinal class Plain\n{\n    public function run(Shop $shop, Hidden $hidden): int\n    {\n        $shop->views = 2;\n        return $shop->secret() + $hidden->total() + Shop::MAX;\n    }\n}\n";
+    let outside =
+        |refused: &str| format!("{refused} from `App\\Tenant\\Other\\Plain`, outside namespace `App\\Tenant\\Store`.");
     assert_eq!(
         reach(("src/App/Tenant/Other/Plain.php", php)),
-        ["`App\\Tenant\\Store\\Shop::$views` is set only inside `App.Tenant.Store`."]
+        [
+            outside("Cannot modify internal(set) property `App\\Tenant\\Store\\Shop::$views`"),
+            outside("Call to internal method `App\\Tenant\\Store\\Shop::secret()`"),
+            outside("Call to internal method `App\\Tenant\\Store\\Hidden::total()`"),
+            outside("Cannot access internal constant `App\\Tenant\\Store\\Shop::MAX`"),
+        ]
     );
+    let below = leak(php.replace("App\\Tenant\\Other;", "App\\Tenant\\Store\\Inner;"));
+    assert_eq!(reach(("src/App/Tenant/Store/Inner/Plain.php", below)), Vec::<String>::new());
 }
 
 /// Spec sections 5 and 10: a struct takes every visibility a class takes, so an `internal struct` reaches its
@@ -4090,7 +4167,7 @@ fn an_internal_struct_reaches_only_its_namespace() {
 /// Spec section 6.1: a property's `set` reaches its own namespace at most, so code outside the namespace never changes
 /// the state of its classes. A write from another namespace is refused at the write, a static's and an object
 /// initializer's included, and one from the namespace or one below it compiles. `init` keeps the property's level, so
-/// `new` sets it from anywhere, and a plain PHP file of another namespace is refused as PHP# is.
+/// `new` sets it from anywhere, and a plain PHP file of another namespace is refused as PHP# is, in the engine's words.
 #[test]
 fn a_set_reaches_its_own_namespace_at_most() {
     let transaction = (
@@ -4115,7 +4192,9 @@ fn a_set_reaches_its_own_namespace_at_most() {
     );
     assert_eq!(
         messages(("src/App/Web/pay.php", plain), &[transaction]),
-        ["`App\\Shop\\Payments\\Transaction::$status` is set only inside `App.Shop.Payments`."]
+        [
+            "Cannot modify internal(set) property `App\\Shop\\Payments\\Transaction::$status` from `App\\Web\\pay`, outside namespace `App\\Shop\\Payments`."
+        ]
     );
 }
 
@@ -10831,7 +10910,7 @@ fn a_named_constructor_called_without_new_is_an_error() {
 /// PHP calls a named constructor as the static method it runs as, which returns its class.
 #[test]
 fn php_calls_a_named_constructor_as_the_static_method_it_runs_as() {
-    let sharp = "namespace Demo;\n\nclass Artifact\n{\n    public Artifact(public int size { get; }) { }\n\n    public Artifact.sized(int size) : this(size) { }\n}\n";
+    let sharp = "namespace Demo;\n\npublic class Artifact\n{\n    public Artifact(public int size { get; }) { }\n\n    public Artifact.sized(int size) : this(size) { }\n}\n";
     let caller = "<?php\n\nnamespace App;\n\nfunction run(): string\n{\n    return \\Demo\\Artifact::sized(2)->size . \\Demo\\Artifact::sized('two')->size;\n}\n";
 
     assert_eq!(issues(("src/App/run.php", caller), &[("src/Demo/Artifact.sharp", sharp)]), ["7:67 invalid-argument"]);
@@ -11125,7 +11204,7 @@ fn a_method_a_string_or_a_number_lacks_is_an_error_that_lists_the_methods_it_has
     );
 }
 
-/// Spec section 18: a `string` is text and its bytes are `Bytes`, so a call of a byte member 0.6.40 had is refused with
+/// Spec section 18: a `string` is text and its bytes are `Bytes`, so a call of a byte member a release had is refused with
 /// the member that replaces it, on a `string`, an `int` and a `List<int>`.
 #[test]
 fn a_removed_byte_member_is_refused_with_its_replacement() {
@@ -12832,7 +12911,7 @@ fn a_backed_enum_and_a_class_using_it_have_the_issues_of_their_php_twins() {
 
 #[test]
 fn php_calls_a_sharp_enum_and_sharp_calls_a_php_enum_with_no_issues() {
-    let status = "namespace Demo;\n\nenum Status : string\n{\n    case Active = \"a\";\n\n    public string label() => this.name;\n}\n";
+    let status = "namespace Demo;\n\npublic enum Status : string\n{\n    case Active = \"a\";\n\n    public string label() => this.name;\n}\n";
     let php_caller =
         "<?php\n\nnamespace App;\n\nfunction run(): string\n{\n    return \\Demo\\Status::from('a')->label();\n}\n";
     let color = "<?php\n\nnamespace Lib;\n\nenum Color: string\n{\n    case Red = 'r';\n}\n";
@@ -19244,7 +19323,7 @@ fn a_list_literal_in_a_coalesce_a_conditional_or_a_match_where_a_set_is_declared
 
 /// An `Any` joined with an `Any` is an `Any`, though one of them is an element read that may be past the end of its
 /// `List`. So a `? :` of two `Any` values goes into a declared `Any`, and `[]` beside `[this.streams[0]]` goes into a
-/// declared `List<Any>`, spec section 12, where 0.6.35 joined each pair as `Any?` and refused the line.
+/// declared `List<Any>`, spec section 12, where a release joined each pair as `Any?` and refused the line.
 #[test]
 fn a_conditional_of_two_any_values_or_two_lists_of_any_goes_into_a_declared_any() {
     let sharp = "namespace Demo;\n\nclass Pipe\n{\n    private List<Any> streams = [];\n\n    public List<Any> pending(int written, string request)\n    {\n        List<Any> write = written < request.length() ? [this.streams[0]] : [];\n        return write;\n    }\n\n    public Any first(bool flag, Any held)\n    {\n        Any picked = flag ? this.streams[0] : held;\n        return picked;\n    }\n}\n";
@@ -19688,8 +19767,8 @@ fn each_refused_bound_gives_one_error() {
     assert_eq!(
         errors("T : Shareable & Shareable, TOther", "int", "1"),
         [
-            "Duplicate type `Shareable` is redundant.",
-            "Duplicate type `Shareable` is redundant.",
+            "`Shareable & Shareable` names `Shareable` twice: name it once.",
+            "`Shareable & Shareable` names `Shareable` twice: name it once.",
             "Type argument `int` does not satisfy `Bounded.held<T, TOther>`'s `T`.",
             "`int` does not satisfy the bound `Shareable & Shareable` of type parameter `T`.",
         ]
@@ -20767,11 +20846,12 @@ fn a_return_type_that_would_erase_wider_than_the_parent_return_type_is_an_error(
     assert_eq!(each_file(errors, &feed, &[]), [vec![], vec![], vec!["3:23 invalid-template-parameter Error"]]);
 }
 
-/// PHP requires an overriding property to keep the type of the property it overrides, so a property that erases to
-/// another type than the `virtual` one it overrides is refused, from a PHP# class or a PHP class whose
-/// `@extends Slot<Order>` names it, and one whose parent's bound erases to the same type is not.
+/// An override keeps the type of the property it overrides. A PHP# override that erases to a narrower type than the
+/// `virtual` one it overrides runs with the type its parent erases to, which the bridge writes, so it compiles, as one
+/// whose parent's bound erases to the same type does. A plain PHP class whose `@extends Slot<Order>` names it links its
+/// own declaration, so it is refused.
 #[test]
-fn a_property_whose_type_erases_to_another_type_than_the_parent_property_is_an_error() {
+fn a_property_that_erases_narrower_than_its_parent_compiles_in_sharp_and_is_refused_in_plain_php() {
     let order = ("src/Demo/Order.sharp", "namespace Demo;\n\npublic class Order\n{\n}\n");
     let unbound = (
         "src/Demo/Slot.sharp",
@@ -20787,13 +20867,7 @@ fn a_property_whose_type_erases_to_another_type_than_the_parent_property_is_an_e
     );
     let php_order_slot = "<?php\n\nnamespace Demo;\n\n/** @extends Slot<Order> */\nclass OrderSlot extends Slot\n{\n    public ?Order $item = null;\n}\n";
 
-    assert_eq!(each_file(issues, &[order, unbound], &[order_slot]), vec![Vec::<String>::new(); 2]);
-    assert_eq!(
-        explained(order_slot, &[order, unbound]),
-        [
-            "5:21 incompatible-property-type Property `OrderSlot.item` must have `Any?`, the type `Slot.item` erases to. Write `item` with a type that erases to `Any?`, or bound the type parameter, as in `Slot<TItem : Order>`, so both sides erase to the bound."
-        ]
-    );
+    assert_eq!(each_file(issues, &[order, unbound, order_slot], &[]), vec![Vec::<String>::new(); 3]);
     assert_eq!(each_file(issues, &[order, bound, order_slot], &[]), vec![Vec::<String>::new(); 3]);
     assert_eq!(
         explained(("src/Demo/OrderSlot.php", php_order_slot), &[order, unbound]),
@@ -23529,10 +23603,9 @@ fn a_type_argument_outside_its_bound_is_named_as_sharp_writes_it() {
     );
 }
 
-/// An override that does not fit the member it overrides names both types as PHP# writes them, and a property that
-/// erases to another type than the parent's names each class and member as PHP# writes it, `ListBase.item`, and each erased
-/// type as PHP# writes it, as `Any?`, or as PHP's where PHP# has no name for it, as in PHP's `array|null`. The
-/// parameter of `ListBase.put` takes the type argument, so it is widened. The PHP twin keeps Mago's text.
+/// An override that does not fit the member it overrides names both types as PHP# writes them. A property and a
+/// parameter of `ListBase` that take the type argument run with the types their parents erase to, so they compile. The
+/// PHP twin keeps Mago's text.
 #[test]
 fn an_override_names_its_types_as_sharp_writes_them_and_the_erased_types_as_php_does() {
     let sharp = [
@@ -23556,9 +23629,9 @@ fn an_override_names_its_types_as_sharp_writes_them_and_the_erased_types_as_php_
     assert_eq!(
         worded(("src/Demo/Base.php", php), &[]),
         [
-            "37:12 incompatible-property-type Property `Demo\\OrderBase::$item` has an incompatible type declaration. | This type `Demo\\Line|null` is incompatible with the parent's type. | The parent property is defined with type `mixed` here. | PHP requires property types to be invariant, meaning the type declaration in a child class must be exactly the same as in the parent class. | Change the type of `$item` to `mixed` to match the parent property.",
+            "37:12 incompatible-property-type Property `Demo\\OrderBase::$item` has an incompatible type declaration. | This type `Demo\\Line|null` is incompatible with the parent's type. | The parent property is defined with type `mixed` here. | An override keeps the type of the property it overrides. | Change the type of `$item` to `mixed` to match the parent property.",
             "39:25 docblock-type-mismatch Docblock type `Demo\\Order` for parameter `$item` is incompatible with native type `Demo\\Line`. | Native type is `Demo\\Line`... | ...but docblock declares `Demo\\Order` | The docblock type must be compatible with the native type declaration. | Either change the docblock type to match `Demo\\Line`, or update the native type to be compatible with `Demo\\Order`.",
-            "52:12 incompatible-property-type Property `Demo\\ListBase::$item` has an incompatible type declaration. | This type `array<array-key, mixed>|null` is incompatible with the parent's type. | The parent property is defined with type `mixed` here. | PHP requires property types to be invariant, meaning the type declaration in a child class must be exactly the same as in the parent class. | Change the type of `$item` to `mixed` to match the parent property.",
+            "52:12 incompatible-property-type Property `Demo\\ListBase::$item` has an incompatible type declaration. | This type `array<array-key, mixed>|null` is incompatible with the parent's type. | The parent property is defined with type `mixed` here. | An override keeps the type of the property it overrides. | Change the type of `$item` to `mixed` to match the parent property.",
         ]
     );
     assert_eq!(
@@ -23566,8 +23639,7 @@ fn an_override_names_its_types_as_sharp_writes_them_and_the_erased_types_as_php_
         [
             "7:26 incompatible-parameter-type Parameter `item` of `OrderBase.put` expects type `Line` but parent `Base.put` expects type `Order` | Parameter `item` expects type `Line` but parent expects `Order` | Parent method `Base.put` parameter defined here | In class `OrderBase` | A call through `Base` may pass `item` any `Order`, so `OrderBase.put` must take every `Order` too. | Change the parameter type to be compatible with the parent method.",
             "11:26 incompatible-return-type Return type `Line` of `OrderBase.get` is incompatible with parent return type `Order` of `Base.get` | Returns type `Line` but parent expects `Order` | Parent method `Base.get` return type defined here | In class `OrderBase` | Return types must be covariant: child must return equal or narrower types than parent. | Change the return type to be compatible with the parent method.",
-            "5:21 incompatible-property-type Property `OrderBase.item` has an incompatible type declaration. | This type `Line?` is incompatible with the parent's type. | The parent property is defined with type `Order?` here. | PHP requires property types to be invariant, meaning the type declaration in a child class must be exactly the same as in the parent class. | Change the type of `item` to `Order?` to match the parent property.",
-            "5:21 incompatible-property-type Property `ListBase.item` must have `Any?`, the type `Base.item` erases to. | Erases to PHP's `array|null`. | Erases to `Any?`. | PHP# erases type parameters when it compiles, and PHP requires a property to keep the type of the property it overrides. | Write `item` with a type that erases to `Any?`.",
+            "5:21 incompatible-property-type Property `OrderBase.item` has an incompatible type declaration. | This type `Line?` is incompatible with the parent's type. | The parent property is defined with type `Order?` here. | An override keeps the type of the property it overrides. | Change the type of `item` to `Order?` to match the parent property.",
         ]
     );
 }
@@ -26602,7 +26674,7 @@ fn an_override_names_its_members_and_types_as_sharp_writes_them() {
         [
             "31:21 incompatible-parameter-type Parameter `$item` of `Demo\\OrderBase::put()` expects type `Demo\\Line` but parent `Demo\\Base::put()` expects type `Demo\\Order` | Parameter `$item` expects type `Demo\\Line` but parent expects `Demo\\Order` | Parent method `Demo\\Base::put()` parameter defined here | In class `Demo\\OrderBase` | Parameter types must be contravariant: child must accept equal or wider types than parent. | Change the parameter type to be compatible with the parent method.",
             "35:21 incompatible-return-type Return type `Demo\\Line` of `Demo\\OrderBase::get()` is incompatible with parent return type `Demo\\Order` of `Demo\\Base::get()` | Returns type `Demo\\Line` but parent expects `Demo\\Order` | Parent method `Demo\\Base::get()` return type defined here | In class `Demo\\OrderBase` | Return types must be covariant: child must return equal or narrower types than parent. | Change the return type to be compatible with the parent method.",
-            "29:12 incompatible-property-type Property `Demo\\OrderBase::$item` has an incompatible type declaration. | This type `Demo\\Line|null` is incompatible with the parent's type. | The parent property is defined with type `Demo\\Order|null` here. | PHP requires property types to be invariant, meaning the type declaration in a child class must be exactly the same as in the parent class. | Change the type of `$item` to `Demo\\Order|null` to match the parent property.",
+            "29:12 incompatible-property-type Property `Demo\\OrderBase::$item` has an incompatible type declaration. | This type `Demo\\Line|null` is incompatible with the parent's type. | The parent property is defined with type `Demo\\Order|null` here. | An override keeps the type of the property it overrides. | Change the type of `$item` to `Demo\\Order|null` to match the parent property.",
         ]
     );
     assert_eq!(
@@ -26610,7 +26682,7 @@ fn an_override_names_its_members_and_types_as_sharp_writes_them() {
         [
             "7:26 incompatible-parameter-type Parameter `item` of `OrderBase.put` expects type `Line` but parent `Base.put` expects type `Order` | Parameter `item` expects type `Line` but parent expects `Order` | Parent method `Base.put` parameter defined here | In class `OrderBase` | A call through `Base` may pass `item` any `Order`, so `OrderBase.put` must take every `Order` too. | Change the parameter type to be compatible with the parent method.",
             "11:26 incompatible-return-type Return type `Line` of `OrderBase.get` is incompatible with parent return type `Order` of `Base.get` | Returns type `Line` but parent expects `Order` | Parent method `Base.get` return type defined here | In class `OrderBase` | Return types must be covariant: child must return equal or narrower types than parent. | Change the return type to be compatible with the parent method.",
-            "5:21 incompatible-property-type Property `OrderBase.item` has an incompatible type declaration. | This type `Line?` is incompatible with the parent's type. | The parent property is defined with type `Order?` here. | PHP requires property types to be invariant, meaning the type declaration in a child class must be exactly the same as in the parent class. | Change the type of `item` to `Order?` to match the parent property.",
+            "5:21 incompatible-property-type Property `OrderBase.item` has an incompatible type declaration. | This type `Line?` is incompatible with the parent's type. | The parent property is defined with type `Order?` here. | An override keeps the type of the property it overrides. | Change the type of `item` to `Order?` to match the parent property.",
         ]
     );
     assert_eq!(each_file(worded, &declared, &[]), vec![Vec::<String>::new(); 3]);
@@ -32175,7 +32247,7 @@ fn a_chain_of_class_value_comparisons_is_not_redundant() {
 }
 
 /// Spec section 25: a reflection boolean is named `isNullable` and `isOptional`, as the standard library names every
-/// boolean, so 0.6.10's `nullable` and `optional` name no member.
+/// boolean, so an earlier release's `nullable` and `optional` name no member.
 #[test]
 fn the_reflection_booleans_of_0_6_10_name_no_member() {
     let report = (
@@ -35327,6 +35399,23 @@ fn a_bound_class_reaches_code_only_through_injection() {
         "`StoreService` is bound in `App.Shop`'s module, so it reaches code through a constructor or a parameter.";
 
     assert_eq!(compile_errors(("app/Shop/Checkout.sharp", checkout), &others), [message, message, message]);
+}
+
+/// Spec section 32: a lambda's parameter that plain PHP fills is injection, so a lambda passed to a plain PHP call may
+/// take a bound class, and an `as` or an `is` on the call's result that tests another type compiles. Narrowing the
+/// result to the bound class, as itself or as a type argument, is still the lookup the rule refuses.
+#[test]
+fn a_lambda_a_plain_php_call_takes_receives_a_bound_class_as_its_parameter() {
+    let store = ("app/Shop/StoreService.sharp", "namespace App.Shop;\n\npublic class StoreService\n{\n}\n");
+    let module =
+        ("app/Shop/Module.sharp", "namespace App.Shop;\n\nmodule\n{\n    singleton StoreService = StoreService;\n}\n");
+    let kernel = "<?php\n\nnamespace Lib;\n\nfinal class Kernel\n{\n    public function call(callable $callback): mixed\n    {\n        return $callback();\n    }\n}\n";
+    let console = "namespace App.Shop;\n\nimport Lib.Kernel;\nimport LogicException;\n\npublic class Console\n{\n    internal int used(Kernel kernel) => kernel.call((StoreService store) => 1) as int ?? throw new LogicException(\"no exit code\");\n\n    internal int? cast(Kernel kernel) => kernel.call((StoreService store) => 1) as int;\n\n    internal bool tested(Kernel kernel) => kernel.call((StoreService store) => 1) is int;\n\n    internal StoreService? narrowed(Kernel kernel) => kernel.call(() => 1) as StoreService;\n\n    internal bool narrowedTest(Kernel kernel) => kernel.call(() => 1) is StoreService;\n\n    internal List<StoreService>? listed(Kernel kernel) => kernel.call(() => 1) as List<StoreService>;\n}\n";
+    let others = [store, module, ("src/Lib/Kernel.php", kernel)];
+    let message =
+        "`StoreService` is bound in `App.Shop`'s module, so it reaches code through a constructor or a parameter.";
+
+    assert_eq!(compile_errors(("app/Shop/Console.sharp", console), &others), [message, message, message]);
 }
 
 /// Spec section 32: a binding's expression is where a framework's object enters, as C#'s
