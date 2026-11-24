@@ -1,0 +1,7 @@
+namespace Fields;
+
+// An open class whose override closes its chain, so `fields()` gives its storage.
+public class OpenLeaf : Base
+{
+    public final override string content { get; set; } = "x";
+}
