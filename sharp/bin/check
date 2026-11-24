@@ -204,7 +204,9 @@ gate_workflows() {
 # yet. Two lanes added lines under [0.6.51] after it was cut, b0fb4166be0 and 82720c8c872, where [Unreleased] had no
 # "### Added" heading and the first one in the file was 0.6.51's, and next then conflicted with master. So each such
 # version keeps its lines, from its heading to the next one, without the compare links under the oldest, which a bump
-# rewrites. A release bump passes: its version's lines are on its own branch alone.
+# rewrites. A release bump passes: its version's lines are on its own branch alone. A tree without an open release's
+# version heading, as a spec/ branch off master while the release is open, predates the release and writes none of its
+# lines.
 notes_of() {
   awk -v heading="## [$1]" '/^## / {on = index($0, heading) == 1} on && !/^\[[^]]+\]: /'
 }
@@ -220,6 +222,9 @@ released_notes() {
       versions="${ref#release/}"
     fi
     for version in $versions; do
+      if [[ $ref != master ]] && ! grep -qF "## [$version]" "$root/sharp/CHANGELOG.md"; then
+        continue
+      fi
       if ! lines="$(diff <(notes_of "$version" <<< "$published") <(notes_of "$version" < "$root/sharp/CHANGELOG.md"))"; then
         echo "sharp/CHANGELOG.md changes the lines of [$version], which $ref releases:" >&2
         sed -n 's/^< /  removes: /p; s/^> /  adds: /p' <<< "$lines" >&2
