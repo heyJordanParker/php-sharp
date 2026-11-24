@@ -1,4 +1,5 @@
 import { defineRule } from '@cmodjs/rulebook'
+import { started } from '../rulebook-lib/taskpolicy.ts'
 
 // On 11-24 the machine's load average reached 164 to 208 on 12 cores while lanes ran several full-thread compiles at
 // once, each starting a law checker of 24 threads, and the release's Mac job took 62 minutes over a 10-minute engine
@@ -14,8 +15,9 @@ export default defineRule({
   create(context) {
     return {
       Command(command) {
-        if (!MAGO.test(command.argv[0] ?? command.program)) return
-        const names = command.args.some((arg) => arg === '--threads' || arg.startsWith('--threads=') || ASKS.has(arg))
+        const [path = '', ...args] = started(command.program, command.args, command.argv).argv
+        if (!MAGO.test(path)) return
+        const names = args.some((arg) => arg === '--threads' || arg.startsWith('--threads=') || ASKS.has(arg))
         if (!names) context.report({ node: command })
       },
     }
