@@ -103,16 +103,25 @@ SPEED_TARGETS = ("edit CPU", "edit peak memory", "Mac job, last green", "longest
 def speed_entries(measured):
     """Each speed target that `measured`, targets.py's output, shows off its goal with no intake entry for it."""
     with open(os.path.expanduser("~/.claude/orchestrate/php-sharp/intake.md"), encoding="utf-8") as fh:
-        headings = [line for line in fh if line.startswith("## Speed: ")]
+        entries = fh.read().split("\n## ")
+    speed = [entry for entry in entries if entry.startswith("Speed: ")]
+    headings = ["## " + entry.split("\n", 1)[0] for entry in speed]
+    # A speed design is checked against the ledger of experiments first, so none is tried twice (TRIAGE.md).
+    unsearched = [entry.split("\n", 1)[0] for entry in speed
+                  if "- [x] design:" in entry and "experiments.md" not in entry]
     missing = [
         name for name in SPEED_TARGETS
         if re.search(rf"^  {re.escape(name)}: .* x\d", measured, re.M)
         and not any(heading.startswith(f"## Speed: {name}") for heading in headings)
     ]
-    if not missing:
-        return "SPEED: every speed target off its goal has its intake entry."
-    return "SPEED, ACT FIRST: " + "; ".join(missing) + (
-        " off its goal with no intake entry. Enter each as `## Speed: <target>` at a consumer defect's rank (TRIAGE.md).")
+    lines = []
+    if missing:
+        lines.append("SPEED, ACT FIRST: " + "; ".join(missing) + " off its goal with no intake entry. Enter each as "
+                     "`## Speed: <target>` at a consumer defect's rank (TRIAGE.md).")
+    if unsearched:
+        lines.append("SPEED, ACT FIRST: " + "; ".join(unsearched) + " checks its design box without searching "
+                     "benchmark/experiments.md: name the lines it searched there (TRIAGE.md).")
+    return "\n".join(lines) or "SPEED: every speed target off its goal has its intake entry."
 
 
 def archive_finished():
