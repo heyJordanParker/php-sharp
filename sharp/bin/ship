@@ -8,15 +8,20 @@ set -euo pipefail
 # CHANGELOG, each under its ### heading there. It fails naming the first commit whose diff doesn't apply, or whose
 # added CHANGELOG line no such heading holds, before it creates anything. Every lane commits on the checkout's one
 # branch, whose git refuses `git commit-tree` and a branch switch, so the branch's one commit, whose parent is
-# origin/master, is created through the GitHub API, and its pull request opens with auto-merge.
+# origin/master, is created through the GitHub API, and its pull request opens with auto-merge. Once it merges,
+# `sharp/bin/ship --merged` brings origin/master into the checkout's master, as its section below says.
 # Each run leaves its line in the build record, see sharp/bin/record.
 [[ ${SHARP_RECORDED:-} == sharp/bin/ship ]] || exec "$(dirname "$0")/record" sharp/bin/ship -- "$0" "$@"
 
 usage() {
   echo "usage: sharp/bin/ship <commit>..." >&2
+  echo "       sharp/bin/ship --merged" >&2
   exit 2
 }
-if [[ $# -eq 0 || $1 == -* ]]; then
+merged=false
+if [[ ${1:-} == --merged && $# -eq 1 ]]; then
+  merged=true
+elif [[ $# -eq 0 || $1 == -* ]]; then
   usage
 fi
 
@@ -25,6 +30,82 @@ repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 git fetch --quiet origin master
 base=$(git rev-parse origin/master)
 named() { git rev-list -1 --no-commit-header --format='%h %s' "$1"; }
+changelog=sharp/CHANGELOG.md
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+# `sharp/bin/ship --merged`, once the release it cut has merged, brings origin/master into the checkout's master as a
+# merge commit with both parents, built in private indexes, so the stack's pull requests merge into master again and
+# every lane's uncommitted line stays as it is. The CHANGELOG takes origin/master's released sections, and keeps under
+# ## [Unreleased] only the stack's lines that no released section holds. Every other file merges as git merges it,
+# and the merge's changes reach the working tree file by file.
+if $merged; then
+  head=$(git rev-parse HEAD)
+  if git merge-base --is-ancestor "$base" "$head"; then
+    echo "The checkout's master already holds origin/master, $(git rev-parse --short "$base")."
+    exit 0
+  fi
+  { read -r tree; mapfile -t conflicted; } < <(git merge-tree --write-tree --name-only --no-messages "$base" "$head" || true)
+  for path in "${conflicted[@]}"; do
+    if [[ -n $path && $path != "$changelog" ]]; then
+      echo "origin/master and the checkout's master conflict in $path, which only $changelog may." >&2
+      exit 1
+    fi
+  done
+  git show "$base:$changelog" > "$work/released"
+  git show "$head:$changelog" > "$work/stack"
+  awk '
+    FNR == NR {released[++count] = $0; held[$0]; next}
+    $0 == "## [Unreleased]" {inside = 1; next}
+    inside && /^## / {inside = 0}
+    inside && /^### / {heading = $0; next}
+    inside && !/^[[:space:]]*$/ && !($0 in held) {
+      if (!(heading in notes)) order[++headings] = heading
+      notes[heading] = notes[heading] $0 "\n"
+    }
+    END {
+      for (i = 1; i <= count; i++) {
+        print released[i]
+        if (released[i] == "## [Unreleased]") {
+          for (h = 1; h <= headings; h++) {print ""; print order[h]; print ""; printf "%s", notes[order[h]]}
+        }
+      }
+    }
+  ' "$work/released" "$work/stack" > "$work/changelog"
+  GIT_INDEX_FILE=$work/merged git read-tree "$tree"
+  GIT_INDEX_FILE=$work/merged git update-index --cacheinfo \
+    "$(git ls-tree "$tree" -- "$changelog" | cut -d ' ' -f 1),$(git hash-object -w "$work/changelog"),$changelog"
+  if [[ $(git rev-parse HEAD) != "$head" ]]; then
+    echo "A lane committed on master meanwhile, so nothing merged: run sharp/bin/ship --merged again." >&2
+    exit 1
+  fi
+  # A merge that keeps HEAD's tree records origin/master as the commit's second parent without touching the shared
+  # index or the working tree, and the commit takes the merged tree from the private index.
+  GIT_INDEX_FILE=$work/ours git read-tree "$head"
+  if ! GIT_INDEX_FILE=$work/ours git merge --quiet --no-commit --no-ff -s ours "$base" > "$work/ours.log" 2>&1; then
+    cat "$work/ours.log" >&2
+    exit 1
+  fi
+  version=$(git show "$base:sharp/mago/Cargo.toml" | awk -F '"' '/^version = / {print $2; exit}')
+  if ! GIT_INDEX_FILE=$work/merged git commit --quiet -m "Merge origin/master, which released $version" -m \
+    "The CHANGELOG takes origin/master's released sections, and keeps under ## [Unreleased] only the stack's lines that no released section holds."; then
+    git merge --quit
+    exit 1
+  fi
+  git diff-tree -r --no-renames --no-commit-id "$head" HEAD \
+    | awk -F '\t' '{split($1, entry, " "); print entry[2] " " entry[4] "\t" $2}' | git update-index --index-info
+  unapplied=()
+  while IFS= read -r path; do
+    if ! git diff --binary "$head" HEAD -- "$path" | git apply --whitespace=nowarn 2> /dev/null; then
+      unapplied+=("$path")
+    fi
+  done < <(git diff --name-only --no-renames "$head" HEAD)
+  echo "master holds origin/master $(git rev-parse --short "$base") in merge commit $(git rev-parse --short HEAD)."
+  for path in "${unapplied[@]}"; do
+    echo "$path holds uncommitted lines the merge overlaps: apply git diff ${head:0:11} HEAD -- $path by hand." >&2
+  done
+  exit $((${#unapplied[@]} > 0))
+fi
 
 commits=()
 for name in "$@"; do
@@ -39,11 +120,8 @@ for name in "$@"; do
   commits+=("$commit")
 done
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
 export GIT_INDEX_FILE=$work/index
 git read-tree "$base"
-changelog=sharp/CHANGELOG.md
 mkdir -p "$work/tree/${changelog%/*}"
 git show ":$changelog" > "$work/tree/$changelog"
 
