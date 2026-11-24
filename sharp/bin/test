@@ -192,6 +192,7 @@ unit_step=()
 unit_folder=()
 unit_command=()
 unit_then=()
+unit_keys=()
 queued=()
 sorted=true
 # Adds a unit: its weight, its heading, the step its failure names, the folder it runs in and its command, or, with no
@@ -206,7 +207,35 @@ add_unit() {
   shift 4
   unit_command[unit]="$(printf '%q ' "$@")"
   unit_then[unit]=''
+  unit_keys[unit]=''
   unit_count=$((unit_count + 1))
+}
+# Gives the unit the conflict keys its tests hold, as run-tests.php reads them: while a unit holds a key, no unit that
+# holds it starts, and a unit that holds all runs alone. Each unit runs run-tests.php on one thread, which runs its own
+# tests one at a time, so the keys need holding only across units. Without them two units ran tests that each serve
+# PHP's built-in server on port 8964, and ext/opcache/tests/bug78106.phpt printed "Server is not running" on run
+# 45412167180, where run-tests.php -j<jobs> had kept them apart.
+hold_keys() {
+  unit_keys[$1]=$2
+}
+# Whether no running unit holds a key the unit holds, and no running unit holds all, or nothing runs.
+unit_free() {
+  local r key held=' '
+  for r in "${running[@]}"; do
+    held+="${unit_keys[r]} "
+  done
+  if [[ $held == *" all "* ]]; then
+    return 1
+  fi
+  if [[ " ${unit_keys[$1]} " == *" all "* ]]; then
+    ((${#running[@]} == 0))
+    return
+  fi
+  for key in ${unit_keys[$1]}; do
+    if [[ $held == *" $key "* ]]; then
+      return 1
+    fi
+  done
 }
 ready_unit() {
   queued+=("$1")
@@ -240,7 +269,7 @@ start_unit() {
 # units' lines never mix. A unit's failed steps join the run's, and a unit that stops before it ends fails as its
 # heading.
 run_pool() {
-  local pid u status next reported peak=0
+  local pid u q status next reported peak=0
   part
   if ((unit_count == 0)); then
     return
@@ -253,9 +282,18 @@ run_pool() {
           | LC_ALL=C sort -k1,1nr -k2,2n | cut -d ' ' -f 2)
         sorted=true
       fi
+      # The heaviest queued unit that no running unit's keys hold back starts.
       while ((${#queued[@]} && ${#running[@]} < jobs)); do
-        start_unit "${queued[0]}"
-        queued=("${queued[@]:1}")
+        for ((q = 0; q < ${#queued[@]}; q++)); do
+          if unit_free "${queued[q]}"; then
+            break
+          fi
+        done
+        if ((q == ${#queued[@]})); then
+          break
+        fi
+        start_unit "${queued[q]}"
+        queued=("${queued[@]:0:q}" "${queued[@]:q+1}")
       done
     fi
     if ((${#running[@]} > peak)); then
@@ -288,6 +326,7 @@ run_pool() {
   unit_folder=()
   unit_command=()
   unit_then=()
+  unit_keys=()
 }
 
 finish() {
@@ -604,30 +643,101 @@ add_mode() {
   shift
   mode_options+=("$*")
 }
+# Prints each test's conflict keys, as run-tests.php reads them, after its path and a tab, sorted and joined by spaces:
+# the lines of its --CONFLICTS-- section, or with none, of the CONFLICTS file of its folder, each without its comment.
+# xargs passes the paths in as many runs of awk as the system's argument limit needs: a run holds about 22,800 tests.
+conflict_keys() {
+  # shellcheck disable=SC2016 # The program is awk's, whose $0 the shell must not expand.
+  printf '%s\0' "$@" | xargs -0 awk '
+    function keys_of(line) {
+      sub(/#.*/, "", line)
+      gsub(/^[ \t]+|[ \t]+$/, "", line)
+      return line
+    }
+    function folder_keys(file,   folder, line, keys) {
+      folder = file
+      sub(/\/[^\/]*$/, "", folder)
+      if (!(folder in folders)) {
+        keys = ""
+        while ((getline line < (folder "/CONFLICTS")) > 0) {
+          if ((line = keys_of(line)) != "") {
+            keys = keys " " line
+          }
+        }
+        close(folder "/CONFLICTS")
+        folders[folder] = keys
+      }
+      return folders[folder]
+    }
+    function finish(   count, words, sorted, i, j, word) {
+      if (file == "") {
+        return
+      }
+      count = split(found ? keys : folder_keys(file), words, " ")
+      sorted = 0
+      for (i = 1; i <= count; i++) {
+        for (j = 1; j <= sorted && order[j] != words[i]; j++) {
+        }
+        if (j > sorted) {
+          order[++sorted] = words[i]
+          for (j = sorted; j > 1 && order[j - 1] > order[j]; j--) {
+            word = order[j]; order[j] = order[j - 1]; order[j - 1] = word
+          }
+        }
+      }
+      line = ""
+      for (i = 1; i <= sorted; i++) {
+        line = line (i > 1 ? " " : "") order[i]
+      }
+      print file "\t" line
+    }
+    FNR == 1 { finish(); file = FILENAME; keys = ""; found = 0; on = 0 }
+    on && /^--/ { on = 0 }
+    on && (line = keys_of($0)) != "" { keys = keys " " line }
+    $0 == "--CONFLICTS--" { on = 1; found = 1 }
+    END { finish() }
+  '
+}
 # Adds the units of the tests in every mode. A test sharp/baseline/seconds lists runs alone, and the others in lists of
-# 100, and a list runs in a mode once it ran in the mode before: run-tests.php writes the .php file of each test in the
-# test's own folder, and deletes it before and after the test runs, so one test in two modes at once would delete its
-# other run's. Each unit writes its results, one `RESULT<TAB>path` line for each test it ran, to a file of its mode's.
+# 100 that hold the same conflict keys, which the list's units hold, and a list runs in a mode once it ran in the mode
+# before: run-tests.php writes the .php file of each test in the test's own folder, and deletes it before and after the
+# test runs, so one test in two modes at once would delete its other run's. Each unit writes its results, one
+# `RESULT<TAB>path` line for each test it ran, to a file of its mode's.
 add_test_units() {
-  local test m l previous heading lists=() weights=() group=() options=()
+  local test keys slot m l previous heading lists=() weights=() list_keys=() group=() options=()
+  local -A held_by=() grouped=() counted=()
   read_seconds
+  while IFS=$'\t' read -r test keys; do
+    held_by[$test]=$keys
+  done < <(conflict_keys "${tests[@]}")
   for test in "${tests[@]}"; do
+    keys=${held_by[$test]:-}
     if [[ -n ${seconds[$test]:-} ]]; then
       lists+=("$test")
       weights+=("${seconds[$test]}")
-    else
-      group+=("$test")
-      if ((${#group[@]} == batch)); then
-        lists+=("${group[*]}")
-        weights+=("$batch")
-        group=()
-      fi
+      list_keys+=("$keys")
+      continue
+    fi
+    # A list's slot is its keys, or - for none, since an associative array has no empty key.
+    slot=${keys:--}
+    grouped[$slot]+="$test "
+    counted[$slot]=$((${counted[$slot]:-0} + 1))
+    if ((counted[$slot] == batch)); then
+      lists+=("${grouped[$slot]% }")
+      weights+=("$batch")
+      list_keys+=("$keys")
+      unset "grouped[$slot]" "counted[$slot]"
     fi
   done
-  if ((${#group[@]})); then
-    lists+=("${group[*]}")
-    weights+=("${#group[@]}")
-  fi
+  for slot in "${!grouped[@]}"; do
+    lists+=("${grouped[$slot]% }")
+    weights+=("${counted[$slot]}")
+    if [[ $slot == - ]]; then
+      list_keys+=('')
+    else
+      list_keys+=("$slot")
+    fi
+  done
   for ((l = 0; l < ${#lists[@]}; l++)); do
     read -r -a group <<< "${lists[l]}"
     heading="${#group[@]} tests from ${group[0]}"
@@ -649,6 +759,7 @@ add_test_units() {
         --show-slow 1000 \
         --set-timeout 120 \
         "${options[@]}" "${group[@]}"
+      hold_keys "$unit" "${list_keys[l]}"
       if [[ -z $previous ]]; then
         ready_unit "$unit"
       else
