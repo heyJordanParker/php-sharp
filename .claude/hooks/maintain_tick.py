@@ -95,11 +95,35 @@ def targets():
     return out.stdout.strip()
 
 
+def archive_finished():
+    """Moves each intake entry that left intake to intake-archive.md, so intake holds only the queue: on 11-24 it held
+    150 entries, 89 of them finished (TRIAGE.md: an entry leaves intake when every box that applies is checked). An
+    entry has left when its heading says `(left intake`, or every box it carries is checked and its heading marks no
+    entry still being worked. Only finished entries move, so the queue's order and its one entry in progress stay."""
+    intake = os.path.expanduser("~/.claude/orchestrate/php-sharp/intake.md")
+    with open(intake, encoding="utf-8") as fh:
+        head, *entries = re.split(r"(?m)^(?=## )", fh.read())
+    working = ("(in progress)", "(waiting", "(paused")
+
+    def finished(entry):
+        heading, boxes = entry.split("\n", 1)[0], re.findall(r"(?m)^\s*- \[([ x])\]", entry)
+        return "(left intake" in heading or (bool(boxes) and " " not in boxes and not any(w in heading for w in working))
+
+    done = [entry for entry in entries if finished(entry)]
+    if not done:
+        return
+    with open(os.path.expanduser("~/.claude/orchestrate/php-sharp/intake-archive.md"), "a", encoding="utf-8") as fh:
+        fh.write("".join(done))
+    with open(intake, "w", encoding="utf-8") as fh:
+        fh.write(head + "".join(entry for entry in entries if not finished(entry)))
+
+
 def report():
     """The status box and block every reply opens with, whole: disk, both bars, each target and each lane."""
     # The disk is managed in the background on every report: census.py deletes what the loop made and nobody uses.
     subprocess.Popen([sys.executable, os.path.expanduser("~/.claude/orchestrate/php-sharp/census.py")],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    archive_finished()
     out = targets()
     if out.startswith("TICK INPUT MISSING"):
         return out
