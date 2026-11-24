@@ -15,5 +15,6 @@ export default defineConfig({
     'sharp/block-auto-merge-off': 'error',
     'sharp/block-intake-shell-writes': 'error',
     'sharp/require-nice-builds': 'error',
+    'sharp/require-one-thread-mago': 'error',
   },
 })
