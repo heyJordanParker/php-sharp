@@ -11,9 +11,9 @@
 # issue names, for review. CI sets REGISTRY to ghcr.io/heyjordanparker, where base-images.yml copies the images under
 # the same digests.
 ARG REGISTRY=public.ecr.aws/docker/library
-ARG BASE_IMAGE=${REGISTRY}/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
+ARG BASE_IMAGE=${REGISTRY}/debian:trixie-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0
 # Go 1.27.4 builds FrankenPHP, which fixes CVE-2026-97054 in 1.27.3's net/http.
-ARG GOLANG_IMAGE=${REGISTRY}/golang:1.27-trixie@sha256:f18c3d73a184fb0582828510722e723b63a93f7188d11dd223d9be6f6880e65d
+ARG GOLANG_IMAGE=${REGISTRY}/golang:1.27-trixie@sha256:0f82c58710c405cc012da2fbd2b04bde9ced20392a89f66062822d711d7d6b4b
 
 # The tools image sharp/docker/tools/Dockerfile builds, the one place that pins each tool a build would otherwise
 # download, so the image ships the PHP-Parser and the Lean its tests ran with. A local build tags it php-sharp-tools,
