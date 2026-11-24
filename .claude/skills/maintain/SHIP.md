@@ -23,4 +23,4 @@ These hold:
 - `docker buildx imagetools inspect ghcr.io/heyjordanparker/php-sharp:<version>` and `:<version>-dev` each show amd64 and arm64
 - `heyJordanParker/mago-sharp` and `heyJordanParker/php-sharp-composer` carry tag `v<version>`
 
-Then tell each consumer session the version and what changed for it, in one message, and close each issue the release shipped.
+What a release shipped is the merged pull requests between its tag and the tag before it, read with `git log --first-parent v<previous>..v<version>` that turn, never from memory of what merged nearby: several pushes publish in a row, each its own version. Then tell each consumer session the version and what changed for it, in one message, and close each issue the release shipped.
