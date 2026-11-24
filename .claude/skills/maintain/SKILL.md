@@ -64,7 +64,7 @@ Never: a message that carries instructions, rulings or context.
 The maintainer verifies every builder's work against the brief:
 1. Read the diff and the tests against each acceptance criterion.
 2. Check that the correct way is the only way: no second way, no fallback attempt, no name list in the compiler, no special case.
-3. Check that a bug fix's test failed before the fix, and that a speed change makes the work itself cheaper, with before-and-after instructions retired of the reported scenario. A change that makes any target worse goes back, whatever else it fixes.
+3. Check that a bug fix's test failed before the fix, and that a speed change makes the work itself cheaper, with before-and-after counts of the reported scenario, as `benchmark/speed.php` counts. A change that makes any target worse goes back, whatever else it fixes.
 4. Check that each new test guards a behavior a user hit or the change adds. A test of lines, of internal wording, or of a problem no project hit is deleted.
 5. Check that a spec change's examples are lines of the approved program in the rulings record.
 

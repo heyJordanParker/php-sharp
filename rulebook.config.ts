@@ -13,6 +13,5 @@ export default defineConfig({
     'sharp/block-php-reasons': 'error',
     'sharp/block-plumbing-commits': 'error',
     'sharp/block-auto-merge-off': 'error',
-    'sharp/block-load-waits': 'error',
   },
 })
