@@ -23,6 +23,7 @@ sharp/bin/build                 # incremental build of sharp/build/<os>-<arch>/s
 sharp/bin/build --clean         # rebuild from scratch
 sharp/bin/build-mago            # build sharp/mago/ as cargo test does, and sharp/build/<os>-<arch>/mago/debug/mago
 sharp/bin/build-mago --test-run # build sharp/build/<os>-<arch>/mago/test-run/mago, which behaves as the release
+sharp/bin/build-mago --crate mago-orchestrator # run one crate's tests, then its clippy
 sharp/bin/test                  # run the PHP# suite, Zend/tests/sharp/, in its four modes
 sharp/bin/test --linux          # run it in the sharp/docker/ image, on Linux
 sharp/bin/test Zend/tests/foo   # run these .phpt files or directories instead
