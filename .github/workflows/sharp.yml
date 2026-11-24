@@ -950,6 +950,17 @@ jobs:
       VERSION: ${{ needs.CHANGES.outputs.version }}
       MISSING: ${{ needs.CHANGES.outputs.missing }}
     steps:
+      # The tag goes over SSH with the repository's deploy key, kept in the PHP_SHARP_DEPLOY_KEY secret, as COMPOSER
+      # pushes the mirrors with theirs: GitHub refuses GITHUB_TOKEN a tag on a commit whose workflows differ from
+      # master's, and master moves while a release builds, so runs 45025602373 and 45027728255 failed to create a
+      # release's tag with HTTP 403. The checkout is the job's first step, since its clean deletes every file the
+      # workspace holds: as a step after the downloads, it deleted assets/, and run 45434990708 left its release a
+      # draft with no asset.
+      - name: git checkout, with the deploy key that pushes the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ssh-key: ${{ secrets.PHP_SHARP_DEPLOY_KEY }}
+          sparse-checkout: .github/actions
       # The release is this run's commit, whose run built what the release publishes: MACOS's call of release.yml,
       # since each attestation names the run's commit as the one it was built from, and IMAGE, which this run's RELEASE
       # tags.
@@ -1054,17 +1065,8 @@ jobs:
           echo "Every asset matches its SHA-256 and its attestation, and was built from tree $TREE."
       # The tag is the version, made once every check of the run passed and the assets are the run's, so a red run makes
       # no tag and takes no version. A published tag never moves and is never deleted, since Composer and every mirror
-      # read it once. master's push runs run one at a time, so no other run takes this version meanwhile. GitHub refuses
-      # GITHUB_TOKEN a tag on a commit whose workflows differ from master's, and master moves while a release builds:
-      # runs 45025602373 and 45027728255 failed to create a release's tag so, with HTTP 403. So the tag goes over SSH
-      # with the repository's deploy key, kept in the PHP_SHARP_DEPLOY_KEY secret, as COMPOSER pushes the mirrors with
-      # theirs.
-      - name: git checkout, with the deploy key that pushes the tag
-        if: ${{ !needs.CHANGES.outputs.tagged }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ssh-key: ${{ secrets.PHP_SHARP_DEPLOY_KEY }}
-          sparse-checkout: .github/actions
+      # read it once. master's push runs run one at a time, so no other run takes this version meanwhile. The checkout
+      # the job starts with pushes it, with the deploy key.
       - name: Tag this run's commit v<version>
         if: ${{ !needs.CHANGES.outputs.tagged }}
         run: |
