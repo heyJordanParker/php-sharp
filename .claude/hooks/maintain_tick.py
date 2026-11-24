@@ -176,7 +176,7 @@ def report():
              (re.match(r"\s+(.+?): ([\d.]+) -> [\d.]+ (ROSE|fell|held)$", line) for line in lines) if m}
     goals = []
     for line in lines[start + 1:]:
-        found = re.match(r"\s+(.+?): ([\d.]+)( ?[A-Za-z]*) / ([\d.]+)( ?[A-Za-z]*) (MET|x([\d.]+))(?:, run \d+ (.+))?$", line)
+        found = re.match(r"\s+(.+?): ([\d.]+)( ?[A-Za-z]*) / ([\d.]+)( ?[A-Za-z]*) (MET|x([\d.]+))(?:, (?:run \d+ )?(.+))?$", line)
         if found:
             name = re.sub(r",? (mean|last green)$", "", found.group(1)).replace("->", " to ")
             off = 0.0 if found.group(6) == "MET" else float(found.group(7))
