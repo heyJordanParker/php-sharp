@@ -97,7 +97,8 @@ def targets():
 
 # The speed targets, by the name targets.py prints. The language owner set speed as a standing priority on 11-24,
 # triaged like any other problem: each one off its goal is an intake entry headed `## Speed: <name>` (TRIAGE.md).
-SPEED_TARGETS = ("edit CPU", "edit peak memory", "Mac job, last green", "longest CI job, last green")
+SPEED_TARGETS = ("edit CPU", "edit peak memory", "Mac job, last green", "longest CI job, last green",
+                 "longest local loop, last 24 h")
 
 
 def speed_entries(measured):
