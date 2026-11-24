@@ -535,8 +535,8 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
-  # The run's one Mac job, on the Mac's one build of the engine mago links, the debug engine, the one arm64 build of
-  # it, and the dev build of mago and every test binary, on a disk that ignores case. It runs every test LINUX, MAGO,
+  # The run's one Mac job, on the Mac's one build of the engine, the debug engine, which mago links and the PHP# suite
+  # runs on, the one arm64 build of it, and the dev build of mago and every test binary, on a disk that ignores case. It runs every test LINUX, MAGO,
   # SPEC and UPSTREAM's spec self-test run: the PHP# suite without opcache and in opcache's shared memory, mago
   # convert's whole-project proof, the census, the differential, PHPUnit, the spec's self-test and examples, every
   # workspace test, tests/laws.rs among them, the doc tests and the property tests, then plain-php. Three Linux checks
@@ -565,21 +565,20 @@ jobs:
       # A job never installs on the self-hosted Mac, so it checks that Homebrew already has the build's formulae.
       - name: Homebrew has the build's formulae
         env:
-          FORMULAE: autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
+          FORMULAE: autoconf bison re2c pkgconf icu4c libsodium oniguruma
         run: |
           # shellcheck disable=SC2086 # FORMULAE is a list of formulae.
           brew list --versions $FORMULAE
-      - name: Build the engine mago links
-        run: sharp/bin/build-mago --engine
-      # The engine the PHP# suite runs on, with --enable-debug, since only a debug engine runs ZEND_ASSERT and reports
-      # a leak. On macOS sharp/bin/build builds only sapi/cli/php and sapi/phpdbg/phpdbg, and installs nothing.
-      - name: Build the engine the PHP# suite runs on
-        run: sharp/bin/build
+      # One engine, the debug one: only a debug engine runs ZEND_ASSERT and reports a leak, so mago's tests run on it as
+      # the PHP# suite does, where the job built a -O2 engine for mago beside it, 4.0 to 6.2 minutes of each run.
+      # RELEASE_ASSETS still builds the -O2 engine users get.
+      - name: Build the debug engine mago links and the PHP# suite runs on
+        run: sharp/bin/build-mago --engine --debug
       # mago and every test binary of the workspace, in the dev profile, which keeps the debug assertions and overflow
       # checks the tests need, linked with the engine the step before last built, as BUILD_LINUX builds them.
       - name: Build mago and its test binaries
         env:
-          MAGO_ENGINE: ${{ github.workspace }}/sharp/build/darwin-arm64-engine/install
+          MAGO_ENGINE: ${{ github.workspace }}/sharp/build/darwin-arm64/install
         run: sharp/bin/build-mago --quiet
       - name: Install elan and Lean
         uses: ./.github/actions/setup-lean
@@ -590,7 +589,7 @@ jobs:
       # before last built, run after the workspace's test binaries.
       - name: Test PHP# and mago's workspace
         env:
-          MAGO_ENGINE: ${{ github.workspace }}/sharp/build/darwin-arm64-engine/install
+          MAGO_ENGINE: ${{ github.workspace }}/sharp/build/darwin-arm64/install
         run: |
           suite_log="$RUNNER_TEMP/php-sharp-suite.log"
           (
