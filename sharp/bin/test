@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2329 # The pool runs run_step and each unit's function by eval.
 set -euo pipefail
 
 usage() {
   echo "usage: sharp/bin/test [--linux] [--no-build] [--census] [--spec] [--differential] [--phpunit] [--shard <i>/<n> | paths...]" >&2
   echo "       sharp/bin/test [--linux] [--no-build] --upstream" >&2
   echo "       sharp/bin/test [--linux] [--no-build] --mago [--shard <i>/<n>]" >&2
+  echo "       sharp/bin/test [--linux] [--no-build] --mago [--census] [--spec] [--differential] [--phpunit]" >&2
   echo "       sharp/bin/test [--linux] --mago --cargo-built" >&2
   exit 2
 }
@@ -49,10 +51,19 @@ done
 if { $upstream || $mago; } && [[ ${#tests[@]} -gt 0 ]] || { $upstream && $mago; }; then
   usage
 fi
-if { $mago || $upstream; } && { $census || $spec || $differential || $phpunit; }; then
+if $upstream && { $census || $spec || $differential || $phpunit; }; then
   usage
 fi
-if $cargo_built && { ! $mago || ! $build || [[ -n $shard ]]; }; then
+# --mago with any of the suite's options runs mago's workspace tests and the PHP# suite in one pool, as the Mac's job
+# runs them.
+suite=true
+if $mago && ! $census && ! $spec && ! $differential && ! $phpunit; then
+  suite=false
+fi
+if $mago && $suite && [[ -n $shard ]]; then
+  usage
+fi
+if $cargo_built && { ! $mago || $suite || ! $build || [[ -n $shard ]]; }; then
   usage
 fi
 # --shard <i>/<n> runs the i-th of n slices, so n jobs that run the same modes together run each test once.
@@ -73,15 +84,15 @@ build_dir="$root/sharp/build/$os-$(uname -m)"
 jobs="$("$root/sharp/bin/jobs")"
 
 # Each run keeps its own files in a temporary folder of its own and removes it when it ends, so no run reads what
-# another run wrote. A test command runs in a process group of its own, so a run that ends early, as on SIGTERM, first
-# stops it, its workers and their tests, which would go on writing in the folder.
+# another run wrote. Each unit of the pool runs in a process group of its own, so a run that ends early, as on SIGTERM,
+# first stops every unit still running, with its tests, which would go on writing in the folder.
 TMPDIR="$(mktemp -d)"
 export TMPDIR
 # Each `mago` a test starts runs on one thread, so a run's load is its test threads. A test about threads passes
 # --threads, which wins over MAGO_THREADS.
 export MAGO_THREADS=1
-tests_group=
-trap 'if [[ -n $tests_group ]]; then kill -KILL -- "-$tests_group" || true; wait "$tests_group" || true; fi; rm -rf "$TMPDIR"' EXIT
+declare -A running=()
+trap 'for group in "${!running[@]}"; do kill -KILL -- "-$group" 2> /dev/null || true; done; wait || true; rm -rf "$TMPDIR"' EXIT
 
 # Every step runs, and the script fails at the end if any step failed.
 failed=()
@@ -115,24 +126,21 @@ stale_seconds() {
   fi
 }
 
-# Runs the command from the folder, in a process group of its own, and records the step as failed when it fails.
+# Runs the command from the folder, in the process group of the unit that runs it, and records the step as failed when
+# it fails.
 run_step() {
   local step="$1" folder="$2"
   shift 2
-  set -m
-  (cd "$folder" && exec "$@") &
-  tests_group=$!
-  set +m
-  if ! wait "$tests_group"; then
+  if ! (cd "$folder" && exec "$@"); then
     failed+=("$step")
   fi
-  tests_group=
 }
 
 # Ends the part of the run under way with its wall seconds and the CPU-seconds the shell and the processes it waited
 # for used in it, as bash's times counts them, so a change to one part is judged by that part whatever else the machine
 # runs, and writes its line to the build record, as failed when a step of it failed. Then it starts the part its heading
-# names, if any, from after that write, so the recorder's own time counts in neither part.
+# names, if any, from after that write, so the recorder's own time counts in neither part. Each unit of the pool runs
+# in a shell of its own, whose times count only what that unit ran.
 part_heading=''
 part_started=0
 part_cpu=0
@@ -141,8 +149,8 @@ part_clock() {
   local time
   now="${EPOCHREALTIME/[^0-9]/}"
   cpu=0
-  times > "$TMPDIR/sharp-bin-test-times"
-  for time in $(< "$TMPDIR/sharp-bin-test-times"); do
+  times > "$TMPDIR/sharp-bin-test-times.$BASHPID"
+  for time in $(< "$TMPDIR/sharp-bin-test-times.$BASHPID"); do
     [[ $time =~ ^([0-9]+)m([0-9]+)[.,]([0-9]{3})s$ ]]
     cpu=$((cpu + (BASH_REMATCH[1] * 60 + BASH_REMATCH[2]) * 1000 + 10#${BASH_REMATCH[3]}))
   done
@@ -165,6 +173,121 @@ part() {
   if [[ -n $part_heading ]]; then
     echo "== $part_heading"
   fi
+}
+
+# One pool of the run's jobs runs every test of the run, both lanes of the Mac's job among them, as cargo-nextest runs a
+# workspace: a slot runs one process on one thread with a list of tests, and the heaviest unit waiting starts the
+# moment a slot frees, so the run holds at most its jobs threads and no slot idles while a unit waits. A test
+# sharp/baseline/seconds lists runs alone, and the tests it doesn't list run in lists of 100: a process sets up what
+# its tests share once, and one process per test cost the analyzer's integration tests 0.513 CPU-seconds a test, about
+# 2,057 over their 4,012, where they used 493 (#736). A unit weighs its tests' seconds, 1 for each test the file
+# doesn't list, as --shard weighs them, and units that weigh the same start in the order they were added. When every
+# part of a run started at once on all of the Mac's 12 cores, a test ran past run-tests' 120 s timeout on run
+# 45315093503, and one part after another the Mac's test step took 1,251 to 1,442 s while each part's last tests ran.
+batch=100
+unit_count=0
+unit_weight=()
+unit_heading=()
+unit_step=()
+unit_folder=()
+unit_command=()
+unit_then=()
+queued=()
+sorted=true
+# Adds a unit: its weight, its heading, the step its failure names, the folder it runs in and its command, or, with no
+# step, a function of this script and its arguments. It waits until ready_unit queues it, or the unit then_unit names
+# ends. Sets unit to its index.
+add_unit() {
+  unit=$unit_count
+  unit_weight[unit]=$1
+  unit_heading[unit]=$2
+  unit_step[unit]=$3
+  unit_folder[unit]=$4
+  shift 4
+  unit_command[unit]="$(printf '%q ' "$@")"
+  unit_then[unit]=''
+  unit_count=$((unit_count + 1))
+}
+ready_unit() {
+  queued+=("$1")
+  sorted=false
+}
+# Queues the second unit when the first ends.
+then_unit() {
+  unit_then[$1]+=" $2"
+}
+start_unit() {
+  local u=$1 output="$TMPDIR/unit-$1" step=${unit_step[$1]} folder=${unit_folder[$1]}
+  set -m
+  (
+    # shellcheck disable=SC2030 # The unit's own failed steps, which run_pool reads from its file.
+    failed=()
+    part "${unit_heading[u]}"
+    if [[ -n $step ]]; then
+      eval "run_step \"\$step\" \"\$folder\" ${unit_command[u]}"
+    else
+      eval "${unit_command[u]}"
+    fi
+    part
+    if ((${#failed[@]})); then
+      printf '%s\n' "${failed[@]}"
+    fi > "$output.failed"
+  ) > "$output" 2>&1 &
+  set +m
+  running[$!]=$u
+}
+# Runs every queued unit, and each one a unit that ends queues, and prints each one's output whole as it ends, so two
+# units' lines never mix. A unit's failed steps join the run's, and a unit that stops before it ends fails as its
+# heading.
+run_pool() {
+  local pid u status next reported peak=0
+  part
+  if ((unit_count == 0)); then
+    return
+  fi
+  echo "== $unit_count units on $jobs slots"
+  while ((${#queued[@]} || ${#running[@]})); do
+    if ((${#queued[@]} && ${#running[@]} < jobs)); then
+      if ! $sorted; then
+        mapfile -t queued < <(for u in "${queued[@]}"; do printf '%s %s\n' "${unit_weight[u]}" "$u"; done \
+          | LC_ALL=C sort -k1,1nr -k2,2n | cut -d ' ' -f 2)
+        sorted=true
+      fi
+      while ((${#queued[@]} && ${#running[@]} < jobs)); do
+        start_unit "${queued[0]}"
+        queued=("${queued[@]:1}")
+      done
+    fi
+    if ((${#running[@]} > peak)); then
+      peak=${#running[@]}
+    fi
+    status=0
+    wait -n -p pid "${!running[@]}" || status=$?
+    u=${running[$pid]}
+    unset "running[$pid]"
+    cat "$TMPDIR/unit-$u"
+    reported=()
+    if [[ -f $TMPDIR/unit-$u.failed ]]; then
+      mapfile -t reported < "$TMPDIR/unit-$u.failed"
+    fi
+    if ((${#reported[@]})); then
+      # shellcheck disable=SC2031 # The run's own failed steps, which the unit's join.
+      failed+=("${reported[@]}")
+    elif ((status != 0)); then
+      failed+=("${unit_heading[u]}")
+    fi
+    for next in ${unit_then[u]}; do
+      ready_unit "$next"
+    done
+  done
+  echo "The pool ran $unit_count units, at most $peak at once, on $jobs slots."
+  unit_count=0
+  unit_weight=()
+  unit_heading=()
+  unit_step=()
+  unit_folder=()
+  unit_command=()
+  unit_then=()
 }
 
 finish() {
@@ -243,26 +366,28 @@ if $mago && ! $cargo_built; then
     listed[$b]="$(sed -n 's/: test$//p' <<< "$names")"
   done
 
-  # With --shard, each test weighs the seconds sharp/baseline/seconds lists under its binary's source file and its
-  # name, as sharp/mago/tests/main.rs::compile::<name>, and a test the file doesn't list ran under 1.5 s, so it weighs
-  # 1. A binary runs its tests on as many threads as the run's jobs, so it takes the longer of its longest test and its
-  # tests' seconds over the threads, and a slice the sum of its binaries'. Each test, heaviest first, goes to the slice
-  # whose time that grows least, so every slice computes the same split. Every fifth test in binary and name order gave
-  # MAGO (2/5)'s test step 413 s on run 45016081891, against 177 to 350 s for the other slices, since the two law proofs
-  # of 189 and 158 s fell in it with a fifth of everything else.
-  declare -A chosen=() known=()
+  # Each test weighs the seconds sharp/baseline/seconds lists under its binary's source file and its name, as
+  # sharp/mago/tests/main.rs::compile::<name>, and a test the file doesn't list ran under 1.5 s, so it weighs 1. With
+  # --shard, a slice's binaries share the run's jobs, so a binary takes at least the longer of its longest test and its
+  # tests' seconds over the jobs, and a slice about the sum of its binaries'. Each test, heaviest first, goes to the
+  # slice whose time that grows least, so every slice computes the same split. Every fifth test in binary and name
+  # order gave MAGO (2/5)'s test step 413 s on run 45016081891, against 177 to 350 s for the other slices, since the two
+  # law proofs of 189 and 158 s fell in it with a fifth of everything else.
+  declare -A chosen=() known=() weighs=()
+  read_seconds
+  for b in "${!listed[@]}"; do
+    IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
+    weighs[$b]=0
+    while IFS= read -r name; do
+      if [[ -n $name ]]; then
+        known[$source::$name]=1
+        weighs[$b]=$((weighs[$b] + ${seconds[$source::$name]:-1}))
+        printf '%s\t%s\t%s\n' "${seconds[$source::$name]:-1}" "$b" "$name"
+      fi
+    done <<< "${listed[$b]}"
+  done > "$TMPDIR/mago-tests"
+  stale_seconds known '*::*'
   if [[ -n $shard ]]; then
-    read_seconds
-    for b in "${!listed[@]}"; do
-      IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
-      while IFS= read -r name; do
-        if [[ -n $name ]]; then
-          known[$source::$name]=1
-          printf '%s\t%s\t%s\n' "${seconds[$source::$name]:-1}" "$b" "$name"
-        fi
-      done <<< "${listed[$b]}"
-    done > "$TMPDIR/mago-tests"
-    stale_seconds known '*::*'
     while IFS= read -r test; do
       chosen[$test]=1
     done < <(LC_ALL=C sort -t $'\t' -k1,1nr -k2,2n -k3,3 "$TMPDIR/mago-tests" | awk -F '\t' -v slices="$shard_count" \
@@ -296,50 +421,86 @@ if $mago && ! $cargo_built; then
         }')
   fi
 
-  # A lane that runs no test, as when build.json names no test binary or a slice the balance gives none, fails, since it
-  # tested nothing.
-  started=0
-  for ((b = 0; b < ${#binaries[@]}; b++)); do
-    if [[ -z ${listed[$b]+listed} ]]; then
-      continue
+  # Adds a unit of the binary that runs the names it's given on one thread. libtest takes each name as a filter that
+  # --exact matches whole. libtest-mimic's harness, which the binaries with harness = false use, takes one filter, so
+  # it skips every other test of the binary instead, by exact name, as often as needed.
+  add_tests_unit() {
+    local weight=$1 heading=$2 name selection=()
+    shift 2
+    if $libtest; then
+      selection=("$@")
+    else
+      declare -A wanted=()
+      for name in "$@"; do
+        wanted[$name]=1
+      done
+      while IFS= read -r name; do
+        if [[ -n $name && -z ${wanted[$name]:-} ]]; then
+          selection+=(--skip "$name")
+        fi
+      done <<< "${listed[$b]}"
     fi
+    add_unit "$weight" "$heading" "$heading" "$folder" "${command[@]}" --exact --test-threads 1 "${selection[@]}"
+    ready_unit "$unit"
+  }
+
+  # Each binary's tests join the pool, the binaries that weigh most first. A lane that runs no test, as when build.json
+  # names no test binary or a slice the balance gives none, fails, since it tested nothing.
+  started=0
+  while read -r _ b; do
     IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
-    skips=()
-    selected=0
+    selected=()
     while IFS= read -r name; do
-      if [[ -z $name ]]; then
-        continue
-      fi
-      if [[ -z $shard || -n ${chosen[$b$'\t'$name]:-} ]]; then
-        selected=$((selected + 1))
-      else
-        skips+=(--skip "$name")
+      if [[ -n $name && ( -z $shard || -n ${chosen[$b$'\t'$name]:-} ) ]]; then
+        selected+=("$name")
       fi
     done <<< "${listed[$b]}"
-    if (( selected > 0 )); then
-      started=$((started + selected))
-      # libtest prints each test's own wall time after its result with --report-time, which stable Rust's libtest
-      # takes only under RUSTC_BOOTSTRAP. libtest-mimic's harness, which the binaries with harness = false use, has no
-      # such option, and its --help doesn't name it.
-      command=("$executable")
-      if [[ $("$executable" --help) == *--report-time* ]]; then
-        command=(env RUSTC_BOOTSTRAP=1 "$executable" -Z unstable-options --report-time)
-      fi
-      part "$selected tests of ${executable##*/}, from ${folder#"$root"/}"
-      run_step "${executable##*/}" "$folder" "${command[@]}" --exact --test-threads "$jobs" "${skips[@]}"
-      part
+    if ((${#selected[@]} == 0)); then
+      continue
     fi
-  done
+    started=$((started + ${#selected[@]}))
+    # libtest prints each test's own wall time after its result with --report-time, which stable Rust's libtest
+    # takes only under RUSTC_BOOTSTRAP. libtest-mimic's harness has no such option, and its --help doesn't name it.
+    command=("$executable")
+    libtest=false
+    if [[ $("$executable" --help) == *--report-time* ]]; then
+      command=(env RUSTC_BOOTSTRAP=1 "$executable" -Z unstable-options --report-time)
+      libtest=true
+    fi
+    names=()
+    for name in "${selected[@]}"; do
+      if [[ -n ${seconds[$source::$name]:-} ]]; then
+        add_tests_unit "${seconds[$source::$name]}" "$name, of ${executable##*/} from ${folder#"$root"/}" "$name"
+      else
+        names+=("$name")
+      fi
+      if ((${#names[@]} == batch)); then
+        add_tests_unit "$batch" "$batch tests of ${executable##*/}, from ${folder#"$root"/}" "${names[@]}"
+        names=()
+      fi
+    done
+    if ((${#names[@]})); then
+      add_tests_unit "${#names[@]}" "${#names[@]} tests of ${executable##*/}, from ${folder#"$root"/}" "${names[@]}"
+    fi
+  done < <(for b in "${!weighs[@]}"; do echo "${weighs[$b]} $b"; done | LC_ALL=C sort -k1,1nr -k2,2n)
   if ((started == 0)); then
     echo "mago's workspace tests ran no test: no binary lists a test this run selects." >&2
     failed+=("mago's workspace tests")
   fi
 fi
-if $mago; then
-  if $build && [[ -z $shard ]]; then
-    part "the doc tests and mago-codex's property tests"
-    run_step "the doc tests and mago-codex's property tests" "$root" "$root/sharp/bin/build-mago" --cargo-tests
+# The doc tests and the property tests build with cargo as they run, on the run's jobs, so they run alone, after the
+# pool.
+run_cargo_tests() {
+  if $mago && $build && [[ -z $shard ]]; then
+    add_unit 1 "the doc tests and mago-codex's property tests" "the doc tests and mago-codex's property tests" "$root" \
+      "$root/sharp/bin/build-mago" --cargo-tests
+    ready_unit "$unit"
+    run_pool
   fi
+}
+if $mago && ! $suite; then
+  run_pool
+  run_cargo_tests
   finish
 fi
 
@@ -400,6 +561,21 @@ elif [[ ${#tests[@]} -eq 0 ]]; then
   tests=(Zend/tests/sharp)
   run_proof=true
 fi
+# A path the run is given that holds no test fails the run, where run-tests exits 0 on a path it can't find: #760's run
+# of a missing path passed. A folder's tests are its .phpt files.
+for path in "${tests[@]}"; do
+  if ! (cd "$root" && test -e "$path"); then
+    echo "$path is no test: no such file or folder." >&2
+    failed+=("$path")
+  fi
+done
+mapfile -t tests < <(cd "$root" && for path in "${tests[@]}"; do
+  if [[ -d $path ]]; then
+    find "$path" -name '*.phpt'
+  elif [[ -e $path ]]; then
+    echo "$path"
+  fi
+done | LC_ALL=C sort -u)
 
 php="$build_dir/sapi/cli/php"
 if [[ ! -x "$php" ]]; then
@@ -420,48 +596,92 @@ export SKIP_IO_CAPTURE_TESTS=1
 export STACK_LIMIT_DEFAULTS_CHECK=1
 export RUN_RESOURCE_HEAVY_TESTS=1
 
-# The file run-tests writes each result of a mode to, one `RESULT<TAB>path` line for each test it ran.
-results_of() {
-  printf '%s/results-%s' "$TMPDIR" "$(printf '%s' "$1" | tr -c '[:alnum:]' '-')"
-}
-
-# Runs the tests in a mode. run-tests exits 0 on a path it can't find, on a selection that holds no test and on a run
-# whose every test skipped, so the mode fails too when its results hold no test that ran: #760's run of a missing
-# path passed.
-run_tests() {
-  local mode="$1" results earlier
+# The modes the tests run in, each a name and run-tests' options for it.
+modes=()
+mode_options=()
+add_mode() {
+  modes+=("$1")
   shift
-  results="$(results_of "$mode")"
-  earlier=${#failed[@]}
-  part "$mode"
-  run_step "$mode" "$root" "$php" run-tests.php -P -q -W "$results" \
-    -d opcache.jit=disable \
-    -d opcache.protect_memory=1 \
-    -j"$jobs" \
-    -g FAIL,BORK,LEAK,XLEAK \
-    --no-progress \
-    --offline \
-    --show-diff \
-    --show-slow 1000 \
-    --set-timeout 120 \
-    "$@" "${tests[@]}"
-  if ((${#failed[@]} == earlier)) && ! awk -F '\t' '$1 != "SKIPPED" { ran = 1 } END { exit !ran }' "$results"; then
-    echo "$mode ran no test." >&2
-    failed+=("$mode")
+  mode_options+=("$*")
+}
+# Adds the units of the tests in every mode. A test sharp/baseline/seconds lists runs alone, and the others in lists of
+# 100, and a list runs in a mode once it ran in the mode before: run-tests.php writes the .php file of each test in the
+# test's own folder, and deletes it before and after the test runs, so one test in two modes at once would delete its
+# other run's. Each unit writes its results, one `RESULT<TAB>path` line for each test it ran, to a file of its mode's.
+add_test_units() {
+  local test m l previous heading lists=() weights=() group=() options=()
+  read_seconds
+  for test in "${tests[@]}"; do
+    if [[ -n ${seconds[$test]:-} ]]; then
+      lists+=("$test")
+      weights+=("${seconds[$test]}")
+    else
+      group+=("$test")
+      if ((${#group[@]} == batch)); then
+        lists+=("${group[*]}")
+        weights+=("$batch")
+        group=()
+      fi
+    fi
+  done
+  if ((${#group[@]})); then
+    lists+=("${group[*]}")
+    weights+=("${#group[@]}")
+  fi
+  for ((l = 0; l < ${#lists[@]}; l++)); do
+    read -r -a group <<< "${lists[l]}"
+    heading="${#group[@]} tests from ${group[0]}"
+    if ((${#group[@]} == 1)); then
+      heading="${group[0]}"
+    fi
+    previous=
+    for ((m = 0; m < ${#modes[@]}; m++)); do
+      read -r -a options <<< "${mode_options[m]}"
+      add_unit "${weights[l]}" "${modes[m]}: $heading" "${modes[m]}: $heading" "$root" \
+        "$php" run-tests.php -P -q -W "$TMPDIR/results-$m-$l" \
+        -d opcache.jit=disable \
+        -d opcache.protect_memory=1 \
+        -j1 \
+        -g FAIL,BORK,LEAK,XLEAK \
+        --no-progress \
+        --offline \
+        --show-diff \
+        --show-slow 1000 \
+        --set-timeout 120 \
+        "${options[@]}" "${group[@]}"
+      if [[ -z $previous ]]; then
+        ready_unit "$unit"
+      else
+        then_unit "$previous" "$unit"
+      fi
+      previous=$unit
+    done
+  done
+}
+# The results of a mode's units, in one file. run-tests exits 0 on a selection that holds no test and on a run whose
+# every test skipped, so a mode whose results hold no test that ran fails.
+mode_results() {
+  local m=$1
+  cat "$TMPDIR/results-$m-"* 2> /dev/null > "$TMPDIR/results-$m" || true
+  if ! awk -F '\t' '$1 != "SKIPPED" { ran = 1 } END { exit !ran }' "$TMPDIR/results-$m"; then
+    echo "${modes[m]} ran no test." >&2
+    failed+=("${modes[m]}")
   fi
 }
 
 # The upstream tests run on the engine alone, so they need no mago and no PHP# fixtures.
 if $upstream; then
   baseline=sharp/baseline/linux
-  mode="without opcache, compared with $baseline"
   results="$build_dir/upstream-results"
-  run_tests "$mode"
+  add_mode "without opcache, compared with $baseline"
+  add_test_units
+  run_pool
+  mode_results 0
   awk -F '\t' -v OFS='\t' -v prefix="$root/" '
     $1 != "PASSED" {
       if (index($2, prefix) == 1) $2 = substr($2, length(prefix) + 1)
       print
-    }' "$(results_of "$mode")" | LC_ALL=C sort -o "$results"
+    }' "$TMPDIR/results-0" | LC_ALL=C sort -o "$results"
   if ! diff -u "$root/$baseline" "$results"; then
     echo "The upstream results differ from $baseline. Only the Architect accepts a new baseline, with: cp ${results#"$root"/} $baseline" >&2
     failed+=("the comparison with $baseline")
@@ -526,31 +746,47 @@ export TEST_MAGO_EXECUTABLE="$mago"
 # under the tracing JIT, with every hot counter at 1, so it compiles the code the tests run as soon as it runs. Each
 # expects the output of the run without opcache. macOS runs the first two, since Apple silicon has no thread-safe JIT,
 # as ext/opcache/config.m4 warns.
-run_tests "without opcache"
-run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
+add_mode "without opcache"
+add_mode "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
 if [[ $os == linux ]]; then
-  run_tests "with the function JIT" -d opcache.enable_cli=1 -d opcache.jit=function -d opcache.jit_buffer_size=32M
-  run_tests "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
+  add_mode "with the function JIT" -d opcache.enable_cli=1 -d opcache.jit=function -d opcache.jit_buffer_size=32M
+  add_mode "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
     -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
 fi
+add_test_units
 
 if $census; then
-  part "every write and comparison of a field that holds a PHP# mark"
-  run_step "the census of PHP# marks" "$root" "$php" sharp/bin/census
+  add_unit 1 "every write and comparison of a field that holds a PHP# mark" "the census of PHP# marks" "$root" \
+    "$php" sharp/bin/census
+  ready_unit "$unit"
 fi
 
+# sharp/bin/spec's examples, one for each id its markers name, as its blocks() reads them, run in slices of 100, each on
+# one slot: sharp/bin/spec runs as many compiles at once as sharp/bin/jobs prints, which CARGO_BUILD_JOBS=1 makes 1.
+# The first slice also compares the list's entries that name no example.
+count_examples() {
+  grep -h '^<!-- example ' "$@" | sed 's/^<!-- example \([a-z0-9-]*\).*/\1/' | LC_ALL=C sort -u | wc -l
+}
 if $spec; then
-  part "every rule of sharp/bin/spec, on the examples of sharp/spec-self-test.md"
-  run_step "the self-test of sharp/bin/spec" "$root" "$php" sharp/bin/spec --self-test
-  part "every code example in docs/spec.md and README.md, compared with sharp/baseline/spec"
-  run_step "the code examples of docs/spec.md and README.md" "$root" "$php" sharp/bin/spec
+  add_unit "$(count_examples "$root/sharp/spec-self-test.md")" \
+    "every rule of sharp/bin/spec, on the examples of sharp/spec-self-test.md" "the self-test of sharp/bin/spec" "$root" \
+    env CARGO_BUILD_JOBS=1 "$php" sharp/bin/spec --self-test
+  ready_unit "$unit"
+  examples=$(count_examples "$root/README.md" "$root/docs/spec.md")
+  slices=$(((examples + batch - 1) / batch))
+  for ((slice = 1; slice <= slices; slice++)); do
+    add_unit "$(((examples - slice) / slices + 1))" \
+      "slice $slice of $slices of the code examples in docs/spec.md and README.md, compared with sharp/baseline/spec" \
+      "slice $slice of $slices of the code examples of docs/spec.md and README.md" "$root" \
+      env CARGO_BUILD_JOBS=1 "$php" sharp/bin/spec --shard "$slice/$slices"
+    ready_unit "$unit"
+  done
 fi
 
 # One php -l lints every fixture, each file in a request of its own, and ends each file's output with the line that
 # says whether it compiled. A file passes when that line is all it printed, as when a php -l of its own linted it, where
 # a process per fixture took 44 s on the Mac.
 check_differential() {
-  part "every file mago compile accepted against php -l, through its .sharpc file"
   local files=("$root"/Zend/tests/sharp/*/*.sharp) output line file linted='' index=0 mismatch=false
   output="$("$php" -l "${files[@]}" 2>&1)" || true
   while IFS= read -r line; do
@@ -580,7 +816,8 @@ check_differential() {
 }
 
 if $differential; then
-  check_differential
+  add_unit 1 "every file mago compile accepted against php -l, through its .sharpc file" '' "$root" check_differential
+  ready_unit "$unit"
 fi
 
 # A PHP# test class runs with its file's test module under real PHPUnit, at the version sharp/phpunit/composer.lock
@@ -590,7 +827,6 @@ fi
 # vendor/autoload.php on the engine. composer run-script runs post-autoload-dump with no flags.
 check_phpunit() {
   local project="$root/sharp/phpunit" isolation
-  part "a PHP# test class under PHPUnit, in sharp/phpunit"
   rm -rf "$project/vendor" "$project/.sharp"
   if ! composer install --no-interaction --no-progress --quiet --working-dir="$project" \
     || ! composer run-script --no-interaction post-autoload-dump --working-dir="$project" \
@@ -600,20 +836,27 @@ check_phpunit() {
   fi
   for isolation in "" --process-isolation; do
     if ! "$php" -d opcache.jit=disable "$project/vendor/bin/phpunit" --configuration "$project/phpunit.xml" \
-      --testdox $isolation; then
+      --testdox ${isolation:+"$isolation"}; then
       failed+=("PHPUnit ${isolation:-in one process}")
     fi
   done
 }
 
 if $phpunit; then
-  check_phpunit
+  add_unit 1 "a PHP# test class under PHPUnit, in sharp/phpunit" '' "$root" check_phpunit
+  ready_unit "$unit"
 fi
 
 if $run_proof; then
-  part "mago convert on sharp/mago/crates/converter/tests/project"
   mkdir "$TMPDIR/convert" "$TMPDIR/convert/project"
-  run_step "the whole-project proof of mago convert" "$root" "$proof" "$TMPDIR/convert/project"
+  add_unit "${seconds[$proof]:-1}" "mago convert on sharp/mago/crates/converter/tests/project" \
+    "the whole-project proof of mago convert" "$root" "$proof" "$TMPDIR/convert/project"
+  ready_unit "$unit"
 fi
 
+run_pool
+for ((m = 0; m < ${#modes[@]}; m++)); do
+  mode_results "$m"
+done
+run_cargo_tests
 finish

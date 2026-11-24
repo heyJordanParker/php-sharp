@@ -588,37 +588,18 @@ jobs:
         run: sharp/bin/build-mago --quiet
       - name: Install elan and Lean
         uses: ./.github/actions/setup-lean
-      # The suite and the workspace's tests share no output, and each sharp/bin/test keeps its files in a temporary
-      # folder of its own, so they run at once, where one after the other they took 410 and 654 s of job 137009338505.
-      # The suite's output prints once it ends, so the logs don't mix. The suite runs whole, so it runs mago convert's
-      # whole-project proof after it. The doc tests and the property tests, which cargo builds in the target the step
-      # before last built, run after the workspace's test binaries.
+      # One sharp/bin/test runs the PHP# suite and mago's workspace tests in one pool of the Mac's cores, the
+      # whole-project proof of mago convert among them, as sharp/bin/test explains. The doc tests and the property tests,
+      # which cargo builds on every core in the target the step before last built, run after it, alone.
       - name: Test PHP# and mago's workspace
         env:
           MAGO_ENGINE: ${{ github.workspace }}/sharp/build/darwin-arm64/install
         run: |
-          suite_log="$RUNNER_TEMP/php-sharp-suite.log"
-          (
-            status=0
-            sharp/bin/test --no-build --census --spec --differential --phpunit || status=$?
-            echo "The PHP# suite took $SECONDS s."
-            exit "$status"
-          ) > "$suite_log" 2>&1 &
-          suite=$!
-          workspace=0
-          sharp/bin/test --mago --no-build || workspace=$?
-          sharp/bin/test --mago --cargo-built || workspace=$?
-          echo "mago's workspace tests took $SECONDS s."
-          suite_status=0
-          wait "$suite" || suite_status=$?
-          echo "::group::The PHP# suite, which ran beside mago's workspace tests"
-          cat "$suite_log"
-          echo "::endgroup::"
-          echo "The PHP# suite and mago's workspace tests took $SECONDS s."
-          if ((suite_status != 0 || workspace != 0)); then
-            echo "::error::The PHP# suite exited $suite_status and mago's workspace tests $workspace."
-            exit 1
-          fi
+          status=0
+          sharp/bin/test --no-build --mago --census --spec --differential --phpunit || status=$?
+          sharp/bin/test --mago --cargo-built || status=$?
+          echo "The test step took $SECONDS s."
+          exit "$status"
       # sharp/bin/check plain-php on the Mac's Homebrew PHP, with the dev build the suites ran, in the folder that check
       # reads the test-run mago from.
       - name: Run mago from Composer on plain PHP, and stop sharp/phpunit's tests on it
