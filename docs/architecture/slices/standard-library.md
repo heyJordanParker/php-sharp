@@ -171,7 +171,7 @@ The standard library covers what modern standard libraries cover (decision 96). 
 | --- | --- | --- |
 | Query rows, the first row, one value | `database.query(sql, parameters)`, `queryFirst`, `scalar` | `PDO` |
 | Run a statement | `database.execute(sql, parameters)` | `PDO` |
-| Transactions | `beginTransaction()`, `commit()`, `rollback()` | `PDO` |
+| Transactions | `database.transaction(body)`: serializable, run again on a conflict, its emits heard once it commits | `PDO` |
 | A cache: read, write, remove, read or compute | `cache.get`, `set`, `remove`, `getOrCreate` | `PDO` on SQLite |
 
 ## Types, reflection and events

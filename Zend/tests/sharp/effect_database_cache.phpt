@@ -20,13 +20,15 @@ $ledger = new Demo\Ledger($database);
 var_dump($ledger->skus(), $ledger->cheapest());
 var_dump($database->scalar('SELECT SUM(cents) FROM orders'), $database->scalar('SELECT sku FROM orders WHERE id = 9'));
 
-$database->beginTransaction();
-$database->execute('DELETE FROM orders');
-$database->rollback();
+try {
+    $database->transaction(function () use ($database): void {
+        $database->execute('DELETE FROM orders');
+        throw new LogicException('stop');
+    });
+} catch (LogicException $e) {
+}
 var_dump($database->scalar('SELECT COUNT(*) FROM orders'));
-$database->beginTransaction();
-$database->execute('DELETE FROM orders WHERE sku = ?', ['cake']);
-$database->commit();
+var_dump($database->transaction(fn () => $database->execute('DELETE FROM orders WHERE sku = ?', ['cake'])));
 var_dump($database->scalar('SELECT COUNT(*) FROM orders'));
 
 try {
@@ -83,6 +85,7 @@ int(300)
 int(750)
 NULL
 int(2)
+int(1)
 int(1)
 PDOException
 RuntimeException: Database
