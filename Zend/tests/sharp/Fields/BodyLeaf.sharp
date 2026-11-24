@@ -1,0 +1,9 @@
+namespace Fields;
+
+// An override auto-property under a parent's accessor body: storage, which it reads and writes itself.
+public final class BodyLeaf : BodyMid
+{
+    public override string content { get; set; } = "x";
+
+    public static List<string> stored() => typeof(BodyLeaf).fields().map(field => field.name);
+}
