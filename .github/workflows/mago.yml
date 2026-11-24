@@ -133,10 +133,11 @@ jobs:
           php-version: "8.3"
           tools: "composer:v2"
 
-      - name: Install typos
+      # cargo-deny 0.20.2 is the newest this install-action's manifest holds, which checks each download's SHA-256.
+      - name: Install typos and cargo-deny
         uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
         with:
-          tool: typos
+          tool: typos,cargo-deny@0.20.2
 
       # The PHP# engine mago links, built by sharp/bin/build-mago --engine from the static archives of these packages,
       # which it links into libphp.a.
@@ -146,11 +147,11 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: sharp/bin/build-mago --engine
 
-      # sharp/bin/check mago-checks runs them, as it does on a machine: typos, the PHP SDK's tests, cargo check of
-      # the workspace and of the PHP# bridge alone, the fuzz crate's Cargo.lock, no file watcher in the bridge, the PHP
-      # SDK's generated NodeKind, rustfmt and clippy, then the test-run mago, which analyzes the standard library and
-      # formats, lints and analyzes the Composer code, with the issues as annotations. sharp/bin/build-mago --test-run
-      # builds that mago, and links the engine the step before built.
+      # sharp/bin/check mago-checks runs them, as it does on a machine: typos, cargo deny's advisories of both lockfiles,
+      # the PHP SDK's tests, cargo check of the workspace and of the PHP# bridge alone, the fuzz crate's Cargo.lock, no
+      # file watcher in the bridge, the PHP SDK's generated NodeKind, rustfmt and clippy, then the test-run mago, which
+      # analyzes the standard library and formats, lints and analyzes the Composer code, with the issues as annotations.
+      # sharp/bin/build-mago --test-run builds that mago, and links the engine the step before built.
       - name: Mago's checks, and the test-run mago
         working-directory: .
         env:

@@ -337,12 +337,29 @@ misspellings() {
   fi
   "$typos"
 }
+# No crate either Cargo.lock pins has a RustSec vulnerability, unsound or yanked advisory: cargo deny checks each against
+# the advisory database, by the deny.toml beside it, which allows no advisory by its id. mago's downloads and
+# self-update ran over rustls 0.23.44, which had five, among them a TLS 1.3 handshake bug (#786). An unmaintained
+# advisory names no defect and no fixed version, so it prints as a warning and passes. cargo deny finds the folder cargo
+# keeps installed tools in as typos does.
+advisories() {
+  local deny lock
+  deny="$(command -v cargo-deny || echo "${CARGO_HOME:-$HOME/.cargo}/bin/cargo-deny")"
+  if [[ ! -x $deny ]]; then
+    echo "mago.yml's checks checks the lockfiles for advisories with cargo-deny 0.20.2. Install its release binary, or: cargo install --locked cargo-deny@0.20.2" >&2
+    return 1
+  fi
+  for lock in sharp/mago ext/sharp; do
+    "$deny" deny --manifest-path "$root/$lock/Cargo.toml" --log-level warn check --warn unmaintained advisories
+  done
+}
 gate_mago_checks() {
   local mago
   mago="$root/sharp/build/$os-$(uname -m)/mago/test-run/mago"
   local -x CARGO_TARGET_DIR="$target"
   cd "$root/sharp/mago"
   step misspellings
+  step advisories
   step composer install --no-interaction --no-progress --quiet
   step vendor/bin/phpunit --configuration composer/phpunit.xml
   step rustup run "$rust" cargo check --workspace --locked
