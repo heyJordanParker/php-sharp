@@ -57,7 +57,7 @@ What it does after the change, with its edge cases and error messages.
 - [ ] `<test name>` fails before the fix and passes after it
 - [ ] <command> prints <output>
 - [ ] `cargo clippy -- -D warnings` and `cargo fmt --check` pass on the crates it touches, and CI runs every suite
-- [ ] a `sharp/CHANGELOG.md` line under `## [Unreleased]` says what works now and quotes what the last release did instead
+- [ ] the pull request's `## Changelog` section says what works now and quotes what the last release did instead
 
 **Out of scope:**
 - what this issue does not change
@@ -91,12 +91,11 @@ declares the member.
 **Files it changes:**
 - `sharp/mago/crates/analyzer/src/resolver/class_name.rs`: records the reference
 - `sharp/mago/crates/analyzer/tests/sharp.rs`: the test
-- `sharp/CHANGELOG.md`: the Fixed line
 
 **Acceptance criteria:**
 - [ ] `a_class_plain_php_names_is_used_whichever_class_declares_the_member_it_reaches` fails before and passes after
 - [ ] clippy and fmt pass on the analyzer
-- [ ] a CHANGELOG `### Fixed` line quotes 0.6.23's message
+- [ ] the pull request's `## Changelog` section quotes 0.6.23's message
 
 **Out of scope:**
 - a bare `use` import with no code after it, which still runs nothing

@@ -14,7 +14,7 @@ export default defineConfig({
     'sharp/block-plumbing-commits': 'error',
     'sharp/block-auto-merge-off': 'error',
     'sharp/block-intake-shell-writes': 'error',
-    'sharp/require-background-builds': 'error',
+    'sharp/require-utility-builds': 'error',
     'sharp/require-one-thread-mago': 'error',
   },
 })

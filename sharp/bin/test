@@ -844,8 +844,10 @@ if ! composer install --no-interaction --no-progress --quiet --working-dir="$roo
   exit 1
 fi
 
+# The compile runs alone, before the pool, so it takes every slot of the run: on one thread, as MAGO_THREADS gives each
+# test's mago, 11 of the Mac's 12 slots waited for it.
 part "mago compile, built from sharp/mago"
-if ! "$mago" --no-version-check --colors never --workspace "$root/Zend/tests/sharp" compile; then
+if ! "$mago" --no-version-check --colors never --threads "$jobs" --workspace "$root/Zend/tests/sharp" compile; then
   echo "mago compile refused a PHP# test fixture, and the engine runs only compiled files." >&2
   exit 1
 fi
@@ -872,9 +874,14 @@ if $census; then
   ready_unit "$unit"
 fi
 
-# sharp/bin/spec's examples, one for each id its markers name, as its blocks() reads them, run in slices of 100, each on
+# sharp/bin/spec's examples, one for each id its markers name, as its blocks() reads them, run in slices of 10, each on
 # one slot: sharp/bin/spec runs as many compiles at once as sharp/bin/jobs prints, which CARGO_BUILD_JOBS=1 makes 1.
-# The first slice also compares the list's entries that name no example.
+# Each example is its own mago compile of 7.8 s on the Mac, run 45389050052, so slices of 100 ran 694 to 766 s each
+# and the Mac's test step ended minutes after every other unit had (#784). A slice weighs the seconds
+# sharp/baseline/seconds lists under its `sharp/bin/spec --shard <i>/<n>`, from that run's record of each example, or,
+# once an added example changes the slices, 8 s for each example it holds. The first slice also compares the list's
+# entries that name no example.
+spec_batch=10
 count_examples() {
   grep -h '^<!-- example ' "$@" | sed 's/^<!-- example \([a-z0-9-]*\).*/\1/' | LC_ALL=C sort -u | wc -l
 }
@@ -884,9 +891,10 @@ if $spec; then
     env CARGO_BUILD_JOBS=1 "$php" sharp/bin/spec --self-test
   ready_unit "$unit"
   examples=$(count_examples "$root/README.md" "$root/docs/spec.md")
-  slices=$(((examples + batch - 1) / batch))
+  slices=$(((examples + spec_batch - 1) / spec_batch))
+  read_seconds
   for ((slice = 1; slice <= slices; slice++)); do
-    add_unit "$(((examples - slice) / slices + 1))" \
+    add_unit "${seconds["sharp/bin/spec --shard $slice/$slices"]:-$((((examples - slice) / slices + 1) * 8))}" \
       "slice $slice of $slices of the code examples in docs/spec.md and README.md, compared with sharp/baseline/spec" \
       "slice $slice of $slices of the code examples of docs/spec.md and README.md" "$root" \
       env CARGO_BUILD_JOBS=1 "$php" sharp/bin/spec --shard "$slice/$slices"

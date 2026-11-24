@@ -95,6 +95,60 @@ def targets():
     return out.stdout.strip()
 
 
+# The speed targets, by the name targets.py prints. The language owner set speed as a standing priority on 11-24,
+# triaged like any other problem: each one off its goal is an intake entry headed `## Speed: <name>` (TRIAGE.md).
+SPEED_TARGETS = ("edit CPU", "edit peak memory", "Mac job, last green", "longest CI job, last green",
+                 "longest local loop, last 24 h")
+
+
+def speed_entries(measured):
+    """Each speed target that `measured`, targets.py's output, shows off its goal with no intake entry for it."""
+    with open(os.path.expanduser("~/.claude/orchestrate/php-sharp/intake.md"), encoding="utf-8") as fh:
+        entries = fh.read().split("\n## ")
+    speed = [entry for entry in entries if entry.startswith("Speed: ")]
+    headings = ["## " + entry.split("\n", 1)[0] for entry in speed]
+    # A speed design is checked against the ledger of experiments first, so none is tried twice (TRIAGE.md).
+    unsearched = [entry.split("\n", 1)[0] for entry in speed
+                  if "- [x] design:" in entry and "experiments.md" not in entry]
+    missing = [
+        name for name in SPEED_TARGETS
+        if re.search(rf"^  {re.escape(name)}: .* x\d", measured, re.M)
+        and not any(heading.startswith(f"## Speed: {name}") for heading in headings)
+    ]
+    lines = []
+    if missing:
+        lines.append("SPEED, ACT FIRST: " + "; ".join(missing) + " off its goal with no intake entry. Enter each as "
+                     "`## Speed: <target>` at a consumer defect's rank (TRIAGE.md).")
+    if unsearched:
+        lines.append("SPEED, ACT FIRST: " + "; ".join(unsearched) + " checks its design box without searching "
+                     "benchmark/experiments.md: name the lines it searched there (TRIAGE.md).")
+    return "\n".join(lines) or "SPEED: every speed target off its goal has its intake entry."
+
+
+def upstream_engine():
+    """The engine's php version against upstream's newest patch release of the same minor version.
+
+    The engine takes upstream by merging each patch release's tag, for its security fixes (proposals/engine-8-5-13.md),
+    so a newer tag is a problem the tick names until an intake entry merges it."""
+    with open("main/php_version.h", encoding="utf-8") as fh:
+        ours = re.search(r'#define PHP_VERSION "(\d+)\.(\d+)\.(\d+)"', fh.read())
+    minor = f"{ours.group(1)}.{ours.group(2)}"
+    listed = subprocess.run(["git", "ls-remote", "--tags", "https://github.com/php/php-src.git", f"php-{minor}.*"],
+                            capture_output=True, text=True, timeout=30).stdout
+    patches = [int(m.group(1)) for m in re.finditer(rf"refs/tags/php-{re.escape(minor)}\.(\d+)$", listed, re.M)]
+    if not patches:
+        return f"UPSTREAM ENGINE: no php-{minor} release tag read from php/php-src."
+    newest = max(patches)
+    if newest <= int(ours.group(3)):
+        return f"UPSTREAM ENGINE: the engine is php {minor}.{ours.group(3)}, upstream's newest patch release."
+    with open(os.path.expanduser("~/.claude/orchestrate/php-sharp/intake.md"), encoding="utf-8") as fh:
+        entered = re.search(rf"^## .*\b{re.escape(minor)}\.{newest}\b", fh.read(), re.M)
+    if entered:
+        return f"UPSTREAM ENGINE: php {minor}.{newest} is released and in intake; the engine is {minor}.{ours.group(3)}."
+    return (f"UPSTREAM ENGINE, ACT FIRST: upstream released php {minor}.{newest}; the engine is {minor}.{ours.group(3)}. "
+            f"Enter an intake entry that merges its tag, as #785 merges 8.5.13.")
+
+
 def archive_finished():
     """Moves each intake entry that left intake to intake-archive.md, so intake holds only the queue: on 11-24 it held
     150 entries, 89 of them finished (TRIAGE.md: an entry leaves intake when every box that applies is checked). An
@@ -146,7 +200,7 @@ def report():
              (re.match(r"\s+(.+?): ([\d.]+) -> [\d.]+ (ROSE|fell|held)$", line) for line in lines) if m}
     goals = []
     for line in lines[start + 1:]:
-        found = re.match(r"\s+(.+?): ([\d.]+)( ?[A-Za-z]*) / ([\d.]+)( ?[A-Za-z]*) (MET|x([\d.]+))(?:, run \d+ (.+))?$", line)
+        found = re.match(r"\s+(.+?): ([\d.]+)( ?[A-Za-z]*) / ([\d.]+)( ?[A-Za-z]*) (MET|x([\d.]+))(?:, (?:run \d+ )?(.+))?$", line)
         if found:
             name = re.sub(r",? (mean|last green)$", "", found.group(1)).replace("->", " to ")
             off = 0.0 if found.group(6) == "MET" else float(found.group(7))
@@ -200,7 +254,8 @@ def main():
                 bench = fh.read().strip()
         except OSError as error:
             bench = f"SPEED NUMBERS: ~/.claude/orchestrate/php-sharp/bench.md could not be read: {error}."
-        context = f"{lanes()}\n\n{targets()}\n\n{bench}"
+        measured = targets()
+        context = f"{lanes()}\n\n{measured}\n\n{speed_entries(measured)}\n{upstream_engine()}\n\n{bench}"
     else:
         # `sop <file>` injects one file of the maintain Skill that every tick follows, SKILL.md unless another is named,
         # so a tick never runs from memory of it.
