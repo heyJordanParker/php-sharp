@@ -1,27 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Builds a branch off origin/master that holds only the commits it names, so a fix ships alone however red the stack
-# it was committed in is. `sharp/bin/ship <commit>…` releases them as release/<version>, with the bump the first step
-# of .claude/skills/maintain/SHIP.md describes, and `sharp/bin/ship --land <commit>…` lands them as land/<first commit>,
-# with no bump. It applies each commit's diff but its sharp/CHANGELOG.md, in the order named, to a private index read
-# from origin/master, and writes the lines each commit adds under ## [Unreleased] into origin/master's CHANGELOG, each
-# under its ### heading there. It fails naming the first commit whose diff doesn't apply, or whose added CHANGELOG line
-# no such heading holds, before it creates anything. Every lane commits on the checkout's one branch, whose git
-# refuses `git commit-tree` and a branch switch, so the branch's one commit, whose parent is origin/master, is created
-# through the GitHub API, and its pull request opens with auto-merge.
+# Cuts a release: `sharp/bin/ship <commit>…` builds release/<version> off origin/master with only the commits it names
+# and the bump the first step of .claude/skills/maintain/SHIP.md describes, so a fix ships alone however red the stack
+# it was committed in is. It applies each commit's diff but its sharp/CHANGELOG.md, in the order named, to a private
+# index read from origin/master, and writes the lines each commit adds under ## [Unreleased] into origin/master's
+# CHANGELOG, each under its ### heading there. It fails naming the first commit whose diff doesn't apply, or whose
+# added CHANGELOG line no such heading holds, before it creates anything. Every lane commits on the checkout's one
+# branch, whose git refuses `git commit-tree` and a branch switch, so the branch's one commit, whose parent is
+# origin/master, is created through the GitHub API, and its pull request opens with auto-merge.
 # Each run leaves its line in the build record, see sharp/bin/record.
 [[ ${SHARP_RECORDED:-} == sharp/bin/ship ]] || exec "$(dirname "$0")/record" sharp/bin/ship -- "$0" "$@"
 
 usage() {
-  echo "usage: sharp/bin/ship [--land] <commit>..." >&2
+  echo "usage: sharp/bin/ship <commit>..." >&2
   exit 2
 }
-land=false
-if [[ ${1:-} == --land ]]; then
-  land=true
-  shift
-fi
 if [[ $# -eq 0 || $1 == -* ]]; then
   usage
 fi
@@ -128,14 +122,10 @@ while IFS=$'\t' read -r meta path; do
   fi
 done < <(git diff-index --cached --no-renames "$base")
 
-if $land; then
-  branch=land/$(git rev-parse --short "${commits[0]}")
-else
-  current=$(git show :sharp/mago/Cargo.toml | awk -F '"' '/^version = / {print $2; exit}')
-  IFS=. read -r major minor patch <<< "$current"
-  version=$major.$minor.$((patch + 1))
-  branch=release/$version
-fi
+current=$(git show :sharp/mago/Cargo.toml | awk -F '"' '/^version = / {print $2; exit}')
+IFS=. read -r major minor patch <<< "$current"
+version=$major.$minor.$((patch + 1))
+branch=release/$version
 if gh api "repos/$repo/git/ref/heads/$branch" --silent 2> /dev/null; then
   echo "$branch already exists on $repo." >&2
   exit 1
@@ -143,40 +133,37 @@ fi
 
 # The bump: set-version.php's edits to the root package's version, its line in Cargo.lock and the versioned docs, run
 # on the private index's copies of the files it reads, and the CHANGELOG's heading over the notes and its links.
-bumped=()
-if ! $land; then
-  bumped=(sharp/mago/Cargo.toml sharp/mago/Cargo.lock)
-  while IFS= read -r doc; do
-    path=sharp/mago/$doc
-    while [[ $path == */../* ]]; do
-      path=$(sed -E 's#[^/]+/\.\./##' <<< "$path")
-    done
-    bumped+=("$path")
-  done < <(git show :sharp/mago/scripts/set-version.php \
-    | awk "/^const VERSIONED_DOCUMENTATION_FILES = \[/ {listed = 1; next} listed && /^\];/ {exit}
-      listed && match(\$0, /^ *'[^']+',/) {sub(/^ *'/, \"\"); sub(/',.*/, \"\"); print}")
-  for path in "${bumped[@]}" sharp/mago/scripts/set-version.php; do
-    mkdir -p "$work/tree/${path%/*}"
-    git show ":$path" > "$work/tree/$path"
+bumped=(sharp/mago/Cargo.toml sharp/mago/Cargo.lock)
+while IFS= read -r doc; do
+  path=sharp/mago/$doc
+  while [[ $path == */../* ]]; do
+    path=$(sed -E 's#[^/]+/\.\./##' <<< "$path")
   done
-  php "$work/tree/sharp/mago/scripts/set-version.php" "$version" > /dev/null
-  if ! awk -v version="$version" -v date="$(TZ=UTC date +%F)" '
-    $0 == "## [Unreleased]" && !heading {print; print ""; print "## [" version "] - " date; heading = 1; next}
-    /^\[Unreleased\]: .*\/compare\/v[0-9.]+\.\.\.HEAD$/ && !link {
-      url = $2; sub(/\/compare\/.*/, "", url)
-      last = $2; sub(/.*\/compare\//, "", last); sub(/\.\.\.HEAD$/, "", last)
-      print "[Unreleased]: " url "/compare/v" version "...HEAD"
-      print "[" version "]: " url "/compare/" last "...v" version
-      link = 1; next
-    }
-    {print}
-    END {exit !(heading && link)}
-  ' "$work/tree/$changelog" > "$work/changelog"; then
-    echo "$changelog has no ## [Unreleased] heading or no [Unreleased] compare link from a tag." >&2
-    exit 1
-  fi
-  mv "$work/changelog" "$work/tree/$changelog"
+  bumped+=("$path")
+done < <(git show :sharp/mago/scripts/set-version.php \
+  | awk "/^const VERSIONED_DOCUMENTATION_FILES = \[/ {listed = 1; next} listed && /^\];/ {exit}
+    listed && match(\$0, /^ *'[^']+',/) {sub(/^ *'/, \"\"); sub(/',.*/, \"\"); print}")
+for path in "${bumped[@]}" sharp/mago/scripts/set-version.php; do
+  mkdir -p "$work/tree/${path%/*}"
+  git show ":$path" > "$work/tree/$path"
+done
+php "$work/tree/sharp/mago/scripts/set-version.php" "$version" > /dev/null
+if ! awk -v version="$version" -v date="$(TZ=UTC date +%F)" '
+  $0 == "## [Unreleased]" && !heading {print; print ""; print "## [" version "] - " date; heading = 1; next}
+  /^\[Unreleased\]: .*\/compare\/v[0-9.]+\.\.\.HEAD$/ && !link {
+    url = $2; sub(/\/compare\/.*/, "", url)
+    last = $2; sub(/.*\/compare\//, "", last); sub(/\.\.\.HEAD$/, "", last)
+    print "[Unreleased]: " url "/compare/v" version "...HEAD"
+    print "[" version "]: " url "/compare/" last "...v" version
+    link = 1; next
+  }
+  {print}
+  END {exit !(heading && link)}
+' "$work/tree/$changelog" > "$work/changelog"; then
+  echo "$changelog has no ## [Unreleased] heading or no [Unreleased] compare link from a tag." >&2
+  exit 1
 fi
+mv "$work/changelog" "$work/tree/$changelog"
 for path in "${bumped[@]}" "$changelog"; do
   if ! git show ":$path" | cmp -s - "$work/tree/$path"; then
     mode[$path]=$(git ls-files --stage -- "$path" | cut -d ' ' -f 1)
@@ -184,25 +171,11 @@ for path in "${bumped[@]}" "$changelog"; do
     file[$path]=$work/tree/$path
   fi
 done
-if ((${#mode[@]} == 0)); then
-  echo "The commits change nothing on origin/master." >&2
-  exit 1
-fi
 
-shipped=$(for commit in "${commits[@]}"; do echo "- $(named "$commit")"; done)
-on_master="on origin/master $(git rev-parse --short "$base")"
-if $land; then
-  if ((${#commits[@]} == 1)); then
-    subject=$(git rev-list -1 --no-commit-header --format=%s "${commits[0]}")
-  else
-    subject="land: the ${#commits[@]} commits from $(git rev-parse --short "${commits[0]}")"
-  fi
-  printf 'Lands these commits %s, and nothing else:\n\n%s\n' "$on_master" "$shipped" > "$work/body"
-else
-  subject="chore: release $version"
-  printf 'Releases %s with these commits %s, and nothing else:\n\n%s\n' "$version" "$on_master" "$shipped" \
-    > "$work/body"
-fi
+subject="chore: release $version"
+printf 'Releases %s with these commits on origin/master %s, and nothing else:\n\n%s\n' "$version" \
+  "$(git rev-parse --short "$base")" "$(for commit in "${commits[@]}"; do echo "- $(named "$commit")"; done)" \
+  > "$work/body"
 
 # Each blob, the tree over origin/master's, the commit and its branch, through the API. GitHub names each blob by its
 # content, so a blob whose SHA differs from the one git computes didn't arrive whole.
