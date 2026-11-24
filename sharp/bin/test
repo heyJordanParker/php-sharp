@@ -358,7 +358,9 @@ if $mago && ! $cargo_built; then
 
   # Every binary starts at once, each on as many test threads as the run's jobs, so a binary's slowest tests run beside
   # the other binaries' tests, where one binary after another left the Mac's cores idle while each one's last tests
-  # ran: the workspace lane kept 2.7 to 3.1 of 12 busy on the three runs start_part names.
+  # ran: the workspace lane kept 2.7 to 3.1 of 12 busy on the three runs start_part names. A lane that starts no test,
+  # as when build.json names no test binary or a slice the balance gives none, fails, since it tested nothing.
+  started=0
   for ((b = 0; b < ${#binaries[@]}; b++)); do
     if [[ -z ${listed[$b]+listed} ]]; then
       continue
@@ -377,6 +379,7 @@ if $mago && ! $cargo_built; then
       fi
     done <<< "${listed[$b]}"
     if (( selected > 0 )); then
+      started=$((started + selected))
       # libtest prints each test's own wall time after its result with --report-time, which stable Rust's libtest
       # takes only under RUSTC_BOOTSTRAP. libtest-mimic's harness, which the binaries with harness = false use, has no
       # such option, and its --help doesn't name it.
@@ -388,6 +391,10 @@ if $mago && ! $cargo_built; then
         "${executable##*/}" "$folder" "${command[@]}" --exact --test-threads "$jobs" "${skips[@]}"
     fi
   done
+  if ((started == 0)); then
+    echo "mago's workspace tests ran no test: no binary lists a test this run selects." >&2
+    failed+=("mago's workspace tests")
+  fi
   wait_parts
 fi
 if $mago; then
@@ -476,11 +483,21 @@ export SKIP_IO_CAPTURE_TESTS=1
 export STACK_LIMIT_DEFAULTS_CHECK=1
 export RUN_RESOURCE_HEAVY_TESTS=1
 
+# The file run-tests writes each result of a mode to, one `RESULT<TAB>path` line for each test it ran.
+results_of() {
+  printf '%s/results-%s' "$TMPDIR" "$(printf '%s' "$1" | tr -c '[:alnum:]' '-')"
+}
+
+# Runs the tests in a mode. run-tests exits 0 on a path it can't find, on a selection that holds no test and on a run
+# whose every test skipped, so the mode fails too when its results hold no test that ran: #760's run of a missing
+# path passed.
 run_tests() {
-  local mode="$1"
+  local mode="$1" results earlier
   shift
+  results="$(results_of "$mode")"
+  earlier=${#failed[@]}
   part "$mode"
-  run_step "$mode" "$root" "$php" run-tests.php -P -q \
+  run_step "$mode" "$root" "$php" run-tests.php -P -q -W "$results" \
     -d opcache.jit=disable \
     -d opcache.protect_memory=1 \
     -j"$jobs" \
@@ -491,19 +508,24 @@ run_tests() {
     --show-slow 1000 \
     --set-timeout 120 \
     "$@" "${tests[@]}"
+  if ((${#failed[@]} == earlier)) && ! awk -F '\t' '$1 != "SKIPPED" { ran = 1 } END { exit !ran }' "$results"; then
+    echo "$mode ran no test." >&2
+    failed+=("$mode")
+  fi
 }
 
 # The upstream tests run on the engine alone, so they need no mago and no PHP# fixtures.
 if $upstream; then
   baseline=sharp/baseline/linux
+  mode="without opcache, compared with $baseline"
   results="$build_dir/upstream-results"
-  start_part "without opcache, compared with $baseline" run_tests "without opcache, compared with $baseline" -W "$results"
+  start_part "$mode" run_tests "$mode"
   wait_parts
   awk -F '\t' -v OFS='\t' -v prefix="$root/" '
     $1 != "PASSED" {
       if (index($2, prefix) == 1) $2 = substr($2, length(prefix) + 1)
       print
-    }' "$results" | LC_ALL=C sort -o "$results"
+    }' "$(results_of "$mode")" | LC_ALL=C sort -o "$results"
   if ! diff -u "$root/$baseline" "$results"; then
     echo "The upstream results differ from $baseline. Only the Architect accepts a new baseline, with: cp ${results#"$root"/} $baseline" >&2
     failed+=("the comparison with $baseline")
