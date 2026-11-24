@@ -129,7 +129,10 @@ else
   commit="$(git -C "$root" rev-parse HEAD 2>/dev/null || true)"
   changed=''
   diff_sha256=''
-  if porcelain="$(git -C "$root" status --porcelain 2>/dev/null)" && diff="$(git -C "$root" diff HEAD 2>/dev/null)"; then
+  # With --no-optional-locks, status writes no index, so a record never holds the index lock while a lane beside it
+  # stages or commits.
+  if porcelain="$(git -C "$root" --no-optional-locks status --porcelain 2>/dev/null)" \
+    && diff="$(git -C "$root" diff HEAD 2>/dev/null)"; then
     changed=0
     if [[ -n $porcelain ]]; then
       changed="$(wc -l <<< "$porcelain" | tr -d ' ')"
