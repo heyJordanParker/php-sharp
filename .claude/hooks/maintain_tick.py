@@ -34,8 +34,8 @@ def waits_on_its_run(log):
     ended = set(re.findall(r"task-id>(\w+)</task-id>(?:(?!task-id>).){0,600}?<status>(?:completed|failed|killed|stopped)",
                            text, re.S)) | set(re.findall(r"Successfully stopped task: (\w+)", text))
     # A run whose process died without its notice holds no output file open, so only an open one counts.
-    outputs = {path for task, path in re.findall(r"with ID: (\w+)\. Output is being written to: (\S+?\.output)", text)
-               if task in started - ended}
+    files = {task: path for path, task in re.findall(r"(/[^\s\"']+/tasks/(\w+)\.output)", text)}
+    outputs = {files[task] for task in started - ended if task in files}
     return bool(outputs) and subprocess.run(["lsof", "-t", *outputs], capture_output=True, text=True).stdout.strip() != ""
 
 
