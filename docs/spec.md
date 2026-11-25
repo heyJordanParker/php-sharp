@@ -1334,7 +1334,7 @@ public struct Email : string
 {
     public Email(string value)
     {
-        if (!global.str_contains(value, "@")) {
+        if (!value.contains("@")) {
             throw new ValueError("no email address");
         }
     }
