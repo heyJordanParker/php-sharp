@@ -9,7 +9,7 @@ Build the work one issue's agent brief describes. The brief is the contract: its
 
 ## 1. Read the issues
 
-The task is a batch of one or more issues. Build them in the order named, commit and push each as its criteria pass, then report once for the batch. Before you start, run `gh issue view <number> --repo heyJordanParker/php-sharp --comments` for each, and state its title. The latest `## Agent Brief` comment is the contract, and each later comment that opens with `Brief update:` changes it. A batch can name an issue you built before, because a `Brief update:` on it is work you haven't done yet. An issue with no `## Agent Brief` or `## Research brief` comment has no contract yet: report that and build nothing for it.
+The task is a batch of one or more issues. Build them in the order named, commit and push each as its criteria pass, then report once for the batch. Before you start, run `gh issue view <number> --repo heyJordanParker/php-sharp --comments` for each, and state its title and newest comment's time, which matches the dispatch's. The latest `## Agent Brief` comment is the contract, and each later comment that opens with `Brief update:` changes it. A batch can name an issue you built before, because a `Brief update:` on it is work you haven't done yet. An issue with no `## Agent Brief` or `## Research brief` comment has no contract yet: report that and build nothing for it.
 Never: skipping the read of an issue because you built it before.
 A `/implement` that names the issue you're already building means a new comment arrived on it: run that `gh issue view` again the moment it arrives, stop each run the comment rules out, and follow it.
 
@@ -43,11 +43,11 @@ Wait on a long run with one `Monitor` that ends when the run ends, never by endi
 Work and test in `/Users/jordan/Developer/php-sharp` on the checked-out branch. Other builders edit the same tree:
 - Change only the files the brief lists, plus any test file, fixture or `[dev-dependencies]` line a criterion's test needs. A change that needs any other file is a question for the maintainer.
 - Never edit `docs/spec.md` beyond the spec text the brief quotes. The spec is the language owner's: a rule it seems to need is a question for the maintainer.
-- Never switch branch, and never make a second copy of the repository: no worktree, branch, clone, export, archive, or copy on another machine. Step 5's `blocking` worktree and a brief that names one are the exceptions.
+- Never switch branch, and never make a second copy of the repository: no worktree, branch, clone or copy. Step 5's `blocking` worktree and a brief that names one are the exceptions.
 - Never start a subagent.
 - Read each file before you edit it.
 - Stop only a process you started, by the PID you recorded, never by a name or a pattern another lane's build can match.
-- Never use `git reset`, `git restore`, `git clean` or `git checkout` to undo work, nor `git read-tree --reset` or `git update-ref`, which do the same. A worktree moves forward with `git merge --ff-only master`.
+- Never use `git reset`, `git restore`, `git clean` or `git checkout` to undo work, nor `git read-tree --reset`, which does the same. A worktree moves forward with `git merge --ff-only master`.
 
 ## 5. Commit and push
 
