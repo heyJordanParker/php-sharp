@@ -3375,7 +3375,7 @@ public class ImportScreen
 
 **Effects:** `emit` has the effect `Events` (section 29), so a method that emits shows `Events` among its effects, and code without a body allows it with `uses Events`.
 
-**Timing:** the default dispatcher runs listeners immediately, before `emit` returns. An app replaces the dispatcher once at startup, to run listeners later, after a save, with retries, or not at all in tests.
+**Timing:** the default dispatcher runs listeners immediately, before `emit` returns. An app replaces the dispatcher once at startup, to run listeners later, after a save, with retries, or not at all in tests. An `emit` inside a `Database.transaction` reaches the dispatcher once the transaction commits, and never when it rolls back (section 29).
 
 The app's top module binds `Dispatcher`, its binding serves every `emit`, and a binding of it in any other module of the app is a compile error. A test module still replaces it:
 
@@ -7625,7 +7625,7 @@ A law the checker cannot prove is a compile error that names it (section 27).
 - **A method may call itself, or a method of its class that calls it back, only on a smaller value:** a list's rest from a list pattern, or `n - 1` or `n + 1` towards a bound an `if`, `?:`, `&&`, `||` or `match` comparison tested. The bound is an int literal, tested with `<`, `<=`, `>` or `>=`, or another int parameter the call passes on unchanged, tested with `<` or `>`.
 - **A `for (… of …)` loop over a List, or over a Map's entries,** reaches a law when its body only adds pure int values to int locals with `+=` or `++`, each under an `if` or not, and never reads a local it adds to.
 - **A list pattern takes one rest, anywhere in it,** and each element names a value or only a type. `[...a, x, ...b]` appends the lists.
-- **A law reaches the standard library from its PHP# source, as it reaches the project's code,** so a type such as `Instant` translates from its declaration and each member a law calls, and a member that calls plain PHP is refused where the law reaches it, as the project's would be. `Math.max` and `Math.min` on ints, a List's `count()`, `map` and `filter`, and a Map's literal, `count()`, `isEmpty()`, `isNotEmpty()`, `get`, `has`, `keys()`, `values()`, index read and loop over its entries, keep the checker's own model of what they give, and so does `(string)` of an int, its decimal digits. `Instant.toString()` writes its UTC text in PHP# with no plain PHP, so a law reaches the text it gives. A law that reaches another member of a Map is refused, naming those it reads.
+- **A law reaches the standard library from its PHP# source, as it reaches the project's code,** so a type such as `Instant` translates from its declaration and each member a law calls, and a member that calls plain PHP is refused where the law reaches it, as the project's would be. `Math.max` and `Math.min` on ints, a List's `count()`, `isEmpty()`, `isNotEmpty()`, `map`, `filter`, `join`, `any` and `all`, and a Map's literal, `count()`, `isEmpty()`, `isNotEmpty()`, `get`, `has`, `keys()`, `values()`, `filter`, `any`, index read and loop over its entries, keep the checker's own model of what they give, and so does `(string)` of an int, its decimal digits. `Instant.toString()` writes its UTC text in PHP# with no plain PHP, so a law reaches the text it gives. A law that reaches another member of a List or a Map is refused, naming those it reads.
 - **`<`, `<=`, `>`, `>=` and `<=>` on two values of one class run the class's own `operator <=>`,** so a law that orders two `Instant`s proves through `Instant`'s.
 - **`==` and `!=` on two values of a struct that declares no `operator ==` compare each field with that field's own `==`, and on two values of a class that declares `operator ==` run it,** so a law that compares two `Instant`s proves. On two Lists they compare as many elements on each side, and each pair by the element's own `==`, so `marks == marks` on a `List<Mark>` proves, and so does `==` on two structs with a `List<Mark>` field. With a nullable side they compare as section 19 lifts them: null equals only null, and two values run the class's `==`, so `stamp.at == at` on an `Instant?` and an `Instant` proves, and so does `==` on two structs with an `Instant?` field.
 - **A value of a class holds the fields of every PHP# class above it,** so a law reads a field, calls a method and runs `new` through `: super(…)` with what a PHP# parent declares, at any depth. The first plain PHP class above it, and each class above that, is plain PHP: a law carries the value and takes it as a parameter, and a read of a member such a class declares, or a `new` that runs its constructor, is refused where the law reaches it.
@@ -7808,6 +7808,43 @@ extern AsEventListener uses none;   // compiles: AsEventListener carries [Dynami
 - `PhpGlobals`, in `Sharp.Interop`, replaces `global`, `$GLOBALS` and the superglobals, and runs a plain PHP file in the global scope.
 
 A bare call of a replaced function names no function (section 8), and a PHP built-in class names no class (section 23), so only the standard library reaches them. Inside it, creating a built-in class has the effects its `extern` lists, as creating a `DateTimeImmutable` reads the clock.
+
+**`Database.transaction(body)` is the one way to write in a transaction.** It begins a serializable transaction, commits when `body` returns and rolls back when it throws, and gives what `body` returns. Its parameter is a `Function<T() uses Database, Events>`, so the body reaches the database and emits, and a body that sends mail or calls an API is a compile error, since a rollback can't take either back. When the database refuses the transaction because another one changed what it read, the whole body runs again, up to `Database.ATTEMPTS` times, five, and then `transaction` throws a `RuntimeException` whose previous exception is the last refusal. So two requests that read a stock count and write it back one lower both take effect, where at Read Committed one sale is lost. Each `emit` in the body waits until the transaction commits, and then reaches the app's `Dispatcher`, whichever class the app binds, in emit order. A rollback, or a run of the body again, drops it, so no listener acts on a change that didn't land. A `transaction` called inside a body runs in the open transaction.
+
+<!-- example database-transaction -->
+```csharp
+// app/Shop/Reserved.sharp
+namespace App.Shop;
+
+public event Reserved(string sku);
+```
+
+<!-- example database-transaction -->
+```csharp
+// app/Shop/Stock.sharp
+namespace App.Shop;
+
+import Sharp.Data.Database;
+import Sharp.Net.Mail;
+import Sharp.Net.MailMessage;
+
+public class Stock
+{
+    public Stock(private Database database, private Mail mail) { }
+
+    public int reserve(string sku)
+        => this.database.transaction(() => {
+            const left = this.database.scalar("SELECT count FROM stock WHERE sku = ?", [sku]) as int ?? 0;
+            this.database.execute("UPDATE stock SET count = ? WHERE sku = ?", [left - 1, sku]);
+            emit new Reserved(sku);                                 // its listeners run once the transaction commits
+
+            return left - 1;
+        });
+
+    public void announce(string sku, MailMessage message)
+        => this.database.transaction(() => this.mail.send(message));   // compile error: the body allows only Database and Events
+}
+```
 
 **`Dns.addresses(host)` gives every IPv4 and IPv6 address of a host,** each once, as an `IpAddress`, in the order the system resolver gives them. The system resolver reads the hosts file before it asks a DNS server, so `localhost` resolves with no network. A name that is no host name throws `ValueError` before any lookup, and a host the resolver can't find throws `RuntimeException`:
 

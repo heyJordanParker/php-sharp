@@ -13,7 +13,8 @@ set -euo pipefail
 # engine, which mago links too and the suite runs on. `--test-run` builds the mago of the test-run profile, which
 # behaves as release's without its fat LTO, as sharp/mago/Cargo.toml explains, into test-run/mago, for sharp/bin/check.
 # `--cargo-tests` builds and runs the tests cargo builds only as it runs them: the doc tests, and mago-codex's property
-# tests, which build with a feature of their own.
+# tests, which build with a feature of their own. `--crate <package>` builds and runs one crate's tests, as `cargo test
+# -p` runs them, then its clippy, so a builder's loop on one crate is in the build record and keeps its units.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 # Each run leaves its line in the build record, with each step's under it, see sharp/bin/record.
 [[ ${SHARP_RECORDED:-} == sharp/bin/build-mago ]] || exec "$root/sharp/bin/record" sharp/bin/build-mago -- "$0" "$@"
@@ -22,12 +23,21 @@ mode=tests
 debug=false
 case ${1:-} in
   --engine | --test-run | --cargo-tests) mode=${1#--}; shift ;;
+  --crate)
+    mode=crate
+    package=${2:?--crate names the package whose tests and clippy it runs}
+    shift 2
+    ;;
 esac
 if [[ $mode == engine && ${1:-} == --debug ]]; then
   debug=true
   shift
 fi
 cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
+# cargo finds a subcommand such as clippy through rustup's proxy, which takes the toolchain of the folder it runs in,
+# so every cargo run names the pinned toolchain.
+toolchain="$(cd "$root/ext/sharp" && rustup show active-toolchain)"
+toolchain=${toolchain%% *}
 target="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago"
 # Every file a rename publishes is written under a name with this process's id first, so two builds in one checkout
 # never rename each other's: two builders writing build.json.part both renamed it, and the second rename failed with
@@ -281,10 +291,23 @@ fi
 # Each kind of build keeps cargo's messages about it in a file of its own under $target, one JSON object per line, among
 # them every file it made or found fresh and the folder each build script wrote, while the diagnostics print as cargo
 # prints them: build.json, whose test binaries sharp/bin/test runs, as a CI job does on another job's build with
-# sharp/bin/test --no-build, test-run.json and cargo-tests.json. A failed build leaves no file, so no run takes a build
-# that failed for one that passed.
+# sharp/bin/test --no-build, build-<packages>.json for a build of the packages a -p or --package names, test-run.json,
+# cargo-tests.json and crate-<package>.json. So no build overwrites another kind's file, and the prune keeps every unit
+# each one names. A failed build leaves no file, so no run takes a build that failed for one that passed.
+packages=()
+if [[ $mode == tests ]]; then
+  previous=
+  for argument in "$@"; do
+    case $previous,$argument in
+      -p,* | --package,*) packages+=("$argument") ;;
+      *,--package=*) packages+=("${argument#--package=}") ;;
+    esac
+    previous=$argument
+  done
+fi
 case $mode in
-  tests) messages=$target/build.json ;;
+  tests) messages=$target/build${packages[*]+-$(IFS=-; echo "${packages[*]}")}.json ;;
+  crate) messages=$target/crate-$package.json ;;
   *) messages=$target/$mode.json ;;
 esac
 rm -f "$messages"
@@ -294,43 +317,54 @@ jobs=$("$root/sharp/bin/jobs")
 cargo_in_target() {
   local command=$1
   shift
-  PATH="$(dirname "$cargo"):$PATH" "$record" "cargo $command" -- "$cargo" "$command" --locked \
+  RUSTUP_TOOLCHAIN=$toolchain PATH="$(dirname "$cargo"):$PATH" "$record" "cargo $command" -- "$cargo" "$command" --locked \
     --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$target" --jobs "$jobs" \
     --message-format=json-render-diagnostics "$@"
 }
+# cargo test prints its messages on its standard output among the tests' own lines, so each message goes to the file and
+# every other line prints.
+messages_to_file() {
+  local line
+  while IFS= read -r line; do
+    if [[ $line == '{"reason":'* ]]; then
+      printf '%s\n' "$line" >> "$messages.part.$$"
+    else
+      printf '%s\n' "$line"
+    fi
+  done
+}
 case $mode in
   tests)
-    # A -p or --package among the arguments builds only the packages it names, as MACOS builds the packages of the test
-    # binaries it runs: cargo resolves their features apart from the workspace's, so the shared crates they use compile
-    # once more into the target, and later builds of the same list compile only what a change reaches.
+    # A -p or --package among the arguments builds only the packages it names: cargo resolves their features apart from
+    # the workspace's, so the shared crates they use compile once more into the target, and later builds of the same
+    # list compile only what a change reaches.
     scope=(--workspace)
-    for argument in "$@"; do
-      if [[ $argument == -p || $argument == --package || $argument == --package=* ]]; then
-        scope=()
-      fi
-    done
+    if ((${#packages[@]})); then
+      scope=()
+    fi
     cargo_in_target test "${scope[@]}" --no-run "$@" > "$messages.part.$$"
     ;;
   test-run)
     cargo_in_target build --profile test-run --bin mago "$@" > "$messages.part.$$"
     ;;
   cargo-tests)
-    # cargo prints its messages on its standard output among the tests' own lines, so each message goes to the file and
-    # every other line prints. Both runs run, and the build fails when either did.
-    messages_to_file() {
-      local line
-      while IFS= read -r line; do
-        if [[ $line == '{"reason":'* ]]; then
-          printf '%s\n' "$line" >> "$messages.part.$$"
-        else
-          printf '%s\n' "$line"
-        fi
-      done
-    }
+    # Both runs run, and the build fails when either did.
     failed=()
     cargo_in_target test --workspace --doc -- --test-threads "$jobs" | messages_to_file || failed+=("the doc tests")
     cargo_in_target test -p mago-codex --features property-tests -- --test-threads "$jobs" | messages_to_file \
       || failed+=("mago-codex's property tests")
+    if ((${#failed[@]})); then
+      printf 'Failed: %s\n' "${failed[@]}" >&2
+      exit 1
+    fi
+    ;;
+  crate)
+    # The crate's tests, then its clippy, whose messages print nothing but JSON. Both run, and the build fails when
+    # either did.
+    failed=()
+    cargo_in_target test -p "$package" "$@" -- --test-threads "$jobs" | messages_to_file || failed+=("$package's tests")
+    cargo_in_target clippy -p "$package" --all-targets "$@" -- -D warnings >> "$messages.part.$$" \
+      || failed+=("$package's clippy")
     if ((${#failed[@]})); then
       printf 'Failed: %s\n' "${failed[@]}" >&2
       exit 1

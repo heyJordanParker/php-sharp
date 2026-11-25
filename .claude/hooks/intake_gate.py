@@ -12,7 +12,10 @@ INTAKE = Path.home() / ".claude/orchestrate/php-sharp/intake.md"
 # queue on a user-owned repository, and next and master holding one tree).
 FACTS = INTAKE.parent / "facts.py"
 LEDGER = Path.home() / ".claude/orchestrate/php-sharp/sop-reads.json"
-REQUIRED = ("issue", "verified", "root cause", "outcome", "design")
+# precedent and consistent (11-25, the language owner): every planned change names its system's one precedent from
+# precedents.md and the same-kind names, commands, flags or outputs it matches, so no new API acts or reads unlike its
+# neighbors; the first outline command took one client's JSON shape for want of both.
+REQUIRED = ("issue", "verified", "root cause", "outcome", "design", "precedent", "consistent")
 # A contract a builder reads as a history: on 11-24 the tracker held 626 Brief updates on 154 issues, 53 on #359 and 52
 # on #516, so the sixth update since an issue's last Agent Brief is refused and a whole new brief replaces them.
 UPDATES = 5
@@ -121,6 +124,40 @@ def require_few_updates(issue: str) -> None:
              "states the contract as it is now, instead of another update (AGENT-BRIEF.md).")
 
 
+def require_request(issue: str, entry: str, lines: list) -> None:
+    """Refuses a brief for a problem another agent sent until its design names, for each item the agent asked for, the
+    precedent that keeps it or why it is dropped: on 11-25 the first `mago outline` brief carried every field the
+    tracer agent asked for, 33 s after filing (session review)."""
+    source = next((line for line in lines if line.startswith("source:")), "")
+    if not re.search(r"\b(agent|session)\b", source):
+        return
+    if not any(line.startswith("- [x] request:") for line in lines):
+        deny(f"#{issue} came from another agent, so its entry needs a checked `request:` box: the design's `## Request` "
+             "with each item it asked for as `kept: <precedent or neighbor>` or `dropped: <why>` (TRIAGE.md).")
+    for design in re.findall(r"- \[x\] (?:design|proposal): `(proposals/[^`]+\.md)`", entry):
+        text = (INTAKE.parent / design).read_text() if (INTAKE.parent / design).is_file() else ""
+        section = text.split("## Request", 1)[1].split("\n## ", 1)[0] if "## Request" in text else ""
+        items = [line for line in section.splitlines() if line.startswith("- ")]
+        if not items or any(not re.match(r"- .*?: (kept|dropped): \S", item) for item in items):
+            deny(f"#{issue}'s design {design} needs a `## Request` section of `- <item>: kept: <precedent or neighbor>` "
+                 "or `- <item>: dropped: <why>` lines, one per item the agent asked for (TRIAGE.md).")
+
+
+def require_newest_release(issue: str, lines: list) -> None:
+    """Refuses a brief whose verified box ran on a mago older than the newest release (TRIAGE.md step 3): on 11-25 the
+    #817 entry was verified on 0.6.52 while 0.7.3 was out (session review)."""
+    verified = next((line for line in lines if line.startswith("- [x] verified:")), "")
+    versions = set(re.findall(r"\b0\.\d+\.\d+\b", verified))
+    if not versions:
+        return
+    out = subprocess.run(["gh", "release", "view", "--repo", "heyJordanParker/php-sharp", "--json", "tagName"],
+                         capture_output=True, text=True, timeout=30)
+    newest = json.loads(out.stdout or "{}").get("tagName", "").lstrip("v")
+    if newest and newest not in versions:
+        deny(f"#{issue}'s verified box ran on {', '.join(sorted(versions))}, and the newest release is {newest}. "
+             "Rerun the repro on it, then brief (TRIAGE.md step 3).")
+
+
 def check(event: dict, match: re.Match, text: str) -> None:
     """Refuses one `gh issue` call that posts a brief or a ready-for-agent label before its intake entry is ready."""
     if match.group(1) == "comment" and match.group(2) and "Brief update:" in text and "## Agent Brief" not in text:
@@ -147,6 +184,8 @@ def check(event: dict, match: re.Match, text: str) -> None:
     missing = [key for key in REQUIRED if key not in checked]
     if missing or unchecked:
         deny(f"#{issue}'s intake entry is not ready: " + "; ".join(missing + unchecked) + ". Every box is checked with what it asks for before the brief (TRIAGE.md).")
+    require_request(issue, entry, lines)
+    require_newest_release(issue, lines)
     for design in re.findall(r"- \[x\] (?:design|proposal): `(proposals/[^`]+\.md)`", entry):
         run = subprocess.run([sys.executable, str(FACTS), str(INTAKE.parent / design)], capture_output=True, text=True, timeout=110)
         if run.returncode:

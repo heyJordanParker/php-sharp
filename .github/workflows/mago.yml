@@ -359,7 +359,31 @@ jobs:
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
 
+      # A job whose step failed cancels its run, so GitHub ends that job as cancelled, as sharp.yml's CI_PASSED explains:
+      # run 45507834855 listed only ci-passed as failed, where checks had failed its step 10. So this names each failed
+      # step of the run, with its job, before the needed jobs' results.
+      - name: Every step of the run passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # shellcheck disable=SC2016 # The program is jq's, whose $job the shell must not expand.
+          gh run view "$GITHUB_RUN_ID" --json jobs \
+            --jq '.jobs[] | .name as $job | .steps[] | select(.conclusion == "failure") | [$job, .name] | @tsv' \
+            > "$RUNNER_TEMP/failed-steps"
+          while IFS=$'\t' read -r job step; do
+            title=${job//%/%25}
+            title=${title//,/%2C}
+            title=${title//:/%3A}
+            echo "::error title=$title::${step//%/%25} failed"
+            echo "- \`$job\`: $step failed" >> "$GITHUB_STEP_SUMMARY"
+          done < "$RUNNER_TEMP/failed-steps"
+          if [[ -s $RUNNER_TEMP/failed-steps ]]; then
+            exit 1
+          fi
+
       - name: Every job passed
+        if: always()
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
           jobs: ${{ toJSON(needs) }}

@@ -269,7 +269,12 @@ def main():
             text = f"The SOP at {path} could not be read: {error}. Read it before anything else."
         if text.startswith("---\n"):
             text = text.split("\n---\n", 1)[-1]
-        context = f"Run this tick by .claude/skills/maintain/{name}:\n{text}"
+        # The language owner, 11-25: every tick is told to triage everything, since work another agent sent went into a
+        # brief without its own design.
+        context = (f"TRIAGE EVERYTHING: every arrival, a builder's report, a review, another agent's request or proposed "
+                   f"change and the language owner's feedback, enters intake and gets the maintainer's own design, its "
+                   f"precedent and its consistency check before it reaches a brief, an update or a reply.\n\n"
+                   f"Run this tick by .claude/skills/maintain/{name}:\n{text}")
     json.dump({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
                                       "additionalContext": context}}, sys.stdout)
     return 0

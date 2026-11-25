@@ -325,6 +325,14 @@ no_crate_version() {
     return 1
   fi
 }
+# mago-build-id's ID changes with every crate's source, so each crate that depends on it compiles again after any edit.
+# Only the root package reads it, and the crates below get it as a value, so an edit compiles only what it reaches.
+no_build_id_below_root() {
+  if grep -rn --include='*.rs' --include=Cargo.toml --exclude-dir=build-id -e mago_build_id -e mago-build-id crates; then
+    echo "A crate below the root package names mago-build-id, so every edit compiles it again. Pass it the binary's build ID, crate::consts::BUILD_ID." >&2
+    return 1
+  fi
+}
 # cargo install puts typos in the folder cargo keeps installed tools in, which cargo finds its own subcommands in, but
 # which a Mac with Homebrew's rustup leaves off PATH. That folder can hold an older rustup's rustc, so it never joins
 # PATH.
@@ -369,6 +377,7 @@ gate_mago_checks() {
   step rustup run "$rust" cargo metadata --locked --format-version 1 --manifest-path crates/syntax/fuzz/Cargo.toml > /dev/null
   step no_notify
   step no_crate_version
+  step no_build_id_below_root
   step unchanged_by php scripts/regen-sdk-node-kinds.php
   step rustup run "$rust" cargo fmt --all -- --check
   step rustup run "$rust" cargo clippy --workspace --all-targets --all-features -- -D warnings
