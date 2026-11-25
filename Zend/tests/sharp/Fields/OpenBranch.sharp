@@ -1,0 +1,7 @@
+namespace Fields;
+
+// An open class whose override stays open, so a subclass may replace it and `fields()` leaves it out.
+public class OpenBranch : Base
+{
+    public override string content { get; set; } = "x";
+}

@@ -1,0 +1,7 @@
+namespace Fields;
+
+// The shape a framework's stored override takes: a collection in an open class, set by `new`.
+public class Shelf : Holder
+{
+    public final override Rows<string> items { get; set; } = new Rows<string>();
+}
