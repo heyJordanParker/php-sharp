@@ -498,7 +498,7 @@ gate_mago_tests() {
 # later release installs nothing. Then mago runs on a one-class .sharp project, and sharp/phpunit's tests stop before a
 # .sharp test file's source prints.
 composer_install() {
-  local mago="$target/test-run/mago" version tree package="$TMPDIR/mago-sharp-package" project="$TMPDIR/project"
+  local mago="$target/test-run/mago" version tree triple package="$TMPDIR/mago-sharp-package" project="$TMPDIR/project"
   local output
   if [[ ! -f $mago ]]; then
     echo "$mago is missing. Run sharp/bin/check mago-checks first." >&2
@@ -511,9 +511,12 @@ composer_install() {
   # holds them, as a commit of them would ship them. It prints nothing for a working tree with no change.
   tree="$(git -C "$root" stash create)"
   git -C "$root" archive "${tree:-HEAD}" sharp/mago | tar -x -C "$package" --strip-components 2
-  # The tree's version has no release to download, so the package carries the test-run mago at composer/bin/mago, where
-  # php-sharp-composer's plugin installs a release's binary, and the plugin finds it in place.
-  install -m 755 "$mago" "$package/composer/bin/mago"
+  # The tree's version has no release to download, so the package carries the test-run mago at
+  # composer/bin/<triple>/mago, where php-sharp-composer's plugin installs a release's binary for this platform, and the
+  # plugin finds it in place.
+  triple="$(php -r 'require $argv[1]; echo PhpSharp\Composer\MagoBinary::triple();' "$root/sharp/composer/src/MagoBinary.php")"
+  mkdir -p "$package/composer/bin/$triple"
+  install -m 755 "$mago" "$package/composer/bin/$triple/mago"
   cd "$project"
   cat > composer.json << JSON
 {
