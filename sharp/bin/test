@@ -384,18 +384,15 @@ report_unit() {
     >> "$TMPDIR/report"
   reported_units=$((reported_units + 1))
 }
-# Writes the report with the build's engine, which every run that tests has, and DOM, which it builds with.
+# Writes the report with the PATH's php, which every run has, since Composer runs on it, and its DOM: the build's engine
+# is missing where a job runs only Mago's test binaries, as MAGO's slices do, and the sharp/docker image's Debian php-cli
+# loads DOM from php-xml's ini, so it runs with its ini.
 write_report() {
-  local engine="$build_dir/sapi/cli/php" report="$root/sharp/build/test-report.xml"
+  local report="$root/sharp/build/test-report.xml"
   if [[ ! -s $TMPDIR/report ]]; then
     return
   fi
-  if [[ ! -x $engine ]]; then
-    echo "$engine is missing, so the run writes no report. Run sharp/bin/build." >&2
-    failed+=("the report")
-    return
-  fi
-  if ! "$engine" -n -d memory_limit=-1 -- "$TMPDIR" "$report" <<'PHP'
+  if ! php -d memory_limit=-1 -- "$TMPDIR" "$report" <<'PHP'
 <?php
 declare(strict_types=1);
 
