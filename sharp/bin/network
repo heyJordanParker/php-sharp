@@ -12,7 +12,9 @@ if [[ $# -eq 0 ]]; then
   exit 2
 fi
 
-failures='i/o timeout|connection reset by peer|connection refused|TLS handshake timeout|unexpected EOF|Temporary failure in name resolution|no such host|net/http: request canceled|context deadline exceeded|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout'
+# An HTTP/2 stream the server reset is one too: HOSTS failed run 45465654109 on "stream error: stream ID 5; INTERNAL_ERROR;
+# received from peer" from proxy.golang.org.
+failures='i/o timeout|connection reset by peer|connection refused|TLS handshake timeout|unexpected EOF|Temporary failure in name resolution|no such host|net/http: request canceled|context deadline exceeded|stream error|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout'
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
 

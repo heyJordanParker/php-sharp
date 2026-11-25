@@ -67,8 +67,10 @@ if [[ ! -x "$frankenphp" || "$install/lib/libphp.so" -nt "$frankenphp" ]]; then
   fi
   php_config="$install/bin/php-config"
   # php-config names libphp's folder in neither flag, so the link and the binary's run-time search path name it. Go's
-  # build cache never reads the PHP headers a C file includes, so it lives in the build's folder and goes with it.
+  # build cache never reads the PHP headers a C file includes, so it lives in the build's folder and goes with it. The
+  # modules download first, through sharp/bin/network, so a dropped download runs again and the build reads no network.
   (cd "$source/caddy/frankenphp" \
+    && "$record" "go mod download" -- "$root/sharp/bin/network" go mod download \
     && GOCACHE="$build_dir/frankenphp/go-build" \
       CGO_CFLAGS="$("$php_config" --includes)" \
       CGO_LDFLAGS="-L$install/lib -Wl,-rpath,$install/lib $("$php_config" --ldflags) $("$php_config" --libs)" \
