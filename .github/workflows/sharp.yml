@@ -63,6 +63,9 @@ jobs:
       tagged: ${{ steps.version.outputs.tagged }}
       version: ${{ steps.version.outputs.version }}
     steps:
+      - name: A test of the merge queue, issue 843, fails every staging run that holds it
+        if: github.event_name == 'push'
+        run: exit 1
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
