@@ -130,6 +130,13 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	/* Spec section 25: what reflection read this request, under a key sharp_reflected spells the rows it gave, so a
 	 * class's declarations are read once. NULL until there is one. */
 	HashTable *request_reflected;
+	/* Spec section 10: the fields of each struct or class sharp_read_struct read this request, a sharp_struct_fields by
+	 * the address of its entry, so its `#fields` runs and its field types are read once a request. NULL until there is
+	 * one. */
+	HashTable *request_struct_fields;
+	/* The type each class value sharp_class_value_of read from its text this request, by the address of its interned
+	 * string, so a class's name is read once a request. NULL until there is one. */
+	HashTable *request_read_class_values;
 	/* Spec section 32: Sharp\Container's bindings, under "namespace id" a list of the modules that bind it, each a
 	 * list of its rows, the base modules' and the environment modules' apart; the paths of the module files it read;
 	 * each test file's module, under the exact name of the one PHP# class the file declares, and the one of the test
@@ -6882,12 +6889,26 @@ static const sharp_type *sharp_class_value_of(const zend_string *value)
 	if (type) {
 		return type->members[0];
 	}
+	HashTable **read = &SHARP_G(request_read_class_values);
+	zend_ulong address = (zend_ulong) (uintptr_t) value;
+	type = ZSTR_IS_INTERNED(value) && *read ? zend_hash_index_find_ptr(*read, address) : NULL;
+	if (type) {
+		return type;
+	}
 	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
 	sharp_type_node *node = sharp_class_value_read(value, &reader);
 	type = node ? sharp_type_node_interned(node, &reader) : NULL;
 	zend_arena_destroy(reader.arena);
 	if (!type) {
 		zend_value_error("\"%s\" is no class value: it names no type", ZSTR_VAL(value));
+		return NULL;
+	}
+	if (ZSTR_IS_INTERNED(value)) {
+		if (!*read) {
+			ALLOC_HASHTABLE(*read);
+			zend_hash_init(*read, 8, NULL, NULL, false);
+		}
+		zend_hash_index_add_new_ptr(*read, address, (void *) type);
 	}
 
 	return type;
@@ -13414,6 +13435,109 @@ static const zend_class_entry *sharp_field_scope(const zend_class_entry *ce, zen
 	return info ? info->ce : ce;
 }
 
+/* A field of a struct or class as a row of its `#fields` gives it, spec section 10: its name, the key it is stored under,
+ * its type as written, the order a list of it keeps or NULL, the class whose terms its type is written in, and whether
+ * the main constructor takes it and whether it may be missing. */
+typedef struct {
+	zend_string *name;
+	zend_string *key;
+	zend_string *written;
+	zend_string *order;
+	const zend_class_entry *scope;
+	bool parameter;
+	bool optional;
+} sharp_struct_field;
+
+/* The fields of a struct or class, read once a request from its `#fields`, and their types for each type arguments it
+ * is read with, by their address, 0 for none: a list of a type for each field, in the fields' order. */
+typedef struct {
+	HashTable types;
+	uint32_t count;
+	sharp_struct_field fields[];
+} sharp_struct_fields;
+
+static void sharp_struct_field_types_free(zval *entry)
+{
+	efree(Z_PTR_P(entry));
+}
+
+static void sharp_struct_fields_free(zval *entry)
+{
+	sharp_struct_fields *table = Z_PTR_P(entry);
+
+	for (uint32_t i = 0; i < table->count; i++) {
+		zend_string_release(table->fields[i].name);
+		zend_string_release(table->fields[i].key);
+		zend_string_release(table->fields[i].written);
+		if (table->fields[i].order) {
+			zend_string_release(table->fields[i].order);
+		}
+	}
+	zend_hash_destroy(&table->types);
+	efree(table);
+}
+
+/* The fields of the struct or class `ce`, which its `#fields` gives on the first read of it in the request. */
+static sharp_struct_fields *sharp_struct_fields_of(zend_class_entry *ce)
+{
+	HashTable **tables = &SHARP_G(request_struct_fields);
+	zend_ulong address = (zend_ulong) (uintptr_t) ce;
+	sharp_struct_fields *table = *tables ? zend_hash_index_find_ptr(*tables, address) : NULL;
+	if (table) {
+		return table;
+	}
+	zend_function *fields = zend_hash_str_find_ptr(&ce->function_table, "#fields", sizeof("#fields") - 1);
+	zval rows;
+	zend_call_known_function(fields, NULL, ce, &rows, 0, NULL, NULL);
+	table = emalloc(offsetof(sharp_struct_fields, fields) + zend_hash_num_elements(Z_ARRVAL(rows)) * sizeof(sharp_struct_field));
+	table->count = 0;
+	zend_hash_init(&table->types, 2, NULL, sharp_struct_field_types_free, false);
+	zval *row;
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL(rows), row) {
+		HashTable *parts = Z_ARRVAL_P(row);
+		zval *order = zend_hash_index_find(parts, 5);
+		sharp_struct_field *field = &table->fields[table->count++];
+		field->name = zend_string_copy(Z_STR_P(zend_hash_index_find(parts, 0)));
+		field->key = zend_string_copy(Z_STR_P(zend_hash_index_find(parts, 1)));
+		field->written = zend_string_copy(Z_STR_P(zend_hash_index_find(parts, 2)));
+		field->order = order ? zend_string_copy(Z_STR_P(order)) : NULL;
+		field->scope = sharp_field_scope(ce, field->name);
+		field->parameter = Z_TYPE_P(zend_hash_index_find(parts, 3)) == IS_TRUE;
+		field->optional = Z_TYPE_P(zend_hash_index_find(parts, 4)) == IS_TRUE;
+	} ZEND_HASH_FOREACH_END();
+	zval_ptr_dtor(&rows);
+	if (!*tables) {
+		ALLOC_HASHTABLE(*tables);
+		zend_hash_init(*tables, 8, NULL, sharp_struct_fields_free, false);
+	}
+	zend_hash_index_add_new_ptr(*tables, address, table);
+
+	return table;
+}
+
+/* The type of each of `table`'s fields of `ce`, read with the type arguments `arguments` or none, each read once a
+ * request. */
+static const sharp_type **sharp_struct_field_types(sharp_struct_fields *table, const zend_class_entry *ce,
+	const sharp_type *arguments)
+{
+	zend_ulong address = (zend_ulong) (uintptr_t) arguments;
+	const sharp_type **types = zend_hash_index_find_ptr(&table->types, address);
+	if (types) {
+		return types;
+	}
+	types = safe_emalloc(MAX(table->count, 1), sizeof(*types), 0);
+	for (uint32_t i = 0; i < table->count; i++) {
+		const sharp_struct_field *field = &table->fields[i];
+		const sharp_type *list =
+			sharp_declared_types(ZSTR_VAL(field->written), ZSTR_LEN(field->written), field->scope, ce, arguments);
+		ZEND_ASSERT(list != NULL && "the compile writes each field's type as one PHP# type");
+		types[i] = list->members[0];
+	}
+	zend_hash_index_add_new_ptr(&table->types, address, types);
+
+	return types;
+}
+
 /* Spec section 10: builds in `built` the struct or class `ce`, of the type arguments `arguments` or none, from `value`,
  * a Map, a PHP array or an object, as its `parse` reads it: each field a row of its `#fields` gives, read under its key
  * as a value of its type, then its main constructor called with its parameters by name, so a missing one takes its
@@ -13421,9 +13545,9 @@ static const zend_class_entry *sharp_field_scope(const zend_class_entry *ce, zen
  * problem otherwise. With any problem `built` stays undefined, and `value`'s path is among the read's failed paths. */
 static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments, zval *value, sharp_read *read, zval *built)
 {
-	zend_function *fields = zend_hash_str_find_ptr(&ce->function_table, "#fields", sizeof("#fields") - 1);
-	zval rows, parameters, properties;
-	zend_call_known_function(fields, NULL, ce, &rows, 0, NULL, NULL);
+	sharp_struct_fields *table = sharp_struct_fields_of(ce);
+	const sharp_type **types = sharp_struct_field_types(table, ce, arguments);
+	zval parameters, properties;
 	array_init(&parameters);
 	array_init(&properties);
 	HashTable *problems = Z_ARRVAL_P(read->found.problems);
@@ -13433,19 +13557,12 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 	const zend_class_entry *holder = read->holder;
 	const zend_string *holder_field = read->field;
 
-	zval *row;
-	ZEND_HASH_FOREACH_VAL(Z_ARRVAL(rows), row) {
-		HashTable *parts = Z_ARRVAL_P(row);
-		zend_string *name = Z_STR_P(zend_hash_index_find(parts, 0));
-		zend_string *key = Z_STR_P(zend_hash_index_find(parts, 1));
-		zend_string *written = Z_STR_P(zend_hash_index_find(parts, 2));
-		zval *into = Z_TYPE_P(zend_hash_index_find(parts, 3)) == IS_TRUE ? &parameters : &properties;
-		bool optional = Z_TYPE_P(zend_hash_index_find(parts, 4)) == IS_TRUE;
-		zval *written_order = zend_hash_index_find(parts, 5);
-		const sharp_type *types =
-			sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), sharp_field_scope(ce, name), ce, arguments);
-		ZEND_ASSERT(types != NULL && "the compile writes each field's type as one PHP# type");
-		const sharp_type *type = types->members[0];
+	for (uint32_t i = 0; i < table->count; i++) {
+		const sharp_struct_field *row = &table->fields[i];
+		zend_string *name = row->name;
+		zend_string *key = row->key;
+		zval *into = row->parameter ? &parameters : &properties;
+		const sharp_type *type = types[i];
 		if (length) {
 			smart_str_appendc(&read->found.path, '.');
 		}
@@ -13457,14 +13574,14 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 		if (field) {
 			zval field_value;
 			ZVAL_COPY_DEREF(&field_value, field);
-			read->order = written_order ? Z_STR_P(written_order) : NULL;
+			read->order = row->order;
 			read->holder = ce;
 			read->field = name;
 			sharp_read_whole(type, &field_value, read);
 			read->holder = holder;
 			read->field = holder_field;
 			zend_hash_update(Z_ARRVAL_P(into), name, &field_value);
-		} else if (!optional) {
+		} else if (!row->optional) {
 			zval missing;
 			if (type->kind == SHARP_TYPE_NULLABLE || zend_string_equals_literal(type->text, "Any?")) {
 				ZVAL_NULL(&missing);
@@ -13479,9 +13596,8 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 		if (EG(exception)) {
 			break;
 		}
-	} ZEND_HASH_FOREACH_END();
+	}
 	read->order = order;
-	zval_ptr_dtor(&rows);
 
 	if (!EG(exception) && zend_hash_num_elements(problems) > found) {
 		sharp_read_fail(read);
@@ -17104,6 +17220,8 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 /* Runs after the request's objects are freed, so no slot still points into the request's types. */
 static ZEND_MODULE_POST_ZEND_DEACTIVATE_D(sharp)
 {
+	sharp_type_request_table_free(&SHARP_G(request_struct_fields));
+	sharp_type_request_table_free(&SHARP_G(request_read_class_values));
 	sharp_type_request_table_free(&SHARP_G(request_spelled_lists));
 	sharp_type_request_table_free(&SHARP_G(request_reflected));
 	sharp_type_request_table_free(&SHARP_G(request_class_values));
