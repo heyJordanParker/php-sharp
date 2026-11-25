@@ -67,6 +67,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
+      - name: A test of the merge queue's failed batch, issue 843, part A, fails every staging run that holds it
+        if: github.event_name == 'push'
+        run: exit 1
       # sharp/bin/check --release prints the version this push releases: its tag's, when a tag already names the commit,
       # or else the newest tag's plus one, and the pull requests it holds since that tag, and each part of the release
       # not published yet, which RELEASE publishes, as sharp/bin/check --release explains. staging's pushes run one at a
