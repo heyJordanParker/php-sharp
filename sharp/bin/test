@@ -834,9 +834,12 @@ if $upstream; then
   finish
 fi
 
-if $build; then
-  part "sharp/bin/build-mago"
-  "$root/sharp/bin/build-mago" --quiet
+# The PHP# suite, its checks and the examples run mago alone, which a run of the workspace's tests built with them. A run
+# of 4 .phpt files built every test binary for 2h31m on 11-25, and held the build folder's lock from another lane's
+# cargo test for 61 minutes (#847).
+if $build && ! $mago; then
+  part "sharp/bin/build-mago --bin"
+  "$root/sharp/bin/build-mago" --bin --quiet
 fi
 mago="$build_dir/mago/debug/mago"
 if [[ ! -x $mago ]]; then

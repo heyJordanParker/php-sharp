@@ -2,12 +2,14 @@
 set -euo pipefail
 
 # Builds sharp/mago as `cargo test --workspace` builds it, mago and every test binary in the dev profile, into
-# sharp/build/<os>-<arch>/mago, with the toolchain ext/sharp/rust-toolchain.toml pins. So a worktree keeps one build of
-# Mago, and the binary is the mago the tests run, sharp/build/<os>-<arch>/mago/debug/mago. A build of mago alone would
-# resolve its dependencies' features without the tests' dev-dependencies and compile most crates a second time.
+# sharp/build/<os>-<arch>/mago, with the toolchain ext/sharp/rust-toolchain.toml pins, and the binary is the mago the
+# tests run, sharp/build/<os>-<arch>/mago/debug/mago. `--bin` builds that mago with one test, mago's tests/suite.rs, for
+# a run of no workspace test, as sharp/bin/test runs a .phpt file. A build with a test resolves every feature the
+# workspace's tests do, so each unit it builds is one of the workspace build's: `cargo build --bin mago` resolved
+# features without the tests' dev-dependencies, and compiled 129 of its 393 units apart from it (#847).
 # Every script that builds sharp/mago builds it here, with the jobs sharp/bin/jobs prints, so one place keeps the build
-# folder the size of one fresh build of each kind, as the prune below explains (#730). Every argument goes to cargo
-# test, such as --quiet. It builds the PHP# engine mago links first. `--engine` builds the engine alone, which a CI job
+# folder the size of one fresh build of each kind, as the prune below explains (#730). Every argument goes to cargo,
+# such as --quiet. It builds the PHP# engine mago links first. `--engine` builds the engine alone, which a CI job
 # runs first, and a cargo check or clippy never needs. `--engine --debug` builds it as the PHP# suite runs it, with
 # --enable-debug and zend_test, in sharp/build/<os>-<arch> beside the suite's php and phpdbg, so the Mac job builds one
 # engine, which mago links too and the suite runs on. `--test-run` builds the mago of the test-run profile, which
@@ -22,7 +24,7 @@ record="$root/sharp/bin/record"
 mode=tests
 debug=false
 case ${1:-} in
-  --engine | --test-run | --cargo-tests) mode=${1#--}; shift ;;
+  --bin | --engine | --test-run | --cargo-tests) mode=${1#--}; shift ;;
   --crate)
     mode=crate
     package=${2:?--crate names the package whose tests and clippy it runs}
@@ -291,9 +293,10 @@ fi
 # Each kind of build keeps cargo's messages about it in a file of its own under $target, one JSON object per line, among
 # them every file it made or found fresh and the folder each build script wrote, while the diagnostics print as cargo
 # prints them: build.json, whose test binaries sharp/bin/test runs, as a CI job does on another job's build with
-# sharp/bin/test --no-build, build-<packages>.json for a build of the packages a -p or --package names, test-run.json,
-# cargo-tests.json and crate-<package>.json. So no build overwrites another kind's file, and the prune keeps every unit
-# each one names. A failed build leaves no file, so no run takes a build that failed for one that passed.
+# sharp/bin/test --no-build, build-<packages>.json for a build of the packages a -p or --package names, bin.json,
+# test-run.json, cargo-tests.json and crate-<package>.json. So no build overwrites another kind's file, and the prune
+# keeps every unit each one names. A failed build leaves no file, so no run takes a build that failed for one that
+# passed.
 packages=()
 if [[ $mode == tests ]]; then
   previous=
@@ -343,6 +346,9 @@ case $mode in
       scope=()
     fi
     cargo_in_target test "${scope[@]}" --no-run "$@" > "$messages.part.$$"
+    ;;
+  bin)
+    cargo_in_target test --workspace --no-run --test suite "$@" > "$messages.part.$$"
     ;;
   test-run)
     cargo_in_target build --profile test-run --bin mago "$@" > "$messages.part.$$"
