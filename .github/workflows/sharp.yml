@@ -1144,7 +1144,10 @@ jobs:
           git tag "v$VERSION" "$GITHUB_SHA"
           git push origin "refs/tags/v$VERSION"
       # The release stays a draft until PUBLISH, once the images are tagged and both Composer tags pushed, so a failure
-      # anywhere leaves a draft and nothing public.
+      # anywhere leaves a draft and nothing public. Each asset the draft lacks uploads alone, and one it holds at another
+      # size, or whose upload never finished, uploads again, so a later run finishes an upload GitHub broke off:
+      # gh release upload --clobber stopped at its first failed asset on 0.8.3's run 45637122432, with "HTTP 422:
+      # ReleaseAsset.name already exists" after a GitHub 500, and left the draft without the rest (#849).
       - name: Upload every asset to the draft release, check it, and write its notes
         if: contains(env.MISSING, 'assets')
         env:
@@ -1160,10 +1163,25 @@ jobs:
             echo "Release $tag is already published."
             exit 0
           fi
-          gh release upload "$tag" assets/* --clobber
-          gh release view "$tag" --json assets --jq '.assets[].name' | sort > released-assets.txt
-          diff -u expected-assets.txt released-assets.txt || {
-            echo "::error::Draft release $tag holds different assets than expected, so it stays a draft."
+          gh release view "$tag" --json assets --jq '.assets[] | [.name, .size, .state] | @tsv' > draft-assets.tsv
+          while IFS= read -r asset; do
+            size=$(($(wc -c < "assets/$asset")))
+            printf '%s\t%s\n' "$asset" "$size" >> expected-sizes.tsv
+            held=$(awk -F '\t' -v name="$asset" '$1 == name { print $2 " bytes, " $3 }' draft-assets.tsv)
+            if [[ $held == "$size bytes, uploaded" ]]; then
+              continue
+            fi
+            if [[ -n $held ]]; then
+              echo "Draft release $tag holds $asset at $held, not $size bytes uploaded, so it uploads again."
+              gh release delete-asset "$tag" "$asset" --yes
+            fi
+            gh release upload "$tag" "assets/$asset"
+          done < expected-assets.txt
+          gh release view "$tag" --json assets --jq '.assets[] | select(.state == "uploaded") | [.name, .size] | @tsv' \
+            | sort > released-sizes.tsv
+          sort -o expected-sizes.tsv expected-sizes.tsv
+          diff -u expected-sizes.tsv released-sizes.tsv || {
+            echo "::error::Draft release $tag holds different assets or sizes than expected, so it stays a draft."
             exit 1
           }
           gh release edit "$tag" --notes-file "$NOTES"

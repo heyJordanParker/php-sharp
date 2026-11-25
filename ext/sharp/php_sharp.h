@@ -455,10 +455,15 @@ ZEND_COLD void sharp_refuse_creation(const zend_class_entry *ce);
 bool sharp_owns_storage(const zend_class_entry *ce);
 
 /* The stored form of `object`, whose class sharp_owns_storage holds for, as serialize writes it: an array of the fields
- * Json.encode writes, under their keys, or, for a value as text, its text under `value`. Throws an Error that names the
+ * Json.encode writes, under their keys, or, for a backed struct, its value under `value`. Throws an Error that names the
  * class, and fails, for a type with no stored form: one with a main constructor parameter that holds no property, a
  * field that holds a function, a field's Map whose key has no text, or a `parse` of its own. */
 zend_result sharp_stored_form(zend_object *object, zval *stored);
+
+/* The `#json` of `ce` when it is a backed struct, spec section 10, which gives the value it is stored as, or NULL. A
+ * backed struct has the `parse` of one value that reads it back, and no `#fields`, which a struct stored as its fields
+ * has. With `keyed`, only a struct stored as an int or a string, which a JSON object key holds. */
+zend_function *sharp_backed_value_method(const zend_class_entry *ce, bool keyed);
 
 /* Builds in `built` an object of `ce`, whose class sharp_owns_storage holds for, from `stored`, the array its stored
  * form reads back as, as its `parse` builds one: through its constructor. `type_arguments` is the text serialize kept

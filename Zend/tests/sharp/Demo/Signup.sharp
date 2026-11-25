@@ -1,0 +1,6 @@
+namespace Demo;
+
+public struct Signup
+{
+    public Signup(public Email email { get; }, public UserId id { get; }) { }
+}
