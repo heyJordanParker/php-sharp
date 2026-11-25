@@ -15,27 +15,19 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-# Every lane pushes the checkout's master tip to its branch, so the newest lane pull request's run tests every commit
-# below it. So every lane pull request's run joins one group, lanes, where GitHub keeps one run in progress and only the
-# newest pending one: a push cancels the run it replaced while that run waits, and no lower pull request's run waits for
-# the Mac, which was busy 99% of 12 hours while a release's path from green to published held 6 Mac jobs one after another.
-# A run in progress finishes and lands every commit below it: four lanes push about every half hour, and the Mac job
-# runs 35 to 50 minutes, so a push that cancelled it would let no landing run finish. A branch off origin/master on no
-# stack is either a spec change, spec/<sha>, or a blocking fix, blocking/<issue>. Its pull request's run joins a group of
-# its own, where a push cancels its run in progress, since it holds only its own change, and no lane push replaces it:
-# one replaced PR #794's pending run on 11-24. staging runs one push at a time, and queue.yml pushes it only while no
-# staging run is in progress. A failed job cancels any run, which can no longer pass: a pull request's, and a staging
-# run's, which can no longer land or publish either, so queue.yml's next batch takes its place, as
-# .github/actions/cancel-failed-run explains. Each schedule and dispatch runs in a group of its own.
+# Each pull request's run is in a group of its own, as GitHub's documented per-pull-request concurrency is, where a
+# push to the pull request cancels its run in progress, so no push to one pull request cancels another's run: one group
+# for every lane cancelled the pending runs of PRs #792 and #864, which then had no CI_PASSED, and queue.yml never took
+# them (#872). A pull request's run uses no Mac, since MACOS runs only in a staging run, so runs at once cost only
+# hosted runners. staging runs one push at a time, and queue.yml pushes it only while no staging run is in progress. A
+# failed job cancels any run, which can no longer pass: a pull request's, and a staging run's, which can no longer land
+# or publish either, so queue.yml's next batch takes its place, as .github/actions/cancel-failed-run explains. Each
+# schedule and dispatch runs in a group of its own.
 concurrency:
   group: >-
-    ${{ github.workflow }}-${{ github.event_name == 'pull_request'
-      && ((startsWith(github.head_ref, 'spec/') || startsWith(github.head_ref, 'blocking/'))
-        && github.event.pull_request.url || 'lanes')
+    ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.url
       || (github.event_name == 'push' && github.ref) || github.run_id }}
-  cancel-in-progress: >-
-    ${{ github.event_name == 'pull_request'
-      && (startsWith(github.head_ref, 'spec/') || startsWith(github.head_ref, 'blocking/')) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   # CI_PASSED is this workflow's one required check. Every pull request's push runs every Linux check, whatever it
   # changed: the Linux suites, each job on 4 cores, and the runtime image. A staging run runs every check, the Mac's
