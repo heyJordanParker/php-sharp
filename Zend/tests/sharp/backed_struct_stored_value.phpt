@@ -25,4 +25,5 @@ decimal: "1.50"
 "https://example.com/a"
 "2026-10-22T20:30:00+02:00[Europe/Paris]"
 "18:30:00"
+readings ==: true, keys: 1
 bad email: email: "not-an-email" is no email address

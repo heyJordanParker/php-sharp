@@ -460,6 +460,11 @@ bool sharp_owns_storage(const zend_class_entry *ce);
  * field that holds a function, a field's Map whose key has no text, or a `parse` of its own. */
 zend_result sharp_stored_form(zend_object *object, zval *stored);
 
+/* The `#json` of `ce` when it is a backed struct, spec section 10, which gives the value it is stored as, or NULL. A
+ * backed struct has the `parse` of one value that reads it back, and no `#fields`, which a struct stored as its fields
+ * has. With `keyed`, only a struct stored as an int or a string, which a JSON object key holds. */
+zend_function *sharp_backed_value_method(const zend_class_entry *ce, bool keyed);
+
 /* Builds in `built` an object of `ce`, whose class sharp_owns_storage holds for, from `stored`, the array its stored
  * form reads back as, as its `parse` builds one: through its constructor. `type_arguments` is the text serialize kept
  * for an object of a generic class, or UNDEF, and each class it names resolves through `resolve`. Fails with the error

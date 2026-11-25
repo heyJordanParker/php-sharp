@@ -14330,10 +14330,7 @@ static void sharp_parse_as(const sharp_type *type, zval *value, bool text, zval 
 	}
 }
 
-/* The `#json` of `ce` when it is a backed struct, spec section 10, which gives the value it is stored as, or NULL. A
- * backed struct has the `parse` of one value that reads it back, and no `#fields`, which a struct stored as its fields
- * has. With `keyed`, only a struct stored as an int or a string, which a JSON object key holds. */
-static zend_function *sharp_backed_value_method(const zend_class_entry *ce, bool keyed)
+zend_function *sharp_backed_value_method(const zend_class_entry *ce, bool keyed)
 {
 	if (!instanceof_function((zend_class_entry *) ce, sharp_ce_struct)
 			|| zend_hash_str_exists(&ce->function_table, ZEND_STRL("#fields"))) {

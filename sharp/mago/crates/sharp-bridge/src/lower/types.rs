@@ -2052,14 +2052,19 @@ impl<'analysis> Types<'analysis> {
         }
     }
 
-    /// The name and type of each property `==` compares on the struct `class`, in the order the struct declares them.
+    /// The name and type of each property `==` compares on the struct `class`, in the order the struct declares them: a
+    /// backed struct's `value` alone, spec section 10.
     pub(crate) fn struct_properties(&self, class: Word) -> Vec<(&'analysis [u8], &'analysis TUnion)> {
         let metadata = self.codebase.get_class_like(class).unwrap_or_else(|| {
             unreachable!("the codex registers the struct `{}`", String::from_utf8_lossy(class.as_bytes()))
         });
+        let compared = if metadata.struct_backing_type.is_some() {
+            metadata.properties.get(&word("$value")).into_iter().collect()
+        } else {
+            metadata.struct_properties()
+        };
 
-        metadata
-            .struct_properties()
+        compared
             .into_iter()
             .map(|property| {
                 let name = property.name.0.as_bytes();

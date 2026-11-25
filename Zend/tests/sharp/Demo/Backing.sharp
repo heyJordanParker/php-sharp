@@ -40,6 +40,12 @@ public static class Backing
             Json.encode(Json.decode<DateTime>(Json.encode(DateTime.parse("2026-10-22T20:30:00+02:00[Europe/Paris]")))),
             Json.encode(Json.decode<TimeOfDay>(Json.encode(TimeOfDay.parse("18:30:00")))),
         ];
+        const kitchen = new Reading(20, "kitchen");
+        const hall = new Reading(20, "hall");
+        Map<Reading, string> seen = [:];
+        seen[kitchen] = "kitchen";
+        seen[hall] = "hall";
+        lines.add(`readings ==: ${Backing.shown(kitchen == hall)}, keys: ${seen.count()}`);
         try {
             Json.decode<Signup>("{\"email\":\"not-an-email\",\"id\":1}");
             lines.add("bad email: read");

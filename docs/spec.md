@@ -1323,6 +1323,7 @@ new Checkout().total(2500);   // 2999
 - A backed struct with no fields holds its value. Its constructor takes the one `T value` and may check it, and a struct that declares none gets one. Its `parse(T value)` runs that constructor.
 - A backed struct with fields computes its value, as `public string value => this.iso();`, and declares its own `public static Name parse(T value)`. The compiler names `value` or `parse` when either is missing.
 - `Json.encode`, `serialize` and the `parse` of a containing type store and read it as its value, so `Json.encode(new Signup(new Email("a@b.c")))` writes `{"email":"a@b.c"}`, and reading `"not-an-email"` throws from `Email`'s constructor.
+- `==`, the hash and `Map` keys come from the value alone, so two values with one `value` are one key, whatever fields they hold beside it.
 - `toString()` is display only. A class with `parse(string)` and `toString()` and no backing type stores nothing, so a struct field of it is a compile error that says to declare `: string`.
 
 <!-- example backed-struct -->
