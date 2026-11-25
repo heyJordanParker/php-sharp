@@ -5,7 +5,7 @@ set -euo pipefail
 # runs every job, fastest first, and prints each gate's time. Every build and test runs the jobs sharp/bin/jobs prints.
 # A gate CI runs in the sharp/docker image runs there, and one CI runs on the runner itself runs on this machine, so
 # each check meets the platform it meets in CI. CI's jobs run the gates no other script holds through this script:
-# BUILD_LINUX the generated files, WORKFLOWS the workflows, and mago.yml's checks and plain-php theirs.
+# BUILD_LINUX the generated files, WORKFLOWS the workflows, and MAGO_CHECKS and PLAIN_PHP theirs.
 #
 # With --release, it prints what CI's CHANGES jobs write to $GITHUB_OUTPUT about the release the checked-out commit
 # publishes: the version; tagged, the commit when tag v<version> already names it, empty until RELEASE creates it;
@@ -162,19 +162,23 @@ release() {
   fi
 }
 
-# The SPEED gate's baseline is what the newest green Mago CI push run of a commit master holds counted, its speed
+# The SPEED gate's baseline is what SPEED counted in the newest green push run of a commit master holds, its speed
 # artifact, so a change is compared with the master it lands on, and no file in the tree holds a count. LAND moves
-# master only to a staging commit whose Mago run passed, so that run is usually the tip's own. A commit no push ran on,
-# as the merge that brought the queue in (#843), counts its newest ancestor's, and a staging batch that never landed
-# counts none: run 45671195524's SPEED failed when only master's tip counted, while the tip's own run hadn't ended.
+# master only to a staging commit whose run passed, so that run is usually the tip's own. A commit no push ran on, as
+# the merge that brought the queue in (#843), counts its newest ancestor's, and a staging batch that never landed counts
+# none: run 45671195524's SPEED failed when only master's tip counted, while the tip's own run hadn't ended. The
+# artifact names the run, whichever workflow ran SPEED, which moved into sharp.yml with the rest of Mago's jobs (#853).
 speed_baseline() {
   local run
   run="$(cd "$root" && gh api 'repos/{owner}/{repo}/commits?sha=master&per_page=100' --jq '.[].sha' \
-    | awk 'NR == FNR { if (!($1 in green)) green[$1] = $2; next } $1 in green { print green[$1]; exit }' \
-      <(gh run list --workflow mago.yml --event push --status success --limit 100 --json headSha,databaseId \
-        --jq '.[] | "\(.headSha) \(.databaseId)"') -)"
+    | awk 'FILENAME == ARGV[1] { green[$1] = 1; next }
+           FILENAME == ARGV[2] { if (($2 in green) && !($1 in speed)) speed[$1] = $2; next }
+           $1 in speed { print speed[$1]; exit }' \
+      <(gh run list --event push --status success --limit 200 --json databaseId --jq '.[].databaseId') \
+      <(gh api --paginate 'repos/{owner}/{repo}/actions/artifacts?name=speed&per_page=100' \
+        --jq '.artifacts[] | select(.expired | not) | "\(.workflow_run.head_sha) \(.workflow_run.id)"') -)"
   if [[ -z $run ]]; then
-    echo "No green Mago CI push run is on one of master's newest 100 commits, so there is no speed baseline." >&2
+    echo "No green push run of one of master's newest 100 commits kept a speed artifact, so there is no speed baseline." >&2
     exit 1
   fi
   (cd "$root" && gh run download "$run" --name speed --dir "$1")
@@ -348,8 +352,8 @@ gate_spec_guard() {
   fi
 }
 
-# mago.yml's checks, on this machine with the toolchain sharp/mago/Cargo.toml's rust-version names, as CI runs them on
-# the runner, then the Linux or macOS mago in the test-run profile, which plain-php runs.
+# MAGO_CHECKS, on this machine with the toolchain sharp/mago/Cargo.toml's rust-version names, as CI runs them on the
+# runner, then the Linux or macOS mago in the test-run profile, which plain-php runs.
 no_notify() {
   local output
   if output=$(rustup run "$rust" cargo tree -p mago-sharp-bridge -e normal -i notify --locked 2>&1); then
@@ -383,7 +387,7 @@ misspellings() {
   local typos
   typos="$(command -v typos || echo "${CARGO_HOME:-$HOME/.cargo}/bin/typos")"
   if [[ ! -x $typos ]]; then
-    echo "mago.yml's checks searches for misspellings with typos. Install it with: cargo install --locked typos-cli" >&2
+    echo "MAGO_CHECKS searches for misspellings with typos. Install it with: cargo install --locked typos-cli" >&2
     return 1
   fi
   "$typos"
@@ -397,7 +401,7 @@ advisories() {
   local deny lock
   deny="$(command -v cargo-deny || echo "${CARGO_HOME:-$HOME/.cargo}/bin/cargo-deny")"
   if [[ ! -x $deny ]]; then
-    echo "mago.yml's checks checks the lockfiles for advisories with cargo-deny 0.20.2. Install its release binary, or: cargo install --locked cargo-deny@0.20.2" >&2
+    echo "MAGO_CHECKS checks the lockfiles for advisories with cargo-deny 0.20.2. Install its release binary, or: cargo install --locked cargo-deny@0.20.2" >&2
     return 1
   fi
   for lock in sharp/mago ext/sharp; do
@@ -534,8 +538,8 @@ gate_mago_tests() {
   step sharp/bin/test --linux --mago
 }
 
-# mago.yml's plain-php on this machine's own PHP, with the test-run mago mago-checks built, or that CI's plain-php
-# downloads there. It installs heyjordanparker/mago-sharp from what git archive ships, the way Packagist ships it, and
+# PLAIN_PHP on this machine's own PHP, with the test-run mago mago-checks built, or that CI's PLAIN_PHP downloads
+# there. It installs heyjordanparker/mago-sharp from what git archive ships, the way Packagist ships it, and
 # heyjordanparker/php-sharp-composer from sharp/composer. A package that requires upstream's carthage-software/mago at
 # the release this checker left from, as an extension host does, installs no second checker, and one that requires a
 # later release installs nothing. Then mago runs on a one-class .sharp project, and sharp/phpunit's tests stop before a
@@ -659,12 +663,12 @@ gate_plain_php() {
   step plain_phpunit
 }
 
-# SPEED: what proving and compiling cost, in counts no load changes, against master's newest green Mago CI push run's,
+# SPEED: what proving and compiling cost, in counts no load changes, against master's newest green push run's,
 # as speed_baseline finds it: each law's Lean heartbeats, the law corpus's, and the instructions of a one-file edit, as
-# benchmark/speed.php explains. It measures the test-run mago that mago-checks builds, or that mago.yml's SPEED
-# downloads from its checks there, as plain-php does, which behaves as the release users run without its fat LTO, as
+# benchmark/speed.php explains. It measures the test-run mago that mago-checks builds, or that CI's SPEED downloads
+# from MAGO_CHECKS there, as plain-php does, which behaves as the release users run without its fat LTO, as
 # sharp/mago/Cargo.toml explains. A debug build's counts would move with code the optimizer removes. SPEED_BASELINE
-# names the folder of a baseline already downloaded, as mago.yml's SPEED downloads it outside the sharp/docker image,
+# names the folder of a baseline already downloaded, as CI's SPEED downloads it outside the sharp/docker image,
 # which has no gh. With SPEED_WRITE, it also writes what it measured there, the run's speed artifact.
 speed() {
   local mago="$target/test-run/mago" baseline="${SPEED_BASELINE:-}"
