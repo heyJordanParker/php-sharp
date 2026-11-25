@@ -10,8 +10,9 @@ on:
 
 # Every lane pull request's run joins lanes, which keeps one run in progress and the newest pending one. A branch off
 # origin/master on no stack is either a spec change, spec/<sha>, or a blocking fix, blocking/<issue>, and its pull
-# request's run joins a group of its own, where a push cancels its run in progress. master runs one push at a time and
-# lets it finish, and each merge queue entry runs in a group of its own, as sharp.yml's concurrency explains.
+# request's run joins a group of its own, where a push cancels its run in progress. master runs one push at a time, a
+# failed job cancels any run, a push's included, and each merge queue entry runs in a group of its own, as sharp.yml's
+# concurrency explains.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event_name == 'pull_request'
@@ -171,7 +172,7 @@ jobs:
       # As .github/actions/cancel-failed-run explains.
       - &cancel-failed-run
         name: Cancel the run, which can no longer pass
-        if: failure() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+        if: failure()
         uses: ./.github/actions/cancel-failed-run
 
       - name: Write the job's CPU-seconds and peak memory
