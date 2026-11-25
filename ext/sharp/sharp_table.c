@@ -473,12 +473,21 @@ static bool sharp_hash_declared(zend_object *object, zend_function *method, uint
 }
 
 /* A struct with no declared pair, or an enum case that carries data, hashes from its class and its stored
- * properties in declaration order, as the generated op_Equality compares them. A generic struct's hidden slot of its
- * type arguments is no property, and two keys of one Map share their type. */
+ * properties in declaration order, as the generated op_Equality compares them, and a backed struct from its value
+ * alone, which its op_Equality compares, spec section 10. A generic struct's hidden slot of its type arguments is no
+ * property, and two keys of one Map share their type. */
 static bool sharp_hash_struct(zend_object *object, uint32_t *hash)
 {
 	zend_property_info *info;
 
+	zend_function *backed = sharp_backed_value_method(object->ce, false);
+	if (backed) {
+		zval value;
+		zend_call_known_instance_method_with_0_params(backed, object, &value);
+		bool hashed = !EG(exception) && sharp_hash(&value, hash);
+		zval_ptr_dtor(&value);
+		return hashed;
+	}
 	*hash = (uint32_t) ZSTR_HASH(object->ce->name);
 	ZEND_HASH_MAP_FOREACH_PTR(&object->ce->properties_info, info) {
 		if (info->flags & (ZEND_ACC_STATIC | ZEND_ACC_VIRTUAL | ZEND_ACC_SHARP_HIDDEN)) {

@@ -1,0 +1,11 @@
+namespace Demo;
+
+// A temperature stored as its degrees, with the sensor that read it, which its stored value leaves out.
+public struct Reading : int
+{
+    public Reading(public int celsius { get; }, public string sensor { get; }) { }
+
+    public int value => this.celsius;
+
+    public static Reading parse(int value) => new Reading(value, "");
+}

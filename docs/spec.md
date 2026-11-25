@@ -1318,7 +1318,39 @@ new Checkout().total(2500);   // 2999
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
 
-**A struct keys a `Map` when every field has `==`, by its whole value with nothing declared, or when it declares `==` with `hash()`, by that pair.** It is the general rule for keys (section 12): a struct whose every field has `==` has `==` and `hash()`, and a struct with a field that has none, such as a function, declares both (section 19). Two structs are one key when they are `==`. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, because a JSON object key is text.
+**A struct backed by a built-in type, `struct Name : T`, is stored as its `value`, a `T`, where `T` is `string`, `int`, `float` or `bool`.** The backing type comes first in the header, before any interface, as an enum's does: `public struct Decimal : string, Comparable<Decimal>`. A capitalized type after the colon is an interface, and a struct or any other type in the backing type's place is a compile error that names the four.
+
+- A backed struct with no fields holds its value. Its constructor takes the one `T value` and may check it, and a struct that declares none gets one. Its `parse(T value)` runs that constructor.
+- A backed struct with fields computes its value, as `public string value => this.iso();`, and declares its own `public static Name parse(T value)`. The compiler names `value` or `parse` when either is missing.
+- `Json.encode`, `serialize` and the `parse` of a containing type store and read it as its value, so `Json.encode(new Signup(new Email("a@b.c")))` writes `{"email":"a@b.c"}`, and reading `"not-an-email"` throws from `Email`'s constructor.
+- `==`, the hash and `Map` keys come from the value alone, so two values with one `value` are one key, whatever fields they hold beside it.
+- `toString()` is display only. A class with `parse(string)` and `toString()` and no backing type stores nothing, so a struct field of it is a compile error that says to declare `: string`.
+
+<!-- example backed-struct -->
+```csharp
+// app/Email.sharp
+namespace App;
+
+public struct Email : string
+{
+    public Email(string value)
+    {
+        if (!value.contains("@")) {
+            throw new ValueError("no email address");
+        }
+    }
+}
+```
+
+<!-- example backed-struct -->
+```csharp
+// app/UserId.sharp
+namespace App;
+
+public struct UserId : int { }    // compiles: its constructor takes the int value, and UserId.parse(7) runs it
+```
+
+**A struct keys a `Map` when every field has `==`, by its whole value with nothing declared, or when it declares `==` with `hash()`, by that pair.** It is the general rule for keys (section 12): a struct whose every field has `==` has `==` and `hash()`, and a struct with a field that has none, such as a function, declares both (section 19). Two structs are one key when they are `==`. A struct gets JSON key text only from its value, when it is backed by `int` or `string`, so `Json.encode` of a `Map` keyed by any other struct is a compile error, because a JSON object key is text.
 
 **Every struct has a static `parse`,** which takes a `Map<string, Any?>|Object`, reads the `Map`'s keys or the object's public properties and throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Every class gets both the same way, and `methods()` (section 25) gives each with that parameter type.
 
@@ -1345,7 +1377,7 @@ RenewRequest? maybe = RenewRequest.tryParse(payload);   // null on any bad field
 - A `List` checks each element.
 - An enum parses from its value.
 - A missing key for a `T?` parameter reads as null.
-- A value as text, a class with a static `parse(string)` and a `toString()`, as `Decimal` and `Instant` (section 24), reads through its own `parse`, so `"1.50"` is a `Decimal`. Its error message is the field's problem.
+- A backed struct, as `Decimal` and `Instant` (section 24), reads through its own `parse` of its value, so `"1.50"` is a `Decimal`. Its error message is the field's problem.
 - A field of a union, of classes as `Voucher|Coupon` or of scalars as `(string|int|float|bool)?`, reads as the first member, in the order the field writes them, that reads the value with no problem. A scalar member reads JSON's value as it is and a query's from its text, so `int|string` reads `"3"` from JSON as `"3"` and from a query as `3`.
 
 An object's public properties parse the same way as a `Map`'s keys, so a row object from plain PHP becomes a checked struct:
@@ -1369,7 +1401,7 @@ public class OrderRecord
 OrderRecord record = OrderRecord.parse(row);   // a class parses the same way, by its main constructor's parameters, then every other stored property; throws: "id: expected int, got string 'abc'"
 ```
 
-**`Json.encode` writes a struct or a class by the fields its `parse` reads,** so one declaration governs reading and writing. Each field is written under its key, a value as text as its `toString()`, and a field marked `[Key(omitNull: true)]` is left out when it is null. A missing key of such a field reads as null. A main constructor parameter that holds no property can't be written, so `Json.encode` of a type whose `parse` reads one is a compile error that names the parameter: "`Json.encode` writes `Price` from the properties its `parse` reads, and the main constructor parameter `cents` holds no property."
+**`Json.encode` writes a struct or a class by the fields its `parse` reads,** so one declaration governs reading and writing. Each field is written under its key, a backed struct as its value, and a field marked `[Key(omitNull: true)]` is left out when it is null. A missing key of such a field reads as null. A main constructor parameter that holds no property can't be written, so `Json.encode` of a type whose `parse` reads one is a compile error that names the parameter: "`Json.encode` writes `Price` from the properties its `parse` reads, and the main constructor parameter `cents` holds no property."
 
 **`serialize` writes a struct or a class as its stored form, the fields `Json.encode` writes, and `unserialize` builds it again through its `parse`,** so the constructor runs on every copy, as a queued job or a cached value is read back. A copy reads back `==` to the original, and data its type no longer reads, as a cached value written before its type changed, throws the error `parse` throws or the constructor's own. `serialize` of a type with no stored form throws an `Error` that names the class and says why: a main constructor parameter that holds no property, as a service a class takes, a field that holds a function, or a `Map` keyed by a type that has no text. A class whose plain PHP parent serializes its objects itself, through `__serialize` and `__unserialize`, as an ORM's model does, keeps the parent's. PHP# code declares none of `__serialize`, `__unserialize`, `__sleep` and `__wakeup`.
 
@@ -6158,7 +6190,7 @@ const point = (object)["x": 1];                   // parse error
 
 - **A JSON object** is a `Map` literal for a one-off payload, and a declared struct for a shape that repeats.
 - **`Json.encode` encodes by the value's PHP# type,** so a `Map` is a JSON object and a `List` is a JSON array wherever it is, below an `Any` too, even when empty, and even when a `Map`'s keys run from 0 to n. A `Map` is an object the engine tells apart from a `List` (section 12).
-- **A struct or a class is written by the fields its `parse` reads,** each under its key, a value as text such as `Decimal` as its `toString()`, `"1.50"`, and a family's variant with its name under the tag's key (section 10), so `Json.decode` reads back what `Json.encode` wrote.
+- **A struct or a class is written by the fields its `parse` reads,** each under its key, a backed struct such as `Decimal` as its value, `"1.50"`, and a family's variant with its name under the tag's key (section 10), so `Json.decode` reads back what `Json.encode` wrote.
 
 <!-- example json-encoding: statements
 import Sharp.Encoding.Json;
