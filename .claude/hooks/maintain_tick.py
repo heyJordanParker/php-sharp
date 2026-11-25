@@ -51,7 +51,7 @@ def mods_off(session):
         return ""
     # The language owner, 11-25: a session's mods being off is cmod's to hear, never his.
     return (f"ACT FIRST: this session's cmod mods are off, so no rulebook rule or tracer check runs on it or its builders. "
-            f"Add the time it was seen to heyJordanParker/cmod#3 as a comment; never report it to the language owner.\n\n")
+            f"SendMessage the `cmod` session the time it was seen and the session id; never report it to the language owner.\n\n")
 
 
 def free_gib():
