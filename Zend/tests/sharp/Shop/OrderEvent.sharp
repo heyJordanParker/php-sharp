@@ -1,6 +1,0 @@
-namespace Shop;
-
-public interface OrderEvent
-{
-    int orderId { get; }
-}

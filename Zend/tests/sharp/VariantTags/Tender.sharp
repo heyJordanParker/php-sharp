@@ -1,6 +1,0 @@
-namespace VariantTags;
-
-import Sharp.Tag;
-
-[Tag("type")]
-public sealed interface Tender { }

@@ -1,6 +1,0 @@
-namespace App.Delegates;
-
-public effect abstract class Mailer
-{
-    public abstract int sent();
-}

@@ -1,9 +1,0 @@
-namespace TypeStatics;
-
-// Redeclares both statics of `Maker`.
-public class Fancy : Maker
-{
-    public static override string make() => "fancy";
-
-    public static override string size { get; set; } = "fancy size";
-}

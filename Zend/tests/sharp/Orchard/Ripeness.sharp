@@ -1,6 +1,0 @@
-namespace Orchard;
-
-public enum Ripeness : string
-{
-    case Ripe = "ripe";
-}

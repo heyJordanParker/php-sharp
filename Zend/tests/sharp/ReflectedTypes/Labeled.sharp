@@ -1,3 +1,0 @@
-namespace ReflectedTypes;
-
-public interface Labeled { }

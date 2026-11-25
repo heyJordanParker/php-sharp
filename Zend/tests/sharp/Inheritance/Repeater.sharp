@@ -1,6 +1,0 @@
-namespace Demo;
-
-public class Repeater : Both
-{
-    public string repeat() => super<Told>.describe() + "!";
-}

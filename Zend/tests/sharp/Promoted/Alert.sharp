@@ -1,7 +1,0 @@
-namespace Promoted;
-
-// A subclass whose objects store what `Notice` declares.
-public class Alert : Notice
-{
-    public Alert(string message) : super(message) { }
-}

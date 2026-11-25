@@ -1,8 +1,0 @@
-namespace DataInOut;
-
-import Sharp.Tag;
-
-[Tag("type")]
-public sealed interface PaymentMethod
-{
-}

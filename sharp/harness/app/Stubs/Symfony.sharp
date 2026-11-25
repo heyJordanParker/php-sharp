@@ -1,5 +1,0 @@
-namespace App.Stubs;
-
-import Symfony.Component.EventDispatcher.Attribute.AsEventListener;
-
-extern AsEventListener uses none;

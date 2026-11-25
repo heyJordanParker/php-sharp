@@ -1,9 +1,0 @@
-namespace Queued;
-
-import Sharp.Time.Clock;
-
-// A class whose constructor takes a service and keeps no property of it, so it has no stored form.
-public class Stamper
-{
-    public Stamper(Clock clock) { }
-}

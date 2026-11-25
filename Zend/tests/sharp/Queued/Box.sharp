@@ -1,6 +1,0 @@
-namespace Queued;
-
-public class Box<T>
-{
-    public Box(public Map<string, T> held { get; }) { }
-}

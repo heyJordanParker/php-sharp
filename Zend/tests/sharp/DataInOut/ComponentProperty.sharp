@@ -1,6 +1,0 @@
-namespace DataInOut;
-
-public struct ComponentProperty
-{
-    public ComponentProperty(public (string|int|float|bool)? default { get; }, public int|string size { get; } = 0) { }
-}

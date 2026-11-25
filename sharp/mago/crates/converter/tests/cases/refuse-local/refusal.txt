@@ -1,2 +1,0 @@
-15:9: `$items` starts as `[]`, and PHP# gives a `List` type to one the body only appends to and a `Map` type to one it only writes by key, which `$items` is not, and no declaration gives its type (spec section 12)
-31:16: `$item` is named here, after the loop that declares it, which has no PHP# form: a PHP# loop declares its own variables, which live in its block (spec sections 3 and 17)

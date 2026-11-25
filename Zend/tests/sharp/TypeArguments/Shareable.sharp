@@ -1,6 +1,0 @@
-namespace App;
-
-public interface Shareable
-{
-    string share();
-}

@@ -1,9 +1,0 @@
-namespace Demo;
-
-public class Kinds
-{
-    public static string own()
-    {
-        return typeof(Kinds);
-    }
-}

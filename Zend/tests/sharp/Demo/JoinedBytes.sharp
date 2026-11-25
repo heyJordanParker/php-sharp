@@ -1,6 +1,0 @@
-namespace Demo;
-
-public class JoinedBytes
-{
-    public static List<int> joined() => ([1, 2].toBytes() + [3].toBytes()).toList();
-}

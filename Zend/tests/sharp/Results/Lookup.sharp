@@ -1,7 +1,0 @@
-namespace Demo;
-
-public enum Lookup<T>
-{
-    case Found(T value);
-    case Missing;
-}

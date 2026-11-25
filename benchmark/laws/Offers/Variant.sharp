@@ -1,3 +1,0 @@
-namespace App.Offers;
-
-public interface Variant { }

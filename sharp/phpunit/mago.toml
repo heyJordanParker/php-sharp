@@ -1,7 +1,0 @@
-[source]
-paths = ["app", "tests", "vendor/heyjordanparker"]
-includes = ["vendor"]
-extensions = ["php", "sharp"]
-
-[extension-hosts.local]
-file = "extension-host.php"

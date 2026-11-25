@@ -1,6 +1,0 @@
-namespace Demo;
-
-public interface Source
-{
-    Map<string, int> data();
-}

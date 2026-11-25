@@ -1,6 +1,0 @@
-namespace StaticConstructors;
-
-public static class Limits
-{
-    public const int BASE = 4;
-}

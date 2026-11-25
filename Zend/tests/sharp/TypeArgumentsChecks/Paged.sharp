@@ -1,6 +1,0 @@
-namespace Checks;
-
-import App.Order;
-import App.PaginatedList;
-
-public event Paged(PaginatedList<Order> page);

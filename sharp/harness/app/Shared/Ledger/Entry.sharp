@@ -1,6 +1,0 @@
-namespace App.Shared.Ledger;
-
-public class Entry
-{
-    public static void record() { }
-}

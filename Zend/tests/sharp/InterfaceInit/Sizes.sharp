@@ -1,3 +1,0 @@
-namespace InterfaceInit;
-
-public event Sizes(int max) : Sized;

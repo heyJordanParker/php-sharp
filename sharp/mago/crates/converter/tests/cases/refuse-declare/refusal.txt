@@ -1,1 +1,0 @@
-3:1: a `declare` other than `strict_types` has no PHP# form

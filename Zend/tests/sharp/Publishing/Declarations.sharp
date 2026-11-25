@@ -1,3 +1,0 @@
-namespace Publishing;
-
-extern namespace Blog for Blog_Post;
