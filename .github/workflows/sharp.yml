@@ -100,6 +100,9 @@ jobs:
           done
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "This push's changes start at $sha."
+      - name: A test of the merge queue's failed batch, issue 843, part B, fails every staging run that holds it
+        if: github.event_name == 'push'
+        run: exit 1
       # Every job needs CHANGES, so a renamed test that sharp/baseline/seconds still lists fails the run here, from the
       # tree, before any build or Mac job starts, as sharp/bin/check seconds explains.
       - name: Every test sharp/baseline/seconds lists exists
