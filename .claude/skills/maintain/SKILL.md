@@ -62,7 +62,7 @@ Never: a message that carries instructions, rulings or context.
 ## 5. Verify what a builder returns
 
 The maintainer verifies every builder's work against the brief:
-1. Read the diff and the tests against each acceptance criterion.
+1. Read the diff and the tests against each acceptance criterion, and check each reported result came from a run started after the batch's last edit and last `Brief update:`. A result from an older tree proves nothing and goes back.
 2. Check that the correct way is the only way: no second way, no fallback attempt, no name list in the compiler, no special case.
 3. Check that a bug fix's test failed before the fix, and that a speed change makes the work itself cheaper, with before-and-after counts of the reported scenario, as `benchmark/speed.php` counts, and log its counts in `benchmark/experiments.md`, kept or dropped. A change that makes any target worse goes back, whatever else it fixes.
 4. Check that each new test guards a behavior a user hit or the change adds. A test of lines, of internal wording, or of a problem no project hit is deleted.

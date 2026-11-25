@@ -16,5 +16,6 @@ export default defineConfig({
     'sharp/block-intake-shell-writes': 'error',
     'sharp/require-utility-builds': 'error',
     'sharp/require-one-thread-mago': 'error',
+    'sharp/block-local-suites': 'error',
   },
 })

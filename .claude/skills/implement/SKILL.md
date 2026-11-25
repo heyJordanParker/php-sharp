@@ -38,6 +38,8 @@ Every cargo command runs as `rustup run <rust-version> cargo …`, with the `rus
 
 Wait on a long run with one `Monitor` that ends when the run ends, never by ending your turn to wait, since each turn you end sends the maintainer a notification. A `Monitor` expires after 30 minutes, so re-arm it at each expiry until the run ends, and stop every process you started before you report.
 
+A run counts only for the tree it built. An edit, or a `Brief update:` that changes what you build, voids every run started before it, so stop that run and start it again after your last edit. The stale-run hook names each one after every edit.
+
 ## 4. Work in the shared checkout
 
 Work and test in `/Users/jordan/Developer/php-sharp` on the checked-out branch. Other builders edit the same tree:
