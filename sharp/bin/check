@@ -370,6 +370,10 @@ gate_mago_checks() {
   step advisories
   step composer install --no-interaction --no-progress --quiet
   step vendor/bin/phpunit --configuration composer/phpunit.xml
+  # heyjordanparker/php-sharp-composer installs mago's binary, so the tests of its download, SHA-256 check and extract
+  # run here too, from the vendor folder its composer.json keeps in sharp/build.
+  step composer install --no-interaction --no-progress --quiet --working-dir="$root/sharp/composer"
+  step "$root/sharp/build/php-sharp-composer/vendor/bin/phpunit" --configuration "$root/sharp/composer/phpunit.xml"
   step rustup run "$rust" cargo check --workspace --locked
   # Workspace builds merge features, so only a build of the bridge alone shows what php links.
   step rustup run "$rust" cargo check -p mago-sharp-bridge --locked
@@ -495,7 +499,7 @@ gate_mago_tests() {
 # .sharp test file's source prints.
 composer_install() {
   local mago="$target/test-run/mago" version tree package="$TMPDIR/mago-sharp-package" project="$TMPDIR/project"
-  local binary_dir output
+  local output
   if [[ ! -f $mago ]]; then
     echo "$mago is missing. Run sharp/bin/check mago-checks first." >&2
     return 1
@@ -507,6 +511,9 @@ composer_install() {
   # holds them, as a commit of them would ship them. It prints nothing for a working tree with no change.
   tree="$(git -C "$root" stash create)"
   git -C "$root" archive "${tree:-HEAD}" sharp/mago | tar -x -C "$package" --strip-components 2
+  # The tree's version has no release to download, so the package carries the test-run mago at composer/bin/mago, where
+  # php-sharp-composer's plugin installs a release's binary, and the plugin finds it in place.
+  install -m 755 "$mago" "$package/composer/bin/mago"
   cd "$project"
   cat > composer.json << JSON
 {
@@ -572,9 +579,6 @@ JSON
     echo "A host that requires carthage-software/mago ^1.57 installed beside mago-sharp." >&2
     return 1
   fi
-  binary_dir="vendor/heyjordanparker/mago-sharp/composer/bin/$version/mago-$version-$(rustc -vV | sed -n 's/^host: //p')"
-  mkdir -p "$binary_dir"
-  install -m 755 "$mago" "$binary_dir/mago"
   output=$(vendor/bin/mago --version 2>&1)
   echo "$output"
   if [[ $output != "mago $version" ]]; then
