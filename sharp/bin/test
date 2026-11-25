@@ -121,24 +121,6 @@ read_seconds() {
     seconds[$path]=$weight
   done < "$root/sharp/baseline/seconds"
 }
-# Fails the run when sharp/baseline/seconds lists a test that isn't there, since a renamed test's new name weighs 1 s
-# where its old one held its seconds: MAGO (1/5) took 394 s on run 45127191998 against 293 s for MAGO (5/5), because
-# the list held 162.9 s of laws.rs under no name of a test and 1 s under its new one. It checks the keys the pattern
-# matches against the map of every such test there is.
-stale_seconds() {
-  local -n known_tests=$1
-  local pattern=$2 key stale=()
-  for key in "${!seconds[@]}"; do
-    # shellcheck disable=SC2053 # The pattern is a glob.
-    if [[ $key == $pattern && -z ${known_tests[$key]:-} ]]; then
-      stale+=("$key")
-    fi
-  done
-  if ((${#stale[@]})); then
-    printf 'sharp/baseline/seconds lists %s, which no test is. Measure it under its new name, or drop it.\n' "${stale[@]}" >&2
-    exit 2
-  fi
-}
 
 # Runs the command from the folder, in the process group of the unit that runs it, and records the step as failed when
 # it fails.
@@ -455,20 +437,18 @@ if $mago && ! $cargo_built; then
   # whose time that grows least, so every slice computes the same split. Every fifth test in binary and name order gave
   # MAGO (2/5)'s test step 413 s on run 45016081891, against 177 to 350 s for the other slices, since the two law proofs
   # of 189 and 158 s fell in it with a fifth of everything else.
-  declare -A known=() weighs=()
+  declare -A weighs=()
   read_seconds
   for b in "${!listed[@]}"; do
     IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
     weighs[$b]=0
     while IFS= read -r name; do
       if [[ -n $name ]]; then
-        known[$source::$name]=1
         weighs[$b]=$((weighs[$b] + ${seconds[$source::$name]:-1}))
         printf '%s\t%s\t%s\n' "${seconds[$source::$name]:-1}" "$b" "$name"
       fi
     done <<< "${listed[$b]}"
   done > "$TMPDIR/mago-tests"
-  stale_seconds known '*::*'
 
   # Adds a unit of the binary that runs the names it's given on one thread. libtest takes each name as a filter that
   # --exact matches whole. libtest-mimic's harness, which the binaries with harness = false use, takes one filter, so
@@ -624,13 +604,9 @@ elif [[ -n $shard ]]; then
   # 45122643706, 45117789577 and 45114738831, which took 97 to 128 s.
   read_seconds
   items=()
-  declare -A known=()
   while read -r test; do
-    # shellcheck disable=SC2034 # stale_seconds reads known by its name.
-    known[$test]=1
     items+=("${seconds[$test]:-1} $test")
   done < <(cd "$root" && find Zend/tests/sharp -name '*.phpt')
-  stale_seconds known '*.phpt'
   items+=("$((${seconds[$proof]} * jobs)) $proof")
   mapfile -t items < <(printf '%s\n' "${items[@]}" | LC_ALL=C sort -k1,1nr -k2,2)
   loads=()

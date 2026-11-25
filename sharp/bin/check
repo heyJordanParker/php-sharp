@@ -15,7 +15,7 @@ set -euo pipefail
 #
 # With --speed-baseline, it downloads the speed.json the SPEED gate compares with into the folder it names.
 usage() {
-  echo "usage: sharp/bin/check [workflows | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php | speed]..." >&2
+  echo "usage: sharp/bin/check [seconds | workflows | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php | speed]..." >&2
   echo "       sharp/bin/check --release [<pull request title>]" >&2
   echo "       sharp/bin/check --speed-baseline <folder>" >&2
   exit 2
@@ -195,7 +195,7 @@ case "${1:-}" in
     ;;
 esac
 
-all=(workflows spec-guard mago-checks linux upstream hosts generated mago-tests plain-php speed)
+all=(seconds workflows spec-guard mago-checks linux upstream hosts generated mago-tests plain-php speed)
 for gate in "$@"; do
   if [[ " ${all[*]} " != *" $gate "* ]]; then
     usage
@@ -285,6 +285,46 @@ gate_workflows() {
   step unpinned
   step syntax_frontend
   step lint_workflows
+}
+
+# Every test sharp/baseline/seconds lists exists, since a renamed test's new name weighs 1 s in sharp/bin/test's slices
+# where its old one held its seconds: MAGO (1/5) took 394 s on run 45127191998 against 293 s for MAGO (5/5), because the
+# list held 162.9 s of laws.rs under no name of a test and 1 s under its new one. CHANGES runs it, before any build or
+# Mac job starts, where MAGO's slices found 3 such lists of 11-24 and 11-25 only after BUILD_LINUX (#834). It reads the
+# tree, so it needs no build: a .phpt key and the convert proof name their file, and a Mago key, <its binary's
+# source>::<module path>::<name>, a name that a .rs file under its source's folder holds, as a fn's or as a macro's
+# argument, such as the analyzer's test_case!(array_type_combination_threshold).
+stale_seconds() {
+  local key source folder words stale=()
+  local -A listed=()
+  while IFS=$'\t' read -r _ key; do
+    case $key in
+      *::*)
+        source=${key%%::*}
+        folder=${source%/*}
+        words="$TMPDIR/words-${#listed[@]}"
+        if [[ -z ${listed[$folder]:-} ]]; then
+          grep -rhoE '[A-Za-z_][A-Za-z0-9_]*' --include='*.rs' "$root/$folder" | LC_ALL=C sort -u > "$words"
+          listed[$folder]=$words
+        fi
+        if [[ ! -f $root/$source ]] || ! grep -qxF -- "${key##*::}" "${listed[$folder]}"; then
+          stale+=("$key")
+        fi
+        ;;
+      *.phpt | *.sh)
+        if [[ ! -f $root/$key ]]; then
+          stale+=("$key")
+        fi
+        ;;
+    esac
+  done < "$root/sharp/baseline/seconds"
+  if ((${#stale[@]})); then
+    printf 'sharp/baseline/seconds lists %s, which no test is. Measure it under its new name, or drop it.\n' "${stale[@]}" >&2
+    return 1
+  fi
+}
+gate_seconds() {
+  step stale_seconds
 }
 
 # SPEC_GUARD and COMPLETES, with the merge base's sharp/bin/spec, as completes.yml runs them. COMPLETES reads the pull
