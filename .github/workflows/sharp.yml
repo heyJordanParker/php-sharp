@@ -710,10 +710,39 @@ jobs:
           ssh-key: ${{ secrets.PHP_SHARP_COMPOSER_DEPLOY_KEY }}
           path: sharp/build/php-sharp-composer
           fetch-depth: 0
+      # A release's heyjordanparker/mago-sharp version is the split plus a commit that adds the release's SHA-256s as
+      # composer/sha256sums.txt. php-sharp-composer's plugin refuses an archive whose SHA-256 differs, so the package
+      # version pins the exact binary, as esbuild's and Biome's npm packages do. The tag pins them for good, so they are
+      # the release's sums file, which install.sh checks a download against, and every asset a user downloads from the
+      # release must match them, as the draft PUBLISH makes public holds them. The library's compile runs the Linux one.
+      - name: The release's assets match its SHA-256s
+        if: env.VERSION
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          published="$RUNNER_TEMP/published"
+          gh release download "v$VERSION" --dir "$published"
+          if ! (cd "$published" && sha256sum --check --strict "mago-$VERSION-sha256sums.txt"); then
+            echo "::error::An asset of release v$VERSION has a SHA-256 other than its sums file names, so no Composer tag is pushed."
+            exit 1
+          fi
+      # PHP# compiles the standard library once, at its release, for every platform: the release's own Linux mago
+      # compiles sharp/composer at the release's tag into its .sharp folder with the library's codex, the command
+      # sharp/bin/build-mago runs for a source build. Every project's compile reads the library from that folder in
+      # place of its sources.
+      - name: Compile the release's standard library with the release's mago
+        if: env.VERSION
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/release" "v$VERSION"
+          tar -xzf "$RUNNER_TEMP/published/mago-$VERSION-x86_64-unknown-linux-gnu.tar.gz" -C "$RUNNER_TEMP"
+          (cd "$RUNNER_TEMP/release/sharp/composer" \
+            && "$RUNNER_TEMP/mago-$VERSION-x86_64-unknown-linux-gnu/mago" --no-version-check compile)
       # A release's tag here becomes the plugin release of the same version: the split plus a commit that adds the
       # release's docs/spec.md as spec.md, so a project reads the spec its version follows at
-      # vendor/heyjordanparker/php-sharp-composer/spec.md. A rerun finds the tag an earlier attempt pushed, and leaves it.
-      - name: Push the split, and a release's tag with its spec
+      # vendor/heyjordanparker/php-sharp-composer/spec.md, and the library's compiled files and codex as .sharp, from
+      # the step above. A rerun finds the tag an earlier attempt pushed, and leaves it.
+      - name: Push the split, and a release's tag with its spec and compiled library
         working-directory: sharp/build/php-sharp-composer
         run: |
           git fetch "$GITHUB_WORKSPACE" refs/heads/composer
@@ -728,9 +757,13 @@ jobs:
           git fetch "$GITHUB_WORKSPACE" refs/heads/composer-release
           git switch --detach FETCH_HEAD
           git -C "$GITHUB_WORKSPACE" show "v$VERSION:docs/spec.md" > spec.md
+          mkdir .sharp
+          (cd "$RUNNER_TEMP/release/sharp/composer/.sharp" && find . -type f \( -name '*.sharpc' -o -name library.codex \) \
+            -exec cp --parents {} "$OLDPWD/.sharp/" \;)
           git add spec.md
+          git add --force .sharp
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit --message "The spec PHP# $VERSION follows"
+            commit --message "The spec PHP# $VERSION follows, and the standard library it compiled"
           git push origin "HEAD:refs/tags/v$VERSION"
       - name: Split sharp/mago
         run: splitsh-lite --prefix=sharp/mago --target=refs/heads/mago
@@ -755,26 +788,9 @@ jobs:
             exit 0
           fi
           git push origin "FETCH_HEAD:$GITHUB_REF"
-      # A release's heyjordanparker/mago-sharp version is the split plus a commit that adds the release's SHA-256s as
-      # composer/sha256sums.txt. php-sharp-composer's plugin refuses an archive whose SHA-256 differs, so the package
-      # version pins the exact binary, as esbuild's and Biome's npm packages do. The tag pins them for good, so they are
-      # the release's sums file, which install.sh checks a download against, and every asset a user downloads from the
-      # release must match them, as the draft PUBLISH makes public holds them.
-      - name: The release's assets match its SHA-256s
-        if: env.VERSION
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          published="$RUNNER_TEMP/published"
-          gh release download "v$VERSION" --dir "$published"
-          if ! (cd "$published" && sha256sum --check --strict "mago-$VERSION-sha256sums.txt"); then
-            echo "::error::An asset of release v$VERSION has a SHA-256 other than its sums file names, so no heyjordanparker/mago-sharp tag is pushed."
-            exit 1
-          fi
       # A rerun finds the tag an earlier attempt pushed, and leaves it. The tag also carries schema.json, the editor
-      # schema of the release's configuration, from the release's own Linux binary run outside any project, so no start
-      # and no install of the package writes it.
+      # schema of the release's configuration, from the release's own Linux binary run outside any project, which the
+      # library's compile extracted, so no start and no install of the package writes it.
       - name: Push the release's tag, with the SHA-256 of every release asset and its configuration's schema
         if: env.VERSION
         working-directory: sharp/build/mago-sharp
@@ -786,7 +802,6 @@ jobs:
           git fetch "$GITHUB_WORKSPACE" refs/heads/mago-release
           git switch --detach FETCH_HEAD
           cp "$RUNNER_TEMP/published/mago-$VERSION-sha256sums.txt" composer/sha256sums.txt
-          tar -xzf "$RUNNER_TEMP/published/mago-$VERSION-x86_64-unknown-linux-gnu.tar.gz" -C "$RUNNER_TEMP"
           (cd "$RUNNER_TEMP" && "./mago-$VERSION-x86_64-unknown-linux-gnu/mago" config --schema) > schema.json
           git add composer/sha256sums.txt schema.json
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
