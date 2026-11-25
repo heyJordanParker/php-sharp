@@ -162,16 +162,19 @@ release() {
   fi
 }
 
-# The SPEED gate's baseline is what the green Mago CI push run of master's tip counted, its speed artifact: master moves
-# only to a commit whose staging run passed, so a change is compared with the master it lands on, and no file in the
-# tree holds a count.
+# The SPEED gate's baseline is what the newest green Mago CI push run of a commit master holds counted, its speed
+# artifact, so a change is compared with the master it lands on, and no file in the tree holds a count. LAND moves
+# master only to a staging commit whose Mago run passed, so that run is usually the tip's own. A commit no push ran on,
+# as the merge that brought the queue in (#843), counts its newest ancestor's, and a staging batch that never landed
+# counts none: run 45671195524's SPEED failed when only master's tip counted, while the tip's own run hadn't ended.
 speed_baseline() {
-  local tip run
-  tip="$(cd "$root" && gh api 'repos/{owner}/{repo}/commits/master' --jq .sha)"
-  run="$(cd "$root" && gh run list --workflow mago.yml --event push --commit "$tip" --status success --limit 1 \
-    --json databaseId --jq '.[0].databaseId // empty')"
+  local run
+  run="$(cd "$root" && gh api 'repos/{owner}/{repo}/commits?sha=master&per_page=100' --jq '.[].sha' \
+    | awk 'NR == FNR { if (!($1 in green)) green[$1] = $2; next } $1 in green { print green[$1]; exit }' \
+      <(gh run list --workflow mago.yml --event push --status success --limit 100 --json headSha,databaseId \
+        --jq '.[] | "\(.headSha) \(.databaseId)"') -)"
   if [[ -z $run ]]; then
-    echo "master's tip $tip has no green Mago CI push run, so there is no speed baseline." >&2
+    echo "No green Mago CI push run is on one of master's newest 100 commits, so there is no speed baseline." >&2
     exit 1
   fi
   (cd "$root" && gh run download "$run" --name speed --dir "$1")
