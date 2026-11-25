@@ -15,6 +15,7 @@ Before adding a rule, check that:
 - the precedent is a whole system whose form PHP# mirrors: the same mechanism, in the same place, written the same way, and consistent with every PHP# decision about that system. A function another language happens to have is not precedent, and neither is a language picked because it has one
 - the proposal makes every call the change needs, and every fact it rests on is checked in the code. An open question or an unchecked fact in it is work not yet done, so it is not sent
 - a change to CI or the process makes no target worse: the design counts, from `~/.local/state/php-sharp/runs.jsonl`, the Mac jobs, runs and waits it adds or removes a day, and one that adds Mac minutes is redesigned
+- an output other tools read, a command's JSON or a file format, takes the shape of the established standard every such tool already reads, never the shape the one tool that asked for it proposed, and gains a field only when every reader is served by it
 - the rule adds the least code to every program that follows it, because less code is easier to maintain, and the proposal states how many lines it adds
 - nothing is implicit: what the program relies on is written in it, and a missing declaration is a compile error that names what to write, never a silent default
 - a construct works with every other feature of the language by default: its guarantee lives in its type, never in rules about the places that hold it, and each feature it can't join is a defect to fix
