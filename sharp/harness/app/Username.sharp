@@ -1,6 +1,0 @@
-namespace App;
-
-public struct Username
-{
-    public Username(public string value { get; }) { }
-}

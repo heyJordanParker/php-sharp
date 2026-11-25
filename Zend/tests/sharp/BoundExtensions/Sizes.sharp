@@ -1,9 +1,0 @@
-namespace BoundExtensions;
-
-public static class Sizes
-{
-    extension<TItem>(Heap<TItem> heap)
-    {
-        public int size() => heap.count();
-    }
-}

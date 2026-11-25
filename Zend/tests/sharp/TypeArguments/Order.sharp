@@ -1,6 +1,0 @@
-namespace App;
-
-public class Order : DatabaseEntity
-{
-    public const int LIMIT = 20;
-}

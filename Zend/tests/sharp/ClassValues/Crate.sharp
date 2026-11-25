@@ -1,6 +1,0 @@
-namespace Classes;
-
-public class Crate<TItem>
-{
-    public required Crate() { }
-}

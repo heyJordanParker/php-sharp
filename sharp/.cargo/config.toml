@@ -1,6 +1,0 @@
-# A plain cargo in sharp/mago builds where sharp/bin/build-mago and sharp/bin/test build on the Mac, so it reuses their
-# build. Cargo's target-dir takes no per-platform path, so it names the Mac's folder, and every Linux build passes its
-# own: the scripts their --target-dir or CARGO_TARGET_DIR, and release.yml its CARGO_TARGET_DIR. It sits above
-# sharp/mago, so the split mirror heyJordanParker/mago-sharp never ships it.
-[build]
-target-dir = "build/darwin-arm64/mago"

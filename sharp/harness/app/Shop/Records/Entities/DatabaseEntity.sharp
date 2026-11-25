@@ -1,6 +1,0 @@
-namespace App.Shop.Records.Entities;
-
-public abstract class DatabaseEntity
-{
-    public int id { get; set; } = 1;
-}

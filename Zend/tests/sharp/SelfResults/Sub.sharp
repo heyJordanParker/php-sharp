@@ -1,3 +1,0 @@
-namespace SelfResults;
-
-public class Sub : Base { }

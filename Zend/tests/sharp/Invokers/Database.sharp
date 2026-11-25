@@ -1,6 +1,0 @@
-namespace App.Invokers;
-
-public effect abstract class Database
-{
-    public abstract int rows();
-}

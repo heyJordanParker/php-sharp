@@ -1,6 +1,0 @@
-namespace Fields;
-
-public abstract class Holder
-{
-    public abstract Rows<string> items { get; }
-}

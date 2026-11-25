@@ -1,5 +1,0 @@
-namespace App;
-
-public class ListMaker<T> : Maker<List<T>>
-{
-}

@@ -1,6 +1,0 @@
-namespace App.Delegates;
-
-public class FakeDatabase : Database
-{
-    public override int rows() => 3;
-}

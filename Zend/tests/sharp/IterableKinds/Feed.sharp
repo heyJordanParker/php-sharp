@@ -1,5 +1,0 @@
-namespace IterableKinds;
-
-public interface Feed<TItem> : Iterable<TItem>
-{
-}

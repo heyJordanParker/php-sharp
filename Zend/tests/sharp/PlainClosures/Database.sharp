@@ -1,6 +1,0 @@
-namespace App.PlainClosures;
-
-public effect abstract class Database
-{
-    public abstract int query();
-}

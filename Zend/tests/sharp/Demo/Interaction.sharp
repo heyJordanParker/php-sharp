@@ -1,6 +1,0 @@
-namespace Demo;
-
-public sealed interface Interaction
-{
-    string name();
-}

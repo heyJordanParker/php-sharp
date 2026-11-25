@@ -1,6 +1,0 @@
-namespace Sharp;
-
-public static class Bool
-{
-    public static bool? tryParse(Any? value) => global.filter_var(value, global.FILTER_VALIDATE_BOOLEAN, global.FILTER_NULL_ON_FAILURE);
-}

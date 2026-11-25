@@ -1,8 +1,0 @@
-namespace Demo;
-
-public class Pen<TAnimal : Animal>
-{
-    public Any? keeper() => (TAnimal animal) => animal;
-
-    public Any? holder<TFood>(TFood food) => () => food;
-}

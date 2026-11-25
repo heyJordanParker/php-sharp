@@ -1,6 +1,0 @@
-namespace App.Probe;
-
-public class Box
-{
-    public Box(public string label { get; set; }) { }
-}

@@ -1,7 +1,0 @@
-namespace Demo;
-
-public enum Ripeness : string
-{
-    case Green = "green";
-    case Ripe = "ripe";
-}

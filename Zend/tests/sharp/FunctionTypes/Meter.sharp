@@ -1,6 +1,0 @@
-namespace Demo;
-
-public effect abstract class Meter
-{
-    public abstract int now();
-}

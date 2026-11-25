@@ -1,7 +1,0 @@
-namespace TypedExterns;
-
-import Lib.Routing;
-
-extern string Routing.route(RouteName name) uses none;
-extern string Routing.label(RouteName? name) uses none;
-extern string Routing.orderBy(keyof Order column) uses none;

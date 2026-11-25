@@ -1,8 +1,0 @@
-namespace Demo;
-
-import Illuminate.Support.Collection;
-
-public class SalesReport : Collection<int, int>
-{
-    public SalesReport(int id) : super([id]) { }
-}

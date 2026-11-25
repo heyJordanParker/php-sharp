@@ -1,8 +1,0 @@
-namespace ReflectedTypes;
-
-import Lib.Model;
-
-extern Model uses none;
-
-// A PHP# class that inherits a plain PHP method with a `callable` parameter.
-public class Row : Model { }

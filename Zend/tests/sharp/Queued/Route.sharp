@@ -1,7 +1,0 @@
-namespace Queued;
-
-// A struct with a Map keyed by a struct that has no text, so its stored form has no key for an entry.
-public struct Route
-{
-    public Route(public Map<Parcel, string> labels { get; }) { }
-}

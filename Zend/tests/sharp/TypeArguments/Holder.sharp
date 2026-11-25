@@ -1,5 +1,0 @@
-namespace App;
-
-public class Holder<TBox : Box<int>>
-{
-}

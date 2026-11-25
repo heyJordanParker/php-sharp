@@ -1,6 +1,0 @@
-namespace App.Mail;
-
-public interface Mailer
-{
-    string name();
-}

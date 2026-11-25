@@ -1,8 +1,0 @@
-namespace StoredValues;
-
-public struct Parcel
-{
-    public Parcel(public Map<int, string> shelves { get; }, public List<string> labels { get; }) { }
-
-    public LinkStatus status { get; } = LinkStatus.enter();
-}

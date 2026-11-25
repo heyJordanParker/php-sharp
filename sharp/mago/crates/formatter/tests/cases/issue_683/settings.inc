@@ -1,3 +1,0 @@
-FormatSettings {
-    ..FormatSettings::default()
-}

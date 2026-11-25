@@ -1,5 +1,0 @@
-namespace Equatables;
-
-public interface Failure : Equatable
-{
-}

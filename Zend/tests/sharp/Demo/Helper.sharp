@@ -1,6 +1,0 @@
-namespace Demo;
-
-public static class Helper
-{
-    public static int take(int value) => value;
-}

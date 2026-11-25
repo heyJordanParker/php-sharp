@@ -1,6 +1,0 @@
-namespace TypedExterns;
-
-public class Order
-{
-    public Order(public int total { get; }) { }
-}

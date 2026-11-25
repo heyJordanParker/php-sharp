@@ -1,8 +1,0 @@
-namespace Equatables;
-
-public class Lists
-{
-    public static bool same<T : Equatable>(List<T> a, List<T> b) => a == b;
-
-    public static bool points(int x, int other) => Lists.same([new Point(x)], [new Point(other)]);
-}
