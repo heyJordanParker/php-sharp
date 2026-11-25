@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Mago\Tests\Internal;
+namespace PhpSharp\Composer\Tests;
 
+use PhpSharp\Composer\MagoBinary;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -14,8 +15,6 @@ use function file_put_contents;
 use function filesize;
 use function fsockopen;
 use function is_resource;
-use function Mago\Internal\download_with_curl;
-use function Mago\Internal\download_with_fopen;
 use function proc_close;
 use function proc_open;
 use function proc_terminate;
@@ -102,7 +101,7 @@ final class DownloadTest extends TestCase
     {
         self::assertSame(
             'first host: Bearer redirect-test-token, redirect host: none',
-            self::download(download_with_curl(...)),
+            self::download(MagoBinary::downloadWithCurl(...)),
         );
     }
 
@@ -110,7 +109,7 @@ final class DownloadTest extends TestCase
     {
         self::assertSame(
             'first host: Bearer redirect-test-token, redirect host: none',
-            self::download(download_with_fopen(...)),
+            self::download(MagoBinary::downloadWithFopen(...)),
         );
     }
 
@@ -124,13 +123,13 @@ final class DownloadTest extends TestCase
                 PHP_BINARY,
                 '-r',
                 'require '
-                    . var_export(dirname(__DIR__, 3) . '/vendor/autoload.php', true)
+                    . var_export(dirname(__DIR__, 2) . '/build/php-sharp-composer/vendor/autoload.php', true)
                     . ';'
-                    . 'Mago\\Internal\\download_with_curl('
+                    . 'PhpSharp\\Composer\\MagoBinary::downloadWithCurl('
                     . var_export('http://127.0.0.1:' . self::$port . '/?bytes=8388608', true)
                     . ', '
                     . var_export($destination, true)
-                    . ');',
+                    . ", '0.0.0');",
             ],
             [2 => ['file', $stderr, 'w']],
             $pipes,
@@ -150,7 +149,7 @@ final class DownloadTest extends TestCase
     /**
      * Downloads through the redirect with the token set, and returns what the redirect's host answered.
      *
-     * @param \Closure(string, string): void $download
+     * @param \Closure(string, string, string): void $download
      */
     private static function download(\Closure $download): string
     {
@@ -158,7 +157,7 @@ final class DownloadTest extends TestCase
         $destination = (string) tempnam(sys_get_temp_dir(), 'mago-download');
         try {
             $redirect = 'http://localhost:' . self::$port . '/asset';
-            $download('http://127.0.0.1:' . self::$port . '/?to=' . urlencode($redirect), $destination);
+            $download('http://127.0.0.1:' . self::$port . '/?to=' . urlencode($redirect), $destination, '0.0.0');
 
             return (string) file_get_contents($destination);
         } finally {
