@@ -8,6 +8,7 @@ usage() {
   echo "       sharp/bin/test [--linux] [--no-build] --mago [--shard <i>/<n>]" >&2
   echo "       sharp/bin/test [--linux] [--no-build] --mago [--census] [--spec] [--differential] [--phpunit]" >&2
   echo "       sharp/bin/test [--linux] --mago --cargo-built" >&2
+  echo "       sharp/bin/test [--linux] [--no-build] --examples [--shard <i>/<n>]" >&2
   exit 2
 }
 
@@ -25,6 +26,7 @@ phpunit=false
 upstream=false
 mago=false
 cargo_built=false
+examples=false
 shard=
 tests=()
 container_command=(sharp/bin/test)
@@ -42,6 +44,7 @@ for ((a = 0; a < ${#args[@]}; a++)); do
     --upstream) upstream=true ;;
     --mago) mago=true ;;
     --cargo-built) cargo_built=true ;;
+    --examples) examples=true ;;
     -*) usage ;;
     *) tests+=("$arg") ;;
   esac
@@ -66,6 +69,17 @@ fi
 if $cargo_built && { ! $mago || $suite || ! $build || [[ -n $shard ]]; }; then
   usage
 fi
+# --examples runs the code examples alone, the part of the run --spec adds, and --shard slices them.
+if $examples && { $mago || $upstream || $census || $spec || $differential || $phpunit || ((${#tests[@]})); }; then
+  usage
+fi
+named=("${tests[@]}")
+# A run of every test is six parts, each of which a run of its own runs alone, on the same units: the doc tests and
+# the property tests, mago's workspace tests in part_slices slices, the PHP# suite with its checks and the proof of
+# mago convert, and the code examples in part_slices slices. On the Mac each ran within 5 minutes when #816 replayed
+# the pools of four runs: 199 to 240 s for a slice of the workspace tests, 182 to 250 s for the suite, and 155 to 212 s
+# for a slice of the examples.
+part_slices=2
 # --shard <i>/<n> runs the i-th of n slices, so n jobs that run the same modes together run each test once.
 if [[ -n $shard ]]; then
   if $upstream || [[ ${#tests[@]} -gt 0 || ! $shard =~ ^([1-9][0-9]*)/([1-9][0-9]*)$ ]] || (( BASH_REMATCH[1] > BASH_REMATCH[2] )); then
@@ -193,11 +207,27 @@ unit_folder=()
 unit_command=()
 unit_then=()
 unit_keys=()
+unit_part=()
 queued=()
 sorted=true
-# Adds a unit: its weight, its heading, the step its failure names, the folder it runs in and its command, or, with no
-# step, a function of this script and its arguments. It waits until ready_unit queues it, or the unit then_unit names
-# ends. Sets unit to its index.
+# The part of the run the units added next belong to: its name, a tab, and the command that runs it alone.
+adding=''
+# Sets the part the units added next belong to: its name, and the options of the command that runs it alone, which
+# builds nothing when this run builds nothing.
+adding_part() {
+  local name=$1 options=''
+  shift
+  if ! $build; then
+    options=' --no-build'
+  fi
+  if (($#)); then
+    options+=$(printf ' %q' "$@")
+  fi
+  adding="$name"$'\t'"sharp/bin/test$options"
+}
+# Adds a unit of the part adding_part set: its weight, its heading, the step its failure names, the folder it runs in
+# and its command, or, with no step, a function of this script and its arguments. It waits until ready_unit queues it,
+# or the unit then_unit names ends. Sets unit to its index.
 add_unit() {
   unit=$unit_count
   unit_weight[unit]=$1
@@ -208,7 +238,12 @@ add_unit() {
   unit_command[unit]="$(printf '%q ' "$@")"
   unit_then[unit]=''
   unit_keys[unit]=''
+  unit_part[unit]=$adding
   unit_count=$((unit_count + 1))
+}
+# A failed step of the unit, with the part the unit belongs to and the command that runs that part alone.
+in_part() {
+  printf '%s, in %s, which %s runs alone' "$1" "${unit_part[$2]%%$'\t'*}" "${unit_part[$2]#*$'\t'}"
 }
 # Gives the unit the conflict keys its tests hold, as run-tests.php reads them: while a unit holds a key, no unit that
 # holds it starts, and a unit that holds all runs alone. Each unit runs run-tests.php on one thread, which runs its own
@@ -269,7 +304,7 @@ start_unit() {
 # units' lines never mix. A unit's failed steps join the run's, and a unit that stops before it ends fails as its
 # heading.
 run_pool() {
-  local pid u q status next reported peak=0
+  local pid u q status next reported step peak=0
   part
   if ((unit_count == 0)); then
     return
@@ -308,12 +343,13 @@ run_pool() {
     if [[ -f $TMPDIR/unit-$u.failed ]]; then
       mapfile -t reported < "$TMPDIR/unit-$u.failed"
     fi
-    if ((${#reported[@]})); then
-      # shellcheck disable=SC2031 # The run's own failed steps, which the unit's join.
-      failed+=("${reported[@]}")
-    elif ((status != 0)); then
-      failed+=("${unit_heading[u]}")
+    if ((status != 0 && ${#reported[@]} == 0)); then
+      reported=("${unit_heading[u]}")
     fi
+    for step in "${reported[@]}"; do
+      # shellcheck disable=SC2031 # The run's own failed steps, which the unit's join.
+      failed+=("$(in_part "$step" "$u")")
+    done
     for next in ${unit_then[u]}; do
       ready_unit "$next"
     done
@@ -327,6 +363,7 @@ run_pool() {
   unit_command=()
   unit_then=()
   unit_keys=()
+  unit_part=()
 }
 
 finish() {
@@ -393,8 +430,10 @@ if $mago && ! $cargo_built; then
 
   # Each binary's tests, as its --list prints them, by the binary's index. A binary that can't list them fails the run:
   # its --list ran in a pipe whose failure nothing read, so its empty list read as a binary with no tests, and the run
-  # ran none of them and passed.
-  declare -A listed=()
+  # ran none of them and passed. libtest prints each test's own wall time after its result with --report-time, which
+  # stable Rust's libtest takes only under RUSTC_BOOTSTRAP. libtest-mimic's harness has no such option, and its --help
+  # doesn't name it.
+  declare -A listed=() libtests=()
   for ((b = 0; b < ${#binaries[@]}; b++)); do
     IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
     if ! names="$(cd "$folder" && "$executable" --list --format terse)"; then
@@ -403,16 +442,20 @@ if $mago && ! $cargo_built; then
       continue
     fi
     listed[$b]="$(sed -n 's/: test$//p' <<< "$names")"
+    libtests[$b]=false
+    if [[ $("$executable" --help) == *--report-time* ]]; then
+      libtests[$b]=true
+    fi
   done
 
   # Each test weighs the seconds sharp/baseline/seconds lists under its binary's source file and its name, as
-  # sharp/mago/tests/main.rs::compile::<name>, and a test the file doesn't list ran under 1.5 s, so it weighs 1. With
-  # --shard, a slice's binaries share the run's jobs, so a binary takes at least the longer of its longest test and its
-  # tests' seconds over the jobs, and a slice about the sum of its binaries'. Each test, heaviest first, goes to the
-  # slice whose time that grows least, so every slice computes the same split. Every fifth test in binary and name
-  # order gave MAGO (2/5)'s test step 413 s on run 45016081891, against 177 to 350 s for the other slices, since the two
-  # law proofs of 189 and 158 s fell in it with a fifth of everything else.
-  declare -A chosen=() known=() weighs=()
+  # sharp/mago/tests/main.rs::compile::<name>, and a test the file doesn't list ran under 1.5 s, so it weighs 1. A
+  # slice's binaries share the run's jobs, so a binary takes at least the longer of its longest test and its tests'
+  # seconds over the jobs, and a slice about the sum of its binaries'. Each test, heaviest first, goes to the slice
+  # whose time that grows least, so every slice computes the same split. Every fifth test in binary and name order gave
+  # MAGO (2/5)'s test step 413 s on run 45016081891, against 177 to 350 s for the other slices, since the two law proofs
+  # of 189 and 158 s fell in it with a fifth of everything else.
+  declare -A known=() weighs=()
   read_seconds
   for b in "${!listed[@]}"; do
     IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
@@ -426,11 +469,39 @@ if $mago && ! $cargo_built; then
     done <<< "${listed[$b]}"
   done > "$TMPDIR/mago-tests"
   stale_seconds known '*::*'
-  if [[ -n $shard ]]; then
+
+  # Adds a unit of the binary that runs the names it's given on one thread. libtest takes each name as a filter that
+  # --exact matches whole. libtest-mimic's harness, which the binaries with harness = false use, takes one filter, so
+  # it skips every other test of the binary instead, by exact name, as often as needed.
+  add_tests_unit() {
+    local weight=$1 heading=$2 name selection=()
+    shift 2
+    if ${libtests[$b]}; then
+      selection=("$@")
+    else
+      declare -A wanted=()
+      for name in "$@"; do
+        wanted[$name]=1
+      done
+      while IFS= read -r name; do
+        if [[ -n $name && -z ${wanted[$name]:-} ]]; then
+          selection+=(--skip "$name")
+        fi
+      done <<< "${listed[$b]}"
+    fi
+    add_unit "$weight" "$heading" "$heading" "$folder" "${command[@]}" --exact --test-threads 1 "${selection[@]}"
+    ready_unit "$unit"
+  }
+
+  # Adds the units of the slice'th of count slices of the tests, each binary's tests the binaries that weigh most
+  # first, as the part that runs that slice alone.
+  add_workspace_slice() {
+    local slice=$1 count=$2 test
+    local -A chosen=()
     while IFS= read -r test; do
       chosen[$test]=1
-    done < <(LC_ALL=C sort -t $'\t' -k1,1nr -k2,2n -k3,3 "$TMPDIR/mago-tests" | awk -F '\t' -v slices="$shard_count" \
-      -v slice="$shard_index" -v threads="$jobs" '
+    done < <(LC_ALL=C sort -t $'\t' -k1,1nr -k2,2n -k3,3 "$TMPDIR/mago-tests" | awk -F '\t' -v slices="$count" \
+      -v slice="$slice" -v threads="$jobs" '
         # In units of a second over the threads, so a time stays a whole number.
         function spent(at, binary, key) {
           key = at SUBSEP binary
@@ -458,70 +529,52 @@ if $mago && ! $cargo_built; then
             print $2 "\t" $3
           }
         }')
-  fi
-
-  # Adds a unit of the binary that runs the names it's given on one thread. libtest takes each name as a filter that
-  # --exact matches whole. libtest-mimic's harness, which the binaries with harness = false use, takes one filter, so
-  # it skips every other test of the binary instead, by exact name, as often as needed.
-  add_tests_unit() {
-    local weight=$1 heading=$2 name selection=()
-    shift 2
-    if $libtest; then
-      selection=("$@")
-    else
-      declare -A wanted=()
-      for name in "$@"; do
-        wanted[$name]=1
-      done
+    adding_part "mago's workspace tests, slice $slice of $count" --mago --shard "$slice/$count"
+    while read -r _ b; do
+      IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
+      selected=()
       while IFS= read -r name; do
-        if [[ -n $name && -z ${wanted[$name]:-} ]]; then
-          selection+=(--skip "$name")
+        if [[ -n $name && -n ${chosen[$b$'\t'$name]:-} ]]; then
+          selected+=("$name")
         fi
       done <<< "${listed[$b]}"
-    fi
-    add_unit "$weight" "$heading" "$heading" "$folder" "${command[@]}" --exact --test-threads 1 "${selection[@]}"
-    ready_unit "$unit"
+      if ((${#selected[@]} == 0)); then
+        continue
+      fi
+      started=$((started + ${#selected[@]}))
+      command=("$executable")
+      if ${libtests[$b]}; then
+        command=(env RUSTC_BOOTSTRAP=1 "$executable" -Z unstable-options --report-time)
+      fi
+      names=()
+      for name in "${selected[@]}"; do
+        if [[ -n ${seconds[$source::$name]:-} ]]; then
+          add_tests_unit "${seconds[$source::$name]}" "$name, of ${executable##*/} from ${folder#"$root"/}" "$name"
+        else
+          names+=("$name")
+        fi
+        if ((${#names[@]} == batch)); then
+          add_tests_unit "$batch" "$batch tests of ${executable##*/}, from ${folder#"$root"/}" "${names[@]}"
+          names=()
+        fi
+      done
+      if ((${#names[@]})); then
+        add_tests_unit "${#names[@]}" "${#names[@]} tests of ${executable##*/}, from ${folder#"$root"/}" "${names[@]}"
+      fi
+    done < <(for b in "${!weighs[@]}"; do echo "${weighs[$b]} $b"; done | LC_ALL=C sort -k1,1nr -k2,2n)
   }
 
-  # Each binary's tests join the pool, the binaries that weigh most first. A lane that runs no test, as when build.json
-  # names no test binary or a slice the balance gives none, fails, since it tested nothing.
+  # The binaries' tests join the pool, a run without --shard the part_slices slices one after another, so each slice
+  # adds the units a run of that slice alone adds. A lane that runs no test, as when build.json names no test binary or
+  # a slice the balance gives none, fails, since it tested nothing.
   started=0
-  while read -r _ b; do
-    IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
-    selected=()
-    while IFS= read -r name; do
-      if [[ -n $name && ( -z $shard || -n ${chosen[$b$'\t'$name]:-} ) ]]; then
-        selected+=("$name")
-      fi
-    done <<< "${listed[$b]}"
-    if ((${#selected[@]} == 0)); then
-      continue
-    fi
-    started=$((started + ${#selected[@]}))
-    # libtest prints each test's own wall time after its result with --report-time, which stable Rust's libtest
-    # takes only under RUSTC_BOOTSTRAP. libtest-mimic's harness has no such option, and its --help doesn't name it.
-    command=("$executable")
-    libtest=false
-    if [[ $("$executable" --help) == *--report-time* ]]; then
-      command=(env RUSTC_BOOTSTRAP=1 "$executable" -Z unstable-options --report-time)
-      libtest=true
-    fi
-    names=()
-    for name in "${selected[@]}"; do
-      if [[ -n ${seconds[$source::$name]:-} ]]; then
-        add_tests_unit "${seconds[$source::$name]}" "$name, of ${executable##*/} from ${folder#"$root"/}" "$name"
-      else
-        names+=("$name")
-      fi
-      if ((${#names[@]} == batch)); then
-        add_tests_unit "$batch" "$batch tests of ${executable##*/}, from ${folder#"$root"/}" "${names[@]}"
-        names=()
-      fi
+  if [[ -n $shard ]]; then
+    add_workspace_slice "$shard_index" "$shard_count"
+  else
+    for ((slice = 1; slice <= part_slices; slice++)); do
+      add_workspace_slice "$slice" "$part_slices"
     done
-    if ((${#names[@]})); then
-      add_tests_unit "${#names[@]}" "${#names[@]} tests of ${executable##*/}, from ${folder#"$root"/}" "${names[@]}"
-    fi
-  done < <(for b in "${!weighs[@]}"; do echo "${weighs[$b]} $b"; done | LC_ALL=C sort -k1,1nr -k2,2n)
+  fi
   if ((started == 0)); then
     echo "mago's workspace tests ran no test: no binary lists a test this run selects." >&2
     failed+=("mago's workspace tests")
@@ -531,6 +584,7 @@ fi
 # pool.
 run_cargo_tests() {
   if $mago && $build && [[ -z $shard ]]; then
+    adding_part "the doc tests and mago-codex's property tests" --mago --cargo-built
     add_unit 1 "the doc tests and mago-codex's property tests" "the doc tests and mago-codex's property tests" "$root" \
       "$root/sharp/bin/build-mago" --cargo-tests
     ready_unit "$unit"
@@ -557,6 +611,9 @@ if $upstream; then
   # run it was 506 of 7,436 tests, every one of the slowest, and the compile of its 939 fixtures took 51 s more.
   mapfile -t tests < <(cd "$root" && find Zend/tests ext/reflection ext/tokenizer ext/opcache -path Zend/tests/sharp -prune \
     -o -name '*.phpt' -print | LC_ALL=C sort)
+elif $examples; then
+  # The code examples alone run no test of the PHP# suite.
+  tests=()
 elif [[ -n $shard ]]; then
   # The slices balance by the seconds sharp/baseline/seconds lists, from CI's slow-test summaries: a test's seconds
   # summed over the modes, and the proof's own, which hold the whole slice while it runs, so it weighs them times
@@ -785,6 +842,7 @@ if $upstream; then
   baseline=sharp/baseline/linux
   results="$build_dir/upstream-results"
   add_mode "without opcache, compared with $baseline"
+  adding_part "the upstream tests" --upstream
   add_test_units
   run_pool
   mode_results 0
@@ -808,6 +866,77 @@ mago="$build_dir/mago/debug/mago"
 if [[ ! -x $mago ]]; then
   echo "$mago is missing. Run sharp/bin/build-mago first." >&2
   exit 1
+fi
+
+# sharp/bin/spec's examples, one for each id its markers name, as its blocks() reads them, run in slices of 10, each on
+# one slot: sharp/bin/spec runs as many compiles at once as sharp/bin/jobs prints, which CARGO_BUILD_JOBS=1 makes 1.
+# Each example is its own mago compile of 7.8 s on the Mac, run 45389050052, so slices of 100 ran 694 to 766 s each
+# and the Mac's test step ended minutes after every other unit had (#784). A slice weighs the seconds
+# sharp/baseline/seconds lists under its `sharp/bin/spec --shard <i>/<n>`, from that run's record of each example, or,
+# once an added example changes the slices, 8 s for each example it holds. The first slice also compares the list's
+# entries that name no example.
+spec_batch=10
+count_examples() {
+  grep -h '^<!-- example ' "$@" | sed 's/^<!-- example \([a-z0-9-]*\).*/\1/' | LC_ALL=C sort -u | wc -l
+}
+# Adds the self-test of sharp/bin/spec and the slices of the examples, in part_slices parts, or the n of
+# --examples --shard <i>/<n>, which adds only its i-th. Each, heaviest first, goes to the part that weighs least so far,
+# so every run computes the same parts, and a part adds the units a run of it alone adds.
+add_examples() {
+  local held slices slice count=$part_slices part lightest weight item self_test items=() loads=() owner=()
+  if $examples && [[ -n $shard ]]; then
+    count=$shard_count
+  fi
+  self_test="$(count_examples "$root/sharp/spec-self-test.md")"
+  held=$(count_examples "$root/README.md" "$root/docs/spec.md")
+  slices=$(((held + spec_batch - 1) / spec_batch))
+  read_seconds
+  items=("$((self_test)) 0")
+  for ((slice = 1; slice <= slices; slice++)); do
+    items+=("${seconds["sharp/bin/spec --shard $slice/$slices"]:-$((((held - slice) / slices + 1) * 8))} $slice")
+  done
+  for ((part = 1; part <= count; part++)); do
+    loads[part]=0
+  done
+  while read -r weight item; do
+    lightest=1
+    for ((part = 2; part <= count; part++)); do
+      if ((loads[part] < loads[lightest])); then
+        lightest=$part
+      fi
+    done
+    loads[lightest]=$((loads[lightest] + weight))
+    owner[item]=$lightest
+  done < <(printf '%s\n' "${items[@]}" | LC_ALL=C sort -k1,1nr -k2,2n)
+  for ((part = 1; part <= count; part++)); do
+    if $examples && [[ -n $shard ]] && ((part != shard_index)); then
+      continue
+    fi
+    adding_part "the code examples, slice $part of $count" --examples --shard "$part/$count"
+    if ((owner[0] == part)); then
+      add_unit "$self_test" \
+        "every rule of sharp/bin/spec, on the examples of sharp/spec-self-test.md" "the self-test of sharp/bin/spec" \
+        "$root" env CARGO_BUILD_JOBS=1 "$php" sharp/bin/spec --self-test
+      ready_unit "$unit"
+    fi
+    for ((slice = 1; slice <= slices; slice++)); do
+      if ((owner[slice] == part)); then
+        add_unit "${items[slice]% *}" \
+          "slice $slice of $slices of the code examples in docs/spec.md and README.md, compared with sharp/baseline/spec" \
+          "slice $slice of $slices of the code examples of docs/spec.md and README.md" "$root" \
+          env CARGO_BUILD_JOBS=1 "$php" sharp/bin/spec --shard "$slice/$slices"
+        ready_unit "$unit"
+      fi
+    done
+  done
+}
+
+# The code examples alone need neither the PHP# suite's Composer packages nor its compiled fixtures.
+if $examples; then
+  export TEST_MAGO_EXECUTABLE="$mago"
+  add_examples
+  run_pool
+  finish
 fi
 
 # Zend/tests/sharp is a project shaped like an application: the tests load their PHP# fixtures through Composer's
@@ -866,40 +995,26 @@ if [[ $os == linux ]]; then
   add_mode "with the tracing JIT" -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M \
     -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
 fi
+# The PHP# suite's part: its tests in each mode, the checks this run adds to them, and the proof of mago convert.
+suite_options=()
+for check in census differential phpunit; do
+  if ${!check}; then
+    suite_options+=("--$check")
+  fi
+done
+if [[ -n $shard ]]; then
+  adding_part "the PHP# suite, slice $shard_index of $shard_count" "${suite_options[@]}" --shard "$shard"
+elif ((${#named[@]})); then
+  adding_part "the PHP# suite's tests this run names" "${suite_options[@]}" "${named[@]}"
+else
+  adding_part "the PHP# suite" "${suite_options[@]}"
+fi
 add_test_units
 
 if $census; then
   add_unit 1 "every write and comparison of a field that holds a PHP# mark" "the census of PHP# marks" "$root" \
     "$php" sharp/bin/census
   ready_unit "$unit"
-fi
-
-# sharp/bin/spec's examples, one for each id its markers name, as its blocks() reads them, run in slices of 10, each on
-# one slot: sharp/bin/spec runs as many compiles at once as sharp/bin/jobs prints, which CARGO_BUILD_JOBS=1 makes 1.
-# Each example is its own mago compile of 7.8 s on the Mac, run 45389050052, so slices of 100 ran 694 to 766 s each
-# and the Mac's test step ended minutes after every other unit had (#784). A slice weighs the seconds
-# sharp/baseline/seconds lists under its `sharp/bin/spec --shard <i>/<n>`, from that run's record of each example, or,
-# once an added example changes the slices, 8 s for each example it holds. The first slice also compares the list's
-# entries that name no example.
-spec_batch=10
-count_examples() {
-  grep -h '^<!-- example ' "$@" | sed 's/^<!-- example \([a-z0-9-]*\).*/\1/' | LC_ALL=C sort -u | wc -l
-}
-if $spec; then
-  add_unit "$(count_examples "$root/sharp/spec-self-test.md")" \
-    "every rule of sharp/bin/spec, on the examples of sharp/spec-self-test.md" "the self-test of sharp/bin/spec" "$root" \
-    env CARGO_BUILD_JOBS=1 "$php" sharp/bin/spec --self-test
-  ready_unit "$unit"
-  examples=$(count_examples "$root/README.md" "$root/docs/spec.md")
-  slices=$(((examples + spec_batch - 1) / spec_batch))
-  read_seconds
-  for ((slice = 1; slice <= slices; slice++)); do
-    add_unit "${seconds["sharp/bin/spec --shard $slice/$slices"]:-$((((examples - slice) / slices + 1) * 8))}" \
-      "slice $slice of $slices of the code examples in docs/spec.md and README.md, compared with sharp/baseline/spec" \
-      "slice $slice of $slices of the code examples of docs/spec.md and README.md" "$root" \
-      env CARGO_BUILD_JOBS=1 "$php" sharp/bin/spec --shard "$slice/$slices"
-    ready_unit "$unit"
-  done
 fi
 
 # One php -l lints every fixture, each file in a request of its own, and ends each file's output with the line that
@@ -971,6 +1086,10 @@ if $run_proof; then
   add_unit "${seconds[$proof]:-1}" "mago convert on sharp/mago/crates/converter/tests/project" \
     "the whole-project proof of mago convert" "$root" "$proof" "$TMPDIR/convert/project"
   ready_unit "$unit"
+fi
+
+if $spec; then
+  add_examples
 fi
 
 run_pool
