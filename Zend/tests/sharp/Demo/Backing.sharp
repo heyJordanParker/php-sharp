@@ -1,0 +1,54 @@
+namespace Demo;
+
+import Sharp.BigInteger;
+import Sharp.Bytes;
+import Sharp.Decimal;
+import Sharp.Encoding.Json;
+import Sharp.Net.IpAddress;
+import Sharp.Net.Url;
+import Sharp.Time.Date;
+import Sharp.Time.DateTime;
+import Sharp.Time.Duration;
+import Sharp.Time.Instant;
+import Sharp.Time.TimeOfDay;
+
+// Spec section 10: a backed struct is stored as its value, which its `parse` reads back through its constructor. The
+// ten standard library types stored as text round-trip through `Json.encode` and `Json.decode` to the text 0.7.6 writes.
+public static class Backing
+{
+    public static List<string> answers()
+    {
+        const signup = new Signup(new Email("a@b.c"), new UserId(7));
+        const encoded = Json.encode(signup);
+        const decoded = Json.decode<Signup>(encoded);
+        List<string> lines = [
+            `encoded: ${encoded}`,
+            `decoded: ${decoded.email.value} ${decoded.id.value}`,
+            `equal: ${Backing.shown(decoded == signup)}`,
+            `parsed: ${Email.parse("x@y.z").value}`,
+            `same value: ${Backing.shown(new UserId(7) == new UserId(7))}, other value: ${Backing.shown(new UserId(7) == new UserId(8))}`,
+            `map: ${Json.encode([new UserId(3): "three"])}`,
+            `decimal: ${Json.encode(Decimal.parse("1.50"))}`,
+            Json.encode(Json.decode<Decimal>(Json.encode(Decimal.parse("1.50")))),
+            Json.encode(Json.decode<BigInteger>(Json.encode(BigInteger.parse("9223372036854775808")))),
+            Json.encode(Json.decode<Instant>(Json.encode(Instant.parse("2026-10-22T18:30:00Z")))),
+            Json.encode(Json.decode<Date>(Json.encode(Date.parse("2026-01-31")))),
+            Json.encode(Json.decode<Duration>(Json.encode(Duration.parse("PT1H30M")))),
+            Json.encode(Json.decode<IpAddress>(Json.encode(IpAddress.parse("2001:db8::1")))),
+            Json.encode(Json.decode<Bytes>(Json.encode(Bytes.parse("aGk=")))),
+            Json.encode(Json.decode<Url>(Json.encode(Url.parse("https://example.com/a")))),
+            Json.encode(Json.decode<DateTime>(Json.encode(DateTime.parse("2026-10-22T20:30:00+02:00[Europe/Paris]")))),
+            Json.encode(Json.decode<TimeOfDay>(Json.encode(TimeOfDay.parse("18:30:00")))),
+        ];
+        try {
+            Json.decode<Signup>("{\"email\":\"not-an-email\",\"id\":1}");
+            lines.add("bad email: read");
+        } catch (Throwable error) {
+            lines.add(`bad email: ${error.getMessage()}`);
+        }
+
+        return lines;
+    }
+
+    private static string shown(bool value) => value ? "true" : "false";
+}

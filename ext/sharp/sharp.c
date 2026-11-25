@@ -13308,8 +13308,8 @@ static zval *sharp_input_field(zval *value, zend_string *key, zval *read)
 
 /* Spec section 10: one read of a value into a type, the one place a value is read into a type, for a struct's or a
  * class's `parse`, a family's, `Json.decode` and `Query.decode`. It holds the problems it found, each under its path,
- * the paths of the structs that reported their own problems, where the walk's problem goes, and the problems a value
- * as text's own `parse` gave, which take the walk's place at their path. With `text`, a number or a bool is read from
+ * the paths of the structs that reported their own problems, where the walk's problem goes, and the problems a backed
+ * struct's own `parse` gave, which take the walk's place at their path. With `text`, a number or a bool is read from
  * its text, as Query.decode reads it, at every depth. `order` names the classes and scalar types the declaration of
  * the field being read writes, in its order, `App.Card, App.Bank`, which a union tries in that order, or is NULL.
  * `holder` and `field` name the field of a class whose value is being read, which a Secret's encryption is bound to,
@@ -13361,8 +13361,8 @@ static void sharp_read_fail(sharp_read *read)
 }
 
 /* Reads `value` into `type`, then checks it with the walk, each problem under its path. The walk's problem at a
- * struct that reported its own goes, and a value as text's own takes the walk's place. Only the structs and values as
- * text this read reaches count, so a struct's field drops only the problems its own read made. */
+ * struct that reported its own goes, and a backed struct's own takes the walk's place. Only the structs and backed
+ * structs this read reaches count, so a struct's field drops only the problems its own read made. */
 static void sharp_read_whole(const sharp_type *type, zval *value, sharp_read *read)
 {
 	zval outer_failed, outer_texts;
@@ -14144,7 +14144,7 @@ static void sharp_read_sealed(zend_class_entry *ce, const sharp_type *arguments,
 	zval_ptr_dtor(&fields);
 }
 
-/* Spec section 10: builds, in `value`, each struct, class, family's variant, value as text and enum case `type` holds,
+/* Spec section 10: builds, in `value`, each struct, class, family's variant, backed struct and enum case `type` holds,
  * as a field `parse` reads builds them, each problem under its path in the read. With the read's `text`, a number or
  * a bool is read from its text, as `Query.decode` reads it. sharp_read_whole checks the whole value after. */
 static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *read)
@@ -14288,7 +14288,7 @@ static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *re
 			}
 		}
 	} else {
-		/* A class that declares its own `parse` of the value, as a value as text's of a string and JsonValue's of any
+		/* A class that declares its own `parse` of the value, as a backed struct's of its value and JsonValue's of any
 		 * value, builds through it. */
 		zend_function *parse = zend_hash_str_find_ptr(&ce->function_table, "parse", sizeof("parse") - 1);
 		if (parse && (parse->common.fn_flags & ZEND_ACC_STATIC) && parse->common.num_args >= 1
@@ -14330,15 +14330,25 @@ static void sharp_parse_as(const sharp_type *type, zval *value, bool text, zval 
 	}
 }
 
-/* The method that gives an object of `ce` as text, as spec section 18 shows it: its PHP# `toString()`, or PHP's
- * `__toString()`, or NULL. */
-static zend_function *sharp_to_string_method(const zend_class_entry *ce)
+/* The `#json` of `ce` when it is a backed struct, spec section 10, which gives the value it is stored as, or NULL. A
+ * backed struct has the `parse` of one value that reads it back, and no `#fields`, which a struct stored as its fields
+ * has. With `keyed`, only a struct stored as an int or a string, which a JSON object key holds. */
+static zend_function *sharp_backed_value_method(const zend_class_entry *ce, bool keyed)
 {
-	zend_function *to_string = (ce->sharp_flags & SHARP_CLASS_EXACT_NAMES)
-		? zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("toString"))
-		: zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("tostring"));
+	if (!instanceof_function((zend_class_entry *) ce, sharp_ce_struct)
+			|| zend_hash_str_exists(&ce->function_table, ZEND_STRL("#fields"))) {
+		return NULL;
+	}
+	zend_function *parse = zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("parse"));
+	if (!parse || !(parse->common.fn_flags & ZEND_ACC_STATIC) || parse->common.num_args != 1) {
+		return NULL;
+	}
+	zend_type backing = parse->common.arg_info[0].type;
+	if (keyed && !ZEND_TYPE_CONTAINS_CODE(backing, IS_LONG) && !ZEND_TYPE_CONTAINS_CODE(backing, IS_STRING)) {
+		return NULL;
+	}
 
-	return to_string ? to_string : ce->__tostring;
+	return zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("#json"));
 }
 
 ZEND_COLD void sharp_refuse_creation(const zend_class_entry *ce)
@@ -14380,7 +14390,7 @@ static ZEND_COLD void sharp_refuse_storage(const zend_class_entry *ce, const cha
 }
 
 /* Whether a Map key of `type` has the text a stored form keys it by, as sharp_table_json_key gives it: an int, a
- * string, a backed enum case, or an object of a class with toString(). A type parameter's and an `Any`'s key is decided
+ * string, a backed enum case, or a struct backed by an int or a string. A type parameter's and an `Any`'s key is decided
  * by its value, as is the key of a class no autoloader finds. */
 static bool sharp_type_keys_text(const sharp_type *type)
 {
@@ -14414,7 +14424,7 @@ static bool sharp_type_keys_text(const sharp_type *type)
 		return !EG(exception);
 	}
 
-	return (ce->ce_flags & ZEND_ACC_ENUM) ? ce->enum_backing_type != IS_UNDEF : sharp_to_string_method(ce) != NULL;
+	return (ce->ce_flags & ZEND_ACC_ENUM) ? ce->enum_backing_type != IS_UNDEF : sharp_backed_value_method(ce, true) != NULL;
 }
 
 /* The key type of a Map in `type`, at any depth of its collections and unions, whose key has no stored text, as
@@ -14506,13 +14516,12 @@ zend_result sharp_stored_form(zend_object *object, zval *stored)
 	if (EG(exception)) {
 		return FAILURE;
 	}
-	if (Z_TYPE(written) == IS_STRING) {
-		/* A value as text, spec section 10, stores its text, which its own `parse` reads. */
+	if (Z_TYPE(written) != IS_OBJECT) {
+		/* A backed struct, spec section 10, stores its value, which its own `parse` reads. */
 		array_init_size(stored, 1);
 		add_assoc_zval_ex(stored, "value", sizeof("value") - 1, &written);
 		return SUCCESS;
 	}
-	ZEND_ASSERT(Z_TYPE(written) == IS_OBJECT && "`#json` gives a value as text's text or an object of the fields");
 	ZVAL_ARR(stored, zend_array_dup(Z_OBJPROP(written)));
 	zval_ptr_dtor(&written);
 
@@ -14651,10 +14660,10 @@ zend_result sharp_read_stored_form(zend_class_entry *ce, zval *stored, const zva
 		/* A case of an enum that carries no data is the case's one object. */
 		zend_call_known_function(instance, NULL, ce, built, 0, NULL, NULL);
 	} else if (parse) {
-		/* A value as text builds through its own `parse` of its text. */
-		zval *text = zend_hash_str_find(Z_ARRVAL_P(stored), "value", sizeof("value") - 1);
-		if (text) {
-			zend_call_known_function(parse, NULL, ce, built, 1, text, NULL);
+		/* A backed struct builds through its own `parse` of its value. */
+		zval *value = zend_hash_str_find(Z_ARRVAL_P(stored), "value", sizeof("value") - 1);
+		if (value) {
+			zend_call_known_function(parse, NULL, ce, built, 1, value, NULL);
 		} else {
 			zval missing;
 			ZVAL_STRINGL(&missing, "missing", sizeof("missing") - 1);
@@ -16398,8 +16407,8 @@ ZEND_METHOD(Sharp_Table, offsetUnset)
 	zend_throw_error(NULL, "A %s is written through its index, which copies a shared one first", ZSTR_VAL(Z_OBJCE_P(ZEND_THIS)->name));
 }
 
-/* The text JSON writes for a key: an int, a string, a backed enum case's value, or what an object's PHP# toString()
- * or PHP __toString() gives, as spec section 10 keys a JSON object by a struct. NULL after an exception for any other
+/* The text JSON writes for a key: an int, a string, or the value of a backed enum case or of a struct backed by an
+ * int or a string, as spec section 10 keys a JSON object by a backed struct. NULL after an exception for any other
  * key, which has no text. */
 static zend_string *sharp_table_json_key(zval *key)
 {
@@ -16410,19 +16419,19 @@ static zend_string *sharp_table_json_key(zval *key)
 	if (Z_TYPE_P(key) == IS_LONG || Z_TYPE_P(key) == IS_STRING) {
 		return zval_get_string(key);
 	}
-	if (Z_TYPE_P(key) == IS_OBJECT) {
-		zend_function *to_string = sharp_to_string_method(Z_OBJCE_P(key));
-		if (to_string) {
-			zval text;
-			zend_call_known_instance_method_with_0_params(to_string, Z_OBJ_P(key), &text);
-			if (EG(exception)) {
-				return NULL;
-			}
-			if (Z_TYPE(text) == IS_STRING) {
-				return Z_STR(text);
-			}
-			zval_ptr_dtor(&text);
+	zend_function *backed = Z_TYPE_P(key) == IS_OBJECT ? sharp_backed_value_method(Z_OBJCE_P(key), true) : NULL;
+	if (backed) {
+		zval value;
+		zend_call_known_instance_method_with_0_params(backed, Z_OBJ_P(key), &value);
+		if (EG(exception)) {
+			return NULL;
 		}
+		if (Z_TYPE(value) == IS_LONG || Z_TYPE(value) == IS_STRING) {
+			zend_string *text = zval_get_string(&value);
+			zval_ptr_dtor(&value);
+			return text;
+		}
+		zval_ptr_dtor(&value);
 	}
 
 	zend_throw_exception_ex(php_json_exception_ce, 0, "A JSON object key is text, and %s is not",

@@ -1,0 +1,12 @@
+namespace Demo;
+
+// An email address, stored as its text, which its constructor checks.
+public struct Email : string
+{
+    public Email(string value)
+    {
+        if (!value.contains("@")) {
+            throw new ValueError(`"${value}" is no email address`);
+        }
+    }
+}

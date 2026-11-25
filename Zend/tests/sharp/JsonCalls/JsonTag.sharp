@@ -1,8 +1,12 @@
 namespace Demo;
 
-public struct JsonTag
+public struct JsonTag : string
 {
     public JsonTag(public string name { get; }) { }
 
-    public string toString() => `#${this.name}`;
+    public string value => `#${this.name}`;
+
+    public static JsonTag parse(string value) => new JsonTag(value.removePrefix("#"));
+
+    public string toString() => this.value;
 }

@@ -455,7 +455,7 @@ ZEND_COLD void sharp_refuse_creation(const zend_class_entry *ce);
 bool sharp_owns_storage(const zend_class_entry *ce);
 
 /* The stored form of `object`, whose class sharp_owns_storage holds for, as serialize writes it: an array of the fields
- * Json.encode writes, under their keys, or, for a value as text, its text under `value`. Throws an Error that names the
+ * Json.encode writes, under their keys, or, for a backed struct, its value under `value`. Throws an Error that names the
  * class, and fails, for a type with no stored form: one with a main constructor parameter that holds no property, a
  * field that holds a function, a field's Map whose key has no text, or a `parse` of its own. */
 zend_result sharp_stored_form(zend_object *object, zval *stored);

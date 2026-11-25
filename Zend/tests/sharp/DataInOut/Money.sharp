@@ -2,9 +2,11 @@ namespace DataInOut;
 
 import Sharp.Decimal;
 
-public class Money
+public struct Money : string
 {
     public Money(public Decimal amount { get; }) { }
+
+    public string value => this.amount.value;
 
     public static Money zero() => new Money(Decimal.parse("0.00"));
 
