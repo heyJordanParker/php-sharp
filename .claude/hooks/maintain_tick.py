@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import calendar
 import glob
 import json
 import os
@@ -36,7 +37,17 @@ def waits_on_its_run(log):
     # A run whose process died without its notice holds no output file open, so only an open one counts.
     files = {task: path for path, task in re.findall(r"(/[^\s\"']+/tasks/(\w+)\.output)", text)}
     outputs = {files[task] for task in started - ended if task in files}
-    return bool(outputs) and subprocess.run(["lsof", "-t", *outputs], capture_output=True, text=True).stdout.strip() != ""
+    if outputs and subprocess.run(["lsof", "-t", *outputs], capture_output=True, text=True).stdout.strip():
+        return True
+    # A Monitor writes no output file: it watches until its event, its expiry or its stop.
+    for line in text.splitlines():
+        started = re.search(r"Monitor started \(task (\w+), expires in (\d+)m", line)
+        at = started and re.search(r'"timestamp":"([^"]+)"', line)
+        if (at and f"task-id>{started.group(1)}</task-id>" not in text and f"stopped task: {started.group(1)}" not in text
+                and calendar.timegm(time.strptime(at.group(1)[:19], "%Y-%m-%dT%H:%M:%S"))
+                + int(started.group(2)) * 60 > time.time()):
+            return True
+    return False
 
 
 def mods_off(session):
