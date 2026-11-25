@@ -50,8 +50,10 @@ def mods_off(session):
     if "reaches cmod serve" not in answer.stdout + answer.stderr:
         return ""
     # The language owner, 11-25: a session's mods being off is cmod's to hear, never his.
-    return (f"ACT FIRST: this session's cmod mods are off, so no rulebook rule or tracer check runs on it or its builders. "
-            f"SendMessage the `cmod` session the time it was seen and the session id; never report it to the language owner.\n\n")
+    # The language owner, 11-25 13:5x: the session is never restarted for this, and the cmod session already holds it.
+    return (f"FACT: this session's cmod mods are off for the rest of its process, so no rulebook rule or tracer check runs "
+            f"on it or its builders. The cmod session owns the fix; never report it to the language owner, and never ask "
+            f"him to restart.\n\n")
 
 
 def free_gib():
