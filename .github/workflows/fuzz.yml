@@ -2,11 +2,11 @@ name: Fuzz
 # sharp/mago/crates/syntax/fuzz holds libFuzzer targets for the lexer, and for the parser in the PHP and PHP#
 # dialects. PHP and PHP# source is user input, so every day each target runs for 10 minutes, seeded from the
 # fixtures the Justfile's fuzz recipes use, and sharp_parser also from the engine's PHP# tests, the .sharp files
-# under Zend/tests/sharp. Each target's corpus is kept between runs, so a run starts from every input the runs
-# before it found. A panic, an abort, a stack overflow, or an input that runs for more than 10 seconds fails the job,
-# and the input that caused it is uploaded as an artifact. No pull request runs it: a finding is a defect no project
-# hit, which the nightly run reports, and on a pull request that changed the fuzz crate the three targets held 11.5
-# minutes each of every run.
+# under Zend/tests/sharp. Each run starts from those seeds alone and keeps nothing for the next, as every CI run
+# builds and tests from nothing (#721). A panic, an abort, a stack overflow, or an input that runs for more than 10
+# seconds fails the job, and the input that caused it is uploaded as an artifact. No pull request runs it: a finding is
+# a defect no project hit, which the nightly run reports, and on a pull request that changed the fuzz crate the three
+# targets held 11.5 minutes each of every run.
 on:
   schedule:
     - cron: '43 3 * * *'
@@ -47,13 +47,6 @@ jobs:
         run: cargo +"$NIGHTLY" metadata --locked --format-version 1 > /dev/null
       - name: Install cargo-fuzz
         run: cargo +"$NIGHTLY" install cargo-fuzz --version 0.13.2 --locked
-      # Each run saves its corpus under a key of its own, and the next run restores the newest one.
-      - name: Restore ${{ matrix.target }}'s corpus from the runs before
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/mago/crates/syntax/fuzz/corpus/${{ matrix.target }}
-          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
-          restore-keys: fuzz-corpus-${{ matrix.target }}-
       - name: Fuzz ${{ matrix.target }} for 10 minutes
         env:
           TARGET: ${{ matrix.target }}
