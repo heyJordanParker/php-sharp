@@ -67,7 +67,9 @@ def lanes():
             continue
         idle = int((time.time() - os.path.getmtime(logs[0])) // 60)
         rows.append(f"  {lane:<9} {agent} {kind:<17} idle {idle} min")
-        if idle >= IDLE and f"worktrees/{lane.lower()}" not in container_mounts():
+        # A lane whose batch landed and waits only for its release is marked `| done:` in state.md, so its idle
+        # builder holds no batch to send again: on 11-25 the tracer lane was flagged idle after #817 merged.
+        if idle >= IDLE and "| done:" not in line and f"worktrees/{lane.lower()}" not in container_mounts():
             stalled.append(f"{lane} idle {idle} min")
         if kind != "claude":
             stalled.append(f"{lane} runs {kind}, not claude")
