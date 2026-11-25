@@ -12,7 +12,10 @@ INTAKE = Path.home() / ".claude/orchestrate/php-sharp/intake.md"
 # queue on a user-owned repository, and next and master holding one tree).
 FACTS = INTAKE.parent / "facts.py"
 LEDGER = Path.home() / ".claude/orchestrate/php-sharp/sop-reads.json"
-REQUIRED = ("issue", "verified", "root cause", "outcome", "design")
+# precedent and consistent (11-25, the language owner): every planned change names its system's one precedent from
+# precedents.md and the same-kind names, commands, flags or outputs it matches, so no new API acts or reads unlike its
+# neighbors; the first outline command took one client's JSON shape for want of both.
+REQUIRED = ("issue", "verified", "root cause", "outcome", "design", "precedent", "consistent")
 # A contract a builder reads as a history: on 11-24 the tracker held 626 Brief updates on 154 issues, 53 on #359 and 52
 # on #516, so the sixth update since an issue's last Agent Brief is refused and a whole new brief replaces them.
 UPDATES = 5
