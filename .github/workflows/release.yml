@@ -382,12 +382,20 @@ jobs:
         run: sharp/bin/build-mago --engine
 
       # The law checker's build for the job's platform, which mago embeds and unpacks on the first compile that
-      # proves a law, so no machine builds the checker with lake and a binary runs only its own checker.
+      # proves a law, so no machine builds the checker with lake and a binary runs only its own checker. Only the
+      # archive ships, and the example writes the same one in any profile, so it runs in the dev profile, where the
+      # release profile compiled 175 crates in 2m33s of release run 45544095366's 3m59s step. On the Mac it runs the
+      # example "Build mago and its test binaries" compiled, since a cargo run -p resolves its features apart from the
+      # workspace's and compiles the shared crates again, as sharp/bin/build-mago explains.
       - name: Build the law checker mago embeds
         if: inputs.assets
         shell: bash
         run: |
-          cargo run --locked --release --target=${{ matrix.job.target }} -p mago-sharp-lean --example checker -- "$RUNNER_TEMP/checker.tar.zst"
+          if [[ $RUNNER_OS == macOS ]]; then
+            "$GITHUB_WORKSPACE/sharp/build/darwin-arm64/mago/debug/examples/checker" "$RUNNER_TEMP/checker.tar.zst"
+          else
+            cargo run --locked -p mago-sharp-lean --example checker -- "$RUNNER_TEMP/checker.tar.zst"
+          fi
           echo "MAGO_CHECKER_ARCHIVE=$RUNNER_TEMP/checker.tar.zst" >> "$GITHUB_ENV"
 
       # mago exits 1 when the analysis finds issues, which the corpus holds, and any other exit, a crash, a kill or a
