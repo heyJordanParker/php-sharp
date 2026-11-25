@@ -1,8 +1,0 @@
-namespace CallerChecked;
-
-import Illuminate.Support.Collection;
-
-public class Article : Collection<int, Relation>, Related
-{
-    public string viaThis() => this.first().name;
-}

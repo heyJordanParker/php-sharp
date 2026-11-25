@@ -1,6 +1,0 @@
-namespace CallerChecked;
-
-public interface Source<T>
-{
-    T read();
-}

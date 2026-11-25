@@ -1,3 +1,0 @@
-Proof.Box
-Proof.Special
-Proof.Spec

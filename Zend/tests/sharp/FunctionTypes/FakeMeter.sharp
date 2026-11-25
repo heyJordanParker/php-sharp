@@ -1,6 +1,0 @@
-namespace Demo;
-
-public class FakeMeter : Meter
-{
-    public override int now() => 7;
-}

@@ -1,9 +1,0 @@
-namespace StoredValues;
-
-import Sharp.Key;
-
-[Key("link")]
-public struct Link : Attachment
-{
-    public Link(public string url { get; }) { }
-}

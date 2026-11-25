@@ -1,8 +1,0 @@
-namespace Demo;
-
-public class Tagger<TTag : Equatable> : Keyed<List<TTag>>
-{
-    public Tagger(public TTag tag { get; }) { }
-
-    public List<TTag> key() => [this.tag];
-}

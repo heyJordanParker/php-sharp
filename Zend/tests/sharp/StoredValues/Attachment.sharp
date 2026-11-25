@@ -1,6 +1,0 @@
-namespace StoredValues;
-
-import Sharp.Tag;
-
-[Tag("type")]
-public sealed interface Attachment { }

@@ -1,6 +1,0 @@
-namespace App.Delegates;
-
-public effect abstract class Database
-{
-    public abstract int rows();
-}

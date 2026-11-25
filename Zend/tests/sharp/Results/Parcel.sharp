@@ -1,8 +1,0 @@
-namespace Demo;
-
-public enum Parcel : Labeled
-{
-    case Boxed(int size);
-
-    public string code => "boxed";
-}

@@ -1,7 +1,0 @@
-namespace InteropMatrix;
-
-import Lib.Interop.PlainLedger;
-
-public class SharpLedger : PlainLedger
-{
-}

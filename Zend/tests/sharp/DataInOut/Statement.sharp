@@ -1,8 +1,0 @@
-namespace DataInOut;
-
-public class Statement
-{
-    public Statement(public int id { get; }) { }
-
-    public int version { get; } = 1;
-}

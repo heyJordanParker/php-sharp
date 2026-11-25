@@ -1,9 +1,0 @@
-namespace LoweredAround;
-
-// A named constructor whose name starts with `__` and is no magic method's.
-public final class Maker
-{
-    public Maker(public int size { get; }) { }
-
-    public Maker.__make(int size) : this(size) { }
-}

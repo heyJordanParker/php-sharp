@@ -1,8 +1,0 @@
-namespace Demo;
-
-public class Prices
-{
-    public static Map<int, int> all() => [10: 3, 20: 4];
-
-    public static List<int> listed() => [3, 4];
-}

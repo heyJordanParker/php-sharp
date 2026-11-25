@@ -1,7 +1,0 @@
-namespace Demo;
-
-public enum Level : string
-{
-    case Low = "low";
-    case High = "high";
-}

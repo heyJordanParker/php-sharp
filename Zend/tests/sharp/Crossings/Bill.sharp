@@ -1,6 +1,0 @@
-namespace Demo;
-
-import Illuminate.Database.Eloquent.Model;
-
-// Eloquent's getKey() and getMorphClass(), which declare no return type, implement the interface's typed ones.
-public class Bill : Model, Morphable { }

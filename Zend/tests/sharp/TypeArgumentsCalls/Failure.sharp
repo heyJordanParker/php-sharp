@@ -1,7 +1,0 @@
-namespace Calls;
-
-import RuntimeException;
-
-public class Failure<T> : RuntimeException
-{
-}

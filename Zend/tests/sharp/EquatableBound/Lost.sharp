@@ -1,6 +1,0 @@
-namespace Equatables;
-
-public enum Lost : Failure
-{
-    case Gone;
-}

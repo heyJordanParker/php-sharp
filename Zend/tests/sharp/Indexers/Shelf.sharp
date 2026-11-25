@@ -1,9 +1,0 @@
-namespace Indexers;
-
-public class Shelf : Rows
-{
-    public string? this[int index]
-    {
-        get => index >= 0 ? `row ${index}` : null;
-    }
-}

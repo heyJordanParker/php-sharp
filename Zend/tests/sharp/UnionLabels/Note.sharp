@@ -1,8 +1,0 @@
-namespace Demo.Labels;
-
-public class Note
-{
-    public Note() { }
-
-    public Function<string()> tag => () => "note tag";
-}

@@ -1,3 +1,0 @@
-namespace App;
-
-extern namespace Acme.Format for shout;

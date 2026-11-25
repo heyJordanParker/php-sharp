@@ -1,6 +1,0 @@
-namespace App.Parcels;
-
-public final class Receipt
-{
-    public Receipt(public int cents { get; }, public string reference { get; }) { }
-}

@@ -1,8 +1,0 @@
-namespace Demo;
-
-import Lib.Copies;
-import Lib.Document;
-
-public class Shelved : Document, Copies
-{
-}

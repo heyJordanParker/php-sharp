@@ -1,6 +1,0 @@
-namespace ReflectedTypes;
-
-public class Box<T>
-{
-    public Box(public T held { get; }) { }
-}

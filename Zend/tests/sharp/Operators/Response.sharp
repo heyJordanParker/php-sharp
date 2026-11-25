@@ -1,6 +1,0 @@
-namespace Billing;
-
-public class Response
-{
-    public Response(public int status { get; }, public Body|string body { get; }) { }
-}

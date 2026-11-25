@@ -1,6 +1,0 @@
-namespace Demo;
-
-public interface Linked
-{
-    string name();
-}

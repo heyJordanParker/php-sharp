@@ -1,6 +1,0 @@
-namespace ReflectedConstants;
-
-public class Sized : Limits
-{
-    public const SMALL = 1;
-}

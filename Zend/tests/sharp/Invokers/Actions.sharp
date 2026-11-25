@@ -1,9 +1,0 @@
-namespace App.Invokers;
-
-// What a dispatcher may do: each call keeps to the effect `Database`.
-public interface Actions
-{
-    Any? pause(Billing billing, List<Any?> arguments) uses Database;
-
-    Any? create(List<Any?> arguments) uses Database;
-}

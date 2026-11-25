@@ -1,6 +1,0 @@
-namespace StoredValues;
-
-public struct Author
-{
-    public Author(public string name { get; }) { }
-}

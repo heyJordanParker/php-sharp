@@ -1,1 +1,0 @@
-extern namespace Zoo for shout_all;

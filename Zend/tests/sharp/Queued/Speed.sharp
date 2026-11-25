@@ -1,7 +1,0 @@
-namespace Queued;
-
-public enum Speed
-{
-    case Standard;
-    case Express;
-}

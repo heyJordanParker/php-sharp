@@ -1,2 +1,0 @@
-24:21: a spread of `list<int>` here has no PHP# form: only a `List` spreads into a call, and only into a `...` parameter (spec section 7)
-26:17: a spread of `array<int, string>` has no PHP# form: a `List` spread appends, and a `Map` spread keeps each key, where PHP renumbers an `int` key and reads `'42'` as one (spec section 12)

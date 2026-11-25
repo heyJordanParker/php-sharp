@@ -1,6 +1,0 @@
-namespace Demo;
-
-public class Kennel<out TAnimal>
-{
-    public Kennel(public TAnimal resident { get; }) { }
-}

@@ -1,7 +1,0 @@
-namespace App;
-
-public class Response
-{
-    public int status { get; set; } = 200;
-    public ResponseBody body { get; set; } = new ResponseBody();
-}

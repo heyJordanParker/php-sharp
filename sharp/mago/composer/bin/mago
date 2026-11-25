@@ -1,3 +1,0 @@
-#!/bin/sh
-echo "mago's binary is not installed: require heyjordanparker/php-sharp-composer and allow its plugin, then run \`composer install\`." >&2
-exit 1

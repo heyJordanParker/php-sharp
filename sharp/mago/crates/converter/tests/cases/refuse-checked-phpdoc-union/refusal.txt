@@ -1,1 +1,0 @@
-13:25: `mixed` reaches a parameter of a known type, which PHP# allows only from a known type, and no declaration gives this value one (spec section 24)

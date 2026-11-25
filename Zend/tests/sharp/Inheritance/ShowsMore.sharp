@@ -1,6 +1,0 @@
-namespace Demo;
-
-public interface ShowsMore : Shows
-{
-    override string label() => "more";
-}
