@@ -7,7 +7,8 @@ description: >-
   /proc/stat, and its memory the machine's memory in use, MemTotal less MemAvailable, which counts its containers. The
   self-hosted Mac runs other work beside the job, so there the job is the runner's Runner.Worker process and every
   process under it: the CPU is each live one's time plus the time of every child it reaped, as proc_pid_rusage reports
-  it, and the memory the sum of their resident sets. On Linux the notice also gives steal_seconds, the time the
+  it, and the memory the sum of their resident sets. The sampler runs while the job's Runner.Worker lives, so it ends
+  with its job even when the end step never runs. On Linux the notice also gives steal_seconds, the time the
   hypervisor ran other machines on the job's CPUs, from /proc/stat, and on each system cpu, the processor's model, as
   lscpu or sysctl names it: the
   same Mago tests took 21 to 51 s across the MAGO slices of run 45025617782, so a slow job shows whether its machine was
@@ -33,26 +34,29 @@ runs:
         echo 0 > "$state/peak-kib"
         date +%s > "$state/started"
         echo "XDG_STATE_HOME=$RUNNER_TEMP/state" >> "$GITHUB_ENV"
+        pid=$$
+        while [[ $(ps -o comm= -p "$pid") != *Runner.Worker ]]; do
+          pid=$(ps -o ppid= -p "$pid" | tr -d ' ')
+          if ((pid <= 1)); then
+            echo "::error::No Runner.Worker process runs this step, so the job's CPU and memory can't be measured."
+            exit 1
+          fi
+        done
+        echo "$pid" > "$state/worker"
         if [[ $RUNNER_OS == Linux ]]; then
           awk '/^cpu /{print $2 + $3 + $4 + $7 + $8, $9}' /proc/stat > "$state/cpu-start"
           sample='awk "/^MemTotal:/{total = \$2} /^MemAvailable:/{available = \$2} END{print total - available}" /proc/meminfo'
         else
-          pid=$$
-          while [[ $(ps -o comm= -p "$pid") != *Runner.Worker ]]; do
-            pid=$(ps -o ppid= -p "$pid" | tr -d ' ')
-            if ((pid <= 1)); then
-              echo "::error::No Runner.Worker process runs this step, so the job's CPU and memory can't be measured."
-              exit 1
-            fi
-          done
-          echo "$pid" > "$state/worker"
           # The resident sets of the worker and every process under it, in KiB.
           sample="ps -axo pid=,ppid=,rss= | awk -v root=$pid '{parent[\$1] = \$2; rss[\$1] = \$3}
             END{for (p in parent) {q = p; while (q in parent && q != root) q = parent[q]; if (q == root) sum += rss[p]} print sum}'"
         fi
+        # The sampler samples while the job's Runner.Worker lives, so it ends with its job when the end step never
+        # runs: on 11-25 the Mac held three samplers of finished jobs, the oldest 2 days 13 hours old, each forking ps
+        # every second.
         # shellcheck disable=SC2016 # The sampler's shell expands its own variables.
-        nohup bash -c 'peak=0; while :; do used=$(eval "$1"); if ((used > peak)); then peak=$used; echo "$peak" > "$2"; fi; sleep 1; done' \
-          usage "$sample" "$state/peak-kib" > /dev/null 2>&1 &
+        nohup bash -c 'peak=0; while kill -0 "$3" 2> /dev/null; do used=$(eval "$1"); if ((used > peak)); then peak=$used; echo "$peak" > "$2"; fi; sleep 1; done' \
+          usage "$sample" "$state/peak-kib" "$pid" > /dev/null 2>&1 &
         echo $! > "$state/sampler"
     - name: Write the job's CPU-seconds and peak memory
       if: inputs.end == 'true'

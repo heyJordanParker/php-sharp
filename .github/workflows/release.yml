@@ -541,6 +541,23 @@ jobs:
         with:
           end: true
 
+      # Every process the job started ends with it, however the job ended, the way systemd's KillMode=control-group
+      # ends every process of a unit when it stops. The Mac runner keeps its machine between jobs, and on 11-25 it held
+      # two sapi/cli/php -t servers and a debug mago analyze --watch of finished jobs, the oldest 5 days old: a killed
+      # test binary never runs Watch's drop guard. A process of the job is one whose command line names the job's
+      # workspace, which awk reads from its environment, so its own command line never names it.
+      - name: End every process the job started
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: |
+          ps -axwwo pid=,command= | awk -v self=$$ '$1 != self && index($0, ENVIRON["GITHUB_WORKSPACE"])' > "$RUNNER_TEMP/left"
+          while read -r pid command; do
+            echo "::notice title=Ended a process the job left::$pid ${command//%/%25}"
+            if ! kill -KILL "$pid" 2> /dev/null; then
+              echo "$pid had already ended."
+            fi
+          done < "$RUNNER_TEMP/left"
+
   # install.sh checks a download against these SHA-256s when gh is missing, and sharp.yml's COMPOSER pins them in the
   # release's heyjordanparker/mago-sharp version. They are written where the assets were built, so the release
   # publishes the SHA-256s of exactly these assets.

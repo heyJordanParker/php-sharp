@@ -15,6 +15,7 @@ source: <who hit it, and where>
 - [ ] outcome: brief | wontfix | needs-info | proposal
 - [ ] design: `proposals/<slug>.md` holds PROPOSE.md steps 1 to 3, never the reporter's request, and a `## Facts` section of `- <claim>: \`<command>\` prints <output>` lines that `facts.py` reruns
 - [ ] precedent: the system's one in `precedents.md`, each departure's reason
+- [ ] cheaper: (a speed or wait target) the operation the design makes cost less, with its count today from the build log or the job's step timeline
 - [ ] consistent: `git grep` over the whole repository for the same-kind names, commands, flags, conditions or outputs, each match listed and matched
 - [ ] request: (from another agent) the design's `## Request`: each item it asked for as `kept: <precedent or neighbor>` or `dropped: <why>`
 - [ ] proposal: today's program compiled, and the change attacked per PROPOSE.md step 4

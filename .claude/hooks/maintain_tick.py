@@ -24,6 +24,36 @@ def container_mounts():
                                      capture_output=True, text=True).stdout
 
 
+def waits_on_its_run(log):
+    """Whether a builder started a background run its transcript has no end notice for. A builder waiting on its own
+    suite writes nothing to its transcript, so its idle minutes grow: on 11-25 the laws and engine lanes were flagged
+    idle 20 minutes and re-sent their batch while their test suites ran."""
+    with open(log, encoding="utf-8", errors="replace") as fh:
+        text = fh.read()
+    started = set(re.findall(r'backgroundTaskId":"(\w+)"', text))
+    ended = set(re.findall(r"task-id>(\w+)</task-id>(?:(?!task-id>).){0,600}?<status>(?:completed|failed|killed|stopped)",
+                           text, re.S)) | set(re.findall(r"Successfully stopped task: (\w+)", text))
+    # A run whose process died without its notice holds no output file open, so only an open one counts.
+    outputs = {path for task, path in re.findall(r"with ID: (\w+)\. Output is being written to: (\S+?\.output)", text)
+               if task in started - ended}
+    return bool(outputs) and subprocess.run(["lsof", "-t", *outputs], capture_output=True, text=True).stdout.strip() != ""
+
+
+def mods_off(session):
+    """A line when this session's cmod mods are off. Claude Code turns off every hooks-worker mod for the rest of the
+    process after its hooks worker freezes three times with no mod to blame, so rulebook's rules and tracer stop
+    checking this session and every builder in it: on 11-25 they were off from 00:43 to the restart, and nothing said so.
+    cmod answers that no plugin of the session reaches it."""
+    if not session:
+        return ""
+    answer = subprocess.run(["cmod", "ui", "list", "widgets", session], capture_output=True, text=True, timeout=10)
+    if "reaches cmod serve" not in answer.stdout + answer.stderr:
+        return ""
+    # The language owner, 11-25: a session's mods being off is cmod's to hear, never his.
+    return (f"ACT FIRST: this session's cmod mods are off, so no rulebook rule or tracer check runs on it or its builders. "
+            f"SendMessage the `cmod` session the time it was seen and the session id; never report it to the language owner.\n\n")
+
+
 def free_gib():
     return int(subprocess.run(["df", "-g", "/System/Volumes/Data"], capture_output=True, text=True).stdout.split("\n")[1].split()[3])
 
@@ -66,10 +96,12 @@ def lanes():
             stalled.append(f"{lane}'s builder has no transcript")
             continue
         idle = int((time.time() - os.path.getmtime(logs[0])) // 60)
-        rows.append(f"  {lane:<9} {agent} {kind:<17} idle {idle} min")
         # A lane whose batch landed and waits only for its release is marked `| done:` in state.md, so its idle
         # builder holds no batch to send again: on 11-25 the tracer lane was flagged idle after #817 merged.
-        if idle >= IDLE and "| done:" not in line and f"worktrees/{lane.lower()}" not in container_mounts():
+        done = "| done:" in line
+        running = f"worktrees/{lane.lower()}" in container_mounts() or waits_on_its_run(logs[0])
+        rows.append(f"  {lane:<9} {agent} {kind:<17} idle {idle} min" + (", done" if done else ", its run is going" if running else ""))
+        if idle >= IDLE and not done and not running:
             stalled.append(f"{lane} idle {idle} min")
         if kind != "claude":
             stalled.append(f"{lane} runs {kind}, not claude")
@@ -222,7 +254,9 @@ def report():
         lane = parts[0]
         if "no builder" in row:
             state = "no builder"
-        elif f"worktrees/{lane.lower()}" in mounts:
+        elif row.endswith(", done"):
+            state = "done, waits for its release"
+        elif row.endswith(", its run is going") or f"worktrees/{lane.lower()}" in mounts:
             state = "working, its run is going"
         elif "idle" in parts:
             minutes = int(parts[parts.index("idle") + 1])
@@ -257,7 +291,7 @@ def main():
         except OSError as error:
             bench = f"SPEED NUMBERS: ~/.claude/orchestrate/php-sharp/bench.md could not be read: {error}."
         measured = targets()
-        context = f"{lanes()}\n\n{measured}\n\n{speed_entries(measured)}\n{upstream_engine()}\n\n{bench}"
+        context = f"{mods_off(event.get('session_id', ''))}{lanes()}\n\n{measured}\n\n{speed_entries(measured)}\n{upstream_engine()}\n\n{bench}"
     else:
         # `sop <file>` injects one file of the maintain Skill that every tick follows, SKILL.md unless another is named,
         # so a tick never runs from memory of it.
