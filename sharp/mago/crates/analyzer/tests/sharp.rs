@@ -395,26 +395,37 @@ fn package_errors(files: &[(&'static str, &'static str)]) -> Vec<String> {
 
 /// The too-wide errors of a project of `files`, as `mago analyze` gives them once it has analyzed every file: each as
 /// `path line:column message | help`, in the order the files and lines are written.
+/// Each file under `tests/` is in a test folder, an `autoload-dev` one.
 fn too_wide(files: &[(&'static str, &'static str)]) -> Vec<String> {
-    project_errors(files, mago_analyzer::too_wide_members, |issue| {
-        format!("{} | {}", issue.message, issue.help.as_deref().unwrap_or_default())
-    })
+    let test_files = test_files(files);
+
+    project_errors(
+        files,
+        |codebase, references| mago_analyzer::too_wide_members(codebase, references, &test_files),
+        |issue| format!("{} | {}", issue.message, issue.help.as_deref().unwrap_or_default()),
+    )
 }
 
 /// The unused-class errors of a project of `files`, as [`project_errors`] gives them, each file under `tests/` in a test
 /// folder, an `autoload-dev` one.
 fn unused_classes(files: &[(&'static str, &'static str)]) -> Vec<String> {
-    let test_files: Vec<FileId> = files
-        .iter()
-        .filter(|(name, _)| name.starts_with("tests/"))
-        .map(|(name, _)| FileId::new(name.as_bytes()))
-        .collect();
+    let test_files = test_files(files);
 
     project_errors(
         files,
         |codebase, references| mago_analyzer::unused_classes(codebase, references, &test_files),
         |issue| issue.message.clone(),
     )
+}
+
+/// The files of `files` under `tests/`, which the test projects hold in an `autoload-dev` folder.
+fn test_files(files: &[(&'static str, &'static str)]) -> Vec<FileId> {
+    files
+        .iter()
+        .map(|file| file.0)
+        .filter(|name| name.starts_with("tests/"))
+        .map(|name| FileId::new(name.as_bytes()))
+        .collect()
 }
 
 /// The errors `pass` gives for a project of `files` once `mago analyze` has analyzed every file, as spec section 5's
@@ -595,7 +606,7 @@ fn a_program_class_is_used_and_neither_it_nor_its_main_is_too_wide() {
     assert_eq!(
         too_wide(&[import]),
         [
-            "src/App/Console/Import.sharp 7:16 `Import.size` is public, and nothing outside `Import` uses it. | Declare it `private`."
+            "src/App/Console/Import.sharp 7:16 `Import.size` is public, and nothing outside `Import` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class."
         ]
     );
 }
@@ -660,9 +671,9 @@ fn a_public_member_nothing_outside_its_namespace_uses_is_too_wide() {
             ("src/boot.php", boot),
         ]),
         [
-            "src/App/Shop/Cart.sharp 6:22 `Cart.FLOOR` is public, and nothing outside `Cart` uses it. | Declare it `private`.",
-            "src/App/Shop/Cart.sharp 8:19 `Cart.label` is public, and nothing outside `Cart` uses it. | Declare it `private`.",
-            "src/App/Shop/Cart.sharp 17:16 `Cart.count` is public, and nothing outside `Cart` uses it. | Declare it `private`.",
+            "src/App/Shop/Cart.sharp 6:22 `Cart.FLOOR` is public, and nothing outside `Cart` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
+            "src/App/Shop/Cart.sharp 8:19 `Cart.label` is public, and nothing outside `Cart` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
+            "src/App/Shop/Cart.sharp 17:16 `Cart.count` is public, and nothing outside `Cart` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
         ]
     );
 }
@@ -687,9 +698,9 @@ fn a_plain_php_use_outside_the_namespace_keeps_a_public_member() {
             ("src/routes.php", routes),
         ]),
         [
-            "src/App/Payments/Event.sharp 5:64 `Event.kind` is public, and nothing outside `Event` uses it. | Declare it `private`.",
-            "src/App/Payments/Event.sharp 5:93 `Event.source` is public, and nothing outside `App.Payments` uses it. | Declare it `internal`.",
-            "src/App/Payments/Carts.sharp 7:19 `Carts.hidden` is public, and nothing outside `Carts` uses it. | Declare it `private`.",
+            "src/App/Payments/Event.sharp 5:64 `Event.kind` is public, and nothing outside `Event` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
+            "src/App/Payments/Event.sharp 5:93 `Event.source` is public, and nothing outside `App.Payments` uses it. | Declare it `internal`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
+            "src/App/Payments/Carts.sharp 7:19 `Carts.hidden` is public, and nothing outside `Carts` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
         ]
     );
 }
@@ -713,7 +724,7 @@ fn a_class_value_that_leaves_its_code_keeps_its_class_public() {
             ("src/boot.php", boot),
         ]),
         [
-            "src/App/Store/Reflected.sharp 3:20 `Reflected` is public, and nothing outside `App.Store` uses it. | Declare it `internal`."
+            "src/App/Store/Reflected.sharp 3:20 `Reflected` is public, and nothing outside `App.Store` uses it. | Declare it `internal`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on it."
         ]
     );
 }
@@ -785,8 +796,8 @@ fn an_event_s_parameters_are_never_too_wide() {
     assert_eq!(
         too_wide(&files),
         [
-            "src/App/Shop/Quiet.sharp 3:14 `Quiet` is public, and nothing outside `App.Shop` uses it. | Declare it `internal`.",
-            "src/App/Shop/Lost.sharp 3:14 `Lost` is public, and nothing outside `App.Shop` uses it. | Declare it `internal`.",
+            "src/App/Shop/Quiet.sharp 3:14 `Quiet` is public, and nothing outside `App.Shop` uses it. | Declare it `internal`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on it.",
+            "src/App/Shop/Lost.sharp 3:14 `Lost` is public, and nothing outside `App.Shop` uses it. | Declare it `internal`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on it.",
         ]
     );
     assert_eq!(
@@ -817,8 +828,8 @@ fn a_case_is_never_too_wide() {
             ("src/App/Web/Reader.sharp", reader),
         ]),
         [
-            "src/App/Shop/Status.sharp 12:31 `Status.open` is public, and nothing outside `Status` uses it. | Declare it `private`.",
-            "src/App/Shop/Size.sharp 8:19 `Size.label` is public, and nothing outside `Size` uses it. | Declare it `private`.",
+            "src/App/Shop/Status.sharp 12:31 `Status.open` is public, and nothing outside `Status` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
+            "src/App/Shop/Size.sharp 8:19 `Size.label` is public, and nothing outside `Size` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
         ]
     );
 }
@@ -844,7 +855,9 @@ fn a_struct_s_fields_are_used_where_it_is_encoded_or_parsed() {
             ("src/Demo/Item.sharp", item),
             ("src/Other/Wire.sharp", wire),
         ]),
-        ["src/Demo/Row.sharp 7:16 `Row.unused` is public, and nothing outside `Row` uses it. | Declare it `private`."]
+        [
+            "src/Demo/Row.sharp 7:16 `Row.unused` is public, and nothing outside `Row` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class."
+        ]
     );
 }
 
@@ -866,7 +879,7 @@ fn a_member_inherited_from_a_plain_php_parent_is_not_too_wide() {
             ("src/boot.php", boot),
         ]),
         [
-            "src/App/Shop/Cache.sharp 7:25 `App.Shop.Cache.C` is public, and nothing outside `App.Shop.Cache` uses it. | Declare it `private`."
+            "src/App/Shop/Cache.sharp 7:25 `App.Shop.Cache.C` is public, and nothing outside `App.Shop.Cache` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class."
         ]
     );
 }
@@ -890,7 +903,7 @@ fn a_member_a_class_outside_its_namespace_overrides_is_not_too_wide() {
             ("src/App/Shop/Deep/Two.sharp", two),
         ]),
         [
-            "src/App/Shop/Base.sharp 8:27 `Base.title` is public, and nothing outside `App.Shop` uses it. | Declare it `internal`."
+            "src/App/Shop/Base.sharp 8:27 `Base.title` is public, and nothing outside `App.Shop` uses it. | Declare it `internal`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class."
         ]
     );
 }
@@ -910,7 +923,7 @@ fn a_public_member_takes_the_narrowest_access_that_reaches_every_use() {
         "namespace App.Web;\n\ninternal class Page\n{\n    internal string show(Sales sales) => sales.render();\n}\n";
     let protected = |member: &str| {
         format!(
-            "`Report.{member}` is public, and nothing outside `Report` and its subclasses uses it. | Declare it `protected`."
+            "`Report.{member}` is public, and nothing outside `Report` and its subclasses uses it. | Declare it `protected`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class."
         )
     };
 
@@ -925,7 +938,7 @@ fn a_public_member_takes_the_narrowest_access_that_reaches_every_use() {
             format!("src/App/Shop/Report.sharp 9:28 {}", protected("title")),
             format!("src/App/Shop/Report.sharp 11:27 {}", protected("header")),
             format!("src/App/Shop/Report.sharp 13:19 {}", protected("stamp")),
-            "src/App/Shop/Report.sharp 15:19 `Report.footer` is public, and nothing outside `App.Shop` uses it. | Declare it `internal`.".to_owned(),
+            "src/App/Shop/Report.sharp 15:19 `Report.footer` is public, and nothing outside `App.Shop` uses it. | Declare it `internal`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.".to_owned(),
         ]
     );
 }
@@ -945,8 +958,11 @@ fn a_public_type_nothing_outside_its_namespace_uses_is_too_wide() {
     let cart = "namespace App.Shop;\n\ninternal class Cart\n{\n    internal Quiet quiet() => new Quiet(1);\n\n    internal int total(Basket basket, Priced priced, Point point, Size size) => 0;\n}\n";
     let page = "namespace App.Web;\n\nimport App.Shop.Shelf;\n\ninternal class Page\n{\n    internal int show(Shelf shelf) => 0;\n}\n";
     let boot = "<?php\n\n$till = new \\App\\Shop\\Till();\n";
-    let refused =
-        |name: &str| format!("`{name}` is public, and nothing outside `App.Shop` uses it. | Declare it `internal`.");
+    let refused = |name: &str| {
+        format!(
+            "`{name}` is public, and nothing outside `App.Shop` uses it. | Declare it `internal`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on it."
+        )
+    };
 
     assert_eq!(
         too_wide(&[
@@ -995,10 +1011,10 @@ fn a_public_member_whose_attribute_a_framework_reads_by_reflection_is_not_too_wi
             ("src/App/Payments/Hooks.sharp", hooks),
         ]),
         [
-            "src/App/Payments/Hooks.sharp 14:22 `Hooks.CAP` is public, and nothing outside `Hooks` uses it. | Declare it `private`.",
-            "src/App/Payments/Hooks.sharp 20:19 `Hooks.label` is public, and nothing outside `Hooks` uses it. | Declare it `private`.",
-            "src/App/Payments/Hooks.sharp 29:17 `Hooks.voided` is public, and nothing outside `Hooks` uses it. | Declare it `private`.",
-            "src/App/Payments/Hooks.sharp 31:17 `Hooks.settled` is public, and nothing outside `Hooks` uses it. | Declare it `private`.",
+            "src/App/Payments/Hooks.sharp 14:22 `Hooks.CAP` is public, and nothing outside `Hooks` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
+            "src/App/Payments/Hooks.sharp 20:19 `Hooks.label` is public, and nothing outside `Hooks` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
+            "src/App/Payments/Hooks.sharp 29:17 `Hooks.voided` is public, and nothing outside `Hooks` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
+            "src/App/Payments/Hooks.sharp 31:17 `Hooks.settled` is public, and nothing outside `Hooks` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
         ]
     );
 }
@@ -1028,7 +1044,7 @@ fn an_attribute_on_an_extern_line_is_the_declaration_s_own() {
             ("src/App/Payments/Hooks.sharp", hooks),
         ]),
         [
-            "src/App/Payments/Hooks.sharp 10:17 `Hooks.settled` is public, and nothing outside `Hooks` uses it. | Declare it `private`."
+            "src/App/Payments/Hooks.sharp 10:17 `Hooks.settled` is public, and nothing outside `Hooks` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class."
         ]
     );
 
@@ -1088,7 +1104,7 @@ fn a_marked_attribute_on_a_class_or_a_member_counts_it_as_used_and_the_mark_goes
             ("src/App/Shop/Receipts.sharp", receipts),
         ]),
         [
-            "src/App/Shop/Receipts.sharp 10:17 `Receipts.voided` is public, and nothing outside `Receipts` uses it. | Declare it `private`."
+            "src/App/Shop/Receipts.sharp 10:17 `Receipts.voided` is public, and nothing outside `Receipts` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class."
         ]
     );
 
@@ -1098,6 +1114,50 @@ fn a_marked_attribute_on_a_class_or_a_member_counts_it_as_used_and_the_mark_goes
         [
             "5:6 invalid-attribute-target Attribute `DynamicallyAccessed` cannot be used on a method. | Remove `[DynamicallyAccessed]` here, or add a method to the targets in the `[Attribute(…)]` of the `DynamicallyAccessed` class.",
             "8:6 invalid-attribute-target Attribute `DynamicallyAccessed` cannot be used on a property. | Remove `[DynamicallyAccessed]` here, or add a property to the targets in the `[Attribute(…)]` of the `DynamicallyAccessed` class.",
+        ]
+    );
+}
+
+/// Spec section 5: a reach the checker can't see counts as a use from outside. A framework that reads a marked
+/// attribute of a class calls every public member the class has, so `handle`, which `Nightly` inherits from `Sweep`, is
+/// not too wide, nor is the `Sweep` it is declared in. A class in a test folder is created by its runner, so it is not
+/// too wide either. Without the mark, or outside a test folder, each is refused as before.
+#[test]
+fn a_member_a_marked_class_inherits_and_a_test_folder_class_are_not_too_wide() {
+    let marker = (
+        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/DynamicallyAccessed.sharp",
+        include_str!("../../../../composer/library/Sharp/DynamicallyAccessed.sharp"),
+    );
+    let scheduled = (
+        "src/App/Jobs/Scheduled.sharp",
+        "namespace App.Jobs;\n\nimport Attribute;\n\n[Attribute]\n[DynamicallyAccessed]\ninternal final class Scheduled\n{\n}\n",
+    );
+    let sweep = (
+        "src/App/Jobs/Sweep.sharp",
+        "namespace App.Jobs;\n\npublic abstract class Sweep\n{\n    public void handle() { }\n}\n",
+    );
+    let nightly =
+        ("src/App/Jobs/Nightly.sharp", "namespace App.Jobs;\n\n[Scheduled]\npublic class Nightly : Sweep\n{\n}\n");
+    let unmarked = ("src/App/Jobs/Nightly.sharp", "namespace App.Jobs;\n\npublic class Nightly : Sweep\n{\n}\n");
+    let probe = "namespace Tests.Feature;\n\nimport App.Jobs.Sweep;\n\npublic class Probe : Sweep\n{\n}\n";
+
+    assert_eq!(too_wide(&[marker, scheduled, sweep, nightly]), Vec::<String>::new());
+    assert_eq!(
+        too_wide(&[marker, scheduled, sweep, nightly, ("tests/Feature/Probe.sharp", probe)]),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        too_wide(&[marker, scheduled, sweep, unmarked]),
+        [
+            "src/App/Jobs/Sweep.sharp 3:23 `Sweep` is public, and nothing outside `App.Jobs` uses it. | Declare it `internal`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on it.",
+            "src/App/Jobs/Sweep.sharp 5:17 `Sweep.handle` is public, and nothing outside `Sweep` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
+            "src/App/Jobs/Nightly.sharp 3:14 `Nightly` is public, and nothing outside `App.Jobs` uses it. | Declare it `internal`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on it.",
+        ]
+    );
+    assert_eq!(
+        too_wide(&[marker, scheduled, sweep, nightly, ("src/Tests/Feature/Probe.sharp", probe)]),
+        [
+            "src/Tests/Feature/Probe.sharp 5:14 `Probe` is public, and nothing outside `Tests.Feature` uses it. | Declare it `internal`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on it."
         ]
     );
 }
@@ -1155,9 +1215,9 @@ fn an_exported_method_is_not_too_wide_and_the_other_marks_change_nothing() {
     assert_eq!(
         too_wide(&[export, import, key, ("src/Lib/Base.php", base), ("src/App/Shop/Pricing.sharp", pricing)]),
         [
-            "src/App/Shop/Pricing.sharp 10:16 `Pricing.id` is public, and nothing outside `Pricing` uses it. | Declare it `private`.",
-            "src/App/Shop/Pricing.sharp 12:22 `Pricing.amounts` is public, and nothing outside `Pricing` uses it. | Declare it `private`.",
-            "src/App/Shop/Pricing.sharp 20:23 `Pricing.distance` is public, and nothing outside `Pricing` uses it. | Declare it `private`.",
+            "src/App/Shop/Pricing.sharp 10:16 `Pricing.id` is public, and nothing outside `Pricing` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
+            "src/App/Shop/Pricing.sharp 12:22 `Pricing.amounts` is public, and nothing outside `Pricing` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
+            "src/App/Shop/Pricing.sharp 20:23 `Pricing.distance` is public, and nothing outside `Pricing` uses it. | Declare it `private`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class.",
         ]
     );
 }
@@ -3950,6 +4010,33 @@ fn a_property_overrides_a_sharp_property_only_when_it_is_open() {
             ),
         ]
     );
+}
+
+/// Spec sections 6.1 and 22: an override in an open class stays open until `final override` closes the chain at its
+/// class, as it closes a method's, so a subclass below replaces the open override and not the final one.
+#[test]
+fn a_final_override_property_closes_its_override_chain() {
+    let base = (
+        "src/Demo/Base.sharp",
+        "namespace Demo;\n\npublic abstract class Base\n{\n    public abstract string content { get; }\n}\n",
+    );
+    let leaf = (
+        "src/Demo/OpenLeaf.sharp",
+        "namespace Demo;\n\npublic class OpenLeaf : Base\n{\n    public final override string content { get; set; } = \"x\";\n}\n",
+    );
+    let branch = (
+        "src/Demo/OpenBranch.sharp",
+        "namespace Demo;\n\npublic class OpenBranch : Base\n{\n    public override string content { get; set; } = \"x\";\n}\n",
+    );
+    let below_leaf = "namespace Demo;\n\npublic class BelowLeaf : OpenLeaf\n{\n    public override string content { get; set; } = \"y\";\n}\n";
+    let below_branch = "namespace Demo;\n\npublic class BelowBranch : OpenBranch\n{\n    public override string content { get; set; } = \"y\";\n}\n";
+
+    assert_eq!(issues(leaf, &[base]), Vec::<String>::new());
+    assert_eq!(
+        messages(("src/Demo/BelowLeaf.sharp", below_leaf), &[base, leaf]),
+        ["`OpenLeaf.content` is `final`, so no subclass replaces it."]
+    );
+    assert_eq!(messages(("src/Demo/BelowBranch.sharp", below_branch), &[base, branch]), Vec::<String>::new());
 }
 
 /// Spec sections 6.1 and 9: a property a constructor promotes is closed, as one in the class body is, and a parameter
@@ -17395,6 +17482,77 @@ fn a_struct_inherits_nothing_implements_interfaces_and_is_declared_once() {
     let class = ("src/Demo/Dup.sharp", "namespace Demo;\n\nclass Dup\n{\n}\n");
     let structure = ("app/Demo/Dup.sharp", "namespace Demo;\n\nstruct Dup\n{\n}\n");
     assert_keeps_name(structure, (class, "Class `Dup` is already defined in `app/Demo/Dup.sharp`."), &[]);
+}
+
+/// Spec section 10: a struct's header may open with the built-in type it is stored as, `string`, `int`, `float` or
+/// `bool`, and a struct or any other type in that place is refused naming the four. A backed struct with no fields
+/// holds the one value its constructor takes, so a constructor that takes another is refused, and one that declares
+/// none gets it, with its `value` and its `parse`. One with fields declares the `value` it is stored as and the `parse`
+/// that reads it back, and each it lacks is refused by name. A class with `parse(string)` and `toString()` declares no
+/// stored form, so a struct field of it is refused naming `: string`.
+#[test]
+fn a_struct_declares_a_built_in_backing_type_and_the_value_and_parse_its_stored_form_needs() {
+    let sharp = [
+        (
+            "src/Demo/Email.sharp",
+            "namespace Demo;\n\npublic struct Email : string\n{\n    public Email(string value)\n    {\n        if (value == \"\") {\n            throw new ValueError(\"no email address\");\n        }\n    }\n}\n",
+        ),
+        (
+            "src/Demo/Address.sharp",
+            "namespace Demo;\n\npublic struct Address\n{\n    public Address(public string street { get; }) { }\n}\n",
+        ),
+        ("src/Demo/Home.sharp", "namespace Demo;\n\npublic struct Home : Address\n{\n    public Home() { }\n}\n"),
+        (
+            "src/Demo/Point.sharp",
+            "namespace Demo;\n\npublic struct Point : string\n{\n    public Point(public int x { get; }, public int y { get; }) { }\n\n    public string value => `${this.x},${this.y}`;\n}\n",
+        ),
+        (
+            "src/Demo/Spot.sharp",
+            "namespace Demo;\n\npublic struct Spot : int\n{\n    public Spot(public int x { get; }) { }\n\n    public static Spot parse(int value) => new Spot(value);\n}\n",
+        ),
+        (
+            "src/Demo/Money.sharp",
+            "namespace Demo;\n\npublic class Money\n{\n    public Money(public int cents { get; }) { }\n\n    public static Money parse(string text) => new Money(Int.parse(text));\n\n    public string toString() => `${this.cents}`;\n}\n",
+        ),
+        (
+            "src/Demo/Price.sharp",
+            "namespace Demo;\n\npublic struct Price\n{\n    public Price(public Money amount { get; }) { }\n}\n",
+        ),
+        ("src/Demo/Rows.sharp", "namespace Demo;\n\npublic struct Rows : array\n{\n}\n"),
+        ("src/Demo/Pin.sharp", "namespace Demo;\n\npublic struct Pin : int\n{\n    public Pin(int code) { }\n}\n"),
+        ("src/Demo/UserId.sharp", "namespace Demo;\n\npublic struct UserId : int\n{\n}\n"),
+        (
+            "src/Demo/Users.sharp",
+            "namespace Demo;\n\npublic static class Users\n{\n    public static int first() => new UserId(7).value;\n\n    public static UserId read() => UserId.parse(3);\n}\n",
+        ),
+    ];
+
+    assert_eq!(
+        each_file(reported, &sharp, &[]),
+        [
+            vec![],
+            vec![],
+            vec![
+                "3:22 invalid-struct `Address` is a struct, and a struct is stored as `string`, `int`, `float` or `bool`."
+            ],
+            vec![
+                "3:15 invalid-struct `Point` has fields, so it declares `public static Point parse(string value)`, which builds it back from the `string` it is stored as."
+            ],
+            vec![
+                "3:15 invalid-struct `Spot` has fields, so it declares `public int value`, the `int` it is stored as."
+            ],
+            vec![],
+            vec![
+                "5:25 invalid-struct `Money` has `parse(string)` and `toString()`, which store nothing: declare `: string` on it, with the `value` it is stored as and the `parse` that reads it back."
+            ],
+            vec!["3:22 invalid-struct `Rows` is stored as `string`, `int`, `float` or `bool`, and no other type."],
+            vec![
+                "5:5 invalid-struct `Pin` holds the `int` it is stored as, so its constructor takes `int value` alone."
+            ],
+            vec![],
+            vec![],
+        ]
+    );
 }
 
 /// Spec section 10: `==` on a struct compares each property with its own `==`, so a struct with a property `==` can't
@@ -35015,10 +35173,10 @@ const JSON_VALUE: (&str, &str) = (
 );
 
 /// Spec sections 10 and 24: `Json.encode` takes any value, and a JSON object's key is text, so a `Map` keyed by an
-/// object without `toString()`, wherever the value holds it, is an error. A struct with `toString()`, a backed enum,
-/// an `int` and a `string` key a JSON object.
+/// object stored as no `int` or `string`, wherever the value holds it, is an error. A struct backed by `string`, a
+/// backed enum, an `int` and a `string` key a JSON object.
 #[test]
-fn json_encode_refuses_a_map_keyed_by_an_object_without_to_string() {
+fn json_encode_refuses_a_map_keyed_by_an_object_stored_as_no_int_or_string() {
     let shapes = [
         JSON,
         JSON_VALUE,
@@ -35026,10 +35184,7 @@ fn json_encode_refuses_a_map_keyed_by_an_object_without_to_string() {
             "app/Shop/Point.sharp",
             "namespace App.Shop;\n\npublic struct Point\n{\n    public Point(public int x { get; }) { }\n}\n",
         ),
-        (
-            "app/Shop/Tag.sharp",
-            "namespace App.Shop;\n\npublic struct Tag\n{\n    public Tag(public string name { get; }) { }\n\n    public string toString() => this.name;\n}\n",
-        ),
+        ("app/Shop/Tag.sharp", "namespace App.Shop;\n\npublic struct Tag : string\n{\n}\n"),
         (
             "app/Shop/Board.sharp",
             "namespace App.Shop;\n\npublic struct Board\n{\n    public Board(public Map<Point, int> counts { get; }) { }\n}\n",
@@ -35041,7 +35196,7 @@ fn json_encode_refuses_a_map_keyed_by_an_object_without_to_string() {
         "app/Shop/Report.sharp",
         "namespace App.Shop;\n\nimport Sharp.Encoding.Json;\n\npublic class Report\n{\n    public static void run(Map<Point, int> points, Map<Tag, int> tags, List<Map<Point, int>> nested, Map<string, Point> values, Map<int, string> numbered, Any? raw, Board board, Map<float, int> floats, Map<Plain, int> plains, Map<bool, int> flags, Map<Coded, int> coded)\n    {\n        Report.keep(Json.encode(tags));\n        Report.keep(Json.encode(values));\n        Report.keep(Json.encode(numbered));\n        Report.keep(Json.encode(raw));\n        Report.keep(Json.encode(points));\n        Report.keep(Json.encode(nested));\n        Report.keep(Json.encode(board));\n        Report.keep(Json.encode(floats));\n        Report.keep(Json.encode(plains));\n        Report.keep(Json.encode(flags));\n        Report.keep(Json.encode(coded));\n    }\n\n    public static void keep(string json)\n    {\n    }\n}\n",
     );
-    let point = "invalid-json-key `Json.encode` writes each `Map` key as JSON text, and `Point` has no `toString()`. | Declare `public string toString()` on `Point`, or encode a `Map` keyed by text.";
+    let point = "invalid-json-key `Json.encode` writes each `Map` key as JSON text, and `Point` is stored as no `int` or `string`. | Back `Point` by `string` or `int`, as `: string` after its name, or encode a `Map` keyed by text.";
 
     assert_eq!(worded(JSON, &[JSON_VALUE]), Vec::<String>::new());
     assert_eq!(
@@ -35050,9 +35205,9 @@ fn json_encode_refuses_a_map_keyed_by_an_object_without_to_string() {
             format!("13:33 {point}"),
             format!("14:33 {point}"),
             format!("15:33 {point}"),
-            "16:33 invalid-json-key `Json.encode` writes each `Map` key as JSON text, and a `float` key has none. | Encode a `Map` keyed by an `int`, a `string`, a backed enum or a class with `toString()`.".to_owned(),
-            "17:33 invalid-json-key `Json.encode` writes each `Map` key as JSON text, and `Plain` has no `toString()`. | Declare `public string toString()` on `Plain`, or encode a `Map` keyed by text.".to_owned(),
-            "18:33 invalid-json-key `Json.encode` writes each `Map` key as JSON text, and a `bool` key has none. | Encode a `Map` keyed by an `int`, a `string`, a backed enum or a class with `toString()`.".to_owned(),
+            "16:33 invalid-json-key `Json.encode` writes each `Map` key as JSON text, and a `float` key has none. | Encode a `Map` keyed by an `int`, a `string`, a backed enum or a struct backed by `int` or `string`.".to_owned(),
+            "17:33 invalid-json-key `Json.encode` writes each `Map` key as JSON text, and `Plain` is stored as no `int` or `string`. | Back `Plain` by `string` or `int`, as `: string` after its name, or encode a `Map` keyed by text.".to_owned(),
+            "18:33 invalid-json-key `Json.encode` writes each `Map` key as JSON text, and a `bool` key has none. | Encode a `Map` keyed by an `int`, a `string`, a backed enum or a struct backed by `int` or `string`.".to_owned(),
         ]
     );
 }
@@ -35075,7 +35230,7 @@ fn a_parameter_marked_encoded_as_json_refuses_a_map_key_with_no_json_text() {
     assert_eq!(
         refusals(report, &[feed, JSON, JSON_VALUE]),
         [
-            "7:71 invalid-json-key `Feed.write` writes each `Map` key as JSON text, and a `float` key has none. | Encode a `Map` keyed by an `int`, a `string`, a backed enum or a class with `toString()`."
+            "7:71 invalid-json-key `Feed.write` writes each `Map` key as JSON text, and a `float` key has none. | Encode a `Map` keyed by an `int`, a `string`, a backed enum or a struct backed by `int` or `string`."
         ]
     );
 }

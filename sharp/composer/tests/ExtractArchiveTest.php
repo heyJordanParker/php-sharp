@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Mago\Tests\Internal;
+namespace PhpSharp\Composer\Tests;
 
 use FilesystemIterator;
+use PhpSharp\Composer\MagoBinary;
 use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -21,8 +22,6 @@ use function fopen;
 use function fwrite;
 use function hash;
 use function hash_file;
-use function Mago\Internal\extract_archive;
-use function Mago\Internal\get_archive_checksum;
 use function mkdir;
 use function proc_close;
 use function proc_open;
@@ -36,7 +35,7 @@ use function var_export;
 use const PHP_BINARY;
 
 /**
- * The wrapper runs the `mago` it downloads from the GitHub release, so it extracts an archive only when the archive's
+ * The plugin installs the `mago` it downloads from the GitHub release, so it extracts an archive only when the archive's
  * SHA-256 is the one the heyjordanparker/mago-sharp release pins in composer/sha256sums.txt.
  */
 final class ExtractArchiveTest extends TestCase
@@ -74,7 +73,7 @@ final class ExtractArchiveTest extends TestCase
         file_put_contents("{$this->directory}/mago-1.0.0-test/mago", 'the mago binary');
         $archive = $this->archive();
 
-        extract_archive($archive, (string) hash_file('sha256', $archive), "{$this->directory}/release");
+        MagoBinary::extractArchive($archive, (string) hash_file('sha256', $archive), "{$this->directory}/release");
 
         self::assertSame('the mago binary', file_get_contents("{$this->directory}/release/mago-1.0.0-test/mago"));
         self::assertFileDoesNotExist($archive);
@@ -98,9 +97,9 @@ final class ExtractArchiveTest extends TestCase
                 'memory_limit=128M',
                 '-r',
                 'require '
-                    . var_export(dirname(__DIR__, 3) . '/vendor/autoload.php', true)
+                    . var_export(dirname(__DIR__, 2) . '/build/php-sharp-composer/vendor/autoload.php', true)
                     . ';'
-                    . 'Mago\\Internal\\extract_archive('
+                    . 'PhpSharp\\Composer\\MagoBinary::extractArchive('
                     . var_export($archive, true)
                     . ', '
                     . var_export((string) hash_file('sha256', $archive), true)
@@ -126,7 +125,7 @@ final class ExtractArchiveTest extends TestCase
         $pinned = hash('sha256', 'the archive the release built');
 
         try {
-            extract_archive($archive, $pinned, "{$this->directory}/release");
+            MagoBinary::extractArchive($archive, $pinned, "{$this->directory}/release");
             self::fail('A tampered archive was extracted.');
         } catch (RuntimeException $exception) {
             self::assertSame(
@@ -147,7 +146,7 @@ final class ExtractArchiveTest extends TestCase
         file_put_contents($archive, 'not a gzip stream');
 
         try {
-            extract_archive($archive, (string) hash_file('sha256', $archive), "{$this->directory}/release");
+            MagoBinary::extractArchive($archive, (string) hash_file('sha256', $archive), "{$this->directory}/release");
             self::fail('An archive tar cannot read was extracted.');
         } catch (RuntimeException $exception) {
             self::assertMatchesRegularExpression(
@@ -169,7 +168,7 @@ final class ExtractArchiveTest extends TestCase
             . "{$pinned}  mago-1.0.0-x86_64-unknown-linux-gnu.tar.gz\n",
         );
 
-        self::assertSame($pinned, get_archive_checksum(
+        self::assertSame($pinned, MagoBinary::archiveChecksum(
             "{$this->directory}/sha256sums.txt",
             'mago-1.0.0-x86_64-unknown-linux-gnu.tar.gz',
         ));
@@ -189,7 +188,7 @@ final class ExtractArchiveTest extends TestCase
             ),
         );
 
-        get_archive_checksum("{$this->directory}/sha256sums.txt", 'mago-1.0.0-x86_64-unknown-linux-gnu.tar.gz');
+        MagoBinary::archiveChecksum("{$this->directory}/sha256sums.txt", 'mago-1.0.0-x86_64-unknown-linux-gnu.tar.gz');
     }
 
     public function testAPackageWithoutTheReleaseFileIsRefused(): void
@@ -201,7 +200,7 @@ final class ExtractArchiveTest extends TestCase
             ),
         );
 
-        get_archive_checksum("{$this->directory}/sha256sums.txt", 'mago-1.0.0-x86_64-unknown-linux-gnu.tar.gz');
+        MagoBinary::archiveChecksum("{$this->directory}/sha256sums.txt", 'mago-1.0.0-x86_64-unknown-linux-gnu.tar.gz');
     }
 
     /**

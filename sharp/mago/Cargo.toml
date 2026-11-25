@@ -230,7 +230,7 @@ semver = "1"
 tar = "0.4"
 flate2 = "1"
 zstd = { version = "0.13", default-features = false }
-zip = { version = "6", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 tempfile = "3.15.0"
 colored = "3.0.0"
 blake3 = "1.8.1"
@@ -420,6 +420,13 @@ lto = 'off'
 panic = 'unwind'
 incremental = false
 
+# A dependency only build scripts use builds as the crates do, so sharp/bin/build-mago --bin shares it with the
+# workspace's build, where the tests use it too: all 381 units of --bin are among the 542 of the workspace's build.
+# With build-override's default debug of 0, fnv and anyhow, which --bin uses only in build scripts, built apart, and
+# 49 of its units with them.
+[profile.dev.build-override]
+debug = 'line-tables-only'
+
 # The crates the prelude's decode runs in build optimized in every profile. A test process decodes the 7.6 MB prelude
 # build.rs writes, which at opt-level 0 took 96% of one fast analyzer test process's 0.43 CPU-seconds, and 0.089 with
 # these four. Serde's generic decoding of the prelude's types compiles into mago-prelude, which instantiates it.
@@ -433,4 +440,10 @@ opt-level = 3
 opt-level = 3
 
 [profile.dev.package.serde_core]
+opt-level = 3
+
+# zstd's C encoder builds optimized in every profile, since the release's Mac job runs the dev build's law checker
+# example, whose archive compresses at level 19. At opt-level 0 that checker wrote 7.4 of the archive's 32.9 MB in
+# 180 CPU-seconds, and at 3 it wrote all of it in 155.6, with zstd-sys compiling in 27.0 CPU-seconds where it took 10.0.
+[profile.dev.package.zstd-sys]
 opt-level = 3

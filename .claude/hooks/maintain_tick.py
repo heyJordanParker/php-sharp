@@ -24,6 +24,38 @@ def container_mounts():
                                      capture_output=True, text=True).stdout
 
 
+def waits_on_its_run(log):
+    """Whether a builder started a background run its transcript has no end notice for. A builder waiting on its own
+    suite writes nothing to its transcript, so its idle minutes grow: on 11-25 the laws and engine lanes were flagged
+    idle 20 minutes and re-sent their batch while their test suites ran."""
+    with open(log, encoding="utf-8", errors="replace") as fh:
+        text = fh.read()
+    started = set(re.findall(r'backgroundTaskId":"(\w+)"', text))
+    ended = set(re.findall(r"task-id>(\w+)</task-id>(?:(?!task-id>).){0,600}?<status>(?:completed|failed|killed|stopped)",
+                           text, re.S)) | set(re.findall(r"Successfully stopped task: (\w+)", text))
+    # A run whose process died without its notice holds no output file open, so only an open one counts.
+    outputs = {path for task, path in re.findall(r"with ID: (\w+)\. Output is being written to: (\S+?\.output)", text)
+               if task in started - ended}
+    return bool(outputs) and subprocess.run(["lsof", "-t", *outputs], capture_output=True, text=True).stdout.strip() != ""
+
+
+def mods_off(session):
+    """A line when this session's cmod mods are off. Claude Code turns off every hooks-worker mod for the rest of the
+    process after its hooks worker freezes three times with no mod to blame, so rulebook's rules and tracer stop
+    checking this session and every builder in it: on 11-25 they were off from 00:43 to the restart, and nothing said so.
+    cmod answers that no plugin of the session reaches it."""
+    if not session:
+        return ""
+    answer = subprocess.run(["cmod", "ui", "list", "widgets", session], capture_output=True, text=True, timeout=10)
+    if "reaches cmod serve" not in answer.stdout + answer.stderr:
+        return ""
+    # The language owner, 11-25: a session's mods being off is cmod's to hear, never his.
+    # The language owner, 11-25 13:5x: the session is never restarted for this, and the cmod session already holds it.
+    return (f"FACT: this session's cmod mods are off for the rest of its process, so no rulebook rule or tracer check runs "
+            f"on it or its builders. The cmod session owns the fix; never report it to the language owner, and never ask "
+            f"him to restart.\n\n")
+
+
 def free_gib():
     return int(subprocess.run(["df", "-g", "/System/Volumes/Data"], capture_output=True, text=True).stdout.split("\n")[1].split()[3])
 
@@ -66,8 +98,12 @@ def lanes():
             stalled.append(f"{lane}'s builder has no transcript")
             continue
         idle = int((time.time() - os.path.getmtime(logs[0])) // 60)
-        rows.append(f"  {lane:<9} {agent} {kind:<17} idle {idle} min")
-        if idle >= IDLE and f"worktrees/{lane.lower()}" not in container_mounts():
+        # A lane whose batch landed and waits only for its release is marked `| done:` in state.md, so its idle
+        # builder holds no batch to send again: on 11-25 the tracer lane was flagged idle after #817 merged.
+        done = "| done:" in line
+        running = f"worktrees/{lane.lower()}" in container_mounts() or waits_on_its_run(logs[0])
+        rows.append(f"  {lane:<9} {agent} {kind:<17} idle {idle} min" + (", done" if done else ", its run is going" if running else ""))
+        if idle >= IDLE and not done and not running:
             stalled.append(f"{lane} idle {idle} min")
         if kind != "claude":
             stalled.append(f"{lane} runs {kind}, not claude")
@@ -93,6 +129,60 @@ def targets():
     if out.returncode != 0 or not out.stdout.strip():
         return f"TICK INPUT MISSING: {script} exited {out.returncode}: {out.stderr.strip()[-400:]}. Fix that first."
     return out.stdout.strip()
+
+
+# The speed targets, by the name targets.py prints. The language owner set speed as a standing priority on 11-24,
+# triaged like any other problem: each one off its goal is an intake entry headed `## Speed: <name>` (TRIAGE.md).
+SPEED_TARGETS = ("edit CPU", "edit peak memory", "Mac job, last green", "longest CI job, last green",
+                 "longest local loop, last 24 h")
+
+
+def speed_entries(measured):
+    """Each speed target that `measured`, targets.py's output, shows off its goal with no intake entry for it."""
+    with open(os.path.expanduser("~/.claude/orchestrate/php-sharp/intake.md"), encoding="utf-8") as fh:
+        entries = fh.read().split("\n## ")
+    speed = [entry for entry in entries if entry.startswith("Speed: ")]
+    headings = ["## " + entry.split("\n", 1)[0] for entry in speed]
+    # A speed design is checked against the ledger of experiments first, so none is tried twice (TRIAGE.md).
+    unsearched = [entry.split("\n", 1)[0] for entry in speed
+                  if "- [x] design:" in entry and "experiments.md" not in entry]
+    missing = [
+        name for name in SPEED_TARGETS
+        if re.search(rf"^  {re.escape(name)}: .* x\d", measured, re.M)
+        and not any(heading.startswith(f"## Speed: {name}") for heading in headings)
+    ]
+    lines = []
+    if missing:
+        lines.append("SPEED, ACT FIRST: " + "; ".join(missing) + " off its goal with no intake entry. Enter each as "
+                     "`## Speed: <target>` at a consumer defect's rank (TRIAGE.md).")
+    if unsearched:
+        lines.append("SPEED, ACT FIRST: " + "; ".join(unsearched) + " checks its design box without searching "
+                     "benchmark/experiments.md: name the lines it searched there (TRIAGE.md).")
+    return "\n".join(lines) or "SPEED: every speed target off its goal has its intake entry."
+
+
+def upstream_engine():
+    """The engine's php version against upstream's newest patch release of the same minor version.
+
+    The engine takes upstream by merging each patch release's tag, for its security fixes (proposals/engine-8-5-13.md),
+    so a newer tag is a problem the tick names until an intake entry merges it."""
+    with open("main/php_version.h", encoding="utf-8") as fh:
+        ours = re.search(r'#define PHP_VERSION "(\d+)\.(\d+)\.(\d+)"', fh.read())
+    minor = f"{ours.group(1)}.{ours.group(2)}"
+    listed = subprocess.run(["git", "ls-remote", "--tags", "https://github.com/php/php-src.git", f"php-{minor}.*"],
+                            capture_output=True, text=True, timeout=30).stdout
+    patches = [int(m.group(1)) for m in re.finditer(rf"refs/tags/php-{re.escape(minor)}\.(\d+)$", listed, re.M)]
+    if not patches:
+        return f"UPSTREAM ENGINE: no php-{minor} release tag read from php/php-src."
+    newest = max(patches)
+    if newest <= int(ours.group(3)):
+        return f"UPSTREAM ENGINE: the engine is php {minor}.{ours.group(3)}, upstream's newest patch release."
+    with open(os.path.expanduser("~/.claude/orchestrate/php-sharp/intake.md"), encoding="utf-8") as fh:
+        entered = re.search(rf"^## .*\b{re.escape(minor)}\.{newest}\b", fh.read(), re.M)
+    if entered:
+        return f"UPSTREAM ENGINE: php {minor}.{newest} is released and in intake; the engine is {minor}.{ours.group(3)}."
+    return (f"UPSTREAM ENGINE, ACT FIRST: upstream released php {minor}.{newest}; the engine is {minor}.{ours.group(3)}. "
+            f"Enter an intake entry that merges its tag, as #785 merges 8.5.13.")
 
 
 def archive_finished():
@@ -144,15 +234,19 @@ def report():
     # Each target's value 24 hours ago, from the TREND lines, so a target that rose shows beside its number.
     trend = {m.group(1): (m.group(2), m.group(3)) for m in
              (re.match(r"\s+(.+?): ([\d.]+) -> [\d.]+ (ROSE|fell|held)$", line) for line in lines) if m}
+    # A target with no value a day ago shows when it was first measured, never a bare "none".
+    first = {m.group(1): m.group(2) for m in
+             (re.match(r"\s+(.+?): first measured (\d\d-\d\d \d\d:\d\dZ|now)$", line) for line in lines) if m}
     goals = []
     for line in lines[start + 1:]:
-        found = re.match(r"\s+(.+?): ([\d.]+)( ?[A-Za-z]*) / ([\d.]+)( ?[A-Za-z]*) (MET|x([\d.]+))(?:, run \d+ (.+))?$", line)
+        found = re.match(r"\s+(.+?): ([\d.]+)( ?[A-Za-z]*) / ([\d.]+)( ?[A-Za-z]*) (MET|x([\d.]+))(?:, (?:run \d+ )?(.+))?$", line)
         if found:
             name = re.sub(r",? (mean|last green)$", "", found.group(1)).replace("->", " to ")
             off = 0.0 if found.group(6) == "MET" else float(found.group(7))
             when = f"  ({found.group(8)})" if found.group(8) else ""
             before, moved = trend.get(found.group(1), ("", ""))
-            day = f"{float(before):.1f}{found.group(3)}" if before else "none"
+            since = first.get(found.group(1))
+            day = f"{float(before):.1f}{found.group(3)}" if before else f"new {since[6:]}" if since else "none"
             mark = "  ROSE" if moved == "ROSE" else ""
             goals.append((off, f"  {name:<36} {found.group(2) + found.group(3):>12}  {day:>12}  {found.group(4) + found.group(5):>8}  "
                                 f"{'met' if off == 0 else f'{off:.1f}x off':>9}{mark}{when}"))
@@ -166,7 +260,9 @@ def report():
         lane = parts[0]
         if "no builder" in row:
             state = "no builder"
-        elif f"worktrees/{lane.lower()}" in mounts:
+        elif row.endswith(", done"):
+            state = "done, waits for its release"
+        elif row.endswith(", its run is going") or f"worktrees/{lane.lower()}" in mounts:
             state = "working, its run is going"
         elif "idle" in parts:
             minutes = int(parts[parts.index("idle") + 1])
@@ -200,7 +296,8 @@ def main():
                 bench = fh.read().strip()
         except OSError as error:
             bench = f"SPEED NUMBERS: ~/.claude/orchestrate/php-sharp/bench.md could not be read: {error}."
-        context = f"{lanes()}\n\n{targets()}\n\n{bench}"
+        measured = targets()
+        context = f"{mods_off(event.get('session_id', ''))}{lanes()}\n\n{measured}\n\n{speed_entries(measured)}\n{upstream_engine()}\n\n{bench}"
     else:
         # `sop <file>` injects one file of the maintain Skill that every tick follows, SKILL.md unless another is named,
         # so a tick never runs from memory of it.
@@ -214,7 +311,12 @@ def main():
             text = f"The SOP at {path} could not be read: {error}. Read it before anything else."
         if text.startswith("---\n"):
             text = text.split("\n---\n", 1)[-1]
-        context = f"Run this tick by .claude/skills/maintain/{name}:\n{text}"
+        # The language owner, 11-25: every tick is told to triage everything, since work another agent sent went into a
+        # brief without its own design.
+        context = (f"TRIAGE EVERYTHING: every arrival, a builder's report, a review, another agent's request or proposed "
+                   f"change and the language owner's feedback, enters intake and gets the maintainer's own design, its "
+                   f"precedent and its consistency check before it reaches a brief, an update or a reply.\n\n"
+                   f"Run this tick by .claude/skills/maintain/{name}:\n{text}")
     json.dump({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
                                       "additionalContext": context}}, sys.stdout)
     return 0

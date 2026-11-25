@@ -22975,7 +22975,7 @@ fn a_file_lowers_to_the_same_bytes_from_any_workspace_root_and_names_no_path() {
             "no text names the file"
         );
 
-        encode(&unit, &file.contents, [0; 16], [0; 16], &[], &Library::default())
+        encode(&unit, &file.contents, [0; 16], [0; 16], &[], [0; 16], &Library::default())
     });
 
     assert_eq!(encoded[0], encoded[1]);
@@ -25845,47 +25845,23 @@ fn a_loop_over_a_map_reads_each_entry_and_a_loop_unpacks_each_tuple() {
 }
 
 /// ```php
-/// $entries = $entries instanceof \Sharp\Map ? \Sharp\Internal\Sequence::from($entries) : $entries;
+/// return 1;
 /// yield from \Sharp\Internal\Sequence::from($plans);
-/// return \Sharp\Internal\Sequence::from($plans);
-/// $kept = \Sharp\Internal\Sequence::from($plans);
+/// return $plans;
+/// $kept = $plans;
+/// foreach (($entries#1 = $entries) instanceof \Sharp\Map ? \Sharp\Internal\Sequence::from($entries#1) : $entries#1 as [$key, $count]) { }
 /// ```
 ///
-/// Spec section 12: a `Map<TKey, TValue>` is an `Iterable<[TKey, TValue]>` of its entries, so a `Map` that lands in an
-/// `Iterable` place, a local, a return or `yield ...`, is the `Sequence` that reads its entries. A parameter takes any
-/// caller's `Map` the same way before the body runs.
+/// Spec section 12: a `Map<TKey, TValue>` is an `Iterable<[TKey, TValue]>` of its entries, so a reader of an `Iterable`
+/// reads a `Map` as its entries: `yield ...` of a `Map`, and a loop over an `Iterable` that holds one when it runs. A
+/// `Map` that lands in an `Iterable` place, a parameter, a return or a local, stays the `Map`, so `is Map` holds there.
 #[test]
-fn a_map_that_lands_in_an_iterable_gives_its_entries() {
+fn a_map_that_lands_in_an_iterable_stays_the_map_and_its_readers_read_its_entries() {
     let lowered = Lowered::new(
-        "namespace App.Tenant;\n\nclass Report\n{\n    public int count(Iterable<[string, int]> entries) { return 1; }\n\n    public Iterable<[string, int]> all(Map<string, int> plans) { yield ...plans; }\n\n    public Iterable<[string, int]> some(Map<string, int> plans) { return plans; }\n\n    public void run(Map<string, int> plans)\n    {\n        Iterable<[string, int]> kept = plans;\n    }\n}\n",
+        "namespace App.Tenant;\n\nclass Report\n{\n    public int count(Iterable<[string, int]> entries) { return 1; }\n\n    public Iterable<[string, int]> all(Map<string, int> plans) { yield ...plans; }\n\n    public Iterable<[string, int]> some(Map<string, int> plans) { return plans; }\n\n    public void run(Map<string, int> plans)\n    {\n        Iterable<[string, int]> kept = plans;\n    }\n\n    public void each(Iterable<[string, int]> entries)\n    {\n        for (const [key, count] of entries) { }\n    }\n\n    public void any(Iterable<Any?> values)\n    {\n        for (const value of values) { }\n    }\n}\n",
     );
 
-    assert_eq!(
-        lowered.body_of("count"),
-        indoc! {r#"
-            STMT_LIST
-              ASSIGN
-                VAR
-                  ZVAL "entries"
-                CONDITIONAL
-                  INSTANCEOF
-                    VAR
-                      ZVAL "entries"
-                    ZVAL "Sharp\\Map"
-                  STATIC_CALL
-                    ZVAL "Sharp\\Internal\\Sequence"
-                    ZVAL "from"
-                    ARG_LIST
-                      VAR
-                        ZVAL "entries"
-                  VAR
-                    ZVAL "entries"
-              RETURN
-                ZVAL 1
-        "#}
-    );
-    // Each body first makes the object of a PHP array plain PHP passes as `plans`, and then a statement takes the
-    // entries as its first child: the loop `yield ...` runs as, the `return` and the assignment.
+    assert_eq!(lowered.body_of("count"), "STMT_LIST\n  RETURN\n    ZVAL 1\n");
     let entries = concat!(
         "    STATIC_CALL\n",
         "      ZVAL \"Sharp\\\\Internal\\\\Sequence\"\n",
@@ -25894,12 +25870,22 @@ fn a_map_that_lands_in_an_iterable_gives_its_entries() {
         "        VAR\n",
         "          ZVAL \"plans\"\n",
     );
-    for (method, statement) in
-        [("all", "  FOREACH\n"), ("some", "  RETURN\n"), ("run", "  ASSIGN\n    VAR\n      ZVAL \"kept\"\n")]
-    {
+    let all = lowered.body_of("all");
+    assert!(all.contains(&format!("  FOREACH\n{entries}")), "all:\n{all}");
+    for (method, statement) in [("some", "  RETURN\n"), ("run", "  ASSIGN\n    VAR\n      ZVAL \"kept\"\n")] {
         let body = lowered.body_of(method);
 
-        assert!(body.contains(&format!("{statement}{entries}")), "{method}:\n{body}");
+        assert!(body.contains(&format!("{statement}    VAR\n      ZVAL \"plans\"\n")), "{method}:\n{body}");
+        assert!(!body.contains("Sequence"), "{method}:\n{body}");
+    }
+    for method in ["each", "any"] {
+        let body = lowered.body_of(method);
+
+        assert!(
+            body.starts_with("STMT_LIST\n  FOREACH\n    CONDITIONAL\n      INSTANCEOF\n        ASSIGN\n"),
+            "{method}:\n{body}"
+        );
+        assert!(body.contains("ZVAL \"Sharp\\\\Map\""), "{method}:\n{body}");
     }
 }
 
@@ -36606,6 +36592,207 @@ fn a_field_of_a_generic_type_reads_with_its_type_arguments() {
     );
 }
 
+/// Spec section 10: a backed struct with no fields holds its value in a `public readonly` property that its constructor
+/// sets before its body checks it, a declared constructor and one the struct declares none of alike. Its `parse` runs
+/// that constructor, and `#json` writes the value.
+#[test]
+fn a_backed_struct_with_no_fields_holds_the_value_its_constructor_takes() {
+    let email = Lowered::new(
+        "namespace App;\n\npublic struct Email : string\n{\n    public Email(string value)\n    {\n        if (value == \"\") {\n            throw new ValueError(\"empty\");\n        }\n    }\n}\n",
+    );
+    let user = Lowered::new("namespace App;\n\npublic struct UserId : int\n{\n}\n");
+
+    assert_eq!(email.diagnostics(), Vec::<String>::new());
+    assert_eq!(user.diagnostics(), Vec::<String>::new());
+    assert_eq!(
+        email.declared("__construct"),
+        indoc! {r##"
+            METHOD [1] "__construct" @5-10
+              PARAM_LIST
+                PARAM
+                  ZVAL [1] "string"
+                  ZVAL "value"
+                  null
+                  null
+                  null
+                  null
+                SHARP_TYPE_ARGS
+                  null
+                  ZVAL "string"
+              null
+              STMT_LIST
+                ASSIGN
+                  PROP
+                    VAR
+                      ZVAL "this"
+                    ZVAL "value"
+                  VAR
+                    ZVAL "value"
+                IF
+                  IF_ELEM
+                    BINARY_OP [16]
+                      VAR
+                        ZVAL "value"
+                      ZVAL ""
+                    STMT_LIST
+                      THROW
+                        NEW
+                          ZVAL "ValueError"
+                          ARG_LIST
+                            ZVAL "empty"
+              null
+              null
+        "##}
+    );
+    assert_eq!(
+        user.tree(),
+        indoc! {r##"
+            STMT_LIST
+              DECLARE
+                CONST_DECL
+                  CONST_ELEM
+                    ZVAL "strict_types"
+                    ZVAL 1
+                    null
+                null
+              NAMESPACE
+                ZVAL "App"
+                null
+              CLASS [32] "UserId" @3-5
+                null
+                NAME_LIST
+                  ZVAL "Sharp\\Struct"
+                STMT_LIST
+                  METHOD [1] "__construct" @3-5
+                    PARAM_LIST
+                      PARAM
+                        ZVAL [1] "int"
+                        ZVAL "value"
+                        null
+                        null
+                        null
+                        null
+                    null
+                    STMT_LIST
+                      ASSIGN
+                        PROP
+                          VAR
+                            ZVAL "this"
+                          ZVAL "value"
+                        VAR
+                          ZVAL "value"
+                    null
+                    null
+                  METHOD [17] "op_Equality" @3-3
+                    PARAM_LIST
+                      PARAM
+                        ZVAL [1] "mixed"
+                        ZVAL "a"
+                        null
+                        null
+                        null
+                        null
+                      PARAM
+                        ZVAL [1] "mixed"
+                        ZVAL "b"
+                        null
+                        null
+                        null
+                        null
+                    null
+                    STMT_LIST
+                      IF
+                        IF_ELEM
+                          AND
+                            INSTANCEOF
+                              VAR
+                                ZVAL "a"
+                              ZVAL "App\\UserId"
+                            INSTANCEOF
+                              VAR
+                                ZVAL "b"
+                              ZVAL "App\\UserId"
+                          STMT_LIST
+                            RETURN
+                              BINARY_OP [16]
+                                PROP
+                                  VAR
+                                    ZVAL "a"
+                                  ZVAL "value"
+                                PROP
+                                  VAR
+                                    ZVAL "b"
+                                  ZVAL "value"
+                      RETURN
+                        BINARY_OP [16]
+                          VAR
+                            ZVAL "a"
+                          VAR
+                            ZVAL "b"
+                    ZVAL [1] "bool"
+                    null
+                  PROP_GROUP [129]
+                    ZVAL [1] "int"
+                    PROP_DECL
+                      PROP_ELEM
+                        ZVAL "value"
+                        null
+                        null
+                        null
+                    null
+                  SHARP_CLASS_METADATA
+                    null
+                    null
+                    null
+                    ZVAL "\n$value: int\nop_Equality: Function<bool(Any?, Any?)>\n__construct: Function<void(int)>\nparse: Function<App.UserId(int)>"
+                null
+                null
+        "##}
+    );
+    assert_eq!(
+        user.declared("parse"),
+        indoc! {r##"
+            METHOD [17] "parse" @3-3
+              PARAM_LIST
+                PARAM
+                  ZVAL [1] "int"
+                  ZVAL "value"
+                  null
+                  null
+                  null
+                  null
+              null
+              STMT_LIST
+                RETURN
+                  NEW
+                    ZVAL "App\\UserId"
+                    ARG_LIST
+                      VAR
+                        ZVAL "value"
+              SHARP_TYPE_ARGS
+                ZVAL "App\\UserId"
+                ZVAL ": App.UserId"
+              null
+        "##}
+    );
+    assert_eq!(
+        user.declared("#json"),
+        indoc! {r##"
+            METHOD [1] "#json" @3-3
+              PARAM_LIST
+              null
+              STMT_LIST
+                RETURN
+                  PROP
+                    VAR
+                      ZVAL "this"
+                    ZVAL "value"
+              null
+              null
+        "##}
+    );
+}
+
 /// `Sharp\Key` and `Sharp\Tag`, as `sharp/composer/` ships them.
 const FAMILY_ATTRIBUTES: [(&str, &str); 2] = [
     ("src/Sharp/Key.sharp", include_str!("../../../../composer/library/Sharp/Key.sharp")),
@@ -36625,7 +36812,7 @@ const METHOD_FAMILY: [(&str, &str); 2] = [
 ];
 
 /// Spec section 10: `Json.encode` writes a variant with its name under its family's key and leaves out a null
-/// `[Key(omitNull: true)]` field, and a value as text as its `toString()`. A family's `parse` asks the engine for the
+/// `[Key(omitNull: true)]` field, and a backed struct as its `value`. A family's `parse` asks the engine for the
 /// variant its input names, and a call of an interface family's `parse` or `tryParse`, which holds no body, does so
 /// itself. A tuple field reads as each of its elements.
 #[test]
@@ -36633,7 +36820,7 @@ fn a_family_reads_and_writes_a_variant_by_its_name() {
     let library = [FAMILY_ATTRIBUTES.as_slice(), METHOD_FAMILY.as_slice()].concat();
     let card = Lowered::with(METHOD_FAMILY[1].1, &[FAMILY_ATTRIBUTES.as_slice(), &METHOD_FAMILY[..1]].concat());
     let code = Lowered::with(
-        "namespace App;\n\npublic struct Code\n{\n    private Code(private string text { get; }) { }\n\n    public static Code parse(string text) => new Code(text);\n\n    public string toString() => this.text;\n}\n",
+        "namespace App;\n\npublic struct Code : string\n{\n    private Code(private string text { get; }) { }\n\n    public string value => this.text;\n\n    public static Code parse(string text) => new Code(text);\n}\n",
         &[],
     );
     let shape = Lowered::with(
@@ -36717,11 +36904,10 @@ fn a_family_reads_and_writes_a_variant_by_its_name() {
               null
               STMT_LIST
                 RETURN
-                  METHOD_CALL
+                  PROP
                     VAR
                       ZVAL "this"
-                    ZVAL "toString"
-                    ARG_LIST
+                    ZVAL "value"
               null
               null
         "##}

@@ -382,16 +382,27 @@ jobs:
         run: sharp/bin/build-mago --engine
 
       # The law checker's build for the job's platform, which mago embeds and unpacks on the first compile that
-      # proves a law, so no machine builds the checker with lake and a binary runs only its own checker.
+      # proves a law, so no machine builds the checker with lake and a binary runs only its own checker. Only the
+      # archive ships, and the example writes the same one in any profile, so it runs in the dev profile, where the
+      # release profile compiled 175 crates in 2m33s of release run 45544095366's 3m59s step. On the Mac it runs the
+      # example "Build mago and its test binaries" compiled, since a cargo run -p resolves its features apart from the
+      # workspace's and compiles the shared crates again, as sharp/bin/build-mago explains.
       - name: Build the law checker mago embeds
         if: inputs.assets
         shell: bash
         run: |
-          cargo run --locked --release --target=${{ matrix.job.target }} -p mago-sharp-lean --example checker -- "$RUNNER_TEMP/checker.tar.zst"
+          if [[ $RUNNER_OS == macOS ]]; then
+            "$GITHUB_WORKSPACE/sharp/build/darwin-arm64/mago/debug/examples/checker" "$RUNNER_TEMP/checker.tar.zst"
+          else
+            cargo run --locked -p mago-sharp-lean --example checker -- "$RUNNER_TEMP/checker.tar.zst"
+          fi
           echo "MAGO_CHECKER_ARCHIVE=$RUNNER_TEMP/checker.tar.zst" >> "$GITHUB_ENV"
 
       # mago exits 1 when the analysis finds issues, which the corpus holds, and any other exit, a crash, a kill or a
-      # tool error, fails the build, so no binary ships built from a broken profile.
+      # tool error, fails the build, so no binary ships built from a broken profile. The instrumented mago only analyzes
+      # corpus/ once to write the profile and never ships, so it compiles without [profile.release]'s fat LTO in one
+      # codegen unit, which made the build step 1,535 to 1,740 s on the release runs of 11-24. The optimized build that
+      # ships keeps [profile.release] (#797).
       - name: build
         if: inputs.assets
         shell: bash
@@ -401,7 +412,8 @@ jobs:
             exit
           fi
           rm -rf "$CARGO_TARGET_DIR/pgo-profiles"
-          cargo pgo build -- --target=${{ matrix.job.target }}
+          CARGO_PROFILE_RELEASE_LTO=off CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
+            cargo pgo build -- --target=${{ matrix.job.target }}
           status=0
           LLVM_PROFILE_FILE="$CARGO_TARGET_DIR/pgo-profiles/mago_%m_%p.profraw" \
             "$CARGO_TARGET_DIR/${{ matrix.job.target }}/release/mago" --workspace corpus/ analyze --reporting-format count || status=$?
@@ -525,10 +537,10 @@ jobs:
           path: ${{ steps.package.outputs.PKG_PATH }}
           if-no-files-found: error
 
-      # A failed job cancels a pull request's run and a merge queue's run, which can no longer pass, as
-      # .github/actions/cancel-failed-run explains.
+      # A failed job cancels any run, which can no longer pass: a pull request's, a merge queue's, and a push's, which
+      # can no longer publish either, as .github/actions/cancel-failed-run explains.
       - name: Cancel the run, which can no longer pass
-        if: failure() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+        if: failure()
         uses: ./.github/actions/cancel-failed-run
 
       - name: Write the job's CPU-seconds and peak memory
@@ -536,6 +548,23 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
+
+      # Every process the job started ends with it, however the job ended, the way systemd's KillMode=control-group
+      # ends every process of a unit when it stops. The Mac runner keeps its machine between jobs, and on 11-25 it held
+      # two sapi/cli/php -t servers and a debug mago analyze --watch of finished jobs, the oldest 5 days old: a killed
+      # test binary never runs Watch's drop guard. A process of the job is one whose command line names the job's
+      # workspace, which awk reads from its environment, so its own command line never names it.
+      - name: End every process the job started
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: |
+          ps -axwwo pid=,command= | awk -v self=$$ '$1 != self && index($0, ENVIRON["GITHUB_WORKSPACE"])' > "$RUNNER_TEMP/left"
+          while read -r pid command; do
+            echo "::notice title=Ended a process the job left::$pid ${command//%/%25}"
+            if ! kill -KILL "$pid" 2> /dev/null; then
+              echo "$pid had already ended."
+            fi
+          done < "$RUNNER_TEMP/left"
 
   # install.sh checks a download against these SHA-256s when gh is missing, and sharp.yml's COMPOSER pins them in the
   # release's heyjordanparker/mago-sharp version. They are written where the assets were built, so the release

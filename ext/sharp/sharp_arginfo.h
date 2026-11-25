@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 79d73da06669b3e69bbf6606ba590363cbdd2064 */
+ * Stub hash: f7fa561c0635fa5e8e340f3b253e74dd8b566ada */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
@@ -264,6 +264,12 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_emit, 0, 2, IS_VO
 	ZEND_ARG_TYPE_INFO(0, event, IS_OBJECT, 0)
 	ZEND_ARG_TYPE_INFO(0, dispatcher, IS_STRING, 0)
 ZEND_END_ARG_INFO()
+
+#define arginfo_Sharp_Internal_holdEmits arginfo_Sharp_Internal_endTest
+
+#define arginfo_Sharp_Internal_releaseEmits arginfo_Sharp_Internal_endTest
+
+#define arginfo_Sharp_Internal_dropEmits arginfo_Sharp_Internal_endTest
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_listenersFor, 0, 1, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, event, IS_OBJECT, 0)
@@ -567,6 +573,9 @@ ZEND_FUNCTION(Sharp_Internal_runScoped);
 ZEND_FUNCTION(Sharp_Internal_building);
 ZEND_FUNCTION(Sharp_Internal_build);
 ZEND_FUNCTION(Sharp_Internal_emit);
+ZEND_FUNCTION(Sharp_Internal_holdEmits);
+ZEND_FUNCTION(Sharp_Internal_releaseEmits);
+ZEND_FUNCTION(Sharp_Internal_dropEmits);
 ZEND_FUNCTION(Sharp_Internal_listenersFor);
 ZEND_FUNCTION(Sharp_Internal_listen);
 ZEND_FUNCTION(Sharp_Internal_add);
@@ -687,6 +696,9 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "building"), zif_Sharp_Internal_building, arginfo_Sharp_Internal_building, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "build"), zif_Sharp_Internal_build, arginfo_Sharp_Internal_build, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "emit"), zif_Sharp_Internal_emit, arginfo_Sharp_Internal_emit, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "holdEmits"), zif_Sharp_Internal_holdEmits, arginfo_Sharp_Internal_holdEmits, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "releaseEmits"), zif_Sharp_Internal_releaseEmits, arginfo_Sharp_Internal_releaseEmits, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "dropEmits"), zif_Sharp_Internal_dropEmits, arginfo_Sharp_Internal_dropEmits, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "listenersFor"), zif_Sharp_Internal_listenersFor, arginfo_Sharp_Internal_listenersFor, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "listen"), zif_Sharp_Internal_listen, arginfo_Sharp_Internal_listen, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "add"), zif_Sharp_Internal_add, arginfo_Sharp_Internal_add, 0, NULL, NULL)

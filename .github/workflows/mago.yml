@@ -1,24 +1,26 @@
 name: Mago
 
 on:
+  # The tree that lands, master's tip with queue.yml's batch merged onto it, and a pull request into master, as sharp.yml
+  # runs. LAND moves master to a staging commit only once this run of it passed, so master's own push starts no run.
   push:
-    branches: [master]
-  # A pull request into master, and the merge queue's run of it merged onto master, as sharp.yml runs.
+    branches: [staging]
   pull_request:
     branches: [master]
-  merge_group:
 
-# Every lane pull request's run joins lanes, which keeps one run in progress and the newest pending one, a spec/ pull
-# request's joins a group of its own, where a push cancels its run in progress, master runs one push at a time and lets it finish, and each merge queue entry runs in a group of its own,
-# as sharp.yml's concurrency explains.
+# Every lane pull request's run joins lanes, which keeps one run in progress and the newest pending one. A branch off
+# origin/master on no stack is either a spec change, spec/<sha>, or a blocking fix, blocking/<issue>, and its pull
+# request's run joins a group of its own, where a push cancels its run in progress. staging runs one push at a time, and
+# a failed job cancels any run, a push's included, as sharp.yml's concurrency explains.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event_name == 'pull_request'
-      && (startsWith(github.head_ref, 'spec/') && github.event.pull_request.url || 'lanes')
+      && ((startsWith(github.head_ref, 'spec/') || startsWith(github.head_ref, 'blocking/'))
+        && github.event.pull_request.url || 'lanes')
       || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: >-
     ${{ github.event_name == 'pull_request'
-      && startsWith(github.head_ref, 'spec/') }}
+      && (startsWith(github.head_ref, 'spec/') || startsWith(github.head_ref, 'blocking/')) }}
 
 permissions:
   contents: read
@@ -64,30 +66,28 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      # A push's changes start at the commit of master's newest push run that GitHub didn't cancel, as sharp.yml's
-      # CHANGES explains.
-      - name: Find the commit of master's last push run that ran
+      # A staging push's changes start at master's tip, which the batch merges onto, as sharp.yml's CHANGES explains.
+      - name: Find master's tip, which the batch merges onto
         id: base
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # GitHub's API answered this list with HTTP 502 once and failed the push run (44132260911), so it retries, as
-          # .github/actions/setup-lean retries Lean's install.
+          # GitHub's API answered a list of runs with HTTP 502 once and failed the push run (44132260911), so it
+          # retries, as .github/actions/setup-lean retries Lean's install.
           for attempt in 1 2 3; do
-            if sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mago.yml/runs?branch=master&event=push&status=completed&per_page=100" \
-              --jq '[.workflow_runs[] | select(.conclusion != "cancelled" and .id < (env.GITHUB_RUN_ID | tonumber))][0].head_sha // empty'); then
+            if sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha); then
               break
             fi
             if [[ $attempt == 3 ]]; then
-              echo "::error::GitHub's API refused the list of master's push runs 3 times. The output above names the cause."
+              echo "::error::GitHub's API refused master's tip 3 times. The output above names the cause."
               exit 1
             fi
-            echo "Retrying the list of master's push runs in $((attempt * 15)) seconds (retry $attempt of 2)" >&2
+            echo "Retrying master's tip in $((attempt * 15)) seconds (retry $attempt of 2)" >&2
             sleep $((attempt * 15))
           done
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "This push's changes start at ${sha:-no commit}."
+          echo "This push's changes start at $sha."
 
       - name: Write the job's CPU-seconds and peak memory
         if: always()
@@ -133,10 +133,11 @@ jobs:
           php-version: "8.3"
           tools: "composer:v2"
 
-      - name: Install typos
+      # cargo-deny 0.20.2 is the newest this install-action's manifest holds, which checks each download's SHA-256.
+      - name: Install typos and cargo-deny
         uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
         with:
-          tool: typos
+          tool: typos,cargo-deny@0.20.2
 
       # The PHP# engine mago links, built by sharp/bin/build-mago --engine from the static archives of these packages,
       # which it links into libphp.a.
@@ -146,11 +147,11 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: sharp/bin/build-mago --engine
 
-      # sharp/bin/check mago-checks runs them, as it does on a machine: typos, the PHP SDK's tests, cargo check of
-      # the workspace and of the PHP# bridge alone, the fuzz crate's Cargo.lock, no file watcher in the bridge, the PHP
-      # SDK's generated NodeKind, rustfmt and clippy, then the test-run mago, which analyzes the standard library and
-      # formats, lints and analyzes the Composer code, with the issues as annotations. sharp/bin/build-mago --test-run
-      # builds that mago, and links the engine the step before built.
+      # sharp/bin/check mago-checks runs them, as it does on a machine: typos, cargo deny's advisories of both lockfiles,
+      # the PHP SDK's tests, cargo check of the workspace and of the PHP# bridge alone, the fuzz crate's Cargo.lock, no
+      # file watcher in the bridge, the PHP SDK's generated NodeKind, rustfmt and clippy, then the test-run mago, which
+      # analyzes the standard library and formats, lints and analyzes the Composer code, with the issues as annotations.
+      # sharp/bin/build-mago --test-run builds that mago, and links the engine the step before built.
       - name: Mago's checks, and the test-run mago
         working-directory: .
         env:
@@ -168,7 +169,7 @@ jobs:
       # As .github/actions/cancel-failed-run explains.
       - &cancel-failed-run
         name: Cancel the run, which can no longer pass
-        if: failure() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+        if: failure()
         uses: ./.github/actions/cancel-failed-run
 
       - name: Write the job's CPU-seconds and peak memory
@@ -239,13 +240,13 @@ jobs:
         with:
           end: true
 
-  # What proving and compiling cost, against what master's newest green push run counted, in counts no load changes, as
+  # What proving and compiling cost, against what the green push run of master's tip counted, in counts no load changes, as
   # benchmark/speed.php explains: each law's Lean heartbeats, and the instructions mago's own process retires for a
   # one-file edit on one thread, under valgrind's cachegrind, since a hosted runner exposes no hardware counter to perf.
   # It counts the test-run mago checks built, which behaves as the release users run, as plain-php runs it, so it builds
-  # nothing: in sharp.yml it built that mago again, for 272 of its 408 s on run 45122643706. The merge queue merges only
-  # a change whose runs passed, so a commit that proves or compiles slower never reaches master. What it counted is the
-  # run's speed artifact, and a push run's is the baseline of every change after it. It runs in the sharp/docker image,
+  # nothing: in sharp.yml it built that mago again, for 272 of its 408 s on run 45122643706. LAND moves master only to a
+  # staging commit whose runs passed, so a commit that proves or compiles slower never reaches master. What it counted is
+  # the run's speed artifact, and a landed push run's is the baseline of every change after it. It runs in the sharp/docker image,
   # which carries valgrind, Composer and the pinned Lean, so it downloads none of them. checks builds the binary against
   # a glibc older than the image's, as its comment explains.
   SPEED:
@@ -300,7 +301,7 @@ jobs:
         run: chmod +x sharp/build/speed/test-run/mago
 
       # Here, since the sharp/docker image has no gh.
-      - name: Download what master's newest green push run counted
+      - name: Download what the green push run of master's tip counted
         env:
           GH_TOKEN: ${{ github.token }}
         run: sharp/bin/check --speed-baseline sharp/build/speed/baseline
@@ -356,17 +357,41 @@ jobs:
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
 
+      # A job whose step failed cancels its run, so GitHub ends that job as cancelled, as sharp.yml's CI_PASSED explains:
+      # run 45507834855 listed only ci-passed as failed, where checks had failed its step 10. So this names each failed
+      # step of the run, with its job, before the needed jobs' results.
+      - name: Every step of the run passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # shellcheck disable=SC2016 # The program is jq's, whose $job the shell must not expand.
+          gh run view "$GITHUB_RUN_ID" --json jobs \
+            --jq '.jobs[] | .name as $job | .steps[] | select(.conclusion == "failure") | [$job, .name] | @tsv' \
+            > "$RUNNER_TEMP/failed-steps"
+          while IFS=$'\t' read -r job step; do
+            title=${job//%/%25}
+            title=${title//,/%2C}
+            title=${title//:/%3A}
+            echo "::error title=$title::${step//%/%25} failed"
+            echo "- \`$job\`: $step failed" >> "$GITHUB_STEP_SUMMARY"
+          done < "$RUNNER_TEMP/failed-steps"
+          if [[ -s $RUNNER_TEMP/failed-steps ]]; then
+            exit 1
+          fi
+
       - name: Every job passed
+        if: always()
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
           jobs: ${{ toJSON(needs) }}
 
       # As .github/actions/red-master-issue explains.
-      - name: Open an issue for the failed run on master
+      - name: Open an issue for the failed staging run
         if: failure() && github.event_name == 'push'
         uses: ./.github/actions/red-master-issue
         with:
-          title: A push to master failed Mago CI
+          title: A staging run failed Mago CI
           range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
 
       - name: Write the job's CPU-seconds and peak memory

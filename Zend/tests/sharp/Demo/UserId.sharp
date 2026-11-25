@@ -1,0 +1,6 @@
+namespace Demo;
+
+// A user's id, stored as its int, with no constructor of its own.
+public struct UserId : int
+{
+}

@@ -1,14 +1,14 @@
 name: PHP#
 on:
+  # staging holds master's tip with the pull requests queue.yml takes merged onto it, the tree that lands: its run runs
+  # every check, the Mac's among them, then LAND moves master to its commit and the same run publishes the release.
+  # master's own push starts no run, since its commit is one a staging run already tested.
   push:
     branches:
-      - master
+      - staging
   pull_request:
     branches:
       - master
-  # The merge queue's run of a pull request merged onto master and the changes ahead of it, which it merges only once
-  # CI_PASSED passes there.
-  merge_group:
   # ASAN alone, nightly on master's tip, or dispatched, as a fix of a red nightly run shows it green.
   schedule:
     - cron: '17 2 * * *'
@@ -20,32 +20,35 @@ permissions:
 # newest pending one: a push cancels the run it replaced while that run waits, and no lower pull request's run waits for
 # the Mac, which was busy 99% of 12 hours while a release's path from green to published held 6 Mac jobs one after another.
 # A run in progress finishes and lands every commit below it: four lanes push about every half hour, and the Mac job
-# runs 35 to 50 minutes, so a push that cancelled it would let no landing run finish. A spec/ pull request's run, off
-# origin/master and on no stack, joins a group of its own, where a push cancels its run in progress, since it holds only
-# its own change. master runs one push at a time, and only the newest push waits,
-# since its tree holds every commit before it, and a push lets its run finish, since the run publishes. A failed job
-# cancels a pull request's run and a merge queue's run, which can no longer pass, as .github/actions/cancel-failed-run
-# explains. Each merge queue entry, schedule and dispatch runs in a group of its own.
+# runs 35 to 50 minutes, so a push that cancelled it would let no landing run finish. A branch off origin/master on no
+# stack is either a spec change, spec/<sha>, or a blocking fix, blocking/<issue>. Its pull request's run joins a group of
+# its own, where a push cancels its run in progress, since it holds only its own change, and no lane push replaces it:
+# one replaced PR #794's pending run on 11-24. staging runs one push at a time, and queue.yml pushes it only while no
+# staging run is in progress. A failed job cancels any run, which can no longer pass: a pull request's, and a staging
+# run's, which can no longer land or publish either, so queue.yml's next batch takes its place, as
+# .github/actions/cancel-failed-run explains. Each schedule and dispatch runs in a group of its own.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event_name == 'pull_request'
-      && (startsWith(github.head_ref, 'spec/') && github.event.pull_request.url || 'lanes')
+      && ((startsWith(github.head_ref, 'spec/') || startsWith(github.head_ref, 'blocking/'))
+        && github.event.pull_request.url || 'lanes')
       || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: >-
     ${{ github.event_name == 'pull_request'
-      && startsWith(github.head_ref, 'spec/') }}
+      && (startsWith(github.head_ref, 'spec/') || startsWith(github.head_ref, 'blocking/')) }}
 jobs:
-  # CI_PASSED is this workflow's one required check. Every pull request's push and every merge queue entry runs every
-  # check, whatever it changed: the Linux suites, each job on 4 cores, the Mac's and the runtime image, so every check
-  # that guards a release runs before the merge, and the queue's run runs them on the tree that merges. GitHub runs 20 of the account's hosted jobs at once, across all its repositories, and a job
-  # past them waits.
+  # CI_PASSED is this workflow's one required check. Every pull request's push runs every Linux check, whatever it
+  # changed: the Linux suites, each job on 4 cores, and the runtime image. A staging run runs every check, the Mac's
+  # among them, on the tree that lands, so each landed tree crosses the Mac once: #828 crossed it twice, in pull request
+  # run 45570037780 for 55 minutes, then in push run 45600915642 for 87 (#843). GitHub runs 20 of the account's hosted
+  # jobs at once, across all its repositories, and a job past them waits.
   #
   # Every run builds and tests everything from source, with no cache and no result of an earlier run, so its length is
-  # what building and testing PHP# costs (#721): a pull request, its merge queue entry and the push to master each run
-  # every check, the Mac's among them. Only a push to master builds a release, the next version, and publishes it once
-  # every check passed. A red push opens an issue, as CI_PASSED does, for a pull request that fixes it forward.
+  # what building and testing PHP# costs (#721). Only a staging run builds a release, the next version, and publishes
+  # it once every check passed and LAND moved master to its commit. A red staging run opens an issue, as CI_PASSED does,
+  # for a pull request that fixes it forward, and master stays where it was.
   CHANGES:
-    if: &checked ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+    if: &checked ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -65,8 +68,8 @@ jobs:
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
       # sharp/bin/check --release prints the version this push releases: its tag's, when a tag already names the commit,
-      # or else the newest tag's plus one, and the pull requests merged since that tag, and each part of the release not
-      # published yet, which RELEASE publishes, as sharp/bin/check --release explains. Pushes to master run one at a
+      # or else the newest tag's plus one, and the pull requests it holds since that tag, and each part of the release
+      # not published yet, which RELEASE publishes, as sharp/bin/check --release explains. staging's pushes run one at a
       # time, so the next push looks once this one has published.
       - name: Find the version, and what of its release is missing
         id: version
@@ -74,32 +77,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: sharp/bin/check --release | tee -a "$GITHUB_OUTPUT"
-      # A push's changes start at the commit of master's newest push run that GitHub didn't cancel, so a merge whose
-      # pending run a later push replaced still counts, and a red run's issue names every commit it tests. Pushes run
-      # one at a time, so every earlier run has ended. Only an earlier run counts, so a rerun of an old run diffs from
-      # the run before it, as its first attempt did. With none among the last 100 runs, the issue names only the commit.
-      - name: Find the commit of master's last push run that ran
+      # A staging push's changes start at master's tip: queue.yml merges the batch onto it, and only LAND moves master,
+      # once this run passed, so a red run's issue names every commit of the batch.
+      - name: Find master's tip, which the batch merges onto
         id: base
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # GitHub's API answered this list with HTTP 502 once and failed the push run (44132260911), so it retries, as
-          # .github/actions/setup-lean retries Lean's install.
+          # GitHub's API answered a list of runs with HTTP 502 once and failed the push run (44132260911), so it
+          # retries, as .github/actions/setup-lean retries Lean's install.
           for attempt in 1 2 3; do
-            if sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sharp.yml/runs?branch=master&event=push&status=completed&per_page=100" \
-              --jq '[.workflow_runs[] | select(.conclusion != "cancelled" and .id < (env.GITHUB_RUN_ID | tonumber))][0].head_sha // empty'); then
+            if sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha); then
               break
             fi
             if [[ $attempt == 3 ]]; then
-              echo "::error::GitHub's API refused the list of master's push runs 3 times. The output above names the cause."
+              echo "::error::GitHub's API refused master's tip 3 times. The output above names the cause."
               exit 1
             fi
-            echo "Retrying the list of master's push runs in $((attempt * 15)) seconds (retry $attempt of 2)" >&2
+            echo "Retrying master's tip in $((attempt * 15)) seconds (retry $attempt of 2)" >&2
             sleep $((attempt * 15))
           done
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "This push's changes start at ${sha:-no commit}."
+          echo "This push's changes start at $sha."
+      # Every job needs CHANGES, so a renamed test that sharp/baseline/seconds still lists fails the run here, from the
+      # tree, before any build or Mac job starts, as sharp/bin/check seconds explains.
+      - name: Every test sharp/baseline/seconds lists exists
+        run: sharp/bin/check seconds
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -194,7 +198,7 @@ jobs:
       # As .github/actions/cancel-failed-run explains.
       - &cancel-failed-run
         name: Cancel the run, which can no longer pass
-        if: failure() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+        if: failure()
         uses: ./.github/actions/cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
@@ -534,14 +538,15 @@ jobs:
         with:
           end: true
   # The run's one Mac job, which release.yml defines, so in a release's push the Mac's binary builds in it after the
-  # tests, as release.yml explains. assets is true only in a push to master whose version's GitHub release isn't
-  # published, as sharp/bin/check --release finds. Each attestation names the run's commit as the one it was built from,
-  # which is the commit RELEASE tags, and RELEASE publishes what that call built. A pull request's run never builds them,
-  # so the Mac job's checks set its length. A called workflow's jobs may ask only for permissions its caller grants:
-  # actions to cancel a failed run, id-token and attestations to attest the release's assets, and pull-requests to read
-  # the release's notes.
+  # tests, as release.yml explains. It runs only in a staging run, on the tree that lands, so each landed tree crosses
+  # the Mac once, and a pull request's own run is Linux's alone. assets is true only in a staging push whose version's
+  # GitHub release isn't published, as sharp/bin/check --release finds. Each attestation names the run's commit as the
+  # one it was built from, which is the commit LAND moves master to and RELEASE tags, and RELEASE publishes what that
+  # call built. A called workflow's jobs may ask only for permissions its caller grants: actions to cancel a failed run,
+  # id-token and attestations to attest the release's assets, and pull-requests to read the release's notes.
   MACOS:
     needs: CHANGES
+    if: github.event_name != 'pull_request'
     uses: ./.github/workflows/release.yml
     with:
       assets: ${{ contains(needs.CHANGES.outputs.missing, 'assets') }}
@@ -554,12 +559,13 @@ jobs:
       id-token: write
       pull-requests: read
   # This workflow's one required check. It needs every job that runs on every push and pull request, and fails unless
-  # each of them passed. mago.yml's ci-passed is the other required check, and its plain-php job runs mago from Composer
-  # on plain PHP, and its SPEED job counts what proving and compiling cost. In a release's push MACOS also builds the
-  # release's assets, so a failed build fails CI_PASSED, which opens the red-master issue. RELEASE and COMPOSER run
-  # only on a push to master, after the checks, so each opens the red-master issue itself when it fails.
+  # each of them passed, MACOS skipped on a pull request alone. mago.yml's ci-passed is the other required check, and
+  # its plain-php job runs mago from Composer on plain PHP, and its SPEED job counts what proving and compiling cost. In
+  # a release's push MACOS also builds the release's assets, so a failed build fails CI_PASSED, which opens the issue of
+  # a red staging run. LAND, RELEASE and COMPOSER run only in a staging run, after the checks, so each opens that issue
+  # itself when it fails.
   CI_PASSED:
-    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'merge_group')
+    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request')
     needs:
       - CHANGES
       - BUILD_LINUX
@@ -588,36 +594,98 @@ jobs:
             sharp/bin
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
+      # A job whose step failed cancels its run, as .github/actions/cancel-failed-run explains, so GitHub ends that job
+      # as cancelled, and only its step reads failure: run 45507834999 listed only CI_PASSED as failed, where MAGO (3/5)
+      # had failed its step 8. So this names each failed step of the run, with its job, before the needed jobs' results.
+      - name: Every step of the run passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # shellcheck disable=SC2016 # The program is jq's, whose $job the shell must not expand.
+          gh run view "$GITHUB_RUN_ID" --json jobs \
+            --jq '.jobs[] | .name as $job | .steps[] | select(.conclusion == "failure") | [$job, .name] | @tsv' \
+            > "$RUNNER_TEMP/failed-steps"
+          while IFS=$'\t' read -r job step; do
+            title=${job//%/%25}
+            title=${title//,/%2C}
+            title=${title//:/%3A}
+            echo "::error title=$title::${step//%/%25} failed"
+            echo "- \`$job\`: $step failed" >> "$GITHUB_STEP_SUMMARY"
+          done < "$RUNNER_TEMP/failed-steps"
+          if [[ -s $RUNNER_TEMP/failed-steps ]]; then
+            exit 1
+          fi
       - name: Every job passed
+        if: always()
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
+          allowed-skips: ${{ github.event_name == 'pull_request' && 'MACOS' || '' }}
           jobs: ${{ toJSON(needs) }}
-      # As .github/actions/red-master-issue explains. RELEASE and COMPOSER run it by its anchor.
+      # As .github/actions/red-master-issue explains. LAND, RELEASE and COMPOSER run it by its anchor.
       - &red-master-issue
-        name: Open an issue for the failed run on master
+        name: Open an issue for the failed staging run
         if: failure() && github.event_name == 'push'
         uses: ./.github/actions/red-master-issue
         with:
-          title: A push to master failed PHP# CI
+          title: A staging run failed PHP# CI
           range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
         with:
           end: true
+  # Moves master to this staging run's commit once every check of it passed, mago.yml's run of the same push among
+  # them, so master holds only a tree one run tested whole, and that run publishes it (#843). The push is a fast-forward
+  # with the deploy key, which master merge gate lets past its pull request rule and its QUEUE check, a check no run
+  # reports, so no pull request reaches master another way. git refuses a push that isn't a fast-forward, and master
+  # history refuses one with no bypass, so a master that moved fails LAND, and queue.yml merges the batch again onto it.
+  # GitHub marks each pull request whose head master now holds merged.
+  LAND:
+    needs: [CHANGES, CI_PASSED]
+    if: ${{ !failure() && !cancelled() && needs.CI_PASSED.result == 'success' && github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: git checkout, with the deploy key that pushes master
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ssh-key: ${{ secrets.PHP_SHARP_DEPLOY_KEY }}
+          sparse-checkout: .github/actions
+      # This push's run of mago.yml runs every Mago check.
+      - name: Mago CI passed on this push
+        run: |
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mago.yml/runs?head_sha=$GITHUB_SHA&event=push" \
+            --jq '.workflow_runs[0].id // empty')
+          if [[ -z $run ]]; then
+            echo "::error::Mago CI has no push run on commit $GITHUB_SHA, so master stays where it was."
+            exit 1
+          fi
+          gh run watch "$run" --compact --exit-status --interval 15
+      - name: Move master to this run's commit
+        run: git push origin "$GITHUB_SHA:refs/heads/master"
+      - *red-master-issue
   # Splits sharp/composer and sharp/mago and pushes them to master of heyJordanParker/php-sharp-composer and
-  # heyJordanParker/mago-sharp, whose webhooks tell Packagist, once every check of the push passed: it needs RELEASE,
+  # heyJordanParker/mago-sharp, whose webhooks tell Packagist, once every check of the staging run passed and LAND moved
+  # master to its commit: it needs RELEASE,
   # and a job's failure() counts every job before it. For a release, it then pushes tag v<version> to each mirror that
-  # lacks it, once RELEASE made the GitHub release public: the split of the release's commit, which tag v<version>
-  # names, so a rerun that finishes a release tags what the release holds. The pushes never force, so a mistake
-  # can't rewind a published package.
+  # lacks it, while the GitHub release RELEASE filled is still a draft, which only a token that may write reads: the
+  # split of the release's commit, which tag v<version> names, so a rerun that finishes a release tags what the
+  # release holds. The pushes never force, so a mistake can't rewind a published package. A needed job that ended
+  # cancelled, as one past its timeout does, stops it, as RELEASE's if explains.
   COMPOSER:
-    needs: [CHANGES, RELEASE]
-    if: ${{ !failure() && !cancelled() && github.event_name == 'push' }}
+    needs: [CHANGES, LAND, RELEASE]
+    if: ${{ !failure() && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     concurrency: composer-${{ github.ref }}
     permissions:
-      contents: read
+      contents: write
       issues: write
     env:
       VERSION: ${{ needs.RELEASE.outputs.version }}
@@ -690,11 +758,11 @@ jobs:
           fi
           git push origin "FETCH_HEAD:$GITHUB_REF"
       # A release's heyjordanparker/mago-sharp version is the split plus a commit that adds the release's SHA-256s as
-      # composer/sha256sums.txt. The Composer wrapper refuses an archive whose SHA-256 differs, so the package version
-      # pins the exact binary, as esbuild's and Biome's npm packages do. The tag pins them for good, so they are the
-      # published release's sums file, which install.sh checks a download against, and every asset a user downloads from
-      # the release must match them.
-      - name: The published assets match the release's SHA-256s
+      # composer/sha256sums.txt. php-sharp-composer's plugin refuses an archive whose SHA-256 differs, so the package
+      # version pins the exact binary, as esbuild's and Biome's npm packages do. The tag pins them for good, so they are
+      # the release's sums file, which install.sh checks a download against, and every asset a user downloads from the
+      # release must match them, as the draft PUBLISH makes public holds them.
+      - name: The release's assets match its SHA-256s
         if: env.VERSION
         env:
           GH_TOKEN: ${{ github.token }}
@@ -706,8 +774,10 @@ jobs:
             echo "::error::An asset of release v$VERSION has a SHA-256 other than its sums file names, so no heyjordanparker/mago-sharp tag is pushed."
             exit 1
           fi
-      # A rerun finds the tag an earlier attempt pushed, and leaves it.
-      - name: Push the release's tag, with the SHA-256 of every release asset
+      # A rerun finds the tag an earlier attempt pushed, and leaves it. The tag also carries schema.json, the editor
+      # schema of the release's configuration, from the release's own Linux binary run outside any project, so no start
+      # and no install of the package writes it.
+      - name: Push the release's tag, with the SHA-256 of every release asset and its configuration's schema
         if: env.VERSION
         working-directory: sharp/build/mago-sharp
         run: |
@@ -718,10 +788,45 @@ jobs:
           git fetch "$GITHUB_WORKSPACE" refs/heads/mago-release
           git switch --detach FETCH_HEAD
           cp "$RUNNER_TEMP/published/mago-$VERSION-sha256sums.txt" composer/sha256sums.txt
-          git add composer/sha256sums.txt
+          tar -xzf "$RUNNER_TEMP/published/mago-$VERSION-x86_64-unknown-linux-gnu.tar.gz" -C "$RUNNER_TEMP"
+          (cd "$RUNNER_TEMP" && "./mago-$VERSION-x86_64-unknown-linux-gnu/mago" config --schema) > schema.json
+          git add composer/sha256sums.txt schema.json
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit --message "The SHA-256 of every mago $VERSION release asset"
+            commit --message "The SHA-256 of every mago $VERSION release asset, and its configuration's schema"
           git push origin "HEAD:refs/tags/v$VERSION"
+      - *red-master-issue
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+  # Makes the release RELEASE filled public, last, once RELEASE tagged and attested both images and COMPOSER pushed both
+  # Composer tags, so a release is public only with every part it publishes. Run 45455237056 made its release public
+  # before its images, which then never came, and no Composer tag followed.
+  PUBLISH:
+    needs: [CHANGES, LAND, RELEASE, COMPOSER]
+    if: ${{ !failure() && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && needs.RELEASE.result == 'success' && contains(needs.CHANGES.outputs.missing, 'assets') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.RELEASE.outputs.version }}
+    steps:
+      # Only for the actions below, and sharp/bin/record, which the usage action writes the job's line in the build
+      # record with.
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            .github/actions
+            sharp/bin
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+      - name: Publish the release
+        run: gh release edit "v$VERSION" --draft=false
       - *red-master-issue
       - name: Write the job's CPU-seconds and peak memory
         if: always()
@@ -925,15 +1030,19 @@ jobs:
         with:
           end: true
   # Publishes what sharp/bin/check --release finds missing of the release of the version CHANGES found, once every job
-  # before it passed, and mago.yml's run of the same push: tag v<version> on this run's commit, the GitHub release of
+  # before it passed and LAND moved master to this run's commit: tag v<version> on that commit, a draft GitHub release of
   # the files MACOS's call of release.yml built, and the runtime image as ghcr.io/heyjordanparker/php-sharp:<version>
   # and <major>.<minor>, never as latest, with its -dev image as <version>-dev and <major>.<minor>-dev, all from this
-  # run's IMAGE. COMPOSER then pushes the Composer packages' tags. Each part publishes once, as sharp/bin/check
+  # run's IMAGE. COMPOSER then pushes the Composer packages' tags, and PUBLISH makes the draft public. Each part
+  # publishes once, as sharp/bin/check
   # --release explains, and a rerun leaves what an earlier attempt published. It opens the red-master issue when it
   # fails, since CI_PASSED doesn't need it.
   RELEASE:
-    needs: [CHANGES, BUILD_LINUX, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, WORKFLOWS, MACOS, IMAGE]
-    if: ${{ !failure() && !cancelled() && needs.CHANGES.outputs.bump == 'true' }}
+    needs: [CHANGES, BUILD_LINUX, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, WORKFLOWS, MACOS, IMAGE, LAND]
+    # failure() and cancelled() count no needed job that ended cancelled: cancelled() is true only when the run is
+    # cancelled, and a job past its timeout-minutes ends cancelled. Run 45455237056's IMAGE (linux/arm64) did, and
+    # RELEASE then made its release public with no image and no Composer tag. So it also reads each needed job's result.
+    if: ${{ !failure() && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && needs.CHANGES.outputs.bump == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -969,16 +1078,6 @@ jobs:
         run: |
           echo "tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)" >> "$GITHUB_OUTPUT"
           echo "Release $VERSION is commit $GITHUB_SHA, and publishes:${MISSING:+ $MISSING}."
-      # This push's run of mago.yml runs every Mago check.
-      - name: Mago CI passed on this push
-        run: |
-          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mago.yml/runs?head_sha=$GITHUB_SHA&event=push" \
-            --jq '.workflow_runs[0].id // empty')
-          if [[ -z $run ]]; then
-            echo "::error::Mago CI has no push run on commit $GITHUB_SHA, so release $VERSION isn't published."
-            exit 1
-          fi
-          gh run watch "$run" --compact --exit-status --interval 15
       # Each download stops after 5 minutes and runs once more, as LINUX's explain.
       - name: Download the assets
         id: assets
@@ -1065,14 +1164,19 @@ jobs:
           echo "Every asset matches its SHA-256 and its attestation, and was built from tree $TREE."
       # The tag is the version, made once every check of the run passed and the assets are the run's, so a red run makes
       # no tag and takes no version. A published tag never moves and is never deleted, since Composer and every mirror
-      # read it once. master's push runs run one at a time, so no other run takes this version meanwhile. The checkout
+      # read it once. staging's runs run one at a time, so no other run takes this version meanwhile. The checkout
       # the job starts with pushes it, with the deploy key.
       - name: Tag this run's commit v<version>
         if: ${{ !needs.CHANGES.outputs.tagged }}
         run: |
           git tag "v$VERSION" "$GITHUB_SHA"
           git push origin "refs/tags/v$VERSION"
-      - name: Upload every asset to the draft release, check it, then publish it
+      # The release stays a draft until PUBLISH, once the images are tagged and both Composer tags pushed, so a failure
+      # anywhere leaves a draft and nothing public. Each asset the draft lacks uploads alone, and one it holds at another
+      # size, or whose upload never finished, uploads again, so a later run finishes an upload GitHub broke off:
+      # gh release upload --clobber stopped at its first failed asset on 0.8.3's run 45637122432, with "HTTP 422:
+      # ReleaseAsset.name already exists" after a GitHub 500, and left the draft without the rest (#849).
+      - name: Upload every asset to the draft release, check it, and write its notes
         if: contains(env.MISSING, 'assets')
         env:
           NOTES: ${{ runner.temp }}/release-notes.md
@@ -1087,13 +1191,28 @@ jobs:
             echo "Release $tag is already published."
             exit 0
           fi
-          gh release upload "$tag" assets/* --clobber
-          gh release view "$tag" --json assets --jq '.assets[].name' | sort > released-assets.txt
-          diff -u expected-assets.txt released-assets.txt || {
-            echo "::error::Draft release $tag holds different assets than expected, so it stays a draft."
+          gh release view "$tag" --json assets --jq '.assets[] | [.name, .size, .state] | @tsv' > draft-assets.tsv
+          while IFS= read -r asset; do
+            size=$(($(wc -c < "assets/$asset")))
+            printf '%s\t%s\n' "$asset" "$size" >> expected-sizes.tsv
+            held=$(awk -F '\t' -v name="$asset" '$1 == name { print $2 " bytes, " $3 }' draft-assets.tsv)
+            if [[ $held == "$size bytes, uploaded" ]]; then
+              continue
+            fi
+            if [[ -n $held ]]; then
+              echo "Draft release $tag holds $asset at $held, not $size bytes uploaded, so it uploads again."
+              gh release delete-asset "$tag" "$asset" --yes
+            fi
+            gh release upload "$tag" "assets/$asset"
+          done < expected-assets.txt
+          gh release view "$tag" --json assets --jq '.assets[] | select(.state == "uploaded") | [.name, .size] | @tsv' \
+            | sort > released-sizes.tsv
+          sort -o expected-sizes.tsv expected-sizes.tsv
+          diff -u expected-sizes.tsv released-sizes.tsv || {
+            echo "::error::Draft release $tag holds different assets or sizes than expected, so it stays a draft."
             exit 1
           }
-          gh release edit "$tag" --notes-file "$NOTES" --draft=false
+          gh release edit "$tag" --notes-file "$NOTES"
       - name: Download the platforms' digests
         id: digests
         if: contains(env.MISSING, 'images')

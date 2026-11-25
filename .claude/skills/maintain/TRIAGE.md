@@ -13,11 +13,15 @@ source: <who hit it, and where>
 - [ ] verified: `<command>` on the released mago gives <output>
 - [ ] root cause: <the function and lines a run of the repro shows emitting the refusal or the wrong value, MM-DD>
 - [ ] outcome: brief | wontfix | needs-info | proposal
-- [ ] design: `proposals/<slug>.md` holds PROPOSE.md steps 1 to 3, from the problem and a precedent system, never from the reporter's request, and a `## Facts` section of `- <claim>: \`<command>\` prints <output>` lines that `facts.py` reruns
+- [ ] design: `proposals/<slug>.md` holds PROPOSE.md steps 1 to 3, never the reporter's request, and a `## Facts` section of `- <claim>: \`<command>\` prints <output>` lines that `facts.py` reruns
+- [ ] precedent: the system's one in `precedents.md`, each departure's reason
+- [ ] cheaper: (a speed or wait target) the operation the design makes cost less, with its count today from the build log or the job's step timeline
+- [ ] consistent: `git grep` over the whole repository for the same-kind names, commands, flags, conditions or outputs, each match listed and matched
+- [ ] request: (from another agent) the design's `## Request`: each item it asked for as `kept: <precedent or neighbor>` or `dropped: <why>`
 - [ ] proposal: today's program compiled, and the change attacked per PROPOSE.md step 4
 ```
 
-The intake file is the maintainer's one queue, the language owner's requests included. An entry goes in at its rank from SKILL.md section 4, a red check or a `blocking` problem first. One entry at a time carries `(in progress)` in its heading, and it is worked through every box before the next one starts. An arrival is written in at its rank, then the work goes back to the entry in progress. Only a red check or a `blocking` fix that is green and not yet released goes ahead of it, and the paused entry's heading says where it stopped. An entry whose next box waits on a builder's run or the language owner's answer is marked `(waiting on …)`, and the next entry by rank is worked meanwhile.
+The intake file is the maintainer's one queue, the language owner's requests included. An entry goes in at its rank from SKILL.md section 4, a red check or a `blocking` problem first. One entry at a time carries `(in progress)` in its heading, and it is worked through every box before the next one starts. Only a red check or a `blocking` fix that is green and not yet released goes ahead of it, and the paused entry's heading says where it stopped. An entry whose next box waits on a builder's run or the language owner's answer is marked `(waiting on …)`, and the next entry by rank is worked meanwhile.
 
 The design box applies to every brief or proposal that makes an architectural call, the maintainer's own included, and the proposal box only to a `ready-for-human` change to what a PHP# program says or means. CI, tests, speed, releases and the process are the maintainer's, decided in the design box and never proposed. An entry leaves intake when every box that applies is checked, and only then is its brief posted, its builder dispatched or its proposal shown. A reply names an entry still in intake by its problem and the next box it needs, never as a decision for the language owner.
 Never: a problem shown to the language owner, briefed or dispatched with a box unchecked.
@@ -47,13 +51,15 @@ One **priority** label:
 
 - `blocking`: it stops a consumer or user today, so a release is cut the moment its fix is committed. A problem in PHP#'s own build, CI or process ranks as a red check, never `blocking`
 
-Every triaged issue carries exactly one category and one state label. A new issue goes to `needs-triage` first. From there it moves to `needs-info`, `ready-for-agent`, `ready-for-human` or `wontfix`. `needs-info` returns to `needs-triage` once the reporter answers.
+Every triaged issue carries one category and one state label, and starts at `needs-triage`; `needs-info` returns there once the reporter answers.
 
 ## Triage one problem
 
-A question about how to use PHP#, an audit of a consumer's own rules, or a request to pick a form for a consumer's code is not a problem. It gets no issue and no answer, because the spec answers it and the maintainer's time goes to PHP#. Only a defect, with a repro, or a missing capability enters triage. A defect enters only when a project, a user or CI hit it. A defect a builder or a tool found by exploring, which nothing hit, gets no issue.
+A question about how to use PHP#, an audit of a consumer's own rules, or a request to pick a form for a consumer's code is not a problem. It gets no issue and no answer, because the spec answers it and the maintainer's time goes to PHP#. Only a defect, with a repro, a missing capability, or a speed target off its goal enters triage. A defect enters only when a project, a user or CI hit it. A defect a builder or a tool found by exploring, which nothing hit, gets no issue.
 
 The language owner's feedback is a problem like any other: it runs all five steps, and a builder gets the Solution the maintainer designed from the code, never his words.
+
+A speed target off its goal is a problem like a defect a consumer hits, and ranks with one. Its entry's heading is `## Speed: <target>`, as the hook names it. Step 2 searches `benchmark/experiments.md` for the same change, and a design that repeats a dropped line needs a new reason, which its design file states. Step 3 verifies it by its count: the frozen project's, as `benchmark/speed.php` counts, or the last green run's job timeline. Step 4's root cause is the function or the step that a profile of that count shows costing most. Its brief makes that work cheaper, and once it is briefed, the next cost enters as a new entry. Every verification loop, a local build, test or measure or a CI job, ends within 5 minutes, since an agent can't debug a longer one, so the longest local loop and the longest CI job are speed targets, and a long loop is broken into parts that each end in a check. Each kind of loop over 5 minutes in the build log or the last green run is its own entry at once, never one after another. A design may rewrite a core part of the engine or of Mago, generally in Rust, behind a compatibility layer.
 
 Run all five steps on the entry in progress before starting another. Filing is only step 1: nothing else in the loop verifies an issue left at `needs-triage`.
 

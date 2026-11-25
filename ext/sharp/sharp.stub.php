@@ -215,6 +215,12 @@ function build(object $object, \Closure $body, mixed ...$arguments): mixed {}
 
 function emit(object $event, string $dispatcher): void {}
 
+function holdEmits(): void {}
+
+function releaseEmits(): void {}
+
+function dropEmits(): void {}
+
 function listenersFor(object $event): array {}
 
 function listen(string $event, \Closure $listener): \Sharp\Listening {}

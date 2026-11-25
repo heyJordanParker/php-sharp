@@ -1441,6 +1441,11 @@ static void inherit_property_hook(
 	}
 
 	if (!child) {
+		/* PHP#: a property that a class of a .sharp file redeclares runs each operation its storage does itself, so it
+		 * takes no hook of its parent for one, abstract or not, spec section 6: an override auto-property is storage. */
+		if ((ce->sharp_flags & SHARP_CLASS_EXACT_KEY) && property_has_operation(child_info, kind)) {
+			return;
+		}
 		if (parent->common.fn_flags & ZEND_ACC_ABSTRACT) {
 			/* Backed properties are considered to always implement get, and set when they are not readonly. */
 			if (property_has_operation(child_info, kind)) {

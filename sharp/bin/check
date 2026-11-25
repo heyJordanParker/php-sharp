@@ -9,13 +9,13 @@ set -euo pipefail
 #
 # With --release, it prints what CI's CHANGES jobs write to $GITHUB_OUTPUT about the release the checked-out commit
 # publishes: the version; tagged, the commit when tag v<version> already names it, empty until RELEASE creates it;
-# pulls, the pull requests merged since the newest tag, whose ## Changelog sections are the release's notes; missing,
-# each part of the release not published yet; and bump, whether any is. A pull request title after --release counts as
-# one more merged pull request, which is a dry run of the version.
+# pulls, the pull requests whose head the commit holds since the newest tag, whose ## Changelog sections are the
+# release's notes; missing, each part of the release not published yet; and bump, whether any is. A pull request title
+# after --release counts as one more pull request, which is a dry run of the version.
 #
 # With --speed-baseline, it downloads the speed.json the SPEED gate compares with into the folder it names.
 usage() {
-  echo "usage: sharp/bin/check [workflows | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php | speed]..." >&2
+  echo "usage: sharp/bin/check [seconds | workflows | spec-guard | mago-checks | linux | upstream | hosts | generated | mago-tests | plain-php | speed]..." >&2
   echo "       sharp/bin/check --release [<pull request title>]" >&2
   echo "       sharp/bin/check --speed-baseline <folder>" >&2
   exit 2
@@ -35,31 +35,32 @@ export CARGO_BUILD_JOBS
 # composer, tag v<version> of heyJordanParker/php-sharp-composer and heyJordanParker/mago-sharp. A rerun of the push run
 # whose commit the tag names publishes what an earlier attempt left missing, since only that run built its assets and
 # images. Run 45033462105 published a GitHub release and failed before its images and its Composer tags, which a check
-# of the tag alone then counted as released. The image and the mirrors are public, so their checks need no login. git
+# of the tag alone then counted as released. So the GitHub release is public last: RELEASE fills it as a draft and tags
+# the images, COMPOSER pushes the mirrors' tags, and PUBLISH makes it public, and assets is missing until it is. The
+# image and the mirrors are public, so their checks need no login. git
 # ls-remote --exit-code exits 2 when a remote has no such ref, and with another code when it can't ask.
 #
 # A version lives in its tag alone. A commit a tag already names publishes that tag's version, so a rerun finishes the
 # release it started. Any other commit publishes the newest tag's version plus one patch, or one minor when the title of
-# a pull request merged since that tag has `!` before its colon, as merged_pulls finds them. RELEASE tags the commit once every check passed,
-# and master's push runs run one at a time, so a red run makes no tag and two runs never take one version. A release's
-# notes are every pull request merged since the newest published release, so a release after a tag whose release never
-# published carries that tag's pull requests too, as run 45434990708 tagged a release that stayed a draft.
-# CI's checkout holds one commit, so the release fetches the commits since that release, without their trees, in 3.5 s
-# on a test.
-# Prints each pull request that master's first-parent merges of the range merged: its number, a tab, and its title.
-# The merge of a stack's top pull request merges every pull request below it, and GitHub records that one merge commit
-# as each one's: run 45434990708's commit merged 19 pull requests, and its merge commit's subject names one. So the
-# pull requests are those into master whose merge commit is one of the range's first-parent commits. A shallow
-# checkout's oldest commit shows no parent, so a merge there counts as a merge only by its pull request's record.
-merged_pulls() {
-  local merges
-  merges="$(git -C "$root" rev-list --first-parent "$@")"
-  if [[ -z $merges ]]; then
+# a pull request the commit holds since that tag has `!` before its colon, as range_pulls finds them. RELEASE tags the
+# commit once every check passed, and staging's runs run one at a time, so a red run makes no tag and two runs never
+# take one version. A release's notes are every pull request it holds since the newest published release, so a release
+# after a tag whose release never published carries that tag's pull requests too, as run 45434990708 tagged a release
+# that stayed a draft. CI's checkout holds one commit, so the release fetches the commits since that release, without
+# their trees, in 3.5 s on a test.
+# Prints each pull request into master whose head commit the range holds: its number, a tab, and its title. A staging
+# run's pull requests aren't merged yet when its CHANGES runs, so no merge commit GitHub recorded names them, and
+# queue.yml merges each one's head onto master. The merge of a stack's top pull request holds every pull request below
+# it too: run 45434990708's commit landed 19 pull requests, and its merge commit's subject names one.
+range_pulls() {
+  local commits
+  commits="$(git -C "$root" rev-list "$@")"
+  if [[ -z $commits ]]; then
     return
   fi
-  (cd "$root" && gh api --paginate 'repos/{owner}/{repo}/pulls?state=closed&base=master&per_page=100' \
-    --jq '.[] | select(.merged_at != null) | [.merge_commit_sha, .number, .title] | @tsv') \
-    | awk -F '\t' 'NR == FNR { merge[$1] = 1; next } $1 in merge { print $2 "\t" $3 }' <(echo "$merges") -
+  (cd "$root" && gh api --paginate 'repos/{owner}/{repo}/pulls?state=all&base=master&per_page=100' \
+    --jq '.[] | [.head.sha, .number, .title] | @tsv') \
+    | awk -F '\t' 'NR == FNR { held[$1] = 1; next } $1 in held { print $2 "\t" $3 }' <(echo "$commits") -
 }
 release() {
   local title=${1:-} head refs newest commit major minor patch version='' tagged='' pulls=() titles=() range
@@ -83,7 +84,7 @@ release() {
       git -C "$root" fetch --quiet --filter=tree:0 --shallow-exclude="refs/tags/$release" origin "$head"
       range=("$head")
     fi
-    mapfile -t pulls < <(merged_pulls "${range[@]}" | cut -f 1)
+    mapfile -t pulls < <(range_pulls "${range[@]}" | cut -f 1)
   fi
   if [[ -n $version ]]; then
     tagged=$head
@@ -95,7 +96,7 @@ release() {
       exit 1
     fi
     commit="$(awk -v tag="refs/tags/v$newest" '$2 == tag || $2 == tag "^{}" {commit = $1} END {print commit}' <<< "$refs")"
-    mapfile -t titles < <(merged_pulls "$head" "^$commit" | cut -f 2)
+    mapfile -t titles < <(range_pulls "$head" "^$commit" | cut -f 2)
     if [[ -n $title ]]; then
       titles+=("$title")
     fi
@@ -161,15 +162,19 @@ release() {
   fi
 }
 
-# The SPEED gate's baseline is what master's newest green Mago CI push run counted, its speed artifact: the merge queue
-# merges only a change whose runs passed, so a change is compared with the master it merges into, and no file in the
-# tree holds a count.
+# The SPEED gate's baseline is what the newest green Mago CI push run of a commit master holds counted, its speed
+# artifact, so a change is compared with the master it lands on, and no file in the tree holds a count. LAND moves
+# master only to a staging commit whose Mago run passed, so that run is usually the tip's own. A commit no push ran on,
+# as the merge that brought the queue in (#843), counts its newest ancestor's, and a staging batch that never landed
+# counts none: run 45671195524's SPEED failed when only master's tip counted, while the tip's own run hadn't ended.
 speed_baseline() {
   local run
-  run="$(cd "$root" && gh run list --workflow mago.yml --branch master --event push --status success --limit 1 \
-    --json databaseId --jq '.[0].databaseId // empty')"
+  run="$(cd "$root" && gh api 'repos/{owner}/{repo}/commits?sha=master&per_page=100' --jq '.[].sha' \
+    | awk 'NR == FNR { if (!($1 in green)) green[$1] = $2; next } $1 in green { print green[$1]; exit }' \
+      <(gh run list --workflow mago.yml --event push --status success --limit 100 --json headSha,databaseId \
+        --jq '.[] | "\(.headSha) \(.databaseId)"') -)"
   if [[ -z $run ]]; then
-    echo "master has no green Mago CI push run, so there is no speed baseline." >&2
+    echo "No green Mago CI push run is on one of master's newest 100 commits, so there is no speed baseline." >&2
     exit 1
   fi
   (cd "$root" && gh run download "$run" --name speed --dir "$1")
@@ -193,7 +198,7 @@ case "${1:-}" in
     ;;
 esac
 
-all=(workflows spec-guard mago-checks linux upstream hosts generated mago-tests plain-php speed)
+all=(seconds workflows spec-guard mago-checks linux upstream hosts generated mago-tests plain-php speed)
 for gate in "$@"; do
   if [[ " ${all[*]} " != *" $gate "* ]]; then
     usage
@@ -285,6 +290,46 @@ gate_workflows() {
   step lint_workflows
 }
 
+# Every test sharp/baseline/seconds lists exists, since a renamed test's new name weighs 1 s in sharp/bin/test's slices
+# where its old one held its seconds: MAGO (1/5) took 394 s on run 45127191998 against 293 s for MAGO (5/5), because the
+# list held 162.9 s of laws.rs under no name of a test and 1 s under its new one. CHANGES runs it, before any build or
+# Mac job starts, where MAGO's slices found 3 such lists of 11-24 and 11-25 only after BUILD_LINUX (#834). It reads the
+# tree, so it needs no build: a .phpt key and the convert proof name their file, and a Mago key, <its binary's
+# source>::<module path>::<name>, a name that a .rs file under its source's folder holds, as a fn's or as a macro's
+# argument, such as the analyzer's test_case!(array_type_combination_threshold).
+stale_seconds() {
+  local key source folder words stale=()
+  local -A listed=()
+  while IFS=$'\t' read -r _ key; do
+    case $key in
+      *::*)
+        source=${key%%::*}
+        folder=${source%/*}
+        words="$TMPDIR/words-${#listed[@]}"
+        if [[ -z ${listed[$folder]:-} ]]; then
+          grep -rhoE '[A-Za-z_][A-Za-z0-9_]*' --include='*.rs' "$root/$folder" | LC_ALL=C sort -u > "$words"
+          listed[$folder]=$words
+        fi
+        if [[ ! -f $root/$source ]] || ! grep -qxF -- "${key##*::}" "${listed[$folder]}"; then
+          stale+=("$key")
+        fi
+        ;;
+      *.phpt | *.sh)
+        if [[ ! -f $root/$key ]]; then
+          stale+=("$key")
+        fi
+        ;;
+    esac
+  done < "$root/sharp/baseline/seconds"
+  if ((${#stale[@]})); then
+    printf 'sharp/baseline/seconds lists %s, which no test is. Measure it under its new name, or drop it.\n' "${stale[@]}" >&2
+    return 1
+  fi
+}
+gate_seconds() {
+  step stale_seconds
+}
+
 # SPEC_GUARD and COMPLETES, with the merge base's sharp/bin/spec, as completes.yml runs them. COMPLETES reads the pull
 # request's body on its standard input, so it runs when BODY holds it.
 gate_spec_guard() {
@@ -323,6 +368,14 @@ no_crate_version() {
     return 1
   fi
 }
+# mago-build-id's ID changes with every crate's source, so each crate that depends on it compiles again after any edit.
+# Only the root package reads it, and the crates below get it as a value, so an edit compiles only what it reaches.
+no_build_id_below_root() {
+  if grep -rn --include='*.rs' --include=Cargo.toml --exclude-dir=build-id -e mago_build_id -e mago-build-id crates; then
+    echo "A crate below the root package names mago-build-id, so every edit compiles it again. Pass it the binary's build ID, crate::consts::BUILD_ID." >&2
+    return 1
+  fi
+}
 # cargo install puts typos in the folder cargo keeps installed tools in, which cargo finds its own subcommands in, but
 # which a Mac with Homebrew's rustup leaves off PATH. That folder can hold an older rustup's rustc, so it never joins
 # PATH.
@@ -335,14 +388,35 @@ misspellings() {
   fi
   "$typos"
 }
+# No crate either Cargo.lock pins has a RustSec vulnerability, unsound or yanked advisory: cargo deny checks each against
+# the advisory database, by the deny.toml beside it, which allows no advisory by its id. mago's downloads and
+# self-update ran over rustls 0.23.44, which had five, among them a TLS 1.3 handshake bug (#786). An unmaintained
+# advisory names no defect and no fixed version, so it prints as a warning and passes. cargo deny finds the folder cargo
+# keeps installed tools in as typos does.
+advisories() {
+  local deny lock
+  deny="$(command -v cargo-deny || echo "${CARGO_HOME:-$HOME/.cargo}/bin/cargo-deny")"
+  if [[ ! -x $deny ]]; then
+    echo "mago.yml's checks checks the lockfiles for advisories with cargo-deny 0.20.2. Install its release binary, or: cargo install --locked cargo-deny@0.20.2" >&2
+    return 1
+  fi
+  for lock in sharp/mago ext/sharp; do
+    "$deny" deny --manifest-path "$root/$lock/Cargo.toml" --log-level warn check --warn unmaintained advisories
+  done
+}
 gate_mago_checks() {
   local mago
   mago="$root/sharp/build/$os-$(uname -m)/mago/test-run/mago"
   local -x CARGO_TARGET_DIR="$target"
   cd "$root/sharp/mago"
   step misspellings
+  step advisories
   step composer install --no-interaction --no-progress --quiet
   step vendor/bin/phpunit --configuration composer/phpunit.xml
+  # heyjordanparker/php-sharp-composer installs mago's binary, so the tests of its download, SHA-256 check and extract
+  # run here too, from the vendor folder its composer.json keeps in sharp/build.
+  step composer install --no-interaction --no-progress --quiet --working-dir="$root/sharp/composer"
+  step "$root/sharp/build/php-sharp-composer/vendor/bin/phpunit" --configuration "$root/sharp/composer/phpunit.xml"
   step rustup run "$rust" cargo check --workspace --locked
   # Workspace builds merge features, so only a build of the bridge alone shows what php links.
   step rustup run "$rust" cargo check -p mago-sharp-bridge --locked
@@ -350,6 +424,7 @@ gate_mago_checks() {
   step rustup run "$rust" cargo metadata --locked --format-version 1 --manifest-path crates/syntax/fuzz/Cargo.toml > /dev/null
   step no_notify
   step no_crate_version
+  step no_build_id_below_root
   step unchanged_by php scripts/regen-sdk-node-kinds.php
   step rustup run "$rust" cargo fmt --all -- --check
   step rustup run "$rust" cargo clippy --workspace --all-targets --all-features -- -D warnings
@@ -466,8 +541,8 @@ gate_mago_tests() {
 # later release installs nothing. Then mago runs on a one-class .sharp project, and sharp/phpunit's tests stop before a
 # .sharp test file's source prints.
 composer_install() {
-  local mago="$target/test-run/mago" version tree package="$TMPDIR/mago-sharp-package" project="$TMPDIR/project"
-  local binary_dir output
+  local mago="$target/test-run/mago" version tree triple package="$TMPDIR/mago-sharp-package" project="$TMPDIR/project"
+  local output
   if [[ ! -f $mago ]]; then
     echo "$mago is missing. Run sharp/bin/check mago-checks first." >&2
     return 1
@@ -479,6 +554,12 @@ composer_install() {
   # holds them, as a commit of them would ship them. It prints nothing for a working tree with no change.
   tree="$(git -C "$root" stash create)"
   git -C "$root" archive "${tree:-HEAD}" sharp/mago | tar -x -C "$package" --strip-components 2
+  # The tree's version has no release to download, so the package carries the test-run mago at
+  # composer/bin/<triple>/mago, where php-sharp-composer's plugin installs a release's binary for this platform, and the
+  # plugin finds it in place.
+  triple="$(php -r 'require $argv[1]; echo PhpSharp\Composer\MagoBinary::triple();' "$root/sharp/composer/src/MagoBinary.php")"
+  mkdir -p "$package/composer/bin/$triple"
+  install -m 755 "$mago" "$package/composer/bin/$triple/mago"
   cd "$project"
   cat > composer.json << JSON
 {
@@ -544,9 +625,6 @@ JSON
     echo "A host that requires carthage-software/mago ^1.57 installed beside mago-sharp." >&2
     return 1
   fi
-  binary_dir="vendor/heyjordanparker/mago-sharp/composer/bin/$version/mago-$version-$(rustc -vV | sed -n 's/^host: //p')"
-  mkdir -p "$binary_dir"
-  install -m 755 "$mago" "$binary_dir/mago"
   output=$(vendor/bin/mago --version 2>&1)
   echo "$output"
   if [[ $output != "mago $version" ]]; then
