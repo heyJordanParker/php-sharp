@@ -473,3 +473,4 @@
 63	sharp/bin/spec --shard 14/36
 62	sharp/bin/spec --shard 10/36
 61	sharp/bin/spec --shard 36/36
+1	Zend/tests/sharp/no_such_probe.phpt
