@@ -81,11 +81,12 @@ def lanes():
             stalled.append(f"{lane}'s builder has no transcript")
             continue
         idle = int((time.time() - os.path.getmtime(logs[0])) // 60)
-        rows.append(f"  {lane:<9} {agent} {kind:<17} idle {idle} min")
         # A lane whose batch landed and waits only for its release is marked `| done:` in state.md, so its idle
         # builder holds no batch to send again: on 11-25 the tracer lane was flagged idle after #817 merged.
-        if (idle >= IDLE and "| done:" not in line and f"worktrees/{lane.lower()}" not in container_mounts()
-                and not waits_on_its_run(logs[0])):
+        done = "| done:" in line
+        running = f"worktrees/{lane.lower()}" in container_mounts() or waits_on_its_run(logs[0])
+        rows.append(f"  {lane:<9} {agent} {kind:<17} idle {idle} min" + (", done" if done else ", its run is going" if running else ""))
+        if idle >= IDLE and not done and not running:
             stalled.append(f"{lane} idle {idle} min")
         if kind != "claude":
             stalled.append(f"{lane} runs {kind}, not claude")
@@ -238,7 +239,9 @@ def report():
         lane = parts[0]
         if "no builder" in row:
             state = "no builder"
-        elif f"worktrees/{lane.lower()}" in mounts:
+        elif row.endswith(", done"):
+            state = "done, waits for its release"
+        elif row.endswith(", its run is going") or f"worktrees/{lane.lower()}" in mounts:
             state = "working, its run is going"
         elif "idle" in parts:
             minutes = int(parts[parts.index("idle") + 1])
