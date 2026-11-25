@@ -37,7 +37,7 @@ public machine OfferAvailability : Variant
         => endsAt is Instant ends ? (now >= ends ? OfferAvailability.Ended(ends) : open) : open;
 
     law anOfferNotStartedComesBeforeItsEnd(Instant now, Instant starts, Instant ends, int claims)
-        when now < starts
+        when now >= starts
         => OfferAvailability.at(OfferAvailability.of(true, true, starts, ends, null, claims, null, null), now) is OfferAvailability.NotStarted;
 
     law anOfferPastItsEndHasEnded(Instant now, Instant starts, Instant ends, int claims)
