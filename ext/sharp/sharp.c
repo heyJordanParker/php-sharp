@@ -6676,10 +6676,10 @@ static bool sharp_is_init(const zend_property_info *info, zend_string *name)
  * static `name`, by the code that called the standard library member whose body made the internal call `execute_data`,
  * as .NET's FieldInfo.GetValue and SetValue reach a field. The code reaches the storage as a direct use from it would,
  * and a written value is checked against its type as `Property.set` checks it, since `writeField` runs in strict mode
- * (PHP_MINIT_FUNCTION). The storage of an `init` property takes a write only while it holds no value, as only the
- * object's creation writes it. No code a project wrote runs, so a receiver whose class gives the property an accessor,
- * as a PHP 8.4 subclass may by declaring it again, and statics whose initial values have not run throw Error rather than
- * run that code. */
+ * (PHP_MINIT_FUNCTION). The storage of an `init` property takes a write only while it holds no value, and takes it
+ * from the declaring class's scope, as the object's creation writes it, since `init` compiles to `protected(set)`. No
+ * code a project wrote runs, so a receiver whose class gives the property an accessor, as a PHP 8.4 subclass may by
+ * declaring it again, and statics whose initial values have not run throw Error rather than run that code. */
 static void sharp_storage_use(zend_execute_data *execute_data, zend_object *receiver, zend_string *class_name,
 	zend_string *name, zval *value, zval *return_value)
 {
@@ -6721,11 +6721,13 @@ static void sharp_storage_use(zend_execute_data *execute_data, zend_object *rece
 			member, use, ZSTR_VAL(ce->name), ZSTR_VAL(name), ZSTR_VAL(receiver->ce->name), member);
 		RETURN_THROWS();
 	}
-	if (value && info && IS_VALID_PROPERTY_OFFSET(info->offset) && !Z_ISUNDEF_P(OBJ_PROP(receiver, info->offset))
-			&& sharp_is_init(info, name)) {
-		zend_throw_error(NULL, "`set` writes the storage of %s::$%s, which `init` lets the object's creation write "
-			"once, and it holds a value", ZSTR_VAL(info->ce->name), ZSTR_VAL(name));
-		RETURN_THROWS();
+	if (value && info && IS_VALID_PROPERTY_OFFSET(info->offset) && sharp_is_init(info, name)) {
+		if (!Z_ISUNDEF_P(OBJ_PROP(receiver, info->offset))) {
+			zend_throw_error(NULL, "`set` writes the storage of %s::$%s, which `init` lets the object's creation write "
+				"once, and it holds a value", ZSTR_VAL(info->ce->name), ZSTR_VAL(name));
+			RETURN_THROWS();
+		}
+		scope = info->ce;
 	}
 	if (!value) {
 		zval read;
