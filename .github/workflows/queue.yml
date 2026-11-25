@@ -1,0 +1,139 @@
+name: Queue
+# GitHub's merge queue is offered only to repositories an organization owns, and this one is a user's, so this is the
+# queue in its shape (#843). It merges the pull requests ready to land onto master's tip and pushes the result to
+# staging, whose run runs every check, the Mac's among them, on that tree. That run's LAND moves master to its commit
+# and the same run publishes the release, so each landed tree crosses the Mac once: #828 crossed it twice, in pull
+# request run 45570037780 for 55 minutes, then in push run 45600915642 for 87. A pull request is ready once its
+# auto-merge is on and its head passed every check master merge gate requires, which are the Linux checks of its own
+# run. The gate also requires QUEUE, a check no run reports, so GitHub never merges a pull request itself, and LAND,
+# pushing with the deploy key the gate lets past, is the only way onto master.
+on:
+  # pull_request_target runs this file as master has it, with the deploy key, and runs no file of the pull request: the
+  # job only merges its commits.
+  pull_request_target:
+    types: [auto_merge_enabled]
+    branches:
+      - master
+  # A pull request's own runs ending can make it ready, and a staging run ending frees staging.
+  workflow_run:
+    workflows: [PHP#, Mago, Spec guard]
+    types: [completed]
+permissions:
+  contents: read
+# One batch at a time, and a newer event waits for the one in progress, which may have pushed staging meanwhile.
+concurrency:
+  group: queue
+  cancel-in-progress: false
+jobs:
+  BATCH:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: write
+      statuses: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      # The deploy key pushes staging, since a push with GITHUB_TOKEN starts no workflow, and GitHub refuses that token a
+      # commit whose workflows differ from master's. The checkout keeps it for the fetches and the push.
+      - name: git checkout, with the deploy key that pushes staging
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ssh-key: ${{ secrets.PHP_SHARP_DEPLOY_KEY }}
+          ref: master
+      # staging holds master's tip and the last batch merged onto it. While a staging run of it hasn't ended, the batch
+      # waits. A batch master doesn't hold failed: one that held one pull request leaves that pull request out, with a
+      # comment, until its head moves, and one that held more takes its oldest pull request alone, so one broken change
+      # never holds the others. Every other batch takes every ready pull request, oldest first.
+      - name: Merge the ready pull requests onto master and push them to staging
+        shell: bash
+        run: |
+          master=$(git ls-remote origin refs/heads/master | cut -f 1)
+          staging=$(git ls-remote origin refs/heads/staging | cut -f 1)
+          busy=$(gh run list --workflow sharp.yml --branch staging --event push --limit 20 --json status \
+            --jq '[.[] | select(.status != "completed")] | length')
+          if ((busy > 0)); then
+            echo "A staging run hasn't ended, so the next batch waits for it."
+            exit 0
+          fi
+          only=
+          if [[ -n $staging ]]; then
+            compare=$(gh api "repos/$GITHUB_REPOSITORY/compare/$master...$staging")
+            if [[ $(jq -r .status <<< "$compare") == ahead || $(jq -r .status <<< "$compare") == diverged ]]; then
+              # GitHub creates a push's run seconds after the push, so a staging commit with no ended run yet waits.
+              read -r status run < <(gh run list --workflow sharp.yml --branch staging --event push --commit "$staging" \
+                --limit 1 --json status,url --jq '.[0] | "\(.status) \(.url)"')
+              if [[ $status != completed ]]; then
+                echo "staging's run of $staging hasn't ended, so the next batch waits for it."
+                exit 0
+              fi
+              jq -r '.commits[] | select((.parents | length) == 2 and (.commit.message | startswith("Merge pull request #")))
+                | [(.commit.message | capture("^Merge pull request #(?<n>[0-9]+)").n), .parents[1].sha] | @tsv' \
+                <<< "$compare" | sort -n > failed-batch.tsv
+              if (($(wc -l < failed-batch.tsv) == 1)); then
+                read -r number head < failed-batch.tsv
+                marker="<!-- queue: failed alone at $head -->"
+                if ! gh api "repos/$GITHUB_REPOSITORY/issues/$number/comments" --paginate --jq '.[].body' | grep -qF "$marker"; then
+                  gh pr comment "$number" --body "$run failed with only this pull request in its batch, at $head, so master stays where it was. The queue leaves this pull request out until its head moves: push the fix to its branch.
+          $marker"
+                fi
+              else
+                only=$(head -n 1 failed-batch.tsv | cut -f 1)
+                echo "$run failed with pull requests $(cut -f 1 failed-batch.tsv | paste -sd ' ' -), so this batch takes #$only alone."
+              fi
+            fi
+          fi
+          mapfile -t required < <(gh api "repos/$GITHUB_REPOSITORY/rules/branches/master" \
+            --jq '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context | select(. != "QUEUE")')
+          gh pr list --base master --state open --limit 200 \
+            --json number,headRefOid,headRefName,headRepositoryOwner,title,isDraft,autoMergeRequest,statusCheckRollup \
+            | jq -r --args '.[] | select(.autoMergeRequest != null and (.isDraft | not))
+                | .statusCheckRollup as $checks
+                | select(all($ARGS.positional[]; . as $name
+                    | [$checks[] | select((.name // .context) == $name) | (.conclusion // .state)] | length > 0 and all(. == "SUCCESS")))
+                | [.number, .headRefOid, .headRepositoryOwner.login, .headRefName, .title] | @tsv' "${required[@]}" \
+            | sort -n > ready.tsv
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          batch=()
+          while IFS=$'\t' read -r number head owner branch title; do
+            if [[ -n $only && $number != "$only" ]]; then
+              continue
+            fi
+            if gh api "repos/$GITHUB_REPOSITORY/issues/$number/comments" --paginate --jq '.[].body' \
+              | grep -qF "<!-- queue: failed alone at $head -->"; then
+              echo "#$number failed alone at $head, so it waits for a new head."
+              continue
+            fi
+            # Each fetch reaches the merge base of master and the head, so the merge finds it in a shallow history.
+            read -r behind ahead < <(gh api "repos/$GITHUB_REPOSITORY/compare/$master...$head" --jq '"\(.behind_by) \(.ahead_by)"')
+            git fetch --quiet --no-tags --depth=$((behind + 1)) origin "+$master:refs/remotes/origin/master"
+            git fetch --quiet --no-tags --depth=$((ahead + 1)) origin "+refs/pull/$number/head:refs/queue/$number"
+            if [[ $(git rev-parse "refs/queue/$number") != "$head" ]]; then
+              echo "#$number's head moved past $head, the commit its checks passed on, so it waits for its new checks."
+              continue
+            fi
+            if ((${#batch[@]} == 0)); then
+              git checkout --quiet --detach "$master"
+            fi
+            if git merge --quiet --no-ff -m "Merge pull request #$number from $owner/$branch" -m "$title" "$head"; then
+              batch+=("$number")
+              continue
+            fi
+            git merge --abort
+            marker="<!-- queue: conflicts at $head -->"
+            if ! gh api "repos/$GITHUB_REPOSITORY/issues/$number/comments" --paginate --jq '.[].body' | grep -qF "$marker"; then
+              gh pr comment "$number" --body "This pull request conflicts with master or with a pull request merged ahead of it in the queue's batch, so the queue left it out. Make it again on master.
+          $marker"
+            fi
+          done < ready.tsv
+          if ((${#batch[@]} == 0)); then
+            echo "No pull request is ready to land."
+            exit 0
+          fi
+          git push --force origin HEAD:refs/heads/staging
+          echo "staging is $(git rev-parse HEAD): master $master with pull requests ${batch[*]/#/#} merged onto it."

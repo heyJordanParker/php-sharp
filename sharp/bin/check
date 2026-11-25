@@ -9,9 +9,9 @@ set -euo pipefail
 #
 # With --release, it prints what CI's CHANGES jobs write to $GITHUB_OUTPUT about the release the checked-out commit
 # publishes: the version; tagged, the commit when tag v<version> already names it, empty until RELEASE creates it;
-# pulls, the pull requests merged since the newest tag, whose ## Changelog sections are the release's notes; missing,
-# each part of the release not published yet; and bump, whether any is. A pull request title after --release counts as
-# one more merged pull request, which is a dry run of the version.
+# pulls, the pull requests whose head the commit holds since the newest tag, whose ## Changelog sections are the
+# release's notes; missing, each part of the release not published yet; and bump, whether any is. A pull request title
+# after --release counts as one more pull request, which is a dry run of the version.
 #
 # With --speed-baseline, it downloads the speed.json the SPEED gate compares with into the folder it names.
 usage() {
@@ -42,26 +42,25 @@ export CARGO_BUILD_JOBS
 #
 # A version lives in its tag alone. A commit a tag already names publishes that tag's version, so a rerun finishes the
 # release it started. Any other commit publishes the newest tag's version plus one patch, or one minor when the title of
-# a pull request merged since that tag has `!` before its colon, as merged_pulls finds them. RELEASE tags the commit once every check passed,
-# and master's push runs run one at a time, so a red run makes no tag and two runs never take one version. A release's
-# notes are every pull request merged since the newest published release, so a release after a tag whose release never
-# published carries that tag's pull requests too, as run 45434990708 tagged a release that stayed a draft.
-# CI's checkout holds one commit, so the release fetches the commits since that release, without their trees, in 3.5 s
-# on a test.
-# Prints each pull request that master's first-parent merges of the range merged: its number, a tab, and its title.
-# The merge of a stack's top pull request merges every pull request below it, and GitHub records that one merge commit
-# as each one's: run 45434990708's commit merged 19 pull requests, and its merge commit's subject names one. So the
-# pull requests are those into master whose merge commit is one of the range's first-parent commits. A shallow
-# checkout's oldest commit shows no parent, so a merge there counts as a merge only by its pull request's record.
-merged_pulls() {
-  local merges
-  merges="$(git -C "$root" rev-list --first-parent "$@")"
-  if [[ -z $merges ]]; then
+# a pull request the commit holds since that tag has `!` before its colon, as range_pulls finds them. RELEASE tags the
+# commit once every check passed, and staging's runs run one at a time, so a red run makes no tag and two runs never
+# take one version. A release's notes are every pull request it holds since the newest published release, so a release
+# after a tag whose release never published carries that tag's pull requests too, as run 45434990708 tagged a release
+# that stayed a draft. CI's checkout holds one commit, so the release fetches the commits since that release, without
+# their trees, in 3.5 s on a test.
+# Prints each pull request into master whose head commit the range holds: its number, a tab, and its title. A staging
+# run's pull requests aren't merged yet when its CHANGES runs, so no merge commit GitHub recorded names them, and
+# queue.yml merges each one's head onto master. The merge of a stack's top pull request holds every pull request below
+# it too: run 45434990708's commit landed 19 pull requests, and its merge commit's subject names one.
+range_pulls() {
+  local commits
+  commits="$(git -C "$root" rev-list "$@")"
+  if [[ -z $commits ]]; then
     return
   fi
-  (cd "$root" && gh api --paginate 'repos/{owner}/{repo}/pulls?state=closed&base=master&per_page=100' \
-    --jq '.[] | select(.merged_at != null) | [.merge_commit_sha, .number, .title] | @tsv') \
-    | awk -F '\t' 'NR == FNR { merge[$1] = 1; next } $1 in merge { print $2 "\t" $3 }' <(echo "$merges") -
+  (cd "$root" && gh api --paginate 'repos/{owner}/{repo}/pulls?state=all&base=master&per_page=100' \
+    --jq '.[] | [.head.sha, .number, .title] | @tsv') \
+    | awk -F '\t' 'NR == FNR { held[$1] = 1; next } $1 in held { print $2 "\t" $3 }' <(echo "$commits") -
 }
 release() {
   local title=${1:-} head refs newest commit major minor patch version='' tagged='' pulls=() titles=() range
@@ -85,7 +84,7 @@ release() {
       git -C "$root" fetch --quiet --filter=tree:0 --shallow-exclude="refs/tags/$release" origin "$head"
       range=("$head")
     fi
-    mapfile -t pulls < <(merged_pulls "${range[@]}" | cut -f 1)
+    mapfile -t pulls < <(range_pulls "${range[@]}" | cut -f 1)
   fi
   if [[ -n $version ]]; then
     tagged=$head
@@ -97,7 +96,7 @@ release() {
       exit 1
     fi
     commit="$(awk -v tag="refs/tags/v$newest" '$2 == tag || $2 == tag "^{}" {commit = $1} END {print commit}' <<< "$refs")"
-    mapfile -t titles < <(merged_pulls "$head" "^$commit" | cut -f 2)
+    mapfile -t titles < <(range_pulls "$head" "^$commit" | cut -f 2)
     if [[ -n $title ]]; then
       titles+=("$title")
     fi
@@ -163,15 +162,19 @@ release() {
   fi
 }
 
-# The SPEED gate's baseline is what master's newest green Mago CI push run counted, its speed artifact: the merge queue
-# merges only a change whose runs passed, so a change is compared with the master it merges into, and no file in the
-# tree holds a count.
+# The SPEED gate's baseline is what the newest green Mago CI push run of a commit master holds counted, its speed
+# artifact, so a change is compared with the master it lands on, and no file in the tree holds a count. LAND moves
+# master only to a staging commit whose Mago run passed, so that run is usually the tip's own. A commit no push ran on,
+# as the merge that brought the queue in (#843), counts its newest ancestor's, and a staging batch that never landed
+# counts none: run 45671195524's SPEED failed when only master's tip counted, while the tip's own run hadn't ended.
 speed_baseline() {
   local run
-  run="$(cd "$root" && gh run list --workflow mago.yml --branch master --event push --status success --limit 1 \
-    --json databaseId --jq '.[0].databaseId // empty')"
+  run="$(cd "$root" && gh api 'repos/{owner}/{repo}/commits?sha=master&per_page=100' --jq '.[].sha' \
+    | awk 'NR == FNR { if (!($1 in green)) green[$1] = $2; next } $1 in green { print green[$1]; exit }' \
+      <(gh run list --workflow mago.yml --event push --status success --limit 100 --json headSha,databaseId \
+        --jq '.[] | "\(.headSha) \(.databaseId)"') -)"
   if [[ -z $run ]]; then
-    echo "master has no green Mago CI push run, so there is no speed baseline." >&2
+    echo "No green Mago CI push run is on one of master's newest 100 commits, so there is no speed baseline." >&2
     exit 1
   fi
   (cd "$root" && gh run download "$run" --name speed --dir "$1")

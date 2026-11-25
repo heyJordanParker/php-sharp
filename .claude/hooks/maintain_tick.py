@@ -234,6 +234,9 @@ def report():
     # Each target's value 24 hours ago, from the TREND lines, so a target that rose shows beside its number.
     trend = {m.group(1): (m.group(2), m.group(3)) for m in
              (re.match(r"\s+(.+?): ([\d.]+) -> [\d.]+ (ROSE|fell|held)$", line) for line in lines) if m}
+    # A target with no value a day ago shows when it was first measured, never a bare "none".
+    first = {m.group(1): m.group(2) for m in
+             (re.match(r"\s+(.+?): first measured (\d\d-\d\d \d\d:\d\dZ|now)$", line) for line in lines) if m}
     goals = []
     for line in lines[start + 1:]:
         found = re.match(r"\s+(.+?): ([\d.]+)( ?[A-Za-z]*) / ([\d.]+)( ?[A-Za-z]*) (MET|x([\d.]+))(?:, (?:run \d+ )?(.+))?$", line)
@@ -242,7 +245,8 @@ def report():
             off = 0.0 if found.group(6) == "MET" else float(found.group(7))
             when = f"  ({found.group(8)})" if found.group(8) else ""
             before, moved = trend.get(found.group(1), ("", ""))
-            day = f"{float(before):.1f}{found.group(3)}" if before else "none"
+            since = first.get(found.group(1))
+            day = f"{float(before):.1f}{found.group(3)}" if before else f"new {since[6:]}" if since else "none"
             mark = "  ROSE" if moved == "ROSE" else ""
             goals.append((off, f"  {name:<36} {found.group(2) + found.group(3):>12}  {day:>12}  {found.group(4) + found.group(5):>8}  "
                                 f"{'met' if off == 0 else f'{off:.1f}x off':>9}{mark}{when}"))
