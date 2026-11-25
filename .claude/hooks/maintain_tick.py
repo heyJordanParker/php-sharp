@@ -39,6 +39,20 @@ def waits_on_its_run(log):
     return bool(outputs) and subprocess.run(["lsof", "-t", *outputs], capture_output=True, text=True).stdout.strip() != ""
 
 
+def mods_off(session):
+    """A line when this session's cmod mods are off. Claude Code turns off every hooks-worker mod for the rest of the
+    process after its hooks worker freezes three times with no mod to blame, so rulebook's rules and tracer stop
+    checking this session and every builder in it: on 11-25 they were off from 00:43 to the restart, and nothing said so.
+    cmod answers that no plugin of the session reaches it."""
+    if not session:
+        return ""
+    answer = subprocess.run(["cmod", "ui", "list", "widgets", session], capture_output=True, text=True, timeout=10)
+    if "reaches cmod serve" not in answer.stdout + answer.stderr:
+        return ""
+    return (f"ACT FIRST: this session's cmod mods are off, so no rulebook rule or tracer check runs on it or its builders. "
+            f"Tell the language owner to restart it with `claude --resume {session}`.\n\n")
+
+
 def free_gib():
     return int(subprocess.run(["df", "-g", "/System/Volumes/Data"], capture_output=True, text=True).stdout.split("\n")[1].split()[3])
 
@@ -276,7 +290,7 @@ def main():
         except OSError as error:
             bench = f"SPEED NUMBERS: ~/.claude/orchestrate/php-sharp/bench.md could not be read: {error}."
         measured = targets()
-        context = f"{lanes()}\n\n{measured}\n\n{speed_entries(measured)}\n{upstream_engine()}\n\n{bench}"
+        context = f"{mods_off(event.get('session_id', ''))}{lanes()}\n\n{measured}\n\n{speed_entries(measured)}\n{upstream_engine()}\n\n{bench}"
     else:
         # `sop <file>` injects one file of the maintain Skill that every tick follows, SKILL.md unless another is named,
         # so a tick never runs from memory of it.
