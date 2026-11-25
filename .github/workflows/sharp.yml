@@ -24,9 +24,9 @@ permissions:
 # stack is either a spec change, spec/<sha>, or a blocking fix, blocking/<issue>. Its pull request's run joins a group of
 # its own, where a push cancels its run in progress, since it holds only its own change, and no lane push replaces it:
 # one replaced PR #794's pending run on 11-24. master runs one push at a time, and only the newest push waits,
-# since its tree holds every commit before it, and a push lets its run finish, since the run publishes. A failed job
-# cancels a pull request's run and a merge queue's run, which can no longer pass, as .github/actions/cancel-failed-run
-# explains. Each merge queue entry, schedule and dispatch runs in a group of its own.
+# since its tree holds every commit before it. A failed job cancels any run, which can no longer pass: a pull request's,
+# a merge queue's, and a push's, which can no longer publish either, so the newest push's run takes its place, as
+# .github/actions/cancel-failed-run explains. Each merge queue entry, schedule and dispatch runs in a group of its own.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event_name == 'pull_request'
@@ -196,7 +196,7 @@ jobs:
       # As .github/actions/cancel-failed-run explains.
       - &cancel-failed-run
         name: Cancel the run, which can no longer pass
-        if: failure() && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+        if: failure()
         uses: ./.github/actions/cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
