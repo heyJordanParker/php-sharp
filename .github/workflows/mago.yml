@@ -8,19 +8,14 @@ on:
   pull_request:
     branches: [master]
 
-# Every lane pull request's run joins lanes, which keeps one run in progress and the newest pending one. A branch off
-# origin/master on no stack is either a spec change, spec/<sha>, or a blocking fix, blocking/<issue>, and its pull
-# request's run joins a group of its own, where a push cancels its run in progress. staging runs one push at a time, and
-# a failed job cancels any run, a push's included, as sharp.yml's concurrency explains.
+# Each pull request's run is in a group of its own, where a push to the pull request cancels its run in progress, so
+# no push to one pull request cancels another's run, as sharp.yml's concurrency explains (#872). staging runs one push
+# at a time, and a failed job cancels any run, a push's included.
 concurrency:
   group: >-
-    ${{ github.workflow }}-${{ github.event_name == 'pull_request'
-      && ((startsWith(github.head_ref, 'spec/') || startsWith(github.head_ref, 'blocking/'))
-        && github.event.pull_request.url || 'lanes')
+    ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.url
       || (github.event_name == 'push' && github.ref) || github.run_id }}
-  cancel-in-progress: >-
-    ${{ github.event_name == 'pull_request'
-      && (startsWith(github.head_ref, 'spec/') || startsWith(github.head_ref, 'blocking/')) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
