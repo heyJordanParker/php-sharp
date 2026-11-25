@@ -280,7 +280,10 @@ def report():
             state = "working" if minutes < IDLE else f"idle {minutes} min"
         else:
             state = " ".join(parts[2:])
-        block.append(f"  {lane:<8} {state}")
+        target = re.search(rf"^- {re.escape(lane)}:.*\| target: ([^|\n]+)", open(STATE, encoding="utf-8").read(), re.M)
+        off = target and next((m.group(0) for _, r in goals if target.group(1).strip() in r
+                               for m in [re.search(r"\d+\.\dx off|met", r)] if m), "not measured")
+        block.append(f"  {lane:<8} {state}; moves " + (f"{target.group(1).strip()}, {off}" if target else "no target"))
     width = len(box) + 2
     return "\n".join(["```text", "╔" + "═" * width + "╗", f"║ {box} ║", "╚" + "═" * width + "╝", "```", "",
                       "```text", *block, "", "Now   ", "Next  ", "```"])
