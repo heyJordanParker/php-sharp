@@ -1,8 +1,0 @@
-namespace Demo.InternalStructs;
-
-internal struct CheckoutTotals
-{
-    public CheckoutTotals(public int subtotal { get; }, public int shipping { get; }) { }
-
-    public int total => this.subtotal + this.shipping;
-}

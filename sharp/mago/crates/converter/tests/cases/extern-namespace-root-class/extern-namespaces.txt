@@ -1,1 +1,0 @@
-extern namespace Acme.Legacy for Legacy_Order;

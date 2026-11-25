@@ -1,8 +1,0 @@
-namespace Billing;
-
-import LogicException;
-
-public class Ungraded : LogicException
-{
-    public Ungraded(string reason) : super(reason) { }
-}

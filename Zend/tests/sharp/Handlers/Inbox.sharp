@@ -1,6 +1,0 @@
-namespace Handlers;
-
-public class Inbox<T>
-{
-    public virtual int count(T item) => 0;
-}

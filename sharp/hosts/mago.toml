@@ -1,4 +1,0 @@
-[source]
-paths = ["app", "vendor/heyjordanparker"]
-includes = ["vendor"]
-extensions = ["php", "sharp"]

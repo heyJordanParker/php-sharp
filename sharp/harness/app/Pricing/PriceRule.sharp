@@ -1,5 +1,0 @@
-namespace App.Pricing;
-
-public interface PriceRule
-{
-}

@@ -1,8 +1,0 @@
-namespace Demo;
-
-import Sharp.Security.Secret;
-
-public class Relay
-{
-    public Relay(public Secret<string> token { get; }) { }
-}

@@ -1,5 +1,0 @@
-namespace Fields;
-
-public class Rows<T>
-{
-}

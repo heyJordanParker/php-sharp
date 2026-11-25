@@ -1,8 +1,0 @@
-namespace TypeStatics;
-
-public class Maker
-{
-    public static virtual string make() => "maker";
-
-    public static virtual string size { get; set; } = "maker size";
-}

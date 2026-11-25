@@ -1,5 +1,0 @@
-namespace Calls;
-
-public class Wrapped<TX> : Counter<List<TX>>
-{
-}

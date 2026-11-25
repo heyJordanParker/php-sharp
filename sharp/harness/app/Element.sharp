@@ -1,8 +1,0 @@
-namespace App;
-
-public abstract class Element
-{
-    public required Element(public string key { get; }) { }
-
-    public static string defaultTag() => "div";
-}

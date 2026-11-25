@@ -1,6 +1,0 @@
-namespace App;
-
-public effect class RedisStore : SessionStore
-{
-    public override string? get(string key) => key == "" ? null : key;
-}

@@ -1,9 +1,0 @@
-namespace Demo;
-
-public class Image
-{
-    public virtual int size()
-    {
-        return 10;
-    }
-}

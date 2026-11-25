@@ -1,6 +1,0 @@
-namespace Intersections;
-
-public interface Shippable
-{
-    int weight();
-}

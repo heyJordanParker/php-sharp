@@ -1,6 +1,0 @@
-namespace TypedExterns;
-
-public enum RouteName : string
-{
-    case Checkout = "checkout";
-}

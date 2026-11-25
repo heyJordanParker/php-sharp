@@ -1,3 +1,0 @@
-13:26: a string shows `bool` PHP's way, and a template shows only `int`, `float` and `string` that way (spec section 18)
-14:36: `__FUNCTION__` in a lambda gives PHP's name of the lambda, which holds the line it starts on, and the conversion moves lines
-15:17: `__LINE__` gives the line of the PHP file, and the conversion moves lines, so `Position.current().line` would give another one

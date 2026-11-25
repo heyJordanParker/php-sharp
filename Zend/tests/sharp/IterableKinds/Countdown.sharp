@@ -1,8 +1,0 @@
-namespace IterableKinds;
-
-public struct Countdown : Iterable<int>
-{
-    public Countdown(public int from { get; }) { }
-
-    public Iterable<int> elements() => [this.from, this.from - 1];
-}

@@ -1,8 +1,0 @@
-{
-    "name": "acme/legacy",
-    "description": "A plain PHP library whose classes have no namespace.",
-    "type": "library",
-    "autoload": {
-        "classmap": ["."]
-    }
-}

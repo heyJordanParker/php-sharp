@@ -1,5 +1,0 @@
-namespace TypeTests;
-
-public class RushOrder : Order
-{
-}

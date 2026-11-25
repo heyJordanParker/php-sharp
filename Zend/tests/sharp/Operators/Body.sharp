@@ -1,6 +1,0 @@
-namespace Billing;
-
-public class Body
-{
-    public Body(public string type { get; }) { }
-}

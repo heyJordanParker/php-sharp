@@ -1,8 +1,0 @@
-namespace Demo.InternalStructs;
-
-public class Checkout
-{
-    public static int total(int subtotal) => new CheckoutTotals(subtotal, 499).total;
-
-    public static bool same(int subtotal) => new CheckoutTotals(subtotal, 499) == new CheckoutTotals(subtotal, 499);
-}

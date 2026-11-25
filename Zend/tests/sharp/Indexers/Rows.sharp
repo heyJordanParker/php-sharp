@@ -1,6 +1,0 @@
-namespace Indexers;
-
-public interface Rows
-{
-    string? this[int index] { get; }
-}

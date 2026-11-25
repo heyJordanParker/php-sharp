@@ -1,6 +1,0 @@
-namespace App.Shop;
-
-public class Shipment : Order
-{
-    public Shipment(int id) : super(id) { }
-}

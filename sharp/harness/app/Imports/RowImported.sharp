@@ -1,3 +1,0 @@
-namespace App.Imports;
-
-public event RowImported(int row);

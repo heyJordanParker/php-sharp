@@ -1,8 +1,0 @@
-namespace App.B;
-
-import App.A.Account;
-
-public class User
-{
-    public static int of(Account account) => 1;
-}

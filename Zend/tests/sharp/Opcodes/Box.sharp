@@ -1,5 +1,0 @@
-namespace Opcodes;
-
-public class Box<T>
-{
-}
