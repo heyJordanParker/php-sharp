@@ -660,8 +660,14 @@ jobs:
             exit 1
           fi
           gh run watch "$run" --compact --exit-status --interval 15
+      # The checkout holds this commit alone, and git refuses to push over a ref whose commit it doesn't hold, with
+      # "fetch first": run 45690564801's LAND failed so on #873's green batch. So the fetch reaches master's tip, as
+      # queue.yml's reach the merge base, and git sees the push is a fast-forward.
       - name: Move master to this run's commit
-        run: git push origin "$GITHUB_SHA:refs/heads/master"
+        run: |
+          ahead=$(gh api "repos/$GITHUB_REPOSITORY/compare/master...$GITHUB_SHA" --jq .ahead_by)
+          git fetch --quiet --no-tags --depth=$((ahead + 1)) origin "$GITHUB_SHA"
+          git push origin "$GITHUB_SHA:refs/heads/master"
       - *red-master-issue
   # Splits sharp/composer and sharp/mago and pushes them to master of heyJordanParker/php-sharp-composer and
   # heyJordanParker/mago-sharp, whose webhooks tell Packagist, once every check of the staging run passed and LAND moved
