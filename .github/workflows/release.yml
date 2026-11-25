@@ -284,7 +284,8 @@ jobs:
 
       # One sharp/bin/test runs the PHP# suite and mago's workspace tests in one pool of the Mac's cores, the
       # whole-project proof of mago convert among them, as sharp/bin/test explains. The doc tests and the property tests,
-      # which cargo builds on every core in the target the step before last built, run after it, alone.
+      # which cargo builds on every core in the target the step before last built, run after it, alone. Each run writes
+      # sharp/build/test-report.xml, so the pool's moves aside before the second run writes its own.
       - name: Test PHP# and mago's workspace
         if: runner.os == 'macOS'
         working-directory: ${{ github.workspace }}
@@ -293,9 +294,23 @@ jobs:
         run: |
           status=0
           sharp/bin/test --no-build --mago --census --spec --differential --phpunit || status=$?
+          if [[ -f sharp/build/test-report.xml ]]; then
+            mv sharp/build/test-report.xml sharp/build/test-report-pool.xml
+          fi
           sharp/bin/test --mago --cargo-built || status=$?
           echo "The test step took $SECONDS s."
           exit "$status"
+
+      # Each suite's time and each test's, which the timeline shows as the one step above (#855).
+      - name: Upload the test reports
+        if: ${{ runner.os == 'macOS' && !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-report
+          path: |
+            sharp/build/test-report-pool.xml
+            sharp/build/test-report.xml
+          if-no-files-found: warn
 
       # sharp/bin/check plain-php on the Mac's Homebrew PHP, with the dev build the suites ran, in the folder that check
       # reads the test-run mago from.
