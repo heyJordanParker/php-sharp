@@ -207,6 +207,8 @@ unit_then=()
 unit_keys=()
 unit_part=()
 unit_junit=()
+unit_results=()
+unit_mode=()
 queued=()
 sorted=true
 # The part of the run the units added next belong to: its name, a tab, and the command that runs it alone.
@@ -239,6 +241,8 @@ add_unit() {
   unit_keys[unit]=''
   unit_part[unit]=$adding
   unit_junit[unit]=''
+  unit_results[unit]=''
+  unit_mode[unit]=''
   unit_count=$((unit_count + 1))
 }
 # A failed step of the unit, with the part the unit belongs to and the command that runs that part alone.
@@ -344,6 +348,16 @@ run_pool() {
     if [[ -f $TMPDIR/unit-$u.failed ]]; then
       mapfile -t reported < "$TMPDIR/unit-$u.failed"
     fi
+    # A failed run-tests batch names each test that failed in it, from the results run-tests.php wrote, where its heading
+    # names only the batch's first file: run 45817904815 printed "55 tests from …plain_declared_class_closures.phpt" for
+    # a failed type_arguments_entry_collection.phpt (#943). A batch that failed with no test failing keeps its heading.
+    if ((status != 0 || ${#reported[@]})) && [[ -n ${unit_results[u]} && -f ${unit_results[u]} ]]; then
+      mapfile -t tests < <(awk -F '\t' -v mode="${unit_mode[u]}" \
+        '$1 == "FAILED" || $1 == "BORKED" || $1 == "LEAKED" { print mode ": " $2 }' "${unit_results[u]}")
+      if ((${#tests[@]})); then
+        reported=("${tests[@]}")
+      fi
+    fi
     if ((status != 0 && ${#reported[@]} == 0)); then
       reported=("${unit_heading[u]}")
     fi
@@ -367,6 +381,8 @@ run_pool() {
   unit_keys=()
   unit_part=()
   unit_junit=()
+  unit_results=()
+  unit_mode=()
 }
 
 # The run's report, sharp/build/test-report.xml in the JUnit XML format, which CI's test jobs upload, so each suite's and
@@ -989,6 +1005,8 @@ add_test_units() {
         --set-timeout 120 \
         "${options[@]}" "${group[@]}"
       unit_junit[unit]="$TMPDIR/junit-$m-$l"
+      unit_results[unit]="$TMPDIR/results-$m-$l"
+      unit_mode[unit]=${modes[m]}
       hold_keys "$unit" "${list_keys[l]}"
       if [[ -z $previous ]]; then
         ready_unit "$unit"
