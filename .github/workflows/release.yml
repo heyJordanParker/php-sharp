@@ -421,13 +421,15 @@ jobs:
       # A profile-guided build runs as three steps, so the run's timeline times each (#860). The instrumented build and
       # the optimized build both compile with [profile.release], as cargo-pgo's flow does: cargo hashes the profile into
       # each crate's module names, and LLVM finds a local function's profile by its module's name, so an instrumented
-      # build without fat LTO in 16 codegen units left 31,616 functions with no profile on the 0.8.9 release (#897).
+      # build without fat LTO in 16 codegen units left 31,616 functions with no profile on the 0.8.9 release (#897). Cargo
+      # hashes no RUSTFLAGS into the names, and cargo-pgo appends its own to them, so the instrumented build skips fat
+      # LTO with -Clto=off and keeps the optimized build's names: the instrumented mago only writes the profile.
       - name: Build the instrumented mago
         if: inputs.assets && matrix.job.pgo
         shell: bash
         run: |
           rm -rf "$CARGO_TARGET_DIR/pgo-profiles"
-          cargo pgo build -- --target=${{ matrix.job.target }}
+          RUSTFLAGS=-Clto=off cargo pgo build -- --target=${{ matrix.job.target }}
 
       # mago exits 1 when the analysis finds issues, which the corpus holds, and any other exit, a crash, a kill or a
       # tool error, fails the step, so no binary ships built from a broken profile.
@@ -443,10 +445,12 @@ jobs:
             exit 1
           fi
 
+      # LLVM names each function the profile lacks, with its module, so the log shows which crates the "PGO profile data
+      # was not found" count belongs to.
       - name: Build the release mago with the profile
         if: inputs.assets && matrix.job.pgo
         shell: bash
-        run: cargo pgo optimize build -- --target=${{ matrix.job.target }}
+        run: RUSTFLAGS=-Cllvm-args=-pgo-warn-missing-function cargo pgo optimize build -- --target=${{ matrix.job.target }}
 
       - name: set binary name
         if: inputs.assets
