@@ -624,7 +624,7 @@ static sharp_generation *sharp_hold_generation(const zend_string *folder)
 	sharp_generation *generation;
 
 	SHARP_GENERATIONS_LOCK();
-	generation = zend_hash_find_ptr(&sharp_generations, folder);
+	generation = zend_hash_str_find_ptr(&sharp_generations, ZSTR_VAL(folder), ZSTR_LEN(folder));
 	if (!generation) {
 		generation = pemalloc(sizeof(*generation), true);
 		generation->folder = zend_string_init(ZSTR_VAL(folder), ZSTR_LEN(folder), true);
@@ -1584,6 +1584,8 @@ static bool sharp_lock_compiles(const char *path, size_t root_length)
 		sharp_unlock_compiles();
 		return false;
 	}
+	/* A compile another request ran while this one waited wrote a newer generation, which the request reads from now. */
+	sharp_forget_generation(path, root_length);
 
 	return true;
 }
@@ -12816,13 +12818,23 @@ static bool sharp_listener_table_stale(const char *path, size_t root_length, con
  * it, and outside a compile a table whose inputs changed since mago compile wrote it makes the request run the
  * command, as an out-of-date compiled file does, and the table it writes is read instead. Throws and returns NULL when
  * the table is damaged. */
-static HashTable *sharp_listener_table(const char *path, size_t root_length)
+/* The path of the listener table in the generation the request reads the root, the first root_length bytes of path,
+ * from. */
+static zend_string *sharp_listener_table_path(const char *path, size_t root_length)
 {
 	zend_string *folder = sharp_compiled_folder(path, strlen(path), root_length, NULL);
-	zend_string *table_path = zend_string_concat2(ZSTR_VAL(folder), ZSTR_LEN(folder), "/" SHARP_LISTENERS, sizeof("/" SHARP_LISTENERS) - 1);
-	zval *known = zend_hash_find(&SHARP_G(listener_tables), table_path);
+	zend_string *table_path = zend_string_concat2(ZSTR_VAL(folder), ZSTR_LEN(folder), "/" SHARP_LISTENERS,
+		sizeof("/" SHARP_LISTENERS) - 1);
 
 	zend_string_release(folder);
+
+	return table_path;
+}
+
+static HashTable *sharp_listener_table(const char *path, size_t root_length)
+{
+	zend_string *table_path = sharp_listener_table_path(path, root_length);
+	zval *known = zend_hash_find(&SHARP_G(listener_tables), table_path);
 	bool developing = SHARP_G(compile_command) && *SHARP_G(compile_command);
 	zval table;
 
@@ -12831,13 +12843,18 @@ static HashTable *sharp_listener_table(const char *path, size_t root_length)
 		return Z_ARRVAL_P(known);
 	}
 	sharp_read_listener_table(table_path, developing, &table);
-	/* A compile another request ran while this one waited for the lock may have written the table. */
+	/* A compile another request ran while this one waited for the lock may have written the table, in a newer
+	 * generation, as the compile the request runs does. */
 	if (sharp_listener_table_stale(path, root_length, &table) && sharp_lock_compiles(path, root_length)) {
 		zval_ptr_dtor(&table);
+		zend_string_release(table_path);
+		table_path = sharp_listener_table_path(path, root_length);
 		sharp_read_listener_table(table_path, true, &table);
 		if (sharp_listener_table_stale(path, root_length, &table)) {
 			zval_ptr_dtor(&table);
 			sharp_run_compile_command(path, root_length);
+			zend_string_release(table_path);
+			table_path = sharp_listener_table_path(path, root_length);
 			sharp_read_listener_table(table_path, true, &table);
 		}
 		sharp_unlock_compiles();
