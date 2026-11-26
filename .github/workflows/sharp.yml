@@ -925,6 +925,7 @@ jobs:
             done < "$RUNNER_TEMP/failed-steps"
           } > "$RUNNER_TEMP/failed-comment.md"
           gh pr comment "$PULL" --body-file "$RUNNER_TEMP/failed-comment.md"
+      - name: Every job passed
         if: always()
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
