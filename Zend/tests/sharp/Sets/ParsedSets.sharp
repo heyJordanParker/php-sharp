@@ -18,4 +18,6 @@ public class ParsedSets
         string set = `is Set<string>: ${parsed is Set<string> ? "true" : "false"}`;
         return [set, `after the test: ${Json.encode(parsed)}`];
     }
+
+    public static string gapped(Any? value) => `[5, 2 => 2, 5] is Set<int>: ${value is Set<int> ? "true" : "false"}`;
 }

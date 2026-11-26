@@ -7949,6 +7949,22 @@ static bool sharp_type_takes_int_keys(const sharp_type *type)
 	return ce && (ce->ce_flags & ZEND_ACC_ENUM) && ce->enum_backing_type == IS_LONG;
 }
 
+/* Whether `array` is keyed by int alone with a gap or out of order, as array_filter leaves an array. */
+static bool sharp_array_needs_renumbering(HashTable *array)
+{
+	if (zend_array_is_list(array)) {
+		return false;
+	}
+	zend_string *name;
+	ZEND_HASH_FOREACH_STR_KEY(array, name) {
+		if (name) {
+			return false;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return true;
+}
+
 /* Whether `value`, an array, or the Sharp\Map or Sharp\Set of a `Map` or a `Set`, is of the collection `type`, each
  * element checked by sharp_type_holds. A collection of `Any?`, as `List<Any?>`, holds each element without a walk. */
 static bool sharp_type_collection_holds(
@@ -7966,14 +7982,16 @@ static bool sharp_type_collection_holds(
 		}
 		return holds;
 	}
-	/* Spec section 12: a PHP array is a `List`, and a `Set` the list of its elements, only when it is a list. A list
-	 * arrives as a `List`, so a non-empty one is a `Map` only of keys that take an int. An array that isn't a list, as
-	 * `['42' => true]`, whose numeric key PHP stores as an int, is a `Map` of string keys. An empty array is every
-	 * collection. */
+	/* Spec section 12: a PHP array is a `List` only when it is a list, and a `Set` the list of its elements, which an
+	 * array keyed by int alone is too, renumbered. A list arrives as a `List`, so a non-empty one is a `Map` only of
+	 * keys that take an int. An array that isn't a list, as `['42' => true]`, whose numeric key PHP stores as an int, is
+	 * a `Map` of string keys. An empty array is every collection. */
 	bool is_list = zend_array_is_list(Z_ARRVAL_P(value));
 	bool list_as_map = keys && is_list && zend_hash_num_elements(Z_ARRVAL_P(value)) > 0
 		&& !sharp_type_takes_int_keys(keys);
-	if (list_as_map || ((type->built_in == SHARP_BUILT_IN_LIST || type->built_in == SHARP_BUILT_IN_SET) && !is_list)) {
+	bool keyed_as_set = type->built_in == SHARP_BUILT_IN_SET && !is_list
+		&& !sharp_array_needs_renumbering(Z_ARRVAL_P(value));
+	if (list_as_map || keyed_as_set || (type->built_in == SHARP_BUILT_IN_LIST && !is_list)) {
 		if (problems) {
 			sharp_type_problem(problems, "", type, value);
 		}
@@ -8236,22 +8254,6 @@ static bool sharp_type_holds_list(const sharp_type *type)
 
 	return type->built_in == SHARP_BUILT_IN_LIST
 		|| (type->built_in == SHARP_BUILT_IN_MAP && sharp_type_holds_list(type->members[1]));
-}
-
-/* Whether `array` is keyed by int alone with a gap or out of order, as array_filter leaves an array. */
-static bool sharp_array_needs_renumbering(HashTable *array)
-{
-	if (zend_array_is_list(array)) {
-		return false;
-	}
-	zend_string *name;
-	ZEND_HASH_FOREACH_STR_KEY(array, name) {
-		if (name) {
-			return false;
-		}
-	} ZEND_HASH_FOREACH_END();
-
-	return true;
 }
 
 /* The type of the element at `position` of `type`, `T?` read as `T`, which sharp_type_renumber walks: NULL past a
