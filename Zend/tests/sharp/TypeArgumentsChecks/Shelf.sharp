@@ -23,7 +23,6 @@ public class Shelf
     public static string read()
     {
         PaginatedList<Order> page = Pager.orders();
-        page = Pager.orders();
 
         return "read";
     }

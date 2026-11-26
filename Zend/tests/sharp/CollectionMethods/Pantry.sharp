@@ -11,15 +11,17 @@ public class Pantry
 
     public static List<int> grow(List<int> sizes)
     {
-        sizes.add(4);
-        sizes[0] = 9;
-        return sizes;
+        let grown = sizes;
+        grown.add(4);
+        grown[0] = 9;
+        return grown;
     }
 
     public static Map<string, int> drop(Map<string, int> stock, string name)
     {
-        stock.remove(name);
-        return stock;
+        let kept = stock;
+        kept.remove(name);
+        return kept;
     }
 
     public static int? at(List<int> sizes, int index)
@@ -47,9 +49,11 @@ public class Pantry
         return rows.entries();
     }
 
-    public static void setPast(List<int> sizes)
+    public static List<int> setPast(List<int> sizes)
     {
-        sizes[2] = 1;
+        let past = sizes;
+        past[2] = 1;
+        return past;
     }
 
     public Map<string, int> restock(string name)
@@ -115,8 +119,9 @@ public class Pantry
 
     public static List<int> inserted(List<int> sizes, int index, int size)
     {
-        sizes.insert(index, size);
-        return sizes;
+        let changed = sizes;
+        changed.insert(index, size);
+        return changed;
     }
 
     public static bool removes(List<int> sizes, int size)
@@ -126,14 +131,16 @@ public class Pantry
 
     public static List<int> removed(List<int> sizes, int size)
     {
-        sizes.remove(size);
-        return sizes;
+        let rest = sizes;
+        rest.remove(size);
+        return rest;
     }
 
     public static List<int> cleared(List<int> sizes)
     {
-        sizes.clear();
-        return sizes;
+        let emptied = sizes;
+        emptied.clear();
+        return emptied;
     }
 
     public static List<int> reordered()

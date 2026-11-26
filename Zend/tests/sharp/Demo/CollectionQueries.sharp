@@ -41,16 +41,18 @@ public class CollectionQueries
 
     public static [bool, List<int>] withoutNegatives(List<int> values)
     {
-        const removed = values.removeAll(value => value < 0);
-        return [removed, values];
+        let kept = values;
+        const removed = kept.removeAll(value => value < 0);
+        return [removed, kept];
     }
 
     public static [int, int, Map<string, int>, int] counted(Map<string, int> counts)
     {
         let calls = 0;
-        const held = counts.getOrPut("tea", () => { calls += 1; return 9; });
-        const added = counts.getOrPut("jam", () => { calls += 1; return 4; });
-        return [held, added, counts, calls];
+        let filled = counts;
+        const held = filled.getOrPut("tea", () => { calls += 1; return 9; });
+        const added = filled.getOrPut("jam", () => { calls += 1; return 4; });
+        return [held, added, filled, calls];
     }
 
     public static Set<string> union(Set<string> first, Set<string> second) => first.union(second);

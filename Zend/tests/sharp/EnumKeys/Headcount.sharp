@@ -22,14 +22,16 @@ public class Headcount
 
     public static Map<Standing, int> count(Map<Standing, int> counts, Standing status)
     {
-        counts[status] = (counts[status] ?? 0) + 1;
-        return counts;
+        let counted = counts;
+        counted[status] = (counted[status] ?? 0) + 1;
+        return counted;
     }
 
     public static Map<Standing, int> ensure(Map<Standing, int> counts, Standing status)
     {
-        counts[status] ??= 0;
-        return counts;
+        let ensured = counts;
+        ensured[status] ??= 0;
+        return ensured;
     }
 
     public static Map<Size, string> sizes(Size small, Size large)
@@ -51,8 +53,9 @@ public class Headcount
 
     public static Map<Standing, int> without(Map<Standing, int> counts, Standing status)
     {
-        counts.remove(status);
-        return counts;
+        let rest = counts;
+        rest.remove(status);
+        return rest;
     }
 
     public static Map<Standing, Map<Size, int>> nest(Standing status, Size size)

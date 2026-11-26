@@ -158,7 +158,7 @@ array(1) {
     int(2)
   }
 }
-OutOfRangeException: Undefined array key 2 in Pantry.sharp on line 52
+OutOfRangeException: Undefined array key 2 in Pantry.sharp on line 55
 array(1) {
   ["pie"]=>
   int(7)
@@ -226,8 +226,8 @@ array(3) {
   [2]=>
   int(9)
 }
-OutOfRangeException: Undefined array key 3 in Pantry.sharp on line 118
-OutOfRangeException: Undefined array key -1 in Pantry.sharp on line 118
+OutOfRangeException: Undefined array key 3 in Pantry.sharp on line 123
+OutOfRangeException: Undefined array key -1 in Pantry.sharp on line 123
 bool(true)
 bool(false)
 array(3) {
@@ -301,11 +301,11 @@ array(2) {
   int(4)
 }
 int(5)
-OutOfRangeException: The list is empty. in Pantry.sharp on line 164
+OutOfRangeException: The list is empty. in Pantry.sharp on line 171
 int(5)
 int(-9)
-OutOfRangeException: The list is empty. in Pantry.sharp on line 167
-OutOfRangeException: The list is empty. in Pantry.sharp on line 169
+OutOfRangeException: The list is empty. in Pantry.sharp on line 174
+OutOfRangeException: The list is empty. in Pantry.sharp on line 176
 int(3)
 int(1)
 int(1)
@@ -362,5 +362,5 @@ array(1) {
 string(13) "true 1 true 0"
 string(14) "true 1 false 0"
 NULL
-DivisionByZeroError: Modulo by zero in Pantry.sharp on line 76
+DivisionByZeroError: Modulo by zero in Pantry.sharp on line 80
 NULL
