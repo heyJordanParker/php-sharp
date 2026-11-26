@@ -1,0 +1,12 @@
+[
+  {
+    "annotation_level": "notice",
+    "title": "usage",
+    "message": "cpu_seconds=1 peak_mib=960 steal_seconds=0 cpu=INTEL(R) XEON(R) PLATINUM 8573C"
+  },
+  {
+    "annotation_level": "failure",
+    "title": "",
+    "message": "Process completed with exit code 1."
+  }
+]

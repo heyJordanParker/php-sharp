@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Prints `lost` when a failed run failed only because a runner stopped answering, and `failed` otherwise, for
+# .github/workflows/queue.yml, which sends a batch that lost its runner to staging once more instead of splitting it
+# (#915), as staging run 45722884762 failed when its Mac's runner lost communication. A run lost its runner when each
+# failed job other than CI_PASSED, which fails with any of them, has no failed step and an annotation that says the runner lost communication with the server. The jobs
+# file is the run's `gh api --paginate .../actions/runs/<run>/jobs`, and the folder holds each failed job's
+# `gh api --paginate .../check-runs/<job>/annotations` as <job>.json. A job whose annotations are missing counts as
+# failed. sharp/bin/check workflows runs it on the cases under sharp/bin/fixtures/queue-lost-runner.
+if [[ $# -ne 2 ]]; then
+  echo "usage: sharp/bin/queue-lost-runner <jobs.json> <annotations folder>" >&2
+  exit 2
+fi
+jobs=$1
+annotations=$2
+
+failed=$(jq -s -r '.[].jobs[] | select(.conclusion == "failure" and .name != "CI_PASSED")
+  | "\(.id)\t\([.steps[]? | select(.conclusion == "failure")] | length)"' "$jobs")
+if [[ -z $failed ]]; then
+  echo failed
+  exit 0
+fi
+while IFS=$'\t' read -r job steps; do
+  if ((steps > 0)) || ! jq -s -e '[.[][] | .message] | any(contains("lost communication with the server"))' \
+    "$annotations/$job.json" > /dev/null 2>&1; then
+    echo failed
+    exit 0
+  fi
+done <<< "$failed"
+echo lost

@@ -285,10 +285,24 @@ lint_workflows() {
   fi
   (cd "$root" && actionlint)
 }
+# The queue's lost-runner decision, on runs cut from GitHub's API: each folder under sharp/bin/fixtures/queue-lost-runner
+# is named after what sharp/bin/queue-lost-runner prints for its jobs.json and annotations.
+queue_lost_runner() {
+  local case expected printed
+  for case in "$root"/sharp/bin/fixtures/queue-lost-runner/*/; do
+    expected="$(basename "$case")"
+    printed="$("$root/sharp/bin/queue-lost-runner" "$case/jobs.json" "$case/annotations")"
+    if [[ $printed != "$expected" ]]; then
+      echo "sharp/bin/queue-lost-runner printed $printed for ${case#"$root"/}, which is named $expected." >&2
+      return 1
+    fi
+  done
+}
 gate_workflows() {
   step unpinned
   step syntax_frontend
   step lint_workflows
+  step queue_lost_runner
 }
 
 # Every test sharp/baseline/seconds lists exists, since a renamed test's new name weighs 1 s in sharp/bin/test's slices
