@@ -12,8 +12,7 @@ public static class Reads
         const first = parameter.attributes<Marker>();
         const second = parameter.attributes<Marker>();
 
-        return first.count() == 1 && second.count() == 1
-            && global.spl_object_id(first[0]) != global.spl_object_id(second[0]);
+        return first.count() == 1 && second.count() == 1 && !(first[0] === second[0]);
     }
 
     // Two reads of a backed enum's cases give equal lists of its cases, in the order they are declared.
@@ -23,7 +22,7 @@ public static class Reads
         const second = typeof(Shade).enumCases();
 
         return first.map(found => found.name + " " + (found.backingValue is string backing ? backing : "none")
-            + " " + (found.value == Shade.Light ? "Light" : found.value == Shade.Dark ? "Dark" : "other")
+            + " " + (found.value === Shade.Light ? "Light" : found.value === Shade.Dark ? "Dark" : "other")
             + " " + (first == second ? "equal" : "unequal"));
     }
 
