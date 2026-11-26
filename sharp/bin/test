@@ -624,22 +624,25 @@ if $mago && ! $cargo_built; then
   # Each binary's tests, as its --list prints them, by the binary's index. A binary that can't list them fails the run:
   # its --list ran in a pipe whose failure nothing read, so its empty list read as a binary with no tests, and the run
   # ran none of them and passed. libtest prints each test's own wall time after its result with --report-time, which
-  # stable Rust's libtest takes only under RUSTC_BOOTSTRAP. libtest-mimic's harness has no such option, and its --help
-  # doesn't name it.
+  # stable Rust's libtest takes only under RUSTC_BOOTSTRAP. libtest-mimic's harness has no such option. One launch tells
+  # them apart: libtest's --list ends with a count, as "948 tests, 0 benchmarks", and libtest-mimic's prints only its
+  # tests. Its own part times the launches, which took about 50 s at no CPU on run 45830629343's Mac job (#953).
+  part "the list of each test binary's tests"
   declare -A listed=() libtests=()
   for ((b = 0; b < ${#binaries[@]}; b++)); do
     IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
-    if ! names="$(cd "$folder" && "$executable" --list --format terse)"; then
+    if ! names="$(cd "$folder" && "$executable" --list)"; then
       echo "${executable##*/}, from ${folder#"$root"/}, couldn't list its tests, so none of them runs." >&2
       failed+=("the list of ${executable##*/}'s tests")
       continue
     fi
     listed[$b]="$(sed -n 's/: test$//p' <<< "$names")"
     libtests[$b]=false
-    if [[ $("$executable" --help) == *--report-time* ]]; then
+    if [[ ${names##*$'\n'} =~ ^[0-9]+\ tests?,\ [0-9]+\ benchmarks?$ ]]; then
       libtests[$b]=true
     fi
   done
+  part
 
   # Each test weighs the seconds sharp/baseline/seconds lists under its binary's source file and its name, as
   # sharp/mago/tests/main.rs::compile::<name>, and a test the file doesn't list ran under 1.5 s, so it weighs 1. A
