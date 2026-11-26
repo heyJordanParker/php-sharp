@@ -1961,7 +1961,7 @@ $order->number;                      // "A-12"
 
 **Plain PHP's write into a PHP# collection is checked too.** A `Map` or a `Set` PHP# code makes carries its type from when it is made, as `new` of a generic class does: a literal takes the type of where it lands, `entries()`, `groupBy()`, `associateBy()` and `toSet()` the type of their result, `filter()` its receiver's, and a PHP array that crosses into a typed place the type of that place. One plain PHP makes, as `new \Sharp\Map()`, takes its type at the first typed place that holds it, a property, a parameter or a return. Each keeps its one type from then on. A property's initial value that makes one whose type names a type parameter, as `Map<string, T> index = [:]`, runs in the constructor, and a static's for each type argument, so it has the object's or the type argument's type. A literal in a generic method whose place names the method's own type parameter, as `Map<string, TItem> made = [:]` in `build<TItem>()`, has the type argument of the call. So does a literal in a lambda written in that method, since the lambda sees its method's type arguments. A parameter's default runs with neither, so a `Map` or a `Set` it makes whose type names a type parameter has no type, and plain PHP's writes into it are not checked. A key and a value plain PHP writes into a `Map`, as `$larder->stock["k"] = "x"`, and an element it adds to a `Set` cross as a PHP array's entry does, and a wrong one throws the `TypeError` at the write. A write into a `List` property, as `$order->counts[] = "z"`, a write into a `Map`'s value, as `$larder->shelves["k"][] = "x"`, an index write, a nested write, a write through a reference, `sort()`, `array_push()` and `foreach` by reference, writes plain PHP's value. The next PHP# read of the property or of the `Map`'s entries, by an index, a loop, a method such as `values()` or `filter()`, `json_encode` or `serialize`, throws the `TypeError` that names its type and the element. So PHP# code never reads an element its type doesn't hold.
 
-**A plain PHP array keyed by `int` alone arrives as a `List`, renumbered.** PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. A shape whose keys are all `int`, as `list{int, int}` or `array{0: int, 1: int}`, is a `List` too, of its elements in order, and so is each array keyed by `int` alone that a shape's field, a `Map`'s value or a `List`'s element holds. An array keyed by `string` or by `int|string` stays a `Map`, and a value plain PHP types as a list or a map, as `list<int>|array<string, int>`, keeps the keys it holds, so no `string` key is ever lost. A call of a plain PHP function whose declared result is conditional, as `array_slice`'s `($preserve_keys is true ? array<int, V> : list<V>)`, gives the type of the branch its arguments pick, so `array_slice(list, 1, null, true)` arrives as a `List` whose first element is at `0`, and one whose arguments pick no branch gives both. A PHP array that crosses into a `Map` keyed by `string` gives each `int` key back as its `string`, so `"5"` stays `"5"`.
+**A plain PHP array keyed by `int` alone arrives as a `List`, renumbered.** PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. A shape whose keys are all `int`, as `list{int, int}` or `array{0: int, 1: int}`, is a `List` too, of its elements in order, and so is each array keyed by `int` alone that a shape's field, a `Map`'s value or a `List`'s element holds. An array keyed by `string` stays a `Map`. One keyed by `int|string`, as `array`, `array<V>` and `array<array-key, V>`, is a `List` or a `Map`, as a value plain PHP types as a list or a map, as `list<int>|array<string, int>`, is: it keeps the array plain PHP gave, so no `string` key is ever lost, and its keys decide what `is`, `as` and `Json.encode` see. A call of a plain PHP function whose declared result is conditional, as `array_slice`'s `($preserve_keys is true ? array<int, V> : list<V>)`, gives the type of the branch its arguments pick, so `array_slice(list, 1, null, true)` arrives as a `List` whose first element is at `0`, and one whose arguments pick no branch gives both. A PHP array that crosses into a `Map` keyed by `string` gives each `int` key back as its `string`, so `"5"` stays `"5"`.
 
 <!-- example plain-list-arrival -->
 ```php
@@ -1996,6 +1996,48 @@ Map<int, Line> byKey = Shelf.kept();        // compiles: the Map keeps plain PHP
 List<int> pair = Shelf.pair();              // compiles: an int-keyed shape is a List
 const sum = match (Shelf.pair()) { [int a, int b] => a + b, default => 0 };   // compiles: sum is 11
 List<int> attached = Shelf.changes().get("attached") ?? [];   // compiles: attached[0] is 7
+```
+
+<!-- example plain-list-or-map -->
+```php
+final class Bag
+{
+    /** @return array<string, array<string>> */
+    public function messages(): array { return ['price' => ['The price must be at least 0.']]; }
+
+    /** @return array */
+    public function toArray(): array { return ['price' => ['The price must be at least 0.']]; }
+}
+```
+
+<!-- example plain-list-or-map -->
+```csharp
+// app/Stubs/Bag.sharp
+namespace App.Stubs;
+
+import App.Bag;
+
+extern Bag uses none;
+```
+
+<!-- example plain-list-or-map: statements
+import Sharp.Encoding.Json;
+const bag = new Bag();
+-->
+```csharp
+const messages = bag.messages();
+Json.encode(messages);                          // {"price":["The price must be at least 0."]}
+messages as Map<string, List<string>>;          // the map, since each value is a list
+string? first = null;
+for (const lines of messages.values()) {
+    lines.get(0);                               // compile error: `lines` is a `List<string>` or a `Map<int|string, string>`, since plain PHP's `array<string>` holds either, and `get` is a `Map`'s. Test it with `is` first.
+    if (lines is List<string> list) {
+        first = list[0];
+    }
+}
+first;                                          // "The price must be at least 0."
+const fields = bag.toArray();
+const named = fields as Map<string, Any?>;      // the map, or null if plain PHP gave a list
 ```
 
 **A `Map` literal passed to a plain PHP array shape is checked against the shape, key by key.** In an application, a `Map` literal whose keys are fixed at compile time, passed where a plain PHP parameter declares a shape, as `array{code: string, raw: bool}`, gives each key the shape declares a value of the key's type. A key the shape doesn't declare, unless the shape is open, a key it requires that the literal doesn't give, and a value of another type are each a compile error that names the shape and the key:
