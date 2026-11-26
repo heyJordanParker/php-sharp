@@ -29,9 +29,9 @@ concurrency:
       || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  # CI_PASSED is this workflow's one required check. Every pull request's push runs every Linux check, whatever it
-  # changed: the Linux suites, each job on 4 cores, and the runtime image. A staging run runs every check, the Mac's
-  # among them, on the tree that lands, so each landed tree crosses the Mac once: #828 crossed it twice, in pull request
+  # CI_PASSED is this workflow's one required check. Every pull request's push runs every Linux suite, whatever it
+  # changed, each job on 4 cores. A staging run runs every check, the Mac's and the runtime images' among them, on the
+  # tree that lands, so each landed tree crosses the Mac and builds the images once: #828 crossed it twice, in pull request
   # run 45570037780 for 55 minutes, then in push run 45600915642 for 87 (#843). GitHub runs 20 of the account's hosted
   # jobs at once, across all its repositories, and a job past them waits.
   #
@@ -573,7 +573,7 @@ jobs:
       id-token: write
       pull-requests: read
   # This workflow's one required check. It needs every job that runs on every push and pull request, and fails unless
-  # each of them passed, MACOS skipped on a pull request alone. mago.yml's ci-passed is the other required check, and
+  # each of them passed, MACOS and IMAGE skipped on a pull request alone. mago.yml's ci-passed is the other required check, and
   # its plain-php job runs mago from Composer on plain PHP, and its SPEED job counts what proving and compiling cost. In
   # a release's push MACOS also builds the release's assets, so a failed build fails CI_PASSED, which opens the issue of
   # a red staging run. LAND, RELEASE, PUBLISH and COMPOSER run only in a staging run, after the checks, so each opens
@@ -634,7 +634,7 @@ jobs:
         if: always()
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: ${{ github.event_name == 'pull_request' && 'MACOS' || '' }}
+          allowed-skips: ${{ github.event_name == 'pull_request' && 'MACOS, IMAGE' || '' }}
           jobs: ${{ toJSON(needs) }}
       # As .github/actions/red-master-issue explains. LAND, RELEASE, PUBLISH and COMPOSER run it by its anchor.
       - &red-master-issue
@@ -1015,12 +1015,15 @@ jobs:
   # BuildKit, its SBOM scanner and the bases are base-images.yml's copies in ghcr.io at pinned digests, pulled after the
   # login, so no pull is an anonymous Docker Hub pull (#86). The engine changes PHP's internal structures, so an
   # extension can stop building or loading: the image builds every extension it ships, and the job calls into each one
-  # from the pushed image, as an app runs them. Every run builds both, and a release's push tags the ones it built. The
-  # two platforms build at once, since a run ends with its slowest job: each took 12 to 13 minutes on the pushes of pull
-  # requests #351 and #352.
+  # from the pushed image, as an app runs them. It runs once per landed tree, in the staging run, as MACOS does, and a
+  # release's push tags the ones it built: on pull request run 45702817618 its two jobs took 30 of the push's 105
+  # job-minutes, and every open pull request's held hosted runners the staging run waited for (#899). The two platforms
+  # build at once, since a run ends with its slowest job: each took 12 to 13 minutes on the pushes of pull requests #351
+  # and #352.
   IMAGE:
     name: IMAGE (${{ matrix.platform }})
     needs: CHANGES
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 45
     permissions:
