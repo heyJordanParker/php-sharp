@@ -165,12 +165,15 @@ jobs:
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_OUTPUT"
           echo "ZIP_PATH=${STAGING}/${ZIP_NAME}" >> "$GITHUB_OUTPUT"
 
+      # A pull request that runs the release build attests nothing, since no release is made from it (#931).
       - name: Generate artifact attestation (source tar.gz)
+        if: github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: ${{ steps.source_package.outputs.TAR_PATH }}
 
       - name: Generate artifact attestation (source zip)
+        if: github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: ${{ steps.source_package.outputs.ZIP_PATH }}
@@ -549,7 +552,7 @@ jobs:
           echo "PKG_PATH=${PKG_STAGING}/${PKG_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Generate artifact attestation (binary)
-        if: inputs.assets
+        if: inputs.assets && github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: ${{ steps.package.outputs.PKG_PATH }}

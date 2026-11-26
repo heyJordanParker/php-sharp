@@ -52,6 +52,7 @@ jobs:
       bump: ${{ steps.version.outputs.bump }}
       missing: ${{ steps.version.outputs.missing }}
       pulls: ${{ steps.version.outputs.pulls }}
+      release: ${{ steps.release.outputs.release }}
       rust: ${{ steps.rust.outputs.version }}
       tagged: ${{ steps.version.outputs.tagged }}
       version: ${{ steps.version.outputs.version }}
@@ -71,13 +72,29 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      # A pull request that changes the release build runs that build as a staging run does, with no publish, so a
+      # broken release build fails the pull request, not the queue's batch (#931). The build reads release.yml, and
+      # sharp/mago/Cargo.toml's release profile.
+      - name: Find whether the pull request changes the release build
+        id: release
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PULL: ${{ github.event.pull_request.number }}
+        run: |
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PULL/files" --jq '.[].filename')
+          if grep -qx -e .github/workflows/release.yml -e sharp/mago/Cargo.toml <<< "$files"; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "This pull request changes the release build, so MACOS builds every asset."
+          fi
       # sharp/bin/check --release prints the version this push releases: its tag's, when a tag already names the commit,
       # or else the newest tag's plus one, and the pull requests it holds since that tag, and each part of the release
       # not published yet, which RELEASE and PUBLISH publish, as sharp/bin/check --release explains. staging's pushes
-      # run one at a time, so the next push looks once this one has published.
+      # run one at a time, so the next push looks once this one has published. A pull request that runs the release
+      # build takes the version too, which its assets name.
       - name: Find the version, and what of its release is missing
         id: version
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || steps.release.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: sharp/bin/check --release | tee -a "$GITHUB_OUTPUT"
@@ -817,18 +834,21 @@ jobs:
         with:
           end: true
   # The run's one Mac job, which release.yml defines, so in a release's push the Mac's binary builds in it after the
-  # tests, as release.yml explains. It runs only in a staging run, on the tree that lands, so each landed tree crosses
-  # the Mac once, and a pull request's own run is Linux's alone. assets is true only in a staging push whose version's
-  # GitHub release isn't published, as sharp/bin/check --release finds. Each attestation names the run's commit as the
+  # tests, as release.yml explains. It runs in a staging run, on the tree that lands, so each landed tree crosses the
+  # Mac once, and in a pull request only when it changes the release build, as CHANGES finds, so that build fails the
+  # pull request and not the queue's batch (#931). Every other pull request's run is Linux's alone. assets is true in
+  # such a pull request, and in a staging push whose version's GitHub release isn't published, as
+  # sharp/bin/check --release finds. A pull request's run attests nothing and publishes nothing, since RELEASE,
+  # PUBLISH and COMPOSER run on a push alone. Each attestation names the run's commit as the
   # one it was built from, which is the commit LAND moves master to and PUBLISH tags, and RELEASE fills the draft
   # release with what that call built. A called workflow's jobs may ask only for permissions its caller grants: actions to cancel a failed run,
   # id-token and attestations to attest the release's assets, and pull-requests to read the release's notes.
   MACOS:
     needs: CHANGES
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' || needs.CHANGES.outputs.release == 'true'
     uses: ./.github/workflows/release.yml
     with:
-      assets: ${{ contains(needs.CHANGES.outputs.missing, 'assets') }}
+      assets: ${{ needs.CHANGES.outputs.release == 'true' || contains(needs.CHANGES.outputs.missing, 'assets') }}
       version: ${{ needs.CHANGES.outputs.version }}
       pulls: ${{ needs.CHANGES.outputs.pulls }}
     permissions:
@@ -1476,7 +1496,8 @@ jobs:
     # failure() and cancelled() count no needed job that ended cancelled: cancelled() is true only when the run is
     # cancelled, and a job past its timeout-minutes ends cancelled. Run 45455237056's IMAGE (linux/arm64) did, and
     # RELEASE then made its release public with no image and no Composer tag. So it also reads each needed job's result.
-    if: ${{ !failure() && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && needs.CHANGES.outputs.bump == 'true' }}
+    # A pull request that changes the release build finds its version too, so RELEASE runs on a push alone (#931).
+    if: ${{ !failure() && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && needs.CHANGES.outputs.bump == 'true' && github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
