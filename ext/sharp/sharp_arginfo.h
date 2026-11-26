@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: bfde5806d03cb582148e091dd0287879e664caaf */
+ * Stub hash: 2beef3938cb1473f32d9d6a2d6a31d1a0eabe254 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
@@ -173,7 +173,10 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_makeGenericType, 
 	ZEND_ARG_TYPE_INFO(0, arguments, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
 
-#define arginfo_Sharp_Internal_enumCases arginfo_Sharp_Internal_properties
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_enumCases, 0, 2, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, case, IS_STRING, 0)
+ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_attributes, 0, 5, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)

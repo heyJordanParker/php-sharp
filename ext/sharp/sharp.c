@@ -7649,15 +7649,17 @@ ZEND_FUNCTION(Sharp_Internal_makeGenericType)
 	RETURN_STR_COPY(sharp_type_class_value(result));
 }
 
-/* Spec section 25: what `Class<T>.enumCases()` gives, an `EnumCase` of each case of the enum `type` names, in the order
- * they are declared, with its name, its case and its backing value, null for a pure enum's. Empty for a class value that
- * names no enum. Each `EnumCase` is made as its constructor would make it, which sets its three get-only properties. */
+/* Spec section 25: what `Class<T>.enumCases()` gives, an object of the class the class value `of_case` names, the
+ * standard library's `EnumCase`, for each case of the enum `type` names, in the order they are declared, with its name,
+ * its case and its backing value, null for a pure enum's. Empty for a class value that names no enum. Each is made as
+ * the class's constructor would make it, which sets its three get-only properties. */
 ZEND_FUNCTION(Sharp_Internal_enumCases)
 {
-	zend_string *value;
+	zend_string *value, *of_case;
 
-	ZEND_PARSE_PARAMETERS_START(1, 1)
+	ZEND_PARSE_PARAMETERS_START(2, 2)
 		Z_PARAM_STR(value)
+		Z_PARAM_STR(of_case)
 	ZEND_PARSE_PARAMETERS_END();
 
 	const sharp_type *arguments;
@@ -7669,15 +7671,11 @@ ZEND_FUNCTION(Sharp_Internal_enumCases)
 	if (!(ce->ce_flags & ZEND_ACC_ENUM)) {
 		return;
 	}
-	zend_string *enum_case_name = zend_string_init(ZEND_STRL("Sharp\\EnumCase"), 0);
-	zend_class_entry *enum_case = zend_lookup_class(enum_case_name);
-	zend_string_release(enum_case_name);
+	const sharp_type *case_arguments;
+	zend_class_entry *enum_case = sharp_class_value_declaring(of_case, &case_arguments);
 	if (!enum_case) {
 		zval_ptr_dtor(return_value);
 		RETVAL_NULL();
-		if (!EG(exception)) {
-			zend_throw_error(NULL, "Class \"Sharp\\EnumCase\" not found");
-		}
 		RETURN_THROWS();
 	}
 	zend_string *name;
