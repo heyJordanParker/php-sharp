@@ -7740,7 +7740,8 @@ static zend_function *sharp_attributed_method(zend_class_entry *ce, zend_string 
 }
 
 /* Spec section 1: what each member's `attributes<T>()` gives, a new object of each attribute of the class the class value
- * `attribute` names, or of a class that extends or implements it, on the declaration `kind` of the class value `type`, as PHP's
+ * `attribute` names, or of a class that extends or implements it, or of every attribute for a class value that names no
+ * class, as the root bound `Object`'s, on the declaration `kind` of the class value `type`, as PHP's
  * reflection reads one with ReflectionAttribute::IS_INSTANCEOF and makes each with newInstance(): "class", the
  * method `name` for "method", its parameter at `position` for "parameter", the property or field `name`, or the
  * storage of an `extern` one, for "property", none for one with no storage, and the constant or enum case `name` for
@@ -7763,9 +7764,8 @@ ZEND_FUNCTION(Sharp_Internal_attributes)
 	if (!ce) {
 		RETURN_THROWS();
 	}
-	const sharp_type *attribute_arguments;
-	zend_class_entry *base = sharp_class_value_declaring(attribute, &attribute_arguments);
-	if (!base) {
+	zend_class_entry *base = sharp_class_value_class(attribute);
+	if (EG(exception)) {
 		RETURN_THROWS();
 	}
 
@@ -7834,15 +7834,14 @@ ZEND_FUNCTION(Sharp_Internal_attributes)
 		if (found->offset != offset) {
 			continue;
 		}
-		zend_class_entry *attribute_ce = zend_lookup_class_ex(found->name, found->lcname, 0);
-		if (!attribute_ce) {
+		if (base) {
+			zend_class_entry *attribute_ce = zend_lookup_class_ex(found->name, found->lcname, 0);
 			if (EG(exception)) {
 				break;
 			}
-			continue;
-		}
-		if (!instanceof_function(attribute_ce, base)) {
-			continue;
+			if (!attribute_ce || !instanceof_function(attribute_ce, base)) {
+				continue;
+			}
 		}
 		zval object;
 		if (zend_get_attribute_instance(&object, attributes, found, scope, target, filename) != SUCCESS) {
