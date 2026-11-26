@@ -1,0 +1,6 @@
+namespace InheritedFields;
+
+public abstract class BaseText
+{
+    public BaseText(public string value { get; }) { }
+}
