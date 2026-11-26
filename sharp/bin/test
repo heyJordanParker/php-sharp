@@ -176,6 +176,17 @@ part() {
   fi
 }
 
+# On macOS a run builds one engine, the debug one CI's Mac job builds, runs every suite on and links mago with, in
+# sharp/build/<os>-<arch> beside its php and phpdbg, so no other engine build empties that folder (#851). The sharp/docker
+# image's run tests the engine sharp/bin/build built there.
+if [[ $os == darwin ]]; then
+  export MAGO_ENGINE="${MAGO_ENGINE:-$build_dir/install}"
+  if $build; then
+    part "sharp/bin/build-mago --engine --debug"
+    "$root/sharp/bin/build-mago" --engine --debug
+  fi
+fi
+
 # One pool of the run's jobs runs every test of the run, both lanes of the Mac's job among them, as cargo-nextest runs a
 # workspace: a slot runs one process on one thread with a list of tests, and the heaviest unit waiting starts the
 # moment a slot frees, so the run holds at most its jobs threads and no slot idles while a unit waits. A test
@@ -835,16 +846,16 @@ done | LC_ALL=C sort -u)
 
 php="$build_dir/sapi/cli/php"
 if [[ ! -x "$php" ]]; then
-  echo "$php is missing. Run sharp/bin/build first." >&2
+  echo "$php is missing. Run sharp/bin/build-mago --engine --debug first." >&2
   exit 1
 fi
 
-# A build folder an older sharp/bin/build configured can hold an engine without thread safety, which PHP# no longer
+# A build folder an older build configured can hold an engine without thread safety, which PHP# no longer
 # runs, at the tree's version, the root package's in sharp/mago/Cargo.toml.
 version="$(sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q;}' "$root/sharp/mago/Cargo.toml")"
 engine_version="$("$php" -n --ri sharp | sed -n 's/^Version => //p')"
 if [[ "$engine_version" != "$version" || "$("$php" -n -r 'echo PHP_ZTS;')" != 1 ]]; then
-  echo "The engine $php is $engine_version$("$php" -n -r 'echo PHP_ZTS ? "" : " without thread safety";'), but the tree is the thread-safe $version. Run sharp/bin/build." >&2
+  echo "The engine $php is $engine_version$("$php" -n -r 'echo PHP_ZTS ? "" : " without thread safety";'), but the tree is the thread-safe $version. Run sharp/bin/build-mago --engine --debug." >&2
   exit 1
 fi
 

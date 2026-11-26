@@ -1,0 +1,14 @@
+[
+  [
+    {
+      "annotation_level": "notice",
+      "title": "usage",
+      "message": "cpu_seconds=3 peak_mib=1011 steal_seconds=0 cpu=AMD EPYC 7763 64-Core Processor"
+    },
+    {
+      "annotation_level": "failure",
+      "title": "",
+      "message": "Process completed with exit code 1."
+    }
+  ]
+]
