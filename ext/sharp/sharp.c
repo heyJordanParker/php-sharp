@@ -14758,14 +14758,15 @@ static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *re
 }
 
 /* Spec section 10: the value of `type` that `value` builds in `return_value`, as a field of that type a struct's
- * `parse` reads reads it, read from text with `text`, as `Query.decode` reads it. Throws one Sharp\InvalidFields that
- * lists every bad part, under its path. */
-static void sharp_parse_as(const sharp_type *type, zval *value, bool text, zval *return_value)
+ * `parse` reads reads it, read from text with `text`, as `Query.decode` reads it. A union tries its members in `order`,
+ * the classes and scalar types its type's text was written with, as a `#fields` row's does, or in its own order when
+ * `order` is NULL. Throws one Sharp\InvalidFields that lists every bad part, under its path. */
+static void sharp_parse_as(const sharp_type *type, zval *value, bool text, const zend_string *order, zval *return_value)
 {
 	zval problems;
 	array_init(&problems);
 	sharp_read read;
-	sharp_read_start(&read, &problems, text, NULL);
+	sharp_read_start(&read, &problems, text, order);
 	ZVAL_COPY(return_value, value);
 	sharp_read_whole(type, return_value, &read);
 	sharp_read_end(&read);
@@ -15154,14 +15155,86 @@ ZEND_FUNCTION(Sharp_Internal_parseVariant)
 	if (!type) {
 		RETURN_THROWS();
 	}
-	sharp_parse_as(type, value, false, return_value);
+	sharp_parse_as(type, value, false, NULL, return_value);
 	if (!throws && EG(exception) && instanceof_function(EG(exception)->ce, zend_ce_value_error)) {
 		zend_clear_exception();
 	}
 }
 
+/* The ZEND_DO_*CALL in its caller that pushed `frame`, when it gave the method type arguments, as
+ * ZEND_SHARP_RECV_TYPE_ARGS finds it, or NULL. */
+static const zend_op *sharp_frame_call(const zend_execute_data *frame)
+{
+	const zend_execute_data *caller = frame->prev_execute_data;
+
+	if ((ZEND_CALL_INFO(frame) & (ZEND_CALL_TOP|ZEND_CALL_DYNAMIC)) == (ZEND_CALL_TOP|ZEND_CALL_DYNAMIC)
+			|| !caller || !caller->func || !ZEND_USER_CODE(caller->func->type)) {
+		return NULL;
+	}
+	const zend_op *call = caller->opline;
+	if (call->opcode != ZEND_DO_FCALL && call->opcode != ZEND_DO_UCALL && call->opcode != ZEND_DO_FCALL_BY_NAME) {
+		return NULL;
+	}
+
+	return call->op1_type == IS_TMP_VAR ? call : NULL;
+}
+
+/* The written order of the type argument `index` the call that pushed `frame` gave it, see
+ * ZEND_AST_SHARP_CALL_TYPE_ARGS, or NULL when it wrote none. `#i` in it is the order of the type argument i the
+ * caller's own call gave it, so a generic wrapper's order reaches the call it makes, as its type arguments do. */
+static zend_string *sharp_frame_written_order(const zend_execute_data *frame, uint32_t index)
+{
+	const zend_op *call = sharp_frame_call(frame);
+	if (!call) {
+		return NULL;
+	}
+	const zend_execute_data *caller = frame->prev_execute_data;
+	const zend_op *type_args = call;
+	do {
+		if (type_args == caller->func->op_array.opcodes) {
+			return NULL;
+		}
+		type_args--;
+	} while (type_args->opcode != ZEND_SHARP_TYPE_ARGS || type_args->result_type != IS_TMP_VAR
+		|| type_args->result.var != call->op1.var);
+	if (type_args->op2_type != IS_CONST) {
+		return NULL;
+	}
+
+	const zval *written = ZEND_SHARP_TYPE_ARGS_ORDER(type_args);
+	const char *at = Z_STRVAL_P(written), *end = at + Z_STRLEN_P(written);
+	for (uint32_t i = 0; i < index && at < end; i++) {
+		const char *split = zend_memnstr(at, "; ", sizeof("; ") - 1, end);
+		at = split ? split + sizeof("; ") - 1 : end;
+	}
+	const char *split = zend_memnstr(at, "; ", sizeof("; ") - 1, end);
+	end = split ? split : end;
+
+	smart_str order = {0};
+	while (at < end) {
+		const char *comma = zend_memnstr(at, ", ", sizeof(", ") - 1, end);
+		const char *stop = comma ? comma : end;
+		zend_string *named = NULL;
+		if (*at == '#') {
+			named = sharp_frame_written_order(caller, (uint32_t) ZEND_STRTOUL(at + 1, NULL, 10));
+		}
+		if (*at != '#' && *at != '$') {
+			smart_str_appends(&order, order.s ? ", " : "");
+			smart_str_appendl(&order, at, stop - at);
+		} else if (named) {
+			smart_str_appends(&order, order.s ? ", " : "");
+			smart_str_append(&order, named);
+			zend_string_release(named);
+		}
+		at = comma ? comma + sizeof(", ") - 1 : end;
+	}
+
+	return order.s ? smart_str_extract(&order) : NULL;
+}
+
 /* Spec sections 10 and 24: a struct's or a class's `parse`, `Json.decode<T>` and `Query.decode<T>`, the value of the
- * type the class value `type` holds that `value` builds, as sharp_parse_as reads it. */
+ * type the class value `type` holds that `value` builds, as sharp_parse_as reads it. A `[ParsesTypeArgument]` method,
+ * as `Json.decode<T>`, reads its type argument in the order its call wrote it. */
 ZEND_FUNCTION(Sharp_Internal_parseAs)
 {
 	zend_string *class_value;
@@ -15178,7 +15251,11 @@ ZEND_FUNCTION(Sharp_Internal_parseAs)
 	if (!type) {
 		RETURN_THROWS();
 	}
-	sharp_parse_as(type, value, text, return_value);
+	zend_string *order = sharp_frame_written_order(EX(prev_execute_data), 0);
+	sharp_parse_as(type, value, text, order, return_value);
+	if (order) {
+		zend_string_release(order);
+	}
 }
 
 /* Runs a listener on event. A table listener runs on a new object of its class, which the container builds with the

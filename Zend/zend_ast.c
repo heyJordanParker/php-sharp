@@ -2637,6 +2637,10 @@ simple_list:
 			 * an assert(). */
 			zend_ast_export_ex(str, ast->child[0], priority, indent);
 			break;
+		case ZEND_AST_SHARP_CALL_TYPE_ARGS:
+			/* PHP#: the type arguments of a call, written as their type text, the last argument of its list. */
+			smart_str_append(str, zend_ast_get_str(ast->child[0]));
+			break;
 		case ZEND_AST_SHARP_IS_TYPE:
 			/* PHP#: a test of type arguments, written with the type text, as `instanceof` writes a class. */
 			zend_ast_export_ex(str, ast->child[0], 0, indent);

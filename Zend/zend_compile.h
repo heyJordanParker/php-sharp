@@ -1357,6 +1357,12 @@ static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
  * the method's type arguments, the list they spelled, and the class it is written in. */
 #define ZEND_SHARP_TYPE_ARGS_OPEN 1
 
+/* The literal of a ZEND_SHARP_TYPE_ARGS with a CONST op2 that holds the written order of its type arguments, or an empty
+ * string, see ZEND_AST_SHARP_CALL_TYPE_ARGS: right after the text, or after the class name literals of an open one. */
+#define ZEND_SHARP_TYPE_ARGS_ORDER(opline) \
+	(RT_CONSTANT(opline, (opline)->op2) \
+		+ ((opline)->op1_type == IS_CV || (opline)->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN ? 3 : 1))
+
 /* attr of a ZEND_AST_SHARP_TYPE_OF, and extended_value of its ZEND_SHARP_TYPE_OF, that gives the text of its whole type
  * list, as `App.Order, int`, in place of the class value of its one type: the key of a generic class's own statics. */
 #define ZEND_SHARP_TYPE_OF_LIST 1

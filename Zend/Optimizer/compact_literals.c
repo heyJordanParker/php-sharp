@@ -212,9 +212,10 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 					break;
 				case ZEND_SHARP_TYPE_ARGS:
 					if (opline->op2_type == IS_CONST) {
-						// an open type text is followed by the name of the class it is written in
+						// an open type text is followed by the name of the class it is written in, and every text by
+						// the written order of its type arguments
 						LITERAL_INFO(opline->op2.constant,
-							opline->op1_type == IS_CV || opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN ? 3 : 1);
+							opline->op1_type == IS_CV || opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN ? 4 : 2);
 					}
 					break;
 				case ZEND_SHARP_VERIFY_TYPE_ARGS:

@@ -4123,7 +4123,7 @@ ZEND_API uint8_t zend_get_call_op(const zend_op *init_op, zend_function *fbc, bo
 }
 /* }}} */
 
-static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast);
+static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast, zend_ast *order_ast);
 
 static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_function *fbc, uint32_t lineno) /* {{{ */
 {
@@ -4146,12 +4146,11 @@ static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_fun
 		return true;
 	}
 
-	/* A PHP# generic call ends its arguments with the type arguments it gives the method, a ZEND_AST_SHARP_TYPE_ARGS
-	 * without a `new`, which the call op takes. */
+	/* A PHP# generic call ends its arguments with the type arguments it gives the method, a
+	 * ZEND_AST_SHARP_CALL_TYPE_ARGS, which the call op takes. */
 	zend_ast_list *args = zend_ast_get_list(args_ast);
 	zend_ast *type_args_ast = NULL;
-	if (args->children && args->child[args->children - 1]->kind == ZEND_AST_SHARP_TYPE_ARGS
-		&& !args->child[args->children - 1]->child[0]) {
+	if (args->children && args->child[args->children - 1]->kind == ZEND_AST_SHARP_CALL_TYPE_ARGS) {
 		type_args_ast = args->child[--args->children];
 	}
 
@@ -4164,7 +4163,7 @@ static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_fun
 	 * Fiber that suspends inside an argument suspends before they exist, so no suspended frame holds them. */
 	znode type_args_node;
 	if (type_args_ast) {
-		zend_compile_sharp_type_args(&type_args_node, type_args_ast->child[1]);
+		zend_compile_sharp_type_args(&type_args_node, type_args_ast->child[0], type_args_ast->child[1]);
 		/* zend_ast_destroy frees the node with the list. */
 		args->children++;
 	}
@@ -5706,8 +5705,9 @@ static zend_ast *zend_sharp_declared_type(zend_ast *type_ast, zend_string **shar
 }
 
 /* Emits the ZEND_SHARP_TYPE_ARGS that resolves the type arguments `text_ast` spells into `result`, or this's when
- * `text_ast` is NULL, as `new Self` gives them. */
-static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast)
+ * `text_ast` is NULL, as `new Self` gives them. The literal after the text, and after the class name an open text
+ * names, is the written order `order_ast` holds, or empty, see ZEND_AST_SHARP_CALL_TYPE_ARGS. */
+static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast, zend_ast *order_ast)
 {
 	zend_op *opline = zend_emit_op_tmp(result, ZEND_SHARP_TYPE_ARGS, NULL, NULL);
 
@@ -5722,24 +5722,24 @@ static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast)
 	zend_string *text = zend_ast_get_str(text_ast);
 	uint32_t names = sharp_type_list_names(ZSTR_VAL(text), ZSTR_LEN(text));
 	opline->extended_value = zend_alloc_cache_slots(names ? 5 : 1);
-	if (!names) {
-		return;
+	if (names) {
+		/* Its `$i` count the type parameters of the class it is written in, which a lambda keeps when Closure::call() or
+		 * Closure::bind() gives it another scope. */
+		ZEND_ASSERT(CG(active_class_entry));
+		zend_add_class_name_literal(zend_string_copy(CG(active_class_entry)->name));
+		if (names & SHARP_TYPE_NAMES_METHOD) {
+			opline->op1_type = IS_CV;
+			opline->op1.var = lookup_cv(sharp_type_arguments_key);
+		} else {
+			opline->op1.num = ZEND_SHARP_TYPE_ARGS_OPEN;
+		}
+		if (names & SHARP_TYPE_NAMES_THIS) {
+			/* A text that names `$i` reads this's type arguments, so a closure around it keeps its this. */
+			CG(active_op_array)->fn_flags |= ZEND_ACC_USES_THIS;
+		}
 	}
-
-	/* Its `$i` count the type parameters of the class it is written in, which a lambda keeps when Closure::call() or
-	 * Closure::bind() gives it another scope. */
-	ZEND_ASSERT(CG(active_class_entry));
-	zend_add_class_name_literal(zend_string_copy(CG(active_class_entry)->name));
-	if (names & SHARP_TYPE_NAMES_METHOD) {
-		opline->op1_type = IS_CV;
-		opline->op1.var = lookup_cv(sharp_type_arguments_key);
-	} else {
-		opline->op1.num = ZEND_SHARP_TYPE_ARGS_OPEN;
-	}
-	if (names & SHARP_TYPE_NAMES_THIS) {
-		/* A text that names `$i` reads this's type arguments, so a closure around it keeps its this. */
-		CG(active_op_array)->fn_flags |= ZEND_ACC_USES_THIS;
-	}
+	zend_string *order = order_ast ? zend_string_copy(zend_ast_get_str(order_ast)) : ZSTR_EMPTY_ALLOC();
+	zend_add_literal_string(&order);
 }
 
 /* Emits the ZEND_SHARP_VERIFY_TYPE_ARGS that checks the value a ZEND_AST_VERIFY_TYPE_ARGS holds against its type
@@ -5783,7 +5783,7 @@ static void zend_compile_sharp_is_type(znode *result, zend_ast *ast)
 	} else {
 		zend_compile_expr(&value_node, value_ast);
 	}
-	zend_compile_sharp_type_args(&type_node, ast->child[1]);
+	zend_compile_sharp_type_args(&type_node, ast->child[1], NULL);
 	zend_emit_op_tmp(result, ZEND_SHARP_IS_TYPE, &value_node, &type_node)->extended_value =
 		binds ? ZEND_SHARP_IS_TYPE_BINDS : 0;
 }
@@ -5794,7 +5794,7 @@ static void zend_compile_sharp_type_of(znode *result, zend_ast *ast)
 {
 	znode type_node;
 
-	zend_compile_sharp_type_args(&type_node, ast->child[0]);
+	zend_compile_sharp_type_args(&type_node, ast->child[0], NULL);
 	zend_emit_op_tmp(result, ZEND_SHARP_TYPE_OF, &type_node, NULL)->extended_value = ast->attr;
 }
 
@@ -5838,7 +5838,7 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 			zend_compile_expr(&class_node, class_ast);
 		} else {
 			ZEND_ASSERT(type_args_ast && type_args_ast->child[1]);
-			zend_compile_sharp_type_args(&class_node, type_args_ast->child[1]);
+			zend_compile_sharp_type_args(&class_node, type_args_ast->child[1], NULL);
 		}
 		if (class_node.op_type == IS_CONST) {
 			opline = zend_emit_op(result, ZEND_NEW, NULL, NULL);
@@ -5880,7 +5880,7 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 			opline->extended_value = zend_alloc_cache_slot();
 		}
 
-		zend_compile_sharp_type_args(&type_args_node, type_args_ast->child[1]);
+		zend_compile_sharp_type_args(&type_args_node, type_args_ast->child[1], NULL);
 	}
 
 	opline = zend_emit_op(result, ZEND_NEW, NULL, NULL);

@@ -168,6 +168,11 @@ enum _zend_ast_kind {
 	 * child 0 names carries as its own, and whose ZEND_ATTRIBUTE_TARGET_* is the attr. A file runs nothing for it:
 	 * ext/sharp compiles child 1 when reflection reads the declaration's attributes. */
 	ZEND_AST_SHARP_EXTERN,
+	/* PHP#: the type arguments a generic call gives the method it calls, the last child of its argument list: child 0
+	 * their type text, and child 1 NULL or the order each one writes the classes and the scalar types of its unions in,
+	 * `Sharp.Map, string, int`, one type argument after another, split by `; `, with `#i` for the calling method's own
+	 * type parameter i. A value read into a union tries its members in that order, as a `#fields` row's union does. */
+	ZEND_AST_SHARP_CALL_TYPE_ARGS,
 
 	/* 3 child nodes */
 	ZEND_AST_METHOD_CALL = 3 << ZEND_AST_NUM_CHILDREN_SHIFT,
