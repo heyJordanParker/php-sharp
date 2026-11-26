@@ -41,9 +41,11 @@ Every design, the maintainer's own included, meets PROPOSE.md steps 1 to 3 befor
 
 The maintainer designs every change and plans each builder's batch, so no builder decides what to build. A cause inside a lane's files is asked of that lane's builder as a `## Research brief` batch, which returns the root cause from a run and a design, and the maintainer rules on that design per TRIAGE.md step 4. Every build and run is in the build log, and a question about one is answered from it.
 
+### Slowness is a defect, fixed at its cause the day it appears
+Fast iteration comes right after PHP# running: every minute a loop takes is paid on every round of every lane, and every user's compile. So every loop, ours and the user's, is measured against a goal, and a number that grows is a red check the same day. Slowness is never accommodated: no waiting it out, no longer limit, no moving it out of sight, no checking less. Its cause is found by measuring, and the work is made cheaper.
+
 ### Speed is raw speed
 A speed change, to the compile or to CI, makes each operation cost less. A cache, a skipped or reused check, a test taken off a platform, a swapped or generated benchmark, fewer threads, a resident server, work moved to another machine, or more runners, cores, processes or machines behind the same work is never one. A job that waits for the Mac waits less only when the jobs ahead of it cost less, never by a second runner or a reordered queue. Each speed target off its goal is an intake entry, triaged by TRIAGE.md, and its brief is the speed lane's batch, or the CI lane's for CI.
-
 ### Measure targets one way
 Every target's definition, and each decision behind the loop's scripts, is a comment at its code, read before any change. A target stays on the definition and the project it was set on: changing either is the language owner's call.
 
