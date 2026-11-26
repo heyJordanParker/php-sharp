@@ -133,16 +133,17 @@ jobs:
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
       # sharp/build/cargo is the CARGO_HOME of cargo in the sharp/docker image, so every build of the job reads this
       # config. Without debug info a Mago test binary holds 142 MB where it held 235, so the test binaries MAGO's slices
-      # download are smaller, and a panic still names its file and line. The link strips the debug info the standard
-      # library's prebuilt crates hold too, which no job reads (#911).
+      # download are smaller, and a panic still names its file and line.
       - name: Build without debug info in the sharp/docker image
         run: |
           mkdir -p sharp/build/cargo
-          printf '[profile.dev]\ndebug = false\nstrip = "debuginfo"\n' > sharp/build/cargo/config.toml
+          printf '[profile.dev]\ndebug = false\n' > sharp/build/cargo/config.toml
       - name: Build and install the engine
         run: sharp/bin/build --linux
+      # The engine mago links compiles at autoconf's -O2 without its -g, since no job reads the debug info of mago's
+      # engine: configure.ac's non-debug build adds only -DNDEBUG to the CFLAGS it finds (#911).
       - name: Build the engine mago links
-        run: sharp/docker/run sharp/bin/build-mago --engine
+        run: sharp/docker/run env CFLAGS=-O2 sharp/bin/build-mago --engine
       - name: Build mago and its test binaries
         run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/build-mago --quiet
       # What the suites run: the CLI, phpdbg, which run-tests.php finds beside it for the tests that need it, the install
