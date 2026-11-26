@@ -566,10 +566,10 @@ jobs:
           path: ${{ steps.package.outputs.PKG_PATH }}
           if-no-files-found: error
 
-      # A failed job cancels any run, which can no longer pass: a pull request's, a merge queue's, and a push's, which
-      # can no longer publish either, as .github/actions/cancel-failed-run explains.
+      # A failed job cancels a staging or push run, which can no longer land or publish, as
+      # .github/actions/cancel-failed-run explains. A pull request's run runs every job to its end.
       - name: Cancel the run, which can no longer pass
-        if: failure()
+        if: failure() && github.event_name != 'pull_request'
         uses: ./.github/actions/cancel-failed-run
 
       - name: Write the job's CPU-seconds and peak memory
