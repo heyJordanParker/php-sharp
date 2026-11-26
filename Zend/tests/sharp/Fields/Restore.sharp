@@ -1,0 +1,26 @@
+namespace Fields;
+
+// A stored value restored as a program restores one: the object created with no member set, then each field written.
+public final class Restore
+{
+    private static Field key() => typeof(Notice).fields().first(field => field.name == nameof(Notice.key));
+
+    public static List<string> notice()
+    {
+        const notice = typeof(Notice).createInstance([]);
+        List<string> lines = ["before: " + (Restore.key().isInitialized(notice) ? "true" : "false")];
+        Restore.key().set(notice, "x");
+        lines.add(notice.key);
+        try {
+            Restore.key().set(notice, "y");
+        } catch (Throwable failure) {
+            lines.add(Class.of(failure).name() + ": " + failure.getMessage());
+        }
+        try {
+            Restore.key().set(typeof(Notice).createInstance([]), 7);
+        } catch (Throwable failure) {
+            lines.add(Class.of(failure).name() + ": " + failure.getMessage());
+        }
+        return lines;
+    }
+}
