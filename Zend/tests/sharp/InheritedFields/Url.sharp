@@ -1,0 +1,6 @@
+namespace InheritedFields;
+
+public final class Url : BaseText
+{
+    public Url(string value) : super(value.trim()) { }
+}
