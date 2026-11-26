@@ -20,9 +20,11 @@ permissions:
 # for every lane cancelled the pending runs of PRs #792 and #864, which then had no CI_PASSED, and queue.yml never took
 # them (#872). A pull request's run uses no Mac, since MACOS runs only in a staging run, so runs at once cost only
 # hosted runners. staging runs one push at a time, and queue.yml pushes it only while no staging run is in progress. A
-# failed job cancels any run, which can no longer pass: a pull request's, and a staging run's, which can no longer land
-# or publish either, so queue.yml's next batch takes its place, as .github/actions/cancel-failed-run explains. Each
-# schedule and dispatch runs in a group of its own.
+# failed job cancels a staging or push run, which can no longer land or publish, so queue.yml's next batch and the Mac
+# take its place, as .github/actions/cancel-failed-run explains. A pull request's run runs every job to its end, so one
+# run reports every failure: each of PR #972's runs reported one failed test, as its cancel stopped the jobs that
+# would have printed the rest, and a newer push still cancels it through this group (#983). Each schedule and dispatch
+# runs in a group of its own.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.url
@@ -116,14 +118,16 @@ jobs:
   # The run's one Linux build, which every Linux suite runs on: the engine, its install and mago, which the suites run
   # with --no-build. Each of the 8 suite jobs built them itself for 2 to 5 minutes on release pull request #363's run,
   # where the bump rebuilt every Mago crate in each, so a run built the same code 8 times. The suites wait for it, so its
-  # minutes are on every suite's path. sharp/bin/build --linux builds the engine in the sharp/docker image, and
-  # sharp/bin/build-mago mago with every test binary, which MAGO's slices run, on BUILD_MAGO_ENGINE's engine, so Linux
+  # minutes are on every suite's path. sharp/bin/build-mago --engine --debug builds the one engine in the sharp/docker
+  # image that the suites run on and mago links, as the Mac job builds it, with the libphp.so HOSTS builds FrankenPHP
+  # against, so it waits for no other build: it waited 4.8 minutes for BUILD_MAGO_ENGINE's on run 45834816959 (#955).
+  # sharp/bin/build-mago then builds mago with every test binary, which MAGO's slices run, so Linux
   # builds Mago's dev target once per run, where Mago's own workflow's build job built it a second time for 122 seconds
   # on dfa6e7e2941's run. It also runs the checks of generated files, since one of them reads the header
   # the build generates, and the doc tests and the property tests, which cargo builds, so they need this target: a job
   # starts once every job it needs has ended, so the suites wait for them too. MAGO's slices run every test binary.
   BUILD_LINUX:
-    needs: [CHANGES, BUILD_MAGO_ENGINE]
+    needs: CHANGES
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -150,38 +154,19 @@ jobs:
         run: |
           mkdir -p sharp/build/cargo
           printf '[profile.dev]\ndebug = false\n' > sharp/build/cargo/config.toml
-      - name: Build and install the engine
-        run: sharp/bin/build --linux
-      # BUILD_MAGO_ENGINE's, which mago links as it is. MAGO_CHECKS repeats these three steps by their anchors.
-      - &download-mago-engine
-        name: Download the engine mago links
-        id: download-engine
-        continue-on-error: true
-        timeout-minutes: 5
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: mago-engine-linux
-          path: ${{ runner.temp }}
-      - &download-mago-engine-again
-        name: Download the engine mago links, the second try
-        if: steps.download-engine.outcome == 'failure'
-        timeout-minutes: 5
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: mago-engine-linux
-          path: ${{ runner.temp }}
-      - &unpack-mago-engine
-        name: Unpack the engine mago links
-        run: tar --zstd -xf "$RUNNER_TEMP/mago-engine.tar.zst"
+      - name: Build the engine the suites run on and mago links
+        run: sharp/docker/run sharp/bin/build-mago --engine --debug
       - name: Build mago and its test binaries
-        run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/build-mago --quiet
+        run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64/install sharp/bin/build-mago --quiet
       # What the suites run: the CLI, phpdbg, which run-tests.php finds beside it for the tests that need it, the install
-      # sharp/bin/hosts builds FrankenPHP against, and mago. An artifact keeps no file's mode, so the files travel in a
-      # tar, compressed here, since Actions would compress them on one thread.
+      # sharp/bin/hosts builds FrankenPHP against, and mago. The libphp.a mago linked stays out, since no suite links it.
+      # An artifact keeps no file's mode, so the files travel in a tar, compressed here, since Actions would compress
+      # them on one thread.
       - name: Pack the engine and mago for the suites
         run: |
           build="sharp/build/linux-$(uname -m)"
-          tar --zstd -cf "$RUNNER_TEMP/build.tar.zst" "$build/sapi/cli/php" "$build/sapi/phpdbg/phpdbg" "$build/install" \
+          tar --zstd -cf "$RUNNER_TEMP/build.tar.zst" --exclude="$build/install/lib/libphp.a" \
+            "$build/sapi/cli/php" "$build/sapi/phpdbg/phpdbg" "$build/install" \
             "$build/mago/debug/mago"
       - name: Upload the engine and mago for the suites
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -210,14 +195,14 @@ jobs:
       # built the engine from nothing, which held the suites for 280 of this job's 624 seconds on dfa6e7e2941's run.
       - name: Verify the generated files, and that no Cargo.lock names a local source
         env:
-          MAGO_ENGINE: /src/sharp/build/linux-x86_64-engine/install
+          MAGO_ENGINE: /src/sharp/build/linux-x86_64/install
         run: sharp/bin/check generated
       # With the engine the build of mago linked, as the check of the generated files takes it, so cargo's build of the
       # tests rebuilds no crate that links it: Mago's own build job ran these with no MAGO_ENGINE, and built the engine
       # from nothing first, for 4.5 of its 8.7 minutes on dfa6e7e2941's run. They run after the uploads, which the
       # suites download, and the job ends about a minute after them.
       - name: Test the doc tests and the property tests
-        run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/test --mago --cargo-built
+        run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64/install sharp/bin/test --mago --cargo-built
       # sharp/bin/test's report of each suite's and each test's time, which the timeline shows as one step (#855). Its
       # run writes it to sharp/build/test-report.xml, in the checkout the sharp/docker image mounts. UPSTREAM and ASAN
       # repeat this step by its anchor, and LINUX's and MAGO's slices name theirs by their shard.
@@ -229,10 +214,10 @@ jobs:
           name: test-report-${{ github.job }}
           path: sharp/build/test-report.xml
           if-no-files-found: warn
-      # As .github/actions/cancel-failed-run explains.
+      # As .github/actions/cancel-failed-run explains, a staging or push run's alone.
       - &cancel-failed-run
         name: Cancel the run, which can no longer pass
-        if: failure()
+        if: failure() && github.event_name != 'pull_request'
         uses: ./.github/actions/cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
@@ -240,11 +225,10 @@ jobs:
         with:
           end: true
 
-  # The engine mago links, which sharp/bin/build-mago --engine builds from the static archives of the packages
-  # .github/actions/engine-packages installs, once a run for both Linux jobs that link mago: BUILD_LINUX, in the
-  # sharp/docker image, and MAGO_CHECKS, on the runner. It builds on Ubuntu 24.04, whose glibc 2.39 is older than the
-  # image's 2.41, so the engine links in both. Each built it before, for 3.1 and 3.4 minutes on runs 45680467397 and
-  # 45679439684 (#853).
+  # The engine MAGO_CHECKS's test-run mago links, which sharp/bin/build-mago --engine builds at -O2 from the static
+  # archives of the packages .github/actions/engine-packages installs, so SPEED counts a mago on the engine users run.
+  # It builds on Ubuntu 24.04, whose glibc 2.39 is older than the image's 2.41, so that mago runs in the image, where
+  # SPEED counts it, and on PLAIN_PHP's runner (#853). BUILD_LINUX's mago links BUILD_LINUX's own engine (#955).
   BUILD_MAGO_ENGINE:
     needs: CHANGES
     runs-on: ubuntu-24.04
@@ -321,9 +305,24 @@ jobs:
         uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
         with:
           tool: typos,cargo-deny@0.20.2
-      - *download-mago-engine
-      - *download-mago-engine-again
-      - *unpack-mago-engine
+      # BUILD_MAGO_ENGINE's, which mago links as it is.
+      - name: Download the engine mago links
+        id: download-engine
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mago-engine-linux
+          path: ${{ runner.temp }}
+      - name: Download the engine mago links, the second try
+        if: steps.download-engine.outcome == 'failure'
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mago-engine-linux
+          path: ${{ runner.temp }}
+      - name: Unpack the engine mago links
+        run: tar --zstd -xf "$RUNNER_TEMP/mago-engine.tar.zst"
       # sharp/bin/check mago-checks runs them, as it does on a machine: typos, cargo deny's advisories of both lockfiles,
       # the PHP SDK's tests, cargo check of the workspace and of the PHP# bridge alone, the fuzz crate's Cargo.lock, no
       # file watcher in the bridge, the PHP SDK's generated NodeKind, rustfmt and clippy, then the test-run mago, which
@@ -865,6 +864,7 @@ jobs:
       actions: write
       contents: read
       issues: write
+      pull-requests: write
     steps:
       # Only for the actions below, and sharp/bin/record, which the usage action writes the job's line in the build
       # record with.
@@ -877,19 +877,21 @@ jobs:
             sharp/bin
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-      # A job whose step failed cancels its run, as .github/actions/cancel-failed-run explains, so GitHub ends that job
-      # as cancelled, and only its step reads failure: run 45507834999 listed only CI_PASSED as failed, where MAGO (3/5)
-      # had failed its step 8. So this names each failed step of the run, with its job, before the needed jobs' results.
+      # In a staging or push run a job whose step failed cancels its run, as .github/actions/cancel-failed-run explains,
+      # so GitHub ends that job as cancelled, and only its step reads failure: run 45507834999 listed only CI_PASSED as
+      # failed, where MAGO (3/5) had failed its step 8. So this names each failed step of the run, with its job, before
+      # the needed jobs' results.
       - name: Every step of the run passed
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          # shellcheck disable=SC2016 # The program is jq's, whose $job the shell must not expand.
+          # shellcheck disable=SC2016 # The program is jq's, whose $job and $id the shell must not expand.
           gh run view "$GITHUB_RUN_ID" --json jobs \
-            --jq '.jobs[] | .name as $job | .steps[] | select(.conclusion == "failure") | [$job, .name] | @tsv' \
+            --jq '.jobs[] | .name as $job | .databaseId as $id | .steps[] | select(.conclusion == "failure")
+              | [$job, .name, ($id | tostring)] | @tsv' \
             > "$RUNNER_TEMP/failed-steps"
-          while IFS=$'\t' read -r job step; do
+          while IFS=$'\t' read -r job step _; do
             title=${job//%/%25}
             title=${title//,/%2C}
             title=${title//:/%3A}
@@ -899,6 +901,31 @@ jobs:
           if [[ -s $RUNNER_TEMP/failed-steps ]]; then
             exit 1
           fi
+      # This comments the run, each failed job and each failed step on the pull request, with a test step's Failed
+      # lines, which name each failed test, as the queue comments a pull request it leaves out (#943).
+      # A push run opens the red-master issue below instead. curl reads each job's log, since gh api refuses a response
+      # that holds terminal escape sequences, as every test log does, and printed none on run 45836685722.
+      - name: Comment each failed step on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PULL: ${{ github.event.pull_request.number }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [[ ! -s $RUNNER_TEMP/failed-steps ]]; then
+            exit 0
+          fi
+          {
+            echo "Run [$GITHUB_RUN_ID]($RUN) failed: $(cut -f 1 "$RUNNER_TEMP/failed-steps" | awk '!seen[$0]++ { printf "%s`%s`", (n++ ? ", " : ""), $0 }')"
+            echo
+            while IFS=$'\t' read -r job step id; do
+              echo "- \`$job\` › $step"
+              curl -sSfL -H "Authorization: Bearer $GH_TOKEN" "$GITHUB_API_URL/repos/$GH_REPO/actions/jobs/$id/logs" \
+                | sed -E 's/^[0-9T:.-]+Z //; s/\x1b\[[0-9;]*m//g' | grep '^Failed: ' | head -n 20 | sed 's/^/  - /' || true
+            done < "$RUNNER_TEMP/failed-steps"
+          } > "$RUNNER_TEMP/failed-comment.md"
+          gh pr comment "$PULL" --body-file "$RUNNER_TEMP/failed-comment.md"
       - name: Every job passed
         if: always()
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0

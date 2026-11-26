@@ -1,0 +1,42 @@
+namespace Demo;
+
+import Sharp.Encoding.Json;
+
+public class ListsAsMaps
+{
+    private static Map<string, Any?>|List<Any?> arrayAt(Any? value)
+    {
+        if (value is Map<string, Any?> held) {
+            return held;
+        }
+
+        if (value is List<Any?> items) {
+            return items;
+        }
+
+        throw new LogicException("not an array");
+    }
+
+    public static List<string> children()
+    {
+        const decoded = Json.decode<Map<string, Any?>>("{\"a\":[1],\"b\":[]}");
+        List<string> lines = [];
+        for (const [key, child] of decoded) {
+            lines.add(`${key}: ${Json.encode(ListsAsMaps.arrayAt(child))}`);
+        }
+
+        return lines;
+    }
+
+    public static List<string> tests()
+    {
+        Any? one = Json.parse("[1]").value;
+        string byText = `[1] is Map<string, Any?>: ${one is Map<string, Any?> ? "true" : "false"}`;
+        Any? again = Json.parse("[1]").value;
+        string byInt = `[1] is Map<int, Any?>: ${again is Map<int, Any?> ? "true" : "false"}`;
+        return [byText, byInt];
+    }
+
+    public static string numericKey(Any? value) =>
+        `['42' => true] is Map<string, bool>: ${value is Map<string, bool> ? "true" : "false"}`;
+}

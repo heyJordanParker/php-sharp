@@ -7649,14 +7649,17 @@ ZEND_FUNCTION(Sharp_Internal_makeGenericType)
 	RETURN_STR_COPY(sharp_type_class_value(result));
 }
 
-/* Spec section 25: what `Class<T>.enumCases()` reads, the cases of the enum `type` names, in the order they are
- * declared. Empty for a class value that names no enum. */
+/* Spec section 25: what `Class<T>.enumCases()` gives, an object of the class the class value `of_case` names, the
+ * standard library's `EnumCase`, for each case of the enum `type` names, in the order they are declared, with its name,
+ * its case and its backing value, null for a pure enum's. Empty for a class value that names no enum. Each is built
+ * through the class's constructor, spec section 9. */
 ZEND_FUNCTION(Sharp_Internal_enumCases)
 {
-	zend_string *value;
+	zend_string *value, *of_case;
 
-	ZEND_PARSE_PARAMETERS_START(1, 1)
+	ZEND_PARSE_PARAMETERS_START(2, 2)
 		Z_PARAM_STR(value)
+		Z_PARAM_STR(of_case)
 	ZEND_PARSE_PARAMETERS_END();
 
 	const sharp_type *arguments;
@@ -7667,6 +7670,13 @@ ZEND_FUNCTION(Sharp_Internal_enumCases)
 	array_init(return_value);
 	if (!(ce->ce_flags & ZEND_ACC_ENUM)) {
 		return;
+	}
+	const sharp_type *case_arguments;
+	zend_class_entry *enum_case = sharp_class_value_declaring(of_case, &case_arguments);
+	if (!enum_case) {
+		zval_ptr_dtor(return_value);
+		RETVAL_NULL();
+		RETURN_THROWS();
 	}
 	zend_string *name;
 	zend_class_constant *constant;
@@ -7680,10 +7690,170 @@ ZEND_FUNCTION(Sharp_Internal_enumCases)
 			RETVAL_NULL();
 			RETURN_THROWS();
 		}
-		zval of_case;
-		ZVAL_OBJ_COPY(&of_case, found);
-		add_next_index_zval(return_value, &of_case);
+		zval parts[3], entry;
+		ZVAL_STR(&parts[0], name);
+		ZVAL_OBJ(&parts[1], found);
+		if (ce->enum_backing_type != IS_UNDEF) {
+			ZVAL_COPY_VALUE(&parts[2], zend_enum_fetch_case_value(found));
+		} else {
+			ZVAL_NULL(&parts[2]);
+		}
+		if (object_init_with_constructor(&entry, enum_case, 3, parts, NULL) == FAILURE) {
+			zval_ptr_dtor(return_value);
+			RETVAL_NULL();
+			RETURN_THROWS();
+		}
+		add_next_index_zval(return_value, &entry);
 	} ZEND_HASH_FOREACH_END();
+}
+
+/* The method `name` of `ce` whose attributes `Class<T>`'s members read, as ClassMembers.reflectedMethod reflects it: a
+ * method by its name, or a property's accessor, `$name::get` or `$name::set`, a static's hidden `name#get` or `name#set`
+ * and an instance property's hook. Throws for a name `ce` runs no method of. */
+static zend_function *sharp_attributed_method(zend_class_entry *ce, zend_string *name)
+{
+	zend_function *function = NULL;
+	const char *separator = ZSTR_LEN(name) > 1 && ZSTR_VAL(name)[0] == '$'
+		? zend_memnstr(ZSTR_VAL(name) + 1, "::", 2, ZSTR_VAL(name) + ZSTR_LEN(name))
+		: NULL;
+	if (!separator) {
+		function = sharp_method_named(ce, name);
+	} else {
+		zend_string *property = zend_string_init(ZSTR_VAL(name) + 1, separator - ZSTR_VAL(name) - 1, 0);
+		const char *kind = separator + 2;
+		zend_string *hidden = zend_strpprintf(0, "%s#%s", ZSTR_VAL(property), kind);
+		function = sharp_method_named(ce, hidden);
+		zend_string_release(hidden);
+		if (!function) {
+			zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, property);
+			if (info && info->hooks) {
+				function = info->hooks[strcmp(kind, "get") == 0 ? ZEND_PROPERTY_HOOK_GET : ZEND_PROPERTY_HOOK_SET];
+			}
+		}
+		zend_string_release(property);
+	}
+	if (!function) {
+		zend_throw_error(NULL, "Method %s::%s() does not exist", ZSTR_VAL(ce->name), ZSTR_VAL(name));
+	}
+
+	return function;
+}
+
+/* Spec section 1: what each member's `attributes<T>()` gives, a new object of each attribute of the class the class value
+ * `attribute` names, or of a class that extends or implements it, or of every attribute for a class value that names no
+ * class, as the root bound `Object`'s, on the declaration `kind` of the class value `type`, as PHP's
+ * reflection reads one with ReflectionAttribute::IS_INSTANCEOF and makes each with newInstance(): "class", the
+ * method `name` for "method", its parameter at `position` for "parameter", the property or field `name`, or the
+ * storage of an `extern` one, for "property", none for one with no storage, and the constant or enum case `name` for
+ * "constant". A class's and a method's attributes include those of each `extern` line that names it, spec section 29. */
+ZEND_FUNCTION(Sharp_Internal_attributes)
+{
+	zend_string *value, *kind, *name, *attribute;
+	zend_long position;
+
+	ZEND_PARSE_PARAMETERS_START(5, 5)
+		Z_PARAM_STR(value)
+		Z_PARAM_STR(kind)
+		Z_PARAM_STR(name)
+		Z_PARAM_LONG(position)
+		Z_PARAM_STR(attribute)
+	ZEND_PARSE_PARAMETERS_END();
+
+	const sharp_type *arguments;
+	zend_class_entry *ce = sharp_class_value_declaring(value, &arguments);
+	if (!ce) {
+		RETURN_THROWS();
+	}
+	zend_class_entry *base = sharp_class_value_class(attribute);
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+
+	HashTable *attributes = NULL;
+	zend_class_entry *scope = ce;
+	zend_string *filename = NULL;
+	uint32_t target, offset = 0;
+	if (zend_string_equals_literal(kind, "class")) {
+		attributes = sharp_class_attributes(ce);
+		target = ZEND_ATTRIBUTE_TARGET_CLASS;
+	} else if (zend_string_equals_literal(kind, "method") || zend_string_equals_literal(kind, "parameter")) {
+		zend_function *function = sharp_attributed_method(ce, name);
+		if (!function) {
+			RETURN_THROWS();
+		}
+		scope = function->common.scope;
+		filename = function->type == ZEND_USER_FUNCTION ? function->op_array.filename : NULL;
+		if (zend_string_equals_literal(kind, "method")) {
+			attributes = sharp_function_attributes(function);
+			target = ZEND_ATTRIBUTE_TARGET_METHOD;
+		} else {
+			attributes = function->common.attributes;
+			offset = (uint32_t) position + 1;
+			target = ZEND_ATTRIBUTE_TARGET_PARAMETER;
+		}
+	} else if (zend_string_equals_literal(kind, "property")) {
+		zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, name);
+		if (!info) {
+			zend_string *stored = zend_string_concat2(ZSTR_VAL(name), ZSTR_LEN(name), ZEND_STRL("#extern"));
+			info = zend_hash_find_ptr(&ce->properties_info, stored);
+			zend_string_release(stored);
+		}
+		if (!info) {
+			RETURN_EMPTY_ARRAY();
+		}
+		attributes = info->attributes;
+		scope = info->ce;
+		target = ZEND_ATTRIBUTE_TARGET_PROPERTY;
+	} else if (zend_string_equals_literal(kind, "constant")) {
+		zend_class_constant *constant = zend_hash_find_ptr(CE_CONSTANTS_TABLE(ce), name);
+		if (!constant) {
+			zend_throw_error(NULL, "Constant %s::%s does not exist", ZSTR_VAL(ce->name), ZSTR_VAL(name));
+			RETURN_THROWS();
+		}
+		attributes = constant->attributes;
+		scope = constant->ce;
+		target = ZEND_ATTRIBUTE_TARGET_CLASS_CONST;
+	} else {
+		zend_argument_value_error(2, "must be \"class\", \"method\", \"parameter\", \"property\" or \"constant\"");
+		RETURN_THROWS();
+	}
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+	if (!attributes) {
+		RETURN_EMPTY_ARRAY();
+	}
+
+	if (!filename && target != ZEND_ATTRIBUTE_TARGET_METHOD && target != ZEND_ATTRIBUTE_TARGET_PARAMETER
+			&& scope->type == ZEND_USER_CLASS) {
+		filename = scope->info.user.filename;
+	}
+	zend_attribute *found;
+	array_init(return_value);
+	ZEND_HASH_PACKED_FOREACH_PTR(attributes, found) {
+		if (found->offset != offset) {
+			continue;
+		}
+		if (base) {
+			zend_class_entry *attribute_ce = zend_lookup_class_ex(found->name, found->lcname, 0);
+			if (EG(exception)) {
+				break;
+			}
+			if (!attribute_ce || !instanceof_function(attribute_ce, base)) {
+				continue;
+			}
+		}
+		zval object;
+		if (zend_get_attribute_instance(&object, attributes, found, scope, target, filename) != SUCCESS) {
+			break;
+		}
+		add_next_index_zval(return_value, &object);
+	} ZEND_HASH_FOREACH_END();
+	if (EG(exception)) {
+		zval_ptr_dtor(return_value);
+		RETVAL_NULL();
+		RETURN_THROWS();
+	}
 }
 
 /* The type the class constant `constant`, named `name`, declares, read on a class value of `ce` whose type arguments are
@@ -8220,6 +8390,51 @@ static bool sharp_type_is_any_value(const sharp_type *type)
 		&& !type->members[0]->class_name && type->members[0]->built_in == SHARP_BUILT_IN_ANY;
 }
 
+/* Whether a `Map` whose keys are of `type` takes the int keys of a plain PHP list: `int`, `Any`, an enum backed by
+ * ints, a type parameter whose bound does, and `T?` or a union with one of them. `string` does not, though PHP stores a
+ * numeric string key as an int, which sharp_type_holds_key takes. */
+static bool sharp_type_takes_int_keys(const sharp_type *type)
+{
+	switch (type->kind) {
+		case SHARP_TYPE_NULLABLE:
+		case SHARP_TYPE_PARAMETER:
+			return sharp_type_takes_int_keys(type->members[0]);
+		case SHARP_TYPE_UNION:
+			for (uint32_t i = 0; i < type->count; i++) {
+				if (sharp_type_takes_int_keys(type->members[i])) {
+					return true;
+				}
+			}
+			return false;
+		case SHARP_TYPE_NAMED:
+			break;
+		default:
+			return false;
+	}
+	if (!type->class_name) {
+		return type->built_in == SHARP_BUILT_IN_INT || type->built_in == SHARP_BUILT_IN_ANY;
+	}
+	zend_class_entry *ce = sharp_type_class(type->class_name);
+
+	return ce && (ce->ce_flags & ZEND_ACC_ENUM) && ce->enum_backing_type == IS_LONG;
+}
+
+/* Whether `array` is keyed by int alone with a gap or out of order, as array_filter leaves an array. */
+static bool sharp_array_needs_renumbering(HashTable *array)
+{
+	if (zend_array_is_list(array)) {
+		return false;
+	}
+	zend_string *name;
+	ZEND_HASH_FOREACH_STR_KEY(array, name) {
+		if (name) {
+			return false;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return true;
+}
+
 /* Whether `value`, an array, or the Sharp\Map or Sharp\Set of a `Map` or a `Set`, is of the collection `type`, each
  * element checked by sharp_type_holds. A collection of `Any?`, as `List<Any?>`, holds each element without a walk. */
 static bool sharp_type_collection_holds(
@@ -8237,7 +8452,16 @@ static bool sharp_type_collection_holds(
 		}
 		return holds;
 	}
-	if (type->built_in == SHARP_BUILT_IN_LIST && !zend_array_is_list(Z_ARRVAL_P(value))) {
+	/* Spec section 12: a PHP array is a `List` only when it is a list, and a `Set` the list of its elements, which an
+	 * array keyed by int alone is too, renumbered. A list arrives as a `List`, so a non-empty one is a `Map` only of
+	 * keys that take an int. An array that isn't a list, as `['42' => true]`, whose numeric key PHP stores as an int, is
+	 * a `Map` of string keys. An empty array is every collection. */
+	bool is_list = zend_array_is_list(Z_ARRVAL_P(value));
+	bool list_as_map = keys && is_list && zend_hash_num_elements(Z_ARRVAL_P(value)) > 0
+		&& !sharp_type_takes_int_keys(keys);
+	bool keyed_as_set = type->built_in == SHARP_BUILT_IN_SET && !is_list
+		&& !sharp_array_needs_renumbering(Z_ARRVAL_P(value));
+	if (list_as_map || keyed_as_set || (type->built_in == SHARP_BUILT_IN_LIST && !is_list)) {
 		if (problems) {
 			sharp_type_problem(problems, "", type, value);
 		}
@@ -8500,22 +8724,6 @@ static bool sharp_type_holds_list(const sharp_type *type)
 
 	return type->built_in == SHARP_BUILT_IN_LIST
 		|| (type->built_in == SHARP_BUILT_IN_MAP && sharp_type_holds_list(type->members[1]));
-}
-
-/* Whether `array` is keyed by int alone with a gap or out of order, as array_filter leaves an array. */
-static bool sharp_array_needs_renumbering(HashTable *array)
-{
-	if (zend_array_is_list(array)) {
-		return false;
-	}
-	zend_string *name;
-	ZEND_HASH_FOREACH_STR_KEY(array, name) {
-		if (name) {
-			return false;
-		}
-	} ZEND_HASH_FOREACH_END();
-
-	return true;
 }
 
 /* The type of the element at `position` of `type`, `T?` read as `T`, which sharp_type_renumber walks: NULL past a
@@ -14758,14 +14966,15 @@ static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *re
 }
 
 /* Spec section 10: the value of `type` that `value` builds in `return_value`, as a field of that type a struct's
- * `parse` reads reads it, read from text with `text`, as `Query.decode` reads it. Throws one Sharp\InvalidFields that
- * lists every bad part, under its path. */
-static void sharp_parse_as(const sharp_type *type, zval *value, bool text, zval *return_value)
+ * `parse` reads reads it, read from text with `text`, as `Query.decode` reads it. A union tries its members in `order`,
+ * the classes and scalar types its type's text was written with, as a `#fields` row's does, or in its own order when
+ * `order` is NULL. Throws one Sharp\InvalidFields that lists every bad part, under its path. */
+static void sharp_parse_as(const sharp_type *type, zval *value, bool text, const zend_string *order, zval *return_value)
 {
 	zval problems;
 	array_init(&problems);
 	sharp_read read;
-	sharp_read_start(&read, &problems, text, NULL);
+	sharp_read_start(&read, &problems, text, order);
 	ZVAL_COPY(return_value, value);
 	sharp_read_whole(type, return_value, &read);
 	sharp_read_end(&read);
@@ -15154,14 +15363,126 @@ ZEND_FUNCTION(Sharp_Internal_parseVariant)
 	if (!type) {
 		RETURN_THROWS();
 	}
-	sharp_parse_as(type, value, false, return_value);
+	sharp_parse_as(type, value, false, NULL, return_value);
 	if (!throws && EG(exception) && instanceof_function(EG(exception)->ce, zend_ce_value_error)) {
 		zend_clear_exception();
 	}
 }
 
+/* The ZEND_DO_*CALL in its caller that pushed `frame`, when it gave the method type arguments, as
+ * ZEND_SHARP_RECV_TYPE_ARGS finds it, or NULL. */
+static const zend_op *sharp_frame_call(const zend_execute_data *frame)
+{
+	const zend_execute_data *caller = frame->prev_execute_data;
+
+	if ((ZEND_CALL_INFO(frame) & (ZEND_CALL_TOP|ZEND_CALL_DYNAMIC)) == (ZEND_CALL_TOP|ZEND_CALL_DYNAMIC)
+			|| !caller || !caller->func || !ZEND_USER_CODE(caller->func->type)) {
+		return NULL;
+	}
+	const zend_op *call = caller->opline;
+	if (call->opcode != ZEND_DO_FCALL && call->opcode != ZEND_DO_UCALL && call->opcode != ZEND_DO_FCALL_BY_NAME) {
+		return NULL;
+	}
+
+	return call->op1_type == IS_TMP_VAR ? call : NULL;
+}
+
+/* The type argument `index` of the type list `text`, `Map<string, #0>` of `Map<string, #0>, int`, from `*at` to `*end`:
+ * the list split at each comma outside its brackets. Empty past its last one. */
+static void sharp_type_list_argument(const zval *text, uint32_t index, const char **at, const char **end)
+{
+	const char *next = Z_STRVAL_P(text), *stop = next + Z_STRLEN_P(text);
+	uint32_t depth = 0, argument = 0;
+
+	*at = next;
+	for (; next < stop; next++) {
+		if (*next == '<' || *next == '(' || *next == '[') {
+			depth++;
+		} else if (*next == '>' || *next == ')' || *next == ']') {
+			depth--;
+		} else if (*next == ',' && !depth) {
+			if (argument++ == index) {
+				*end = next;
+				return;
+			}
+			*at = next + sizeof(", ") - 1;
+		}
+	}
+	*end = argument == index ? stop : *at;
+}
+
+static zend_string *sharp_frame_written_order(const zend_execute_data *frame, uint32_t index);
+
+/* Appends to `order` the written order the call that pushed `frame` gave its type argument `#i`, at `at`. */
+static void sharp_order_append_parameter(smart_str *order, const zend_execute_data *frame, const char *at)
+{
+	zend_string *named = sharp_frame_written_order(frame, (uint32_t) ZEND_STRTOUL(at + 1, NULL, 10));
+	if (named) {
+		smart_str_appends(order, order->s ? ", " : "");
+		smart_str_append(order, named);
+		zend_string_release(named);
+	}
+}
+
+/* The written order of the type argument `index` the call that pushed `frame` gave it, see ZEND_AST_SHARP_TYPE_ARGS, or
+ * NULL when it wrote none. `#i` in it is the order of the type argument i the caller's own call gave it, and so is each
+ * `#i` the type argument's text names when the call wrote it no order, so a generic wrapper's order reaches the call it
+ * makes, as its type arguments do. */
+static zend_string *sharp_frame_written_order(const zend_execute_data *frame, uint32_t index)
+{
+	const zend_op *call = sharp_frame_call(frame);
+	if (!call) {
+		return NULL;
+	}
+	const zend_execute_data *caller = frame->prev_execute_data;
+	const zend_op *type_args = call;
+	do {
+		if (type_args == caller->func->op_array.opcodes) {
+			return NULL;
+		}
+		type_args--;
+	} while (type_args->opcode != ZEND_SHARP_TYPE_ARGS || type_args->result_type != IS_TMP_VAR
+		|| type_args->result.var != call->op1.var);
+	if (type_args->op2_type != IS_CONST) {
+		return NULL;
+	}
+
+	const zval *written = ZEND_SHARP_TYPE_ARGS_ORDER(type_args);
+	const char *at = Z_STRVAL_P(written), *end = at + Z_STRLEN_P(written);
+	for (uint32_t i = 0; i < index && at < end; i++) {
+		const char *split = zend_memnstr(at, "; ", sizeof("; ") - 1, end);
+		at = split ? split + sizeof("; ") - 1 : end;
+	}
+	const char *split = zend_memnstr(at, "; ", sizeof("; ") - 1, end);
+	end = split ? split : end;
+
+	smart_str order = {0};
+	if (at == end) {
+		sharp_type_list_argument(RT_CONSTANT(type_args, type_args->op2), index, &at, &end);
+		for (; at < end; at++) {
+			if (*at == '#') {
+				sharp_order_append_parameter(&order, caller, at);
+			}
+		}
+	}
+	while (at < end) {
+		const char *comma = zend_memnstr(at, ", ", sizeof(", ") - 1, end);
+		const char *stop = comma ? comma : end;
+		if (*at == '#') {
+			sharp_order_append_parameter(&order, caller, at);
+		} else if (*at != '$') {
+			smart_str_appends(&order, order.s ? ", " : "");
+			smart_str_appendl(&order, at, stop - at);
+		}
+		at = comma ? comma + sizeof(", ") - 1 : end;
+	}
+
+	return order.s ? smart_str_extract(&order) : NULL;
+}
+
 /* Spec sections 10 and 24: a struct's or a class's `parse`, `Json.decode<T>` and `Query.decode<T>`, the value of the
- * type the class value `type` holds that `value` builds, as sharp_parse_as reads it. */
+ * type the class value `type` holds that `value` builds, as sharp_parse_as reads it. A `[ParsesTypeArgument]` method,
+ * as `Json.decode<T>`, reads its type argument in the order its call wrote it. */
 ZEND_FUNCTION(Sharp_Internal_parseAs)
 {
 	zend_string *class_value;
@@ -15178,7 +15499,11 @@ ZEND_FUNCTION(Sharp_Internal_parseAs)
 	if (!type) {
 		RETURN_THROWS();
 	}
-	sharp_parse_as(type, value, text, return_value);
+	zend_string *order = sharp_frame_written_order(EX(prev_execute_data), 0);
+	sharp_parse_as(type, value, text, order, return_value);
+	if (order) {
+		zend_string_release(order);
+	}
 }
 
 /* Runs a listener on event. A table listener runs on a new object of its class, which the container builds with the
