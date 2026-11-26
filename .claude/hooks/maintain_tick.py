@@ -130,13 +130,14 @@ def lanes():
     return "\n".join([head, *rows, act])
 
 
-def targets():
-    """The orchestration and speed targets, each measured now, from targets.py."""
+def targets(limit=30):
+    """The orchestration and speed targets, each measured now, from targets.py. The hook keeps the Harness's 30 s; the
+    report runs from a shell, where 51 s at load 70 on 11-26 left every reply with no block."""
     script = os.path.expanduser("~/.claude/orchestrate/php-sharp/targets.py")
     try:
-        out = subprocess.run([sys.executable, script], capture_output=True, text=True, timeout=30)
+        out = subprocess.run([sys.executable, script], capture_output=True, text=True, timeout=limit)
     except subprocess.TimeoutExpired:
-        return f"TICK INPUT MISSING: {script} took over 30 s. Fix that before any other step of this tick."
+        return f"TICK INPUT MISSING: {script} took over {limit} s. Fix that before any other step of this tick."
     if out.returncode != 0 or not out.stdout.strip():
         return f"TICK INPUT MISSING: {script} exited {out.returncode}: {out.stderr.strip()[-400:]}. Fix that first."
     return out.stdout.strip()
@@ -225,7 +226,7 @@ def report():
     subprocess.Popen([sys.executable, os.path.expanduser("~/.claude/orchestrate/php-sharp/census.py")],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     archive_finished()
-    out = targets()
+    out = targets(limit=100)
     if out.startswith("TICK INPUT MISSING"):
         return out
     lines = out.splitlines()
