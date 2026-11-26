@@ -56,7 +56,7 @@ What it does after the change, with its edge cases and error messages.
 **Acceptance criteria:**
 - [ ] `<test name>` fails before the fix and passes after it
 - [ ] <command> prints <output>
-- [ ] `cargo clippy -- -D warnings` and `cargo fmt --check` pass on the crates it touches, and CI runs every suite
+- [ ] `CARGO_BUILD_WARNINGS=deny cargo clippy --keep-going` and `cargo fmt --check` pass on the crates it touches, and CI runs every suite
 - [ ] the pull request's `## Changelog` section says what works now and quotes what the last release did instead
 
 **Out of scope:**
