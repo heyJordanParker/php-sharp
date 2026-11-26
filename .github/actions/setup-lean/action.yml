@@ -2,7 +2,8 @@ name: Set up Lean
 description: >-
   Installs elan and the Lean version pinned in sharp/mago/crates/sharp-lean/lean/lean-toolchain, checks that its lake and lean
   run, and puts them on PATH. mago compile proves laws with Lean, and installing the pinned version up front keeps the
-  tests that run lake in parallel from each installing it.
+  tests that run lake in parallel from each installing it. A runner that keeps them, as the self-hosted Macs do, runs
+  them with no download: elan's installer downloaded on every run, though the pinned Lean was installed (#721).
 
 runs:
   using: composite
@@ -13,6 +14,9 @@ runs:
         toolchain=$(cat sharp/mago/crates/sharp-lean/lean/lean-toolchain)
         export PATH="$HOME/.elan/bin:$PATH"
         echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+        if command -v elan > /dev/null && lake +"$toolchain" --version && lean +"$toolchain" --version; then
+          exit 0
+        fi
         for attempt in 1 2 3; do
           # elan-init only sets the default toolchain, so the toolchain install is what downloads Lean.
           if curl -sSfL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --no-modify-path --default-toolchain "$toolchain"; then

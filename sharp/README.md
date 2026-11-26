@@ -19,8 +19,9 @@ Run every command from the repository root.
 ```sh
 sharp/bin/check                 # the checks a pull request's required jobs run, on this machine
 sharp/bin/check mago-checks     # only these gates of it, by name
-sharp/bin/build                 # incremental build of sharp/build/<os>-<arch>/sapi/cli/php, installed into its install/
-sharp/bin/build --clean         # rebuild from scratch
+sharp/bin/build-mago --engine --debug # build the debug engine sharp/bin/test runs, sharp/build/<os>-<arch>/sapi/cli/php
+sharp/bin/build --linux         # build the Linux engine in the sharp/docker/ image, installed into its install/
+sharp/bin/build --linux --clean # rebuild it from scratch
 sharp/bin/build-mago            # build sharp/mago/ as cargo test does, and sharp/build/<os>-<arch>/mago/debug/mago
 sharp/bin/build-mago --test-run # build sharp/build/<os>-<arch>/mago/test-run/mago, which behaves as the release
 sharp/bin/build-mago --crate mago-orchestrator # run one crate's tests, then its clippy
