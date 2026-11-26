@@ -1,211 +1,213 @@
-{
-  "jobs": [
-    {
-      "id": 139581722566,
-      "name": "WORKFLOWS",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "The actions are pinned, no Dockerfile names a syntax frontend, and actionlint passes",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139581722945,
-      "name": "CHANGES",
-      "conclusion": "failure",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Find the version, and what of its release is missing",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Find master's tip, which the batch merges onto",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Every test sharp/baseline/seconds lists exists",
-          "conclusion": "failure"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139581724531,
-      "name": "ASAN",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139582511448,
-      "name": "CI_PASSED",
-      "conclusion": "failure",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Every step of the run passed",
-          "conclusion": "failure"
-        },
-        {
-          "name": "Every job passed",
-          "conclusion": "failure"
-        },
-        {
-          "name": "Open an issue for the failed staging run",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139582511529,
-      "name": "BUILD_LINUX",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139582512037,
-      "name": "SPEC (${{ matrix.shard }}/4)",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139582512267,
-      "name": "MACOS",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139582512389,
-      "name": "IMAGE (${{ matrix.platform }})",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139582512783,
-      "name": "UPSTREAM",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139582512988,
-      "name": "LINUX (${{ matrix.shard }}/3)",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139582513137,
-      "name": "MAGO (${{ matrix.shard }}/5)",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139582513173,
-      "name": "HOSTS",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139583374013,
-      "name": "LAND",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139583374294,
-      "name": "COMPOSER",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139583374325,
-      "name": "RELEASE",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139583375154,
-      "name": "PUBLISH",
-      "conclusion": "skipped",
-      "steps": []
-    }
-  ]
-}
+[
+  {
+    "jobs": [
+      {
+        "id": 139581722566,
+        "name": "WORKFLOWS",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "The actions are pinned, no Dockerfile names a syntax frontend, and actionlint passes",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139581722945,
+        "name": "CHANGES",
+        "conclusion": "failure",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Find the version, and what of its release is missing",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Find master's tip, which the batch merges onto",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Every test sharp/baseline/seconds lists exists",
+            "conclusion": "failure"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139581724531,
+        "name": "ASAN",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139582511448,
+        "name": "CI_PASSED",
+        "conclusion": "failure",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Every step of the run passed",
+            "conclusion": "failure"
+          },
+          {
+            "name": "Every job passed",
+            "conclusion": "failure"
+          },
+          {
+            "name": "Open an issue for the failed staging run",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139582511529,
+        "name": "BUILD_LINUX",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139582512037,
+        "name": "SPEC (${{ matrix.shard }}/4)",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139582512267,
+        "name": "MACOS",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139582512389,
+        "name": "IMAGE (${{ matrix.platform }})",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139582512783,
+        "name": "UPSTREAM",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139582512988,
+        "name": "LINUX (${{ matrix.shard }}/3)",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139582513137,
+        "name": "MAGO (${{ matrix.shard }}/5)",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139582513173,
+        "name": "HOSTS",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139583374013,
+        "name": "LAND",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139583374294,
+        "name": "COMPOSER",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139583374325,
+        "name": "RELEASE",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139583375154,
+        "name": "PUBLISH",
+        "conclusion": "skipped",
+        "steps": []
+      }
+    ]
+  }
+]

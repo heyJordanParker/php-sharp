@@ -81,10 +81,10 @@ jobs:
               jq -r '.commits[] | select((.parents | length) == 2 and (.commit.message | startswith("Merge pull request #")))
                 | [(.commit.message | capture("^Merge pull request #(?<n>[0-9]+)").n), .parents[1].sha] | @tsv' \
                 <<< "$compare" | sort -n > failed-batch.tsv
-              gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/${run##*/}/jobs?per_page=100" > jobs.json
+              gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/${run##*/}/jobs?per_page=100" > jobs.json
               mkdir -p annotations
-              for job in $(jq -s -r '.[].jobs[] | select(.conclusion == "failure") | .id' jobs.json); do
-                gh api --paginate "repos/$GITHUB_REPOSITORY/check-runs/$job/annotations" > "annotations/$job.json"
+              for job in $(jq -r '.[].jobs[] | select(.conclusion == "failure") | .id' jobs.json); do
+                gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/check-runs/$job/annotations" > "annotations/$job.json"
               done
               retried=false
               while read -r number head; do

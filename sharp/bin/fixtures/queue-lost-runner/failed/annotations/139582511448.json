@@ -1,22 +1,24 @@
 [
-  {
-    "annotation_level": "notice",
-    "title": "usage",
-    "message": "cpu_seconds=0 peak_mib=958 steal_seconds=0 cpu=AMD EPYC 9V45 96-Core Processor"
-  },
-  {
-    "annotation_level": "failure",
-    "title": "",
-    "message": "Process completed with exit code 1."
-  },
-  {
-    "annotation_level": "failure",
-    "title": "",
-    "message": "Process completed with exit code 1."
-  },
-  {
-    "annotation_level": "failure",
-    "title": "CHANGES",
-    "message": "Every test sharp/baseline/seconds lists exists failed"
-  }
+  [
+    {
+      "annotation_level": "notice",
+      "title": "usage",
+      "message": "cpu_seconds=0 peak_mib=958 steal_seconds=0 cpu=AMD EPYC 9V45 96-Core Processor"
+    },
+    {
+      "annotation_level": "failure",
+      "title": "",
+      "message": "Process completed with exit code 1."
+    },
+    {
+      "annotation_level": "failure",
+      "title": "",
+      "message": "Process completed with exit code 1."
+    },
+    {
+      "annotation_level": "failure",
+      "title": "CHANGES",
+      "message": "Every test sharp/baseline/seconds lists exists failed"
+    }
+  ]
 ]

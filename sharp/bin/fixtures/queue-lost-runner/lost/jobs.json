@@ -1,1831 +1,1833 @@
-{
-  "jobs": [
-    {
-      "id": 139585311475,
-      "name": "CHANGES",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Find the version, and what of its release is missing",
-          "conclusion": "success"
-        },
-        {
-          "name": "Find master's tip, which the batch merges onto",
-          "conclusion": "success"
-        },
-        {
-          "name": "Every test sharp/baseline/seconds lists exists",
-          "conclusion": "success"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139585311778,
-      "name": "WORKFLOWS",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "The actions are pinned, no Dockerfile names a syntax frontend, and actionlint passes",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139585313106,
-      "name": "ASAN",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139586426654,
-      "name": "IMAGE (linux/amd64)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Write the release's version into the checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Pull BuildKit's image",
-          "conclusion": "success"
-        },
-        {
-          "name": "Set up Buildx with BuildKit from ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Take the tools image for the tools stage",
-          "conclusion": "success"
-        },
-        {
-          "name": "Build and push the image by digest",
-          "conclusion": "success"
-        },
-        {
-          "name": "Build and push the -dev image by digest",
-          "conclusion": "success"
-        },
-        {
-          "name": "Pull the pushed images",
-          "conclusion": "success"
-        },
-        {
-          "name": "Scan the pushed image for fixable critical and high CVEs",
-          "conclusion": "success"
-        },
-        {
-          "name": "Start the pushed image on its default command and request a page",
-          "conclusion": "success"
-        },
-        {
-          "name": "The image's php prints its version and lists the sharp extension",
-          "conclusion": "success"
-        },
-        {
-          "name": "A user other than root runs the -dev image's Lean and writes in Mago's cache folder",
-          "conclusion": "success"
-        },
-        {
-          "name": "Check that php -m lists each extension, and call into each one from FrankenPHP's php-cli",
-          "conclusion": "success"
-        },
-        {
-          "name": "Check that the -dev image's php -m lists each extension and the ones it adds, and call into each one",
-          "conclusion": "success"
-        },
-        {
-          "name": "Keep the digests for PUBLISH",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the digest for PUBLISH",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the -dev digest for PUBLISH",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post Scan the pushed image for fixable critical and high CVEs",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post Set up Buildx with BuildKit from ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139586426720,
-      "name": "IMAGE (linux/arm64)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Write the release's version into the checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Pull BuildKit's image",
-          "conclusion": "success"
-        },
-        {
-          "name": "Set up Buildx with BuildKit from ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Take the tools image for the tools stage",
-          "conclusion": "success"
-        },
-        {
-          "name": "Build and push the image by digest",
-          "conclusion": "success"
-        },
-        {
-          "name": "Build and push the -dev image by digest",
-          "conclusion": "success"
-        },
-        {
-          "name": "Pull the pushed images",
-          "conclusion": "success"
-        },
-        {
-          "name": "Scan the pushed image for fixable critical and high CVEs",
-          "conclusion": "success"
-        },
-        {
-          "name": "Start the pushed image on its default command and request a page",
-          "conclusion": "success"
-        },
-        {
-          "name": "The image's php prints its version and lists the sharp extension",
-          "conclusion": "success"
-        },
-        {
-          "name": "A user other than root runs the -dev image's Lean and writes in Mago's cache folder",
-          "conclusion": "success"
-        },
-        {
-          "name": "Check that php -m lists each extension, and call into each one from FrankenPHP's php-cli",
-          "conclusion": "success"
-        },
-        {
-          "name": "Check that the -dev image's php -m lists each extension and the ones it adds, and call into each one",
-          "conclusion": "success"
-        },
-        {
-          "name": "Keep the digests for PUBLISH",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the digest for PUBLISH",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the -dev digest for PUBLISH",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post Scan the pushed image for fixable critical and high CVEs",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post Set up Buildx with BuildKit from ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139586426806,
-      "name": "BUILD_LINUX",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Build without debug info in the sharp/docker image",
-          "conclusion": "success"
-        },
-        {
-          "name": "Build and install the engine",
-          "conclusion": "success"
-        },
-        {
-          "name": "Build the engine mago links",
-          "conclusion": "success"
-        },
-        {
-          "name": "Build mago and its test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Pack the engine and mago for the suites",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the engine and mago for the suites",
-          "conclusion": "success"
-        },
-        {
-          "name": "Pack Mago's test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload Mago's test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Verify the generated files, and that no Cargo.lock names a local source",
-          "conclusion": "success"
-        },
-        {
-          "name": "Test the doc tests and the property tests",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the test report",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139586426886,
-      "name": "MACOS / extract crate metadata",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "extract crate information",
-          "conclusion": "success"
-        },
-        {
-          "name": "The release notes are the",
-          "conclusion": "success"
-        },
-        {
-          "name": "Artifact upload: release notes",
-          "conclusion": "success"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139587195974,
-      "name": "MACOS / Create source code archives",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "Checkout source code",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Write the release's version into the checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Create source archives",
-          "conclusion": "success"
-        },
-        {
-          "name": "Generate artifact attestation (source tar.gz)",
-          "conclusion": "success"
-        },
-        {
-          "name": "Generate artifact attestation (source zip)",
-          "conclusion": "success"
-        },
-        {
-          "name": "Artifact upload: source tar.gz",
-          "conclusion": "success"
-        },
-        {
-          "name": "Artifact upload: source zip",
-          "conclusion": "success"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post Checkout source code",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139587195999,
-      "name": "MACOS / x86_64-unknown-linux-gnu (ubuntu-22.04)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "checkout source code",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Keep mago's cache folder in the checkout",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Homebrew has the build's formulae",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Build the debug engine mago links and the PHP# suite runs on",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Build mago and its test binaries",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Install elan and Lean",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Test PHP# and mago's workspace",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Upload the test reports",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Run mago from Composer on plain PHP, and stop sharp/phpunit's tests on it",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Point CARGO_TARGET_DIR at the release target",
-          "conclusion": "success"
-        },
-        {
-          "name": "set version env variable",
-          "conclusion": "success"
-        },
-        {
-          "name": "Write the release's version into the checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Install what the PHP# engine builds with",
-          "conclusion": "success"
-        },
-        {
-          "name": "install Rust toolchain",
-          "conclusion": "success"
-        },
-        {
-          "name": "install PGO tools",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "show version information (Rust, cargo, GCC)",
-          "conclusion": "success"
-        },
-        {
-          "name": "setup PHP corpus for PGO profiling",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Build the engine mago links",
-          "conclusion": "success"
-        },
-        {
-          "name": "Build the law checker mago embeds",
-          "conclusion": "success"
-        },
-        {
-          "name": "build",
-          "conclusion": "success"
-        },
-        {
-          "name": "set binary name",
-          "conclusion": "success"
-        },
-        {
-          "name": "check GLIBC version requirements",
-          "conclusion": "success"
-        },
-        {
-          "name": "The binary prints the release's version, and analyzes and compiles a one-class PHP# project",
-          "conclusion": "success"
-        },
-        {
-          "name": "Run mago from Composer on plain PHP with the release binary",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "create tarball (main binary)",
-          "conclusion": "success"
-        },
-        {
-          "name": "Generate artifact attestation (binary)",
-          "conclusion": "success"
-        },
-        {
-          "name": "Artifact upload: tarball",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "End every process the job started",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Post checkout source code",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139587196015,
-      "name": "MACOS / aarch64-apple-darwin (macos-arm64-local)",
-      "conclusion": "failure",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "checkout source code",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Keep mago's cache folder in the checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Homebrew has the build's formulae",
-          "conclusion": "success"
-        },
-        {
-          "name": "Build the debug engine mago links and the PHP# suite runs on",
-          "conclusion": "success"
-        },
-        {
-          "name": "Build mago and its test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Install elan and Lean",
-          "conclusion": "success"
-        },
-        {
-          "name": "Test PHP# and mago's workspace",
-          "conclusion": null
-        },
-        {
-          "name": "Upload the test reports",
-          "conclusion": null
-        },
-        {
-          "name": "Run mago from Composer on plain PHP, and stop sharp/phpunit's tests on it",
-          "conclusion": null
-        },
-        {
-          "name": "Point CARGO_TARGET_DIR at the release target",
-          "conclusion": null
-        },
-        {
-          "name": "set version env variable",
-          "conclusion": null
-        },
-        {
-          "name": "Write the release's version into the checkout",
-          "conclusion": null
-        },
-        {
-          "name": "Install what the PHP# engine builds with",
-          "conclusion": null
-        },
-        {
-          "name": "install Rust toolchain",
-          "conclusion": null
-        },
-        {
-          "name": "install PGO tools",
-          "conclusion": null
-        },
-        {
-          "name": "show version information (Rust, cargo, GCC)",
-          "conclusion": null
-        },
-        {
-          "name": "setup PHP corpus for PGO profiling",
-          "conclusion": null
-        },
-        {
-          "name": "Build the engine mago links",
-          "conclusion": null
-        },
-        {
-          "name": "Build the law checker mago embeds",
-          "conclusion": null
-        },
-        {
-          "name": "build",
-          "conclusion": null
-        },
-        {
-          "name": "set binary name",
-          "conclusion": null
-        },
-        {
-          "name": "check GLIBC version requirements",
-          "conclusion": null
-        },
-        {
-          "name": "The binary prints the release's version, and analyzes and compiles a one-class PHP# project",
-          "conclusion": null
-        },
-        {
-          "name": "Run mago from Composer on plain PHP with the release binary",
-          "conclusion": null
-        },
-        {
-          "name": "create tarball (main binary)",
-          "conclusion": null
-        },
-        {
-          "name": "Generate artifact attestation (binary)",
-          "conclusion": null
-        },
-        {
-          "name": "Artifact upload: tarball",
-          "conclusion": null
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": null
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": null
-        },
-        {
-          "name": "End every process the job started",
-          "conclusion": null
-        },
-        {
-          "name": "Post checkout source code",
-          "conclusion": null
-        }
-      ]
-    },
-    {
-      "id": 139587196058,
-      "name": "MACOS / aarch64-unknown-linux-gnu (ubuntu-24.04-arm)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "checkout source code",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Keep mago's cache folder in the checkout",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Homebrew has the build's formulae",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Build the debug engine mago links and the PHP# suite runs on",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Build mago and its test binaries",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Install elan and Lean",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Test PHP# and mago's workspace",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Upload the test reports",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Run mago from Composer on plain PHP, and stop sharp/phpunit's tests on it",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Point CARGO_TARGET_DIR at the release target",
-          "conclusion": "success"
-        },
-        {
-          "name": "set version env variable",
-          "conclusion": "success"
-        },
-        {
-          "name": "Write the release's version into the checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Install what the PHP# engine builds with",
-          "conclusion": "success"
-        },
-        {
-          "name": "install Rust toolchain",
-          "conclusion": "success"
-        },
-        {
-          "name": "install PGO tools",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "show version information (Rust, cargo, GCC)",
-          "conclusion": "success"
-        },
-        {
-          "name": "setup PHP corpus for PGO profiling",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Build the engine mago links",
-          "conclusion": "success"
-        },
-        {
-          "name": "Build the law checker mago embeds",
-          "conclusion": "success"
-        },
-        {
-          "name": "build",
-          "conclusion": "success"
-        },
-        {
-          "name": "set binary name",
-          "conclusion": "success"
-        },
-        {
-          "name": "check GLIBC version requirements",
-          "conclusion": "success"
-        },
-        {
-          "name": "The binary prints the release's version, and analyzes and compiles a one-class PHP# project",
-          "conclusion": "success"
-        },
-        {
-          "name": "Run mago from Composer on plain PHP with the release binary",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "create tarball (main binary)",
-          "conclusion": "success"
-        },
-        {
-          "name": "Generate artifact attestation (binary)",
-          "conclusion": "success"
-        },
-        {
-          "name": "Artifact upload: tarball",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "End every process the job started",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Post checkout source code",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596877796,
-      "name": "LINUX (2/3)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Test PHP#",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the test report",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596877821,
-      "name": "SPEC (2/4)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Check the examples of docs/spec.md and README.md",
-          "conclusion": "success"
-        },
-        {
-          "name": "mago downloaded no Lean",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596877822,
-      "name": "HOSTS",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Serve the fixture from FrankenPHP",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596877835,
-      "name": "SPEC (3/4)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Check the examples of docs/spec.md and README.md",
-          "conclusion": "success"
-        },
-        {
-          "name": "mago downloaded no Lean",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596877837,
-      "name": "LINUX (3/3)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Test PHP#",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the test report",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596877853,
-      "name": "LINUX (1/3)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Test PHP#",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the test report",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596877874,
-      "name": "UPSTREAM",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Test upstream",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the test report",
-          "conclusion": "success"
-        },
-        {
-          "name": "Check sharp/bin/spec's rules on sharp/spec-self-test.md",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596877893,
-      "name": "SPEC (1/4)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Check the examples of docs/spec.md and README.md",
-          "conclusion": "success"
-        },
-        {
-          "name": "mago downloaded no Lean",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596877916,
-      "name": "SPEC (4/4)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's engine and mago, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's engine and mago",
-          "conclusion": "success"
-        },
-        {
-          "name": "Check the examples of docs/spec.md and README.md",
-          "conclusion": "success"
-        },
-        {
-          "name": "mago downloaded no Lean",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596878022,
-      "name": "MAGO (3/5)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's test binaries, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Test a fifth of the workspace's tests",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the test report",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596878052,
-      "name": "MAGO (2/5)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's test binaries, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Test a fifth of the workspace's tests",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the test report",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596878068,
-      "name": "MAGO (5/5)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's test binaries, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Test a fifth of the workspace's tests",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the test report",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596878095,
-      "name": "MAGO (1/5)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's test binaries, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Test a fifth of the workspace's tests",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the test report",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139596878096,
-      "name": "MAGO (4/5)",
-      "conclusion": "success",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Log in to ghcr.io",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Download BUILD_LINUX's test binaries, the second try",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Unpack BUILD_LINUX's test binaries",
-          "conclusion": "success"
-        },
-        {
-          "name": "Test a fifth of the workspace's tests",
-          "conclusion": "success"
-        },
-        {
-          "name": "Upload the test report",
-          "conclusion": "success"
-        },
-        {
-          "name": "Cancel the run, which can no longer pass",
-          "conclusion": "skipped"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139598084210,
-      "name": "MACOS / Write the SHA-256 of every asset",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139604948810,
-      "name": "CI_PASSED",
-      "conclusion": "failure",
-      "steps": [
-        {
-          "name": "Set up job",
-          "conclusion": "success"
-        },
-        {
-          "name": "git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Measure the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Every step of the run passed",
-          "conclusion": "success"
-        },
-        {
-          "name": "Every job passed",
-          "conclusion": "failure"
-        },
-        {
-          "name": "Open an issue for the failed staging run",
-          "conclusion": "success"
-        },
-        {
-          "name": "Write the job's CPU-seconds and peak memory",
-          "conclusion": "success"
-        },
-        {
-          "name": "Post git checkout",
-          "conclusion": "success"
-        },
-        {
-          "name": "Complete job",
-          "conclusion": "success"
-        }
-      ]
-    },
-    {
-      "id": 139605051350,
-      "name": "RELEASE",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139605051384,
-      "name": "LAND",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139605052109,
-      "name": "PUBLISH",
-      "conclusion": "skipped",
-      "steps": []
-    },
-    {
-      "id": 139605053674,
-      "name": "COMPOSER",
-      "conclusion": "skipped",
-      "steps": []
-    }
-  ]
-}
+[
+  {
+    "jobs": [
+      {
+        "id": 139585311475,
+        "name": "CHANGES",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Find the version, and what of its release is missing",
+            "conclusion": "success"
+          },
+          {
+            "name": "Find master's tip, which the batch merges onto",
+            "conclusion": "success"
+          },
+          {
+            "name": "Every test sharp/baseline/seconds lists exists",
+            "conclusion": "success"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139585311778,
+        "name": "WORKFLOWS",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "The actions are pinned, no Dockerfile names a syntax frontend, and actionlint passes",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139585313106,
+        "name": "ASAN",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139586426654,
+        "name": "IMAGE (linux/amd64)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Write the release's version into the checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Pull BuildKit's image",
+            "conclusion": "success"
+          },
+          {
+            "name": "Set up Buildx with BuildKit from ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Take the tools image for the tools stage",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build and push the image by digest",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build and push the -dev image by digest",
+            "conclusion": "success"
+          },
+          {
+            "name": "Pull the pushed images",
+            "conclusion": "success"
+          },
+          {
+            "name": "Scan the pushed image for fixable critical and high CVEs",
+            "conclusion": "success"
+          },
+          {
+            "name": "Start the pushed image on its default command and request a page",
+            "conclusion": "success"
+          },
+          {
+            "name": "The image's php prints its version and lists the sharp extension",
+            "conclusion": "success"
+          },
+          {
+            "name": "A user other than root runs the -dev image's Lean and writes in Mago's cache folder",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check that php -m lists each extension, and call into each one from FrankenPHP's php-cli",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check that the -dev image's php -m lists each extension and the ones it adds, and call into each one",
+            "conclusion": "success"
+          },
+          {
+            "name": "Keep the digests for PUBLISH",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the digest for PUBLISH",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the -dev digest for PUBLISH",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Scan the pushed image for fixable critical and high CVEs",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Set up Buildx with BuildKit from ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139586426720,
+        "name": "IMAGE (linux/arm64)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Write the release's version into the checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Pull BuildKit's image",
+            "conclusion": "success"
+          },
+          {
+            "name": "Set up Buildx with BuildKit from ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Take the tools image for the tools stage",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build and push the image by digest",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build and push the -dev image by digest",
+            "conclusion": "success"
+          },
+          {
+            "name": "Pull the pushed images",
+            "conclusion": "success"
+          },
+          {
+            "name": "Scan the pushed image for fixable critical and high CVEs",
+            "conclusion": "success"
+          },
+          {
+            "name": "Start the pushed image on its default command and request a page",
+            "conclusion": "success"
+          },
+          {
+            "name": "The image's php prints its version and lists the sharp extension",
+            "conclusion": "success"
+          },
+          {
+            "name": "A user other than root runs the -dev image's Lean and writes in Mago's cache folder",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check that php -m lists each extension, and call into each one from FrankenPHP's php-cli",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check that the -dev image's php -m lists each extension and the ones it adds, and call into each one",
+            "conclusion": "success"
+          },
+          {
+            "name": "Keep the digests for PUBLISH",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the digest for PUBLISH",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the -dev digest for PUBLISH",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Scan the pushed image for fixable critical and high CVEs",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Set up Buildx with BuildKit from ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139586426806,
+        "name": "BUILD_LINUX",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build without debug info in the sharp/docker image",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build and install the engine",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build the engine mago links",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build mago and its test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Pack the engine and mago for the suites",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the engine and mago for the suites",
+            "conclusion": "success"
+          },
+          {
+            "name": "Pack Mago's test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload Mago's test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Verify the generated files, and that no Cargo.lock names a local source",
+            "conclusion": "success"
+          },
+          {
+            "name": "Test the doc tests and the property tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the test report",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139586426886,
+        "name": "MACOS / extract crate metadata",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "extract crate information",
+            "conclusion": "success"
+          },
+          {
+            "name": "The release notes are the",
+            "conclusion": "success"
+          },
+          {
+            "name": "Artifact upload: release notes",
+            "conclusion": "success"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139587195974,
+        "name": "MACOS / Create source code archives",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "Checkout source code",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Write the release's version into the checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Create source archives",
+            "conclusion": "success"
+          },
+          {
+            "name": "Generate artifact attestation (source tar.gz)",
+            "conclusion": "success"
+          },
+          {
+            "name": "Generate artifact attestation (source zip)",
+            "conclusion": "success"
+          },
+          {
+            "name": "Artifact upload: source tar.gz",
+            "conclusion": "success"
+          },
+          {
+            "name": "Artifact upload: source zip",
+            "conclusion": "success"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post Checkout source code",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139587195999,
+        "name": "MACOS / x86_64-unknown-linux-gnu (ubuntu-22.04)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "checkout source code",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Keep mago's cache folder in the checkout",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Homebrew has the build's formulae",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Build the debug engine mago links and the PHP# suite runs on",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Build mago and its test binaries",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Install elan and Lean",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Test PHP# and mago's workspace",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Upload the test reports",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Run mago from Composer on plain PHP, and stop sharp/phpunit's tests on it",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Point CARGO_TARGET_DIR at the release target",
+            "conclusion": "success"
+          },
+          {
+            "name": "set version env variable",
+            "conclusion": "success"
+          },
+          {
+            "name": "Write the release's version into the checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install what the PHP# engine builds with",
+            "conclusion": "success"
+          },
+          {
+            "name": "install Rust toolchain",
+            "conclusion": "success"
+          },
+          {
+            "name": "install PGO tools",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "show version information (Rust, cargo, GCC)",
+            "conclusion": "success"
+          },
+          {
+            "name": "setup PHP corpus for PGO profiling",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Build the engine mago links",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build the law checker mago embeds",
+            "conclusion": "success"
+          },
+          {
+            "name": "build",
+            "conclusion": "success"
+          },
+          {
+            "name": "set binary name",
+            "conclusion": "success"
+          },
+          {
+            "name": "check GLIBC version requirements",
+            "conclusion": "success"
+          },
+          {
+            "name": "The binary prints the release's version, and analyzes and compiles a one-class PHP# project",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run mago from Composer on plain PHP with the release binary",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "create tarball (main binary)",
+            "conclusion": "success"
+          },
+          {
+            "name": "Generate artifact attestation (binary)",
+            "conclusion": "success"
+          },
+          {
+            "name": "Artifact upload: tarball",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "End every process the job started",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Post checkout source code",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139587196015,
+        "name": "MACOS / aarch64-apple-darwin (macos-arm64-local)",
+        "conclusion": "failure",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "checkout source code",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Keep mago's cache folder in the checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Homebrew has the build's formulae",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build the debug engine mago links and the PHP# suite runs on",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build mago and its test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install elan and Lean",
+            "conclusion": "success"
+          },
+          {
+            "name": "Test PHP# and mago's workspace",
+            "conclusion": null
+          },
+          {
+            "name": "Upload the test reports",
+            "conclusion": null
+          },
+          {
+            "name": "Run mago from Composer on plain PHP, and stop sharp/phpunit's tests on it",
+            "conclusion": null
+          },
+          {
+            "name": "Point CARGO_TARGET_DIR at the release target",
+            "conclusion": null
+          },
+          {
+            "name": "set version env variable",
+            "conclusion": null
+          },
+          {
+            "name": "Write the release's version into the checkout",
+            "conclusion": null
+          },
+          {
+            "name": "Install what the PHP# engine builds with",
+            "conclusion": null
+          },
+          {
+            "name": "install Rust toolchain",
+            "conclusion": null
+          },
+          {
+            "name": "install PGO tools",
+            "conclusion": null
+          },
+          {
+            "name": "show version information (Rust, cargo, GCC)",
+            "conclusion": null
+          },
+          {
+            "name": "setup PHP corpus for PGO profiling",
+            "conclusion": null
+          },
+          {
+            "name": "Build the engine mago links",
+            "conclusion": null
+          },
+          {
+            "name": "Build the law checker mago embeds",
+            "conclusion": null
+          },
+          {
+            "name": "build",
+            "conclusion": null
+          },
+          {
+            "name": "set binary name",
+            "conclusion": null
+          },
+          {
+            "name": "check GLIBC version requirements",
+            "conclusion": null
+          },
+          {
+            "name": "The binary prints the release's version, and analyzes and compiles a one-class PHP# project",
+            "conclusion": null
+          },
+          {
+            "name": "Run mago from Composer on plain PHP with the release binary",
+            "conclusion": null
+          },
+          {
+            "name": "create tarball (main binary)",
+            "conclusion": null
+          },
+          {
+            "name": "Generate artifact attestation (binary)",
+            "conclusion": null
+          },
+          {
+            "name": "Artifact upload: tarball",
+            "conclusion": null
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": null
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": null
+          },
+          {
+            "name": "End every process the job started",
+            "conclusion": null
+          },
+          {
+            "name": "Post checkout source code",
+            "conclusion": null
+          }
+        ]
+      },
+      {
+        "id": 139587196058,
+        "name": "MACOS / aarch64-unknown-linux-gnu (ubuntu-24.04-arm)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "checkout source code",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Keep mago's cache folder in the checkout",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Homebrew has the build's formulae",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Build the debug engine mago links and the PHP# suite runs on",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Build mago and its test binaries",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Install elan and Lean",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Test PHP# and mago's workspace",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Upload the test reports",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Run mago from Composer on plain PHP, and stop sharp/phpunit's tests on it",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Point CARGO_TARGET_DIR at the release target",
+            "conclusion": "success"
+          },
+          {
+            "name": "set version env variable",
+            "conclusion": "success"
+          },
+          {
+            "name": "Write the release's version into the checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Install what the PHP# engine builds with",
+            "conclusion": "success"
+          },
+          {
+            "name": "install Rust toolchain",
+            "conclusion": "success"
+          },
+          {
+            "name": "install PGO tools",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "show version information (Rust, cargo, GCC)",
+            "conclusion": "success"
+          },
+          {
+            "name": "setup PHP corpus for PGO profiling",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Build the engine mago links",
+            "conclusion": "success"
+          },
+          {
+            "name": "Build the law checker mago embeds",
+            "conclusion": "success"
+          },
+          {
+            "name": "build",
+            "conclusion": "success"
+          },
+          {
+            "name": "set binary name",
+            "conclusion": "success"
+          },
+          {
+            "name": "check GLIBC version requirements",
+            "conclusion": "success"
+          },
+          {
+            "name": "The binary prints the release's version, and analyzes and compiles a one-class PHP# project",
+            "conclusion": "success"
+          },
+          {
+            "name": "Run mago from Composer on plain PHP with the release binary",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "create tarball (main binary)",
+            "conclusion": "success"
+          },
+          {
+            "name": "Generate artifact attestation (binary)",
+            "conclusion": "success"
+          },
+          {
+            "name": "Artifact upload: tarball",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "End every process the job started",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Post checkout source code",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596877796,
+        "name": "LINUX (2/3)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Test PHP#",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the test report",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596877821,
+        "name": "SPEC (2/4)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check the examples of docs/spec.md and README.md",
+            "conclusion": "success"
+          },
+          {
+            "name": "mago downloaded no Lean",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596877822,
+        "name": "HOSTS",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Serve the fixture from FrankenPHP",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596877835,
+        "name": "SPEC (3/4)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check the examples of docs/spec.md and README.md",
+            "conclusion": "success"
+          },
+          {
+            "name": "mago downloaded no Lean",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596877837,
+        "name": "LINUX (3/3)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Test PHP#",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the test report",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596877853,
+        "name": "LINUX (1/3)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Test PHP#",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the test report",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596877874,
+        "name": "UPSTREAM",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Test upstream",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the test report",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check sharp/bin/spec's rules on sharp/spec-self-test.md",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596877893,
+        "name": "SPEC (1/4)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check the examples of docs/spec.md and README.md",
+            "conclusion": "success"
+          },
+          {
+            "name": "mago downloaded no Lean",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596877916,
+        "name": "SPEC (4/4)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's engine and mago, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's engine and mago",
+            "conclusion": "success"
+          },
+          {
+            "name": "Check the examples of docs/spec.md and README.md",
+            "conclusion": "success"
+          },
+          {
+            "name": "mago downloaded no Lean",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596878022,
+        "name": "MAGO (3/5)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's test binaries, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Test a fifth of the workspace's tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the test report",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596878052,
+        "name": "MAGO (2/5)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's test binaries, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Test a fifth of the workspace's tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the test report",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596878068,
+        "name": "MAGO (5/5)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's test binaries, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Test a fifth of the workspace's tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the test report",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596878095,
+        "name": "MAGO (1/5)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's test binaries, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Test a fifth of the workspace's tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the test report",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139596878096,
+        "name": "MAGO (4/5)",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Log in to ghcr.io",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Download BUILD_LINUX's test binaries, the second try",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Unpack BUILD_LINUX's test binaries",
+            "conclusion": "success"
+          },
+          {
+            "name": "Test a fifth of the workspace's tests",
+            "conclusion": "success"
+          },
+          {
+            "name": "Upload the test report",
+            "conclusion": "success"
+          },
+          {
+            "name": "Cancel the run, which can no longer pass",
+            "conclusion": "skipped"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139598084210,
+        "name": "MACOS / Write the SHA-256 of every asset",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139604948810,
+        "name": "CI_PASSED",
+        "conclusion": "failure",
+        "steps": [
+          {
+            "name": "Set up job",
+            "conclusion": "success"
+          },
+          {
+            "name": "git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Measure the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Every step of the run passed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Every job passed",
+            "conclusion": "failure"
+          },
+          {
+            "name": "Open an issue for the failed staging run",
+            "conclusion": "success"
+          },
+          {
+            "name": "Write the job's CPU-seconds and peak memory",
+            "conclusion": "success"
+          },
+          {
+            "name": "Post git checkout",
+            "conclusion": "success"
+          },
+          {
+            "name": "Complete job",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 139605051350,
+        "name": "RELEASE",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139605051384,
+        "name": "LAND",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139605052109,
+        "name": "PUBLISH",
+        "conclusion": "skipped",
+        "steps": []
+      },
+      {
+        "id": 139605053674,
+        "name": "COMPOSER",
+        "conclusion": "skipped",
+        "steps": []
+      }
+    ]
+  }
+]
