@@ -50,11 +50,12 @@ Every target's definition, and each decision behind the loop's scripts, is a com
 ### Keep one long-lived builder per lane
 The lanes are speed, CI, engine and laws, each held by one long-lived builder that every batch of that lane goes to. An issue whose brief shares a file with a running lane joins that lane, and `state.md` lists each lane's files and queue. Every slot holds a working builder: a red check or a blocked release stops no other lane.
 
-### Run at most 4 agents
-At most 4 agents run at once, builders and their subagents included. Speed holds one slot while a speed target is off its goal, and the other three hold the lanes whose work ranks highest:
+### Run at most 4 agents: two keep PHP# running, one speeds CI, one speeds our loops
+At most 4 agents run at once, builders and their subagents included. The engine and laws lanes fix what stops PHP# from running for a consumer. The CI lane makes a CI run faster. The speed lane makes the compile, the tests and the builds faster. Each lane ranks its batch:
 1. A red check or a `blocking` issue, verified by the maintainer's own commands the turn it returns.
-2. A defect a consumer hits, or a speed change.
-3. An approved change consumers rewrite code for, then an issue that unblocks other lanes.
+2. A defect a consumer hits. The engine and laws lanes take every one before anything below it.
+3. A change that makes our own iterations faster: the tests, the builds, CI.
+4. Everything else: an approved change consumers rewrite code for, cleanup, PHP# used for its own tooling.
 ### Dispatch `/implement #<issue>@<its newest comment's HH:MM> …` once per batch, and nothing else
 The batch is every ready issue in the lane, in rank order, with a red check the lane's own commit caused first. A `blocking` issue is a batch of its own, sent the tick it is briefed. Read each issue's thread first: no dispatch breaks its rulings. A correction is a `Brief update:` comment of its own on the issue, then the same dispatch again. Rule on a builder's pushback, and on any public name it invents, in the issue, from the code and the spec.
 Never: a message that carries instructions, rulings or context.
