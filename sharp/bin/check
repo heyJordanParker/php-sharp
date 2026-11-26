@@ -8,7 +8,7 @@ set -euo pipefail
 # BUILD_LINUX the generated files, WORKFLOWS the workflows, and MAGO_CHECKS and PLAIN_PHP theirs.
 #
 # With --release, it prints what CI's CHANGES jobs write to $GITHUB_OUTPUT about the release the checked-out commit
-# publishes: the version; tagged, the commit when tag v<version> already names it, empty until RELEASE creates it;
+# publishes: the version; tagged, the commit when tag v<version> already names it, empty until PUBLISH creates it;
 # pulls, the pull requests whose head the commit holds since the newest tag, whose ## Changelog sections are the
 # release's notes; missing, each part of the release not published yet; and bump, whether any is. A pull request title
 # after --release counts as one more pull request, which is a dry run of the version.
@@ -35,16 +35,17 @@ export CARGO_BUILD_JOBS
 # composer, tag v<version> of heyJordanParker/php-sharp-composer and heyJordanParker/mago-sharp. A rerun of the push run
 # whose commit the tag names publishes what an earlier attempt left missing, since only that run built its assets and
 # images. Run 45033462105 published a GitHub release and failed before its images and its Composer tags, which a check
-# of the tag alone then counted as released. So the GitHub release is public last: RELEASE fills it as a draft and tags
-# the images, COMPOSER pushes the mirrors' tags, and PUBLISH makes it public, and assets is missing until it is. The
-# image and the mirrors are public, so their checks need no login. git
+# of the tag alone then counted as released. So RELEASE fills an untagged draft, PUBLISH makes it public, which creates
+# the tag, and then tags the images, and COMPOSER pushes the mirrors' tags last, and assets is missing until the
+# release is public. The image and the mirrors are public, so their checks need no login. git
 # ls-remote --exit-code exits 2 when a remote has no such ref, and with another code when it can't ask.
 #
 # A version lives in its tag alone. A commit a tag already names publishes that tag's version, so a rerun finishes the
 # release it started. Any other commit publishes the newest tag's version plus one patch, or one minor when the title of
-# a pull request the commit holds since that tag has `!` before its colon, as range_pulls finds them. RELEASE tags the
-# commit once every check passed, and staging's runs run one at a time, so a red run makes no tag and two runs never
-# take one version. A release's notes are every pull request it holds since the newest published release, so a release
+# a pull request the commit holds since that tag has `!` before its colon, as range_pulls finds them. PUBLISH creates
+# the tag as it makes the release public, and staging's runs run one at a time, so a run that fails before that leaves
+# at most an untagged draft, the next run takes the same version, and two runs never take one version (#854). A
+# release's notes are every pull request it holds since the newest published release, so a release
 # after a tag whose release never published carries that tag's pull requests too, as run 45434990708 tagged a release
 # that stayed a draft. CI's checkout holds one commit, so the release fetches the commits since that release, without
 # their trees, in 3.5 s on a test.

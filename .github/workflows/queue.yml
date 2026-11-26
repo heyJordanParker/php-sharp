@@ -48,7 +48,9 @@ jobs:
       # staging holds master's tip and the last batch merged onto it. While a staging run of it hasn't ended, the batch
       # waits. A batch master doesn't hold failed: one that held one pull request leaves that pull request out, with a
       # comment, until its head moves, and one that held more takes its oldest pull request alone, so one broken change
-      # never holds the others. Every other batch takes every ready pull request, oldest first.
+      # never holds the others, unless that pull request is no longer ready, as a draft or with auto-merge off, which
+      # stopped every batch while staging held the failed one (#875). Every other batch takes every ready pull request,
+      # oldest first, as bors-ng's and GitHub's merge queue go on without a pull request that left the queue.
       - name: Merge the ready pull requests onto master and push them to staging
         shell: bash
         run: |
@@ -97,6 +99,10 @@ jobs:
                     | [$checks[] | select((.name // .context) == $name) | (.conclusion // .state)] | length > 0 and all(. == "SUCCESS")))
                 | [.number, .headRefOid, .headRepositoryOwner.login, .headRefName, .title] | @tsv' "${required[@]}" \
             | sort -n > ready.tsv
+          if [[ -n $only ]] && ! cut -f 1 ready.tsv | grep -qx "$only"; then
+            echo "#$only, the failed batch's oldest pull request, is no longer ready, so this batch takes every ready pull request."
+            only=
+          fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           batch=()

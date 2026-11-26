@@ -29,6 +29,7 @@ SKIPPED	Zend/tests/type_coercion/float_to_int/explicit_casts_should_not_warn_32b
 SKIPPED	Zend/tests/type_coercion/float_to_int/warning_float_does_not_fit_zend_long_strings_32bit.phpt
 SKIPPED	Zend/tests/type_declarations/scalar_return_basic.phpt
 SKIPPED	Zend/tests/type_declarations/scalar_strict.phpt
+SKIPPED	Zend/tests/zend_mm_chunk_alloc_mmap_failure.phpt
 SKIPPED	Zend/tests/zend_signed_multiply-32bit.phpt
 SKIPPED	ext/opcache/tests/api/opcache_preloading_002.phpt
 SKIPPED	ext/opcache/tests/blacklist-win32.phpt
@@ -40,6 +41,8 @@ SKIPPED	ext/opcache/tests/gh18417.phpt
 SKIPPED	ext/opcache/tests/gh8466.phpt
 SKIPPED	ext/opcache/tests/jit/bug80426.phpt
 SKIPPED	ext/opcache/tests/jit/gh21710.phpt
+SKIPPED	ext/opcache/tests/jit/preload_restart_function_jit.phpt
+SKIPPED	ext/opcache/tests/jit/preload_restart_hot_counters.phpt
 SKIPPED	ext/opcache/tests/jit/reg_alloc_003_32bits.phpt
 SKIPPED	ext/opcache/tests/preload_user_002.phpt
 SKIPPED	ext/opcache/tests/preload_user_003.phpt

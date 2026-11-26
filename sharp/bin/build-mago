@@ -198,7 +198,14 @@ build_engine() {
   fi
   CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")" "$record" make -- \
     make -C "$engine" -j"$("$root/sharp/bin/jobs")" "${linked[@]}" "${programs[@]}" >/dev/null
-  "$record" "make install" -- make -C "$engine" install-headers install-programs >/dev/null
+  # The install copies the headers, php-config and phpize, which change only with a configure or a header, never with
+  # an object, so it runs only when one of those is newer than the last install.
+  installed="$engine/install/installed"
+  if [[ ! -f $installed || $stamp -nt $installed ]] || [[ -n "$(find "$root/Zend" "$root/main" "$root/TSRM" "$root/ext" \
+    "$root/sapi/embed" "$engine/main" "$engine/Zend" -name '*.h' -newer "$installed" -print -quit)" ]]; then
+    "$record" "make install" -- make -C "$engine" install-headers install-programs >/dev/null
+    touch "$installed"
+  fi
 
   # So the archive mago links holds those objects, and the static archive of each library the link names, so the linker
   # finds every symbol in one archive whatever order they need each other in. libsharp.a stays out: it bundles a Rust
