@@ -467,8 +467,8 @@ jobs:
           echo "binary for target '${{ matrix.job.target }}' requires the following GLIBC versions:"
           strings "${{ steps.bin.outputs.BIN_PATH }}" | grep GLIBC_ || echo "No GLIBC version strings found."
 
-      # The calling run's suites check the tree, so this checks only the binary this job builds, as mago.yml's
-      # plain-php job checks the one CI built.
+      # The calling run's suites check the tree, so this checks only the binary this job builds, as sharp.yml's
+      # PLAIN_PHP checks the one CI built.
       - name: The binary prints the release's version, and analyzes and compiles a one-class PHP# project
         if: inputs.assets
         shell: bash
@@ -510,7 +510,7 @@ jobs:
           "$mago" compile
 
       # sharp/bin/check plain-php on the Mac's Homebrew PHP, with the release binary, in the folder that check reads the
-      # test-run mago from, as the Mac's tests run it with the dev build and mago.yml's plain-php with Linux's test-run
+      # test-run mago from, as the Mac's tests run it with the dev build and sharp.yml's PLAIN_PHP with Linux's test-run
       # build.
       - name: Run mago from Composer on plain PHP with the release binary
         if: inputs.assets && runner.os == 'macOS'

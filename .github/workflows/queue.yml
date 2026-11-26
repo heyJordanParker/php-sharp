@@ -16,7 +16,7 @@ on:
       - master
   # A pull request's own runs ending can make it ready, and a staging run ending frees staging.
   workflow_run:
-    workflows: [PHP#, Mago, Spec guard]
+    workflows: [PHP#, Spec guard]
     types: [completed]
 permissions:
   contents: read
