@@ -13404,14 +13404,20 @@ static void sharp_read_whole(const sharp_type *type, zval *value, sharp_read *re
 	ZVAL_COPY_VALUE(&read->texts, &outer_texts);
 }
 
-/* The class whose terms the type text of the field `name` of the struct or class `ce`'s `#fields` is written in: the
- * class that declares its property, as `PaginatedList<TItem>` declares `items` for `OrderPage : PaginatedList<Order>`,
- * or `ce` for a main constructor parameter that holds no property. */
-static const zend_class_entry *sharp_field_scope(const zend_class_entry *ce, zend_string *name)
+/* The class among `ce` and its parents that the row `parts` of `ce`'s `#fields` names as the one that declares its
+ * field: the class whose terms the field's type text is written in, as `PaginatedList<TItem>` declares `items` for
+ * `OrderPage : PaginatedList<Order>`, and in whose scope the field is written, so a parent's private property is. */
+static const zend_class_entry *sharp_field_scope(const zend_class_entry *ce, HashTable *parts)
 {
-	const zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, name);
+	zend_string *declaring = Z_STR_P(zend_hash_index_find(parts, 5));
+	for (const zend_class_entry *scope = ce; scope; scope = scope->parent) {
+		if (zend_string_equals_ci(scope->name, declaring)) {
+			return scope;
+		}
+	}
+	ZEND_ASSERT(0 && "a #fields row names its class or one of its parents");
 
-	return info ? info->ce : ce;
+	return ce;
 }
 
 /* Spec section 10: builds in `built` the struct or class `ce`, of the type arguments `arguments` or none, from `value`,
@@ -13433,17 +13439,20 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 	const zend_class_entry *holder = read->holder;
 	const zend_string *holder_field = read->field;
 
+	/* A parameter is passed by its name, and a property is kept by its row, since a parent's private property and the
+	 * class's own may share a name. */
+	zend_ulong index;
 	zval *row;
-	ZEND_HASH_FOREACH_VAL(Z_ARRVAL(rows), row) {
+	ZEND_HASH_FOREACH_NUM_KEY_VAL(Z_ARRVAL(rows), index, row) {
 		HashTable *parts = Z_ARRVAL_P(row);
 		zend_string *name = Z_STR_P(zend_hash_index_find(parts, 0));
 		zend_string *key = Z_STR_P(zend_hash_index_find(parts, 1));
 		zend_string *written = Z_STR_P(zend_hash_index_find(parts, 2));
-		zval *into = Z_TYPE_P(zend_hash_index_find(parts, 3)) == IS_TRUE ? &parameters : &properties;
+		bool parameter = Z_TYPE_P(zend_hash_index_find(parts, 3)) == IS_TRUE;
 		bool optional = Z_TYPE_P(zend_hash_index_find(parts, 4)) == IS_TRUE;
-		zval *written_order = zend_hash_index_find(parts, 5);
+		zval *written_order = zend_hash_index_find(parts, 6);
 		const sharp_type *types =
-			sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), sharp_field_scope(ce, name), ce, arguments);
+			sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), sharp_field_scope(ce, parts), ce, arguments);
 		ZEND_ASSERT(types != NULL && "the compile writes each field's type as one PHP# type");
 		const sharp_type *type = types->members[0];
 		if (length) {
@@ -13463,12 +13472,20 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 			sharp_read_whole(type, &field_value, read);
 			read->holder = holder;
 			read->field = holder_field;
-			zend_hash_update(Z_ARRVAL_P(into), name, &field_value);
+			if (parameter) {
+				zend_hash_update(Z_ARRVAL(parameters), name, &field_value);
+			} else {
+				zend_hash_index_update(Z_ARRVAL(properties), index, &field_value);
+			}
 		} else if (!optional) {
 			zval missing;
 			if (type->kind == SHARP_TYPE_NULLABLE || zend_string_equals_literal(type->text, "Any?")) {
 				ZVAL_NULL(&missing);
-				zend_hash_update(Z_ARRVAL_P(into), name, &missing);
+				if (parameter) {
+					zend_hash_update(Z_ARRVAL(parameters), name, &missing);
+				} else {
+					zend_hash_index_update(Z_ARRVAL(properties), index, &missing);
+				}
 			} else {
 				ZVAL_STRINGL(&missing, "missing", sizeof("missing") - 1);
 				sharp_read_note(read->found.problems, read, &missing);
@@ -13481,7 +13498,6 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 		}
 	} ZEND_HASH_FOREACH_END();
 	read->order = order;
-	zval_ptr_dtor(&rows);
 
 	if (!EG(exception) && zend_hash_num_elements(problems) > found) {
 		sharp_read_fail(read);
@@ -13502,13 +13518,14 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 		for (uint32_t i = 0; readonly && i < ce->default_properties_count; i++) {
 			Z_PROP_FLAG_P(OBJ_PROP_NUM(object, i)) |= IS_PROP_REINITABLE;
 		}
-		zend_string *property;
 		zval *property_value;
-		ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL(properties), property, property_value) {
+		ZEND_HASH_FOREACH_NUM_KEY_VAL(Z_ARRVAL(properties), index, property_value) {
 			if (EG(exception)) {
 				break;
 			}
-			zend_update_property_ex(sharp_field_scope(ce, property), object, property, property_value);
+			HashTable *parts = Z_ARRVAL_P(zend_hash_index_find(Z_ARRVAL(rows), index));
+			zend_string *property = Z_STR_P(zend_hash_index_find(parts, 0));
+			zend_update_property_ex(sharp_field_scope(ce, parts), object, property, property_value);
 		} ZEND_HASH_FOREACH_END();
 		for (uint32_t i = 0; readonly && i < ce->default_properties_count; i++) {
 			Z_PROP_FLAG_P(OBJ_PROP_NUM(object, i)) &= ~IS_PROP_REINITABLE;
@@ -13523,6 +13540,7 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 			ZVAL_UNDEF(built);
 		}
 	}
+	zval_ptr_dtor(&rows);
 	zval_ptr_dtor(&parameters);
 	zval_ptr_dtor(&properties);
 }
@@ -14460,7 +14478,7 @@ static bool sharp_fields_store(zend_class_entry *ce, const sharp_type *arguments
 			return false;
 		}
 		const sharp_type *types =
-			sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), sharp_field_scope(ce, name), ce, arguments);
+			sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), sharp_field_scope(ce, parts), ce, arguments);
 		ZEND_ASSERT(types != NULL && "the compile writes each field's type as one PHP# type");
 		const sharp_type *key = sharp_type_unstored_key(types->members[0]);
 		if (key) {

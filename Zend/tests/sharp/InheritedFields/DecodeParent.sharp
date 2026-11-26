@@ -1,0 +1,6 @@
+namespace InheritedFields;
+
+internal abstract class DecodeParent
+{
+    internal string key { get; set; } = "";
+}
