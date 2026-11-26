@@ -47,15 +47,20 @@ export CARGO_BUILD_JOBS
 # at most an untagged draft, the next run takes the same version, and two runs never take one version (#854). A
 # release's notes are every pull request it holds since the newest published release, so a release
 # after a tag whose release never published carries that tag's pull requests too, as run 45434990708 tagged a release
-# that stayed a draft. CI's checkout holds one commit, so the release fetches the commits since that release, without
-# their trees, in 3.5 s on a test.
-# Prints each pull request into master whose head commit the range holds: its number, a tab, and its title. A staging
-# run's pull requests aren't merged yet when its CHANGES runs, so no merge commit GitHub recorded names them, and
-# queue.yml merges each one's head onto master. The merge of a stack's top pull request holds every pull request below
-# it too: run 45434990708's commit landed 19 pull requests, and its merge commit's subject names one.
+# that stayed a draft.
+# Prints each pull request into master whose head commit the commits from $1 to $2 hold: its number, a tab, and its
+# title. GitHub's compare endpoint lists those commits, so a checkout of one commit, as CI's is, reads the range a full
+# one does: a fetch of the history with --shallow-exclude made a release's first merge a shallow boundary, whose pull
+# request's head never arrived, and v0.8.20's notes listed none of its one pull request (#966). A staging run's pull
+# requests aren't merged yet when its CHANGES runs, so no merge commit GitHub recorded names them, and queue.yml merges
+# each one's head onto master. The merge of a stack's top pull request holds every pull request below it too: run
+# 45434990708's commit landed 19 pull requests, and its merge commit's subject names one.
 range_pulls() {
   local commits
-  commits="$(git -C "$root" rev-list "$@")"
+  if ! commits="$(cd "$root" && gh api --paginate "repos/{owner}/{repo}/compare/$1...$2" --jq '.commits[].sha')"; then
+    echo "gh couldn't list the commits from $1 to $2." >&2
+    return 1
+  fi
   if [[ -z $commits ]]; then
     return
   fi
@@ -64,7 +69,7 @@ range_pulls() {
     | awk -F '\t' 'NR == FNR { held[$1] = 1; next } $1 in held { print $2 "\t" $3 }' <(echo "$commits") -
 }
 release() {
-  local title=${1:-} head refs newest commit major minor patch version='' tagged='' pulls=() titles=() range
+  local title=${1:-} head refs newest commit major minor patch version='' tagged='' pulls=() titles=() held
   local release since missing=() published token tag code mirror status
   head="$(git -C "$root" rev-parse HEAD)"
   if ! refs="$(git -C "$root" ls-remote --tags origin 'refs/tags/v*')"; then
@@ -79,13 +84,12 @@ release() {
     exit 1
   fi
   since="$(awk -v tag="refs/tags/$release" '$2 == tag || $2 == tag "^{}" {commit = $1} END {print commit}' <<< "$refs")"
+  # The list is read in this shell, so a failed request stops the release rather than leave its notes empty.
   if [[ $since != "$head" ]]; then
-    range=("$head" "^$since")
-    if [[ $(git -C "$root" rev-parse --is-shallow-repository) == true ]]; then
-      git -C "$root" fetch --quiet --filter=tree:0 --shallow-exclude="refs/tags/$release" origin "$head"
-      range=("$head")
+    held="$(range_pulls "$since" "$head")"
+    if [[ -n $held ]]; then
+      mapfile -t pulls < <(cut -f 1 <<< "$held")
     fi
-    mapfile -t pulls < <(range_pulls "${range[@]}" | cut -f 1)
   fi
   if [[ -n $version ]]; then
     tagged=$head
@@ -97,7 +101,10 @@ release() {
       exit 1
     fi
     commit="$(awk -v tag="refs/tags/v$newest" '$2 == tag || $2 == tag "^{}" {commit = $1} END {print commit}' <<< "$refs")"
-    mapfile -t titles < <(range_pulls "$head" "^$commit" | cut -f 2)
+    held="$(range_pulls "$commit" "$head")"
+    if [[ -n $held ]]; then
+      mapfile -t titles < <(cut -f 2 <<< "$held")
+    fi
     if [[ -n $title ]]; then
       titles+=("$title")
     fi
@@ -576,6 +583,7 @@ composer_install() {
   # The tree's version has no release to download, so the package carries the test-run mago at
   # composer/bin/<triple>/mago, where php-sharp-composer's plugin installs a release's binary for this platform, and the
   # plugin finds it in place.
+  # shellcheck disable=SC2016 # The program is PHP's, whose $argv the shell must not expand.
   triple="$(php -r 'require $argv[1]; echo PhpSharp\Composer\MagoBinary::triple();' "$root/sharp/composer/src/MagoBinary.php")"
   mkdir -p "$package/composer/bin/$triple"
   install -m 755 "$mago" "$package/composer/bin/$triple/mago"
