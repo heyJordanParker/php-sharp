@@ -7920,6 +7920,52 @@ static bool sharp_type_is_any_value(const sharp_type *type)
 		&& !type->members[0]->class_name && type->members[0]->built_in == SHARP_BUILT_IN_ANY;
 }
 
+/* Whether a `Map` whose keys are of `type` takes the int keys of a plain PHP list: `int`, `Any`, an enum backed by
+ * ints, a type parameter whose bound does, and `T?` or a union with one of them. `string` does not, though PHP stores a
+ * numeric string key as an int, which sharp_type_holds_key takes. */
+static bool sharp_type_takes_int_keys(const sharp_type *type)
+{
+	switch (type->kind) {
+		case SHARP_TYPE_NULLABLE:
+		case SHARP_TYPE_PARAMETER:
+			return sharp_type_takes_int_keys(type->members[0]);
+		case SHARP_TYPE_UNION:
+			for (uint32_t i = 0; i < type->count; i++) {
+				if (sharp_type_takes_int_keys(type->members[i])) {
+					return true;
+				}
+			}
+			return false;
+		case SHARP_TYPE_NAMED:
+			break;
+		default:
+			return false;
+	}
+	if (!type->class_name) {
+		return type->built_in == SHARP_BUILT_IN_INT || type->built_in == SHARP_BUILT_IN_ANY;
+	}
+	zend_class_entry *ce = sharp_type_class(type->class_name);
+
+	return ce && (ce->ce_flags & ZEND_ACC_ENUM) && ce->enum_backing_type == IS_LONG;
+}
+
+/* Whether every key of `array` is an int. */
+static bool sharp_array_keyed_by_ints(HashTable *array)
+{
+	zend_string *name;
+
+	if (HT_IS_PACKED(array)) {
+		return true;
+	}
+	ZEND_HASH_FOREACH_STR_KEY(array, name) {
+		if (name) {
+			return false;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return true;
+}
+
 /* Whether `value`, an array, or the Sharp\Map or Sharp\Set of a `Map` or a `Set`, is of the collection `type`, each
  * element checked by sharp_type_holds. A collection of `Any?`, as `List<Any?>`, holds each element without a walk. */
 static bool sharp_type_collection_holds(
@@ -7937,9 +7983,13 @@ static bool sharp_type_collection_holds(
 		}
 		return holds;
 	}
-	/* Spec section 12: a PHP array is a `List`, and a `Set` the list of its elements, only when it is a list. */
-	if ((type->built_in == SHARP_BUILT_IN_LIST || type->built_in == SHARP_BUILT_IN_SET)
-			&& !zend_array_is_list(Z_ARRVAL_P(value))) {
+	/* Spec section 12: a PHP array is a `List`, and a `Set` the list of its elements, only when it is a list. One keyed
+	 * by int alone arrives as a `List`, so a non-empty one is a `Map` only of keys that take an int. An empty array is
+	 * every collection. */
+	bool list_as_map = keys && zend_hash_num_elements(Z_ARRVAL_P(value)) > 0
+		&& sharp_array_keyed_by_ints(Z_ARRVAL_P(value)) && !sharp_type_takes_int_keys(keys);
+	if (list_as_map || ((type->built_in == SHARP_BUILT_IN_LIST || type->built_in == SHARP_BUILT_IN_SET)
+			&& !zend_array_is_list(Z_ARRVAL_P(value)))) {
 		if (problems) {
 			sharp_type_problem(problems, "", type, value);
 		}
