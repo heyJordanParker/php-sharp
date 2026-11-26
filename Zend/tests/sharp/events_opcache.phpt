@@ -32,7 +32,7 @@ echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n'
     . ' -d ' . escapeshellarg("sharp.compile_command=\"$compile\"")
     . ' -r ' . escapeshellarg(
         'require ' . var_export(__DIR__ . '/Container.inc', true) . '; container_load(' . var_export($root, true) . ');'
-        . ' echo "table cached: ", var_export(opcache_compile_file(' . var_export("$root/.sharp/listeners.php", true) . '), true), "\n";'
+        . ' echo "table cached: ", var_export(opcache_compile_file(' . var_export("$root/.sharp/current/listeners.php", true) . '), true), "\n";'
         . ' file_put_contents(' . var_export("$root/app/Fresh/Audit.sharp", true) . ', ' . var_export($audit, true) . ');'
         . ' file_put_contents(' . var_export("$root/app/Fresh/Warmup.sharp", true) . ', ' . var_export($warmup, true) . ');'
         . ' echo "Warmup loaded: ", var_export(class_exists("App\\\\Fresh\\\\Warmup"), true), "\n";'
