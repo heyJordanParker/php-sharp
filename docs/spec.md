@@ -183,7 +183,7 @@ private static void add(Map<string, List<string>> index, string name)
 
 private static int next(int n)
 {
-    n = n + 1;                   // compile error: `n` is a parameter, so it never changes. Declare a local: `let next = n + 1;`
+    n = n + 1;                   // compile error: `n` is a parameter, so it never changes. Declare a local: `let changed = n + 1;`
     return n;
 }
 ```

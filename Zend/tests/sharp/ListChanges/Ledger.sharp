@@ -77,7 +77,11 @@ public class Ledger
         return rest;
     }
 
-    public static string removedFirst(List<string> items) => items.removeFirst();
+    public static string removedFirst(List<string> items)
+    {
+        let rest = items;
+        return rest.removeFirst();
+    }
 
     // `set` gives the element it replaced, as Kotlin's does, and the index write it runs gives the value it stores.
     public static List<int> replaced(List<int> items)
@@ -91,7 +95,11 @@ public class Ledger
     public static List<bool> emptiness(List<string> items) => [items.isEmpty(), items.isNotEmpty()];
 
     // A null before `?.` skips the change and the rest of the chain.
-    public static int? lastCount(List<List<int>>? rows) => rows?.removeLast().count();
+    public static int? lastCount(List<List<int>>? rows)
+    {
+        let rest = rows;
+        return rest?.removeLast().count();
+    }
 
     // A lambda captures `items` itself, so `keep` can hand plain PHP a reference to it, and the change `add` makes
     // and the one `write` makes through that reference both reach the List this method returns.

@@ -126,7 +126,8 @@ public class Pantry
 
     public static bool removes(List<int> sizes, int size)
     {
-        return sizes.remove(size);
+        let rest = sizes;
+        return rest.remove(size);
     }
 
     public static List<int> removed(List<int> sizes, int size)
@@ -239,6 +240,7 @@ public class Pantry
 
     public static bool sold(Map<string, int> stock, string name)
     {
-        return stock.remove(name);
+        let left = stock;
+        return left.remove(name);
     }
 }
