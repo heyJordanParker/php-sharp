@@ -66,6 +66,7 @@ public class ControlFlow
         for (let [slot, price] of slots) {
             total += slot;
             price = 0;
+            total += price;
         }
         return total;
     }
