@@ -4685,7 +4685,7 @@ float area = 0.0;
 -->
 ```csharp
 if (shape is Circle circle) {
-    area = circle.radius;              // compiles: here shape is a Circle
+    area += circle.radius;             // compiles: here shape is a Circle
 }
 circle.radius;                         // compile error: `circle` exists only where `shape is Circle circle` is true
 ```
