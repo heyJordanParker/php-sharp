@@ -904,7 +904,8 @@ jobs:
       # A pull request's run that failed a step ends cancelled, so it reads as cancelled: runs 45805680524 and
       # 45810230196 were read so. This comments the run's link and each failed job and step on the pull request, with a
       # test step's Failed lines, which name each failed test, as the queue comments a pull request it leaves out (#943).
-      # A push run opens the red-master issue below instead.
+      # A push run opens the red-master issue below instead. curl reads each job's log, since gh api refuses a response
+      # that holds terminal escape sequences, as every test log does, and printed none on run 45836685722.
       - name: Comment each failed step on the pull request
         if: failure() && github.event_name == 'pull_request'
         env:
@@ -920,8 +921,8 @@ jobs:
             echo "Run $RUN failed, so the rest of it was cancelled:"
             while IFS=$'\t' read -r job step id; do
               echo "- \`$job\` › $step"
-              gh api "repos/$GH_REPO/actions/jobs/$id/logs" | sed -E 's/^[0-9T:.-]+Z //; s/\x1b\[[0-9;]*m//g' \
-                | grep '^Failed: ' | head -n 20 | sed 's/^/  - /' || true
+              curl -sSfL -H "Authorization: Bearer $GH_TOKEN" "$GITHUB_API_URL/repos/$GH_REPO/actions/jobs/$id/logs" \
+                | sed -E 's/^[0-9T:.-]+Z //; s/\x1b\[[0-9;]*m//g' | grep '^Failed: ' | head -n 20 | sed 's/^/  - /' || true
             done < "$RUNNER_TEMP/failed-steps"
           } > "$RUNNER_TEMP/failed-comment.md"
           gh pr comment "$PULL" --body-file "$RUNNER_TEMP/failed-comment.md"
