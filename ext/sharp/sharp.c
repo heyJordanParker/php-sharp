@@ -7949,23 +7949,6 @@ static bool sharp_type_takes_int_keys(const sharp_type *type)
 	return ce && (ce->ce_flags & ZEND_ACC_ENUM) && ce->enum_backing_type == IS_LONG;
 }
 
-/* Whether every key of `array` is an int. */
-static bool sharp_array_keyed_by_ints(HashTable *array)
-{
-	zend_string *name;
-
-	if (HT_IS_PACKED(array)) {
-		return true;
-	}
-	ZEND_HASH_FOREACH_STR_KEY(array, name) {
-		if (name) {
-			return false;
-		}
-	} ZEND_HASH_FOREACH_END();
-
-	return true;
-}
-
 /* Whether `value`, an array, or the Sharp\Map or Sharp\Set of a `Map` or a `Set`, is of the collection `type`, each
  * element checked by sharp_type_holds. A collection of `Any?`, as `List<Any?>`, holds each element without a walk. */
 static bool sharp_type_collection_holds(
@@ -7983,13 +7966,14 @@ static bool sharp_type_collection_holds(
 		}
 		return holds;
 	}
-	/* Spec section 12: a PHP array is a `List`, and a `Set` the list of its elements, only when it is a list. One keyed
-	 * by int alone arrives as a `List`, so a non-empty one is a `Map` only of keys that take an int. An empty array is
-	 * every collection. */
-	bool list_as_map = keys && zend_hash_num_elements(Z_ARRVAL_P(value)) > 0
-		&& sharp_array_keyed_by_ints(Z_ARRVAL_P(value)) && !sharp_type_takes_int_keys(keys);
-	if (list_as_map || ((type->built_in == SHARP_BUILT_IN_LIST || type->built_in == SHARP_BUILT_IN_SET)
-			&& !zend_array_is_list(Z_ARRVAL_P(value)))) {
+	/* Spec section 12: a PHP array is a `List`, and a `Set` the list of its elements, only when it is a list. A list
+	 * arrives as a `List`, so a non-empty one is a `Map` only of keys that take an int. An array that isn't a list, as
+	 * `['42' => true]`, whose numeric key PHP stores as an int, is a `Map` of string keys. An empty array is every
+	 * collection. */
+	bool is_list = zend_array_is_list(Z_ARRVAL_P(value));
+	bool list_as_map = keys && is_list && zend_hash_num_elements(Z_ARRVAL_P(value)) > 0
+		&& !sharp_type_takes_int_keys(keys);
+	if (list_as_map || ((type->built_in == SHARP_BUILT_IN_LIST || type->built_in == SHARP_BUILT_IN_SET) && !is_list)) {
 		if (problems) {
 			sharp_type_problem(problems, "", type, value);
 		}

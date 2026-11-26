@@ -36,4 +36,7 @@ public class ListsAsMaps
         string byInt = `[1] is Map<int, Any?>: ${again is Map<int, Any?> ? "true" : "false"}`;
         return [byText, byInt];
     }
+
+    public static string numericKey(Any? value) =>
+        `['42' => true] is Map<string, bool>: ${value is Map<string, bool> ? "true" : "false"}`;
 }
