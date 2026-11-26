@@ -22,7 +22,7 @@ public static class Reads
         const second = typeof(Shade).enumCases();
 
         return first.map(found => found.name + " " + (found.backingValue is string backing ? backing : "none")
-            + " " + (found.value === Shade.Light ? "Light" : found.value === Shade.Dark ? "Dark" : "other")
+            + " " + (found.value is Shade shade ? (shade == Shade.Light ? "Light" : shade == Shade.Dark ? "Dark" : "other") : "other")
             + " " + (first == second ? "equal" : "unequal"));
     }
 
