@@ -259,7 +259,11 @@ jobs:
         uses: ./.github/actions/usage
       - name: Install what the PHP# engine builds with
         uses: ./.github/actions/engine-packages
+      # The engine compiles at autoconf's -O2 without its -g, since no job reads the debug info of mago's engine:
+      # configure.ac's non-debug build adds only -DNDEBUG to the CFLAGS it finds (#911).
       - name: Build the engine mago links
+        env:
+          CFLAGS: -O2
         run: sharp/bin/build-mago --engine
       # An artifact keeps no file's mode, so the engine travels in a tar.
       - name: Pack the engine mago links
