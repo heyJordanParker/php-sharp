@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import calendar
+import concurrent.futures
 import glob
 import json
 import os
@@ -29,20 +30,28 @@ def waits_on_its_run(log):
     """Whether a builder started a background run its transcript has no end notice for. A builder waiting on its own
     suite writes nothing to its transcript, so its idle minutes grow: on 11-25 the laws and engine lanes were flagged
     idle 20 minutes and re-sent their batch while their test suites ran."""
-    with open(log, encoding="utf-8", errors="replace") as fh:
-        text = fh.read()
+    # The transcript's last 32 MB, about four hours of the busiest builder's, holds every run still going: a builder's
+    # transcript reached 227 MB on 11-26, and reading all of it on every report cost seconds per lane.
+    with open(log, "rb") as fh:
+        fh.seek(max(0, os.path.getsize(log) - (32 << 20)))
+        text = fh.read().decode("utf-8", errors="replace")
     started = set(re.findall(r'backgroundTaskId":"(\w+)"', text))
     ended = set(re.findall(r"task-id>(\w+)</task-id>(?:(?!task-id>).){0,600}?<status>(?:completed|failed|killed|stopped)",
                            text, re.S)) | set(re.findall(r"Successfully stopped task: (\w+)", text))
     # A run whose process died without its notice holds no output file open, so only an open one counts.
-    files = {task: path for path, task in re.findall(r"(/[^\s\"']+/tasks/(\w+)\.output)", text)}
-    outputs = {files[task] for task in started - ended if task in files}
+    # Each unended task's path, found from its own `/tasks/<id>.output` anchor: a pattern that starts at every `/` of a
+    # 55 MB transcript backtracked for 13 s per lane on 11-26, and the report took over 2 minutes.
+    outputs = set()
+    for task in started - ended:
+        found = re.search(rf"/tasks/{task}\.output", text)
+        if found:
+            outputs.add(re.search(r"[^\s\"'\\]*$", text[max(0, found.start() - 400):found.start()]).group(0) + found.group(0))
     if outputs and subprocess.run(["lsof", "-t", *outputs], capture_output=True, text=True).stdout.strip():
         return True
     # A Monitor writes no output file: it watches until its event, its expiry or its stop.
-    for line in text.splitlines():
-        started = re.search(r"Monitor started \(task (\w+), expires in (\d+)m", line)
-        at = started and re.search(r'"timestamp":"([^"]+)"', line)
+    for started in re.finditer(r"Monitor started \(task (\w+), expires in (\d+)m", text):
+        line = text[text.rfind("\n", 0, started.start()) + 1:text.find("\n", started.end())]
+        at = re.search(r'"timestamp":"([^"]+)"', line)
         if (at and f"task-id>{started.group(1)}</task-id>" not in text and f"stopped task: {started.group(1)}" not in text
                 and calendar.timegm(time.strptime(at.group(1)[:19], "%Y-%m-%dT%H:%M:%S"))
                 + int(started.group(2)) * 60 > time.time()):
@@ -91,6 +100,7 @@ def lanes():
     except OSError as error:
         return f"LANES: {STATE} could not be read: {error}."
     rows, stalled, owners = [], [], {}
+    mounts = container_mounts()
     for line in lines:
         lane = line[2:].split(":", 1)[0]
         listed = re.search(r"files: ([^|]+)", line)
@@ -112,7 +122,7 @@ def lanes():
         # A lane whose batch landed and waits only for its release is marked `| done:` in state.md, so its idle
         # builder holds no batch to send again: on 11-25 the tracer lane was flagged idle after #817 merged.
         done = "| done:" in line
-        running = f"worktrees/{lane.lower()}" in container_mounts() or waits_on_its_run(logs[0])
+        running = f"worktrees/{lane.lower()}" in mounts or waits_on_its_run(logs[0])
         rows.append(f"  {lane:<9} {agent} {kind:<17} idle {idle} min" + (", done" if done else ", its run is going" if running else ""))
         if idle >= IDLE and not done and not running:
             stalled.append(f"{lane} idle {idle} min")
@@ -130,14 +140,13 @@ def lanes():
     return "\n".join([head, *rows, act])
 
 
-def targets(limit=30):
-    """The orchestration and speed targets, each measured now, from targets.py. The hook keeps the Harness's 30 s; the
-    report runs from a shell, where 51 s at load 70 on 11-26 left every reply with no block."""
+def targets():
+    """The orchestration and speed targets, each measured now, from targets.py."""
     script = os.path.expanduser("~/.claude/orchestrate/php-sharp/targets.py")
     try:
-        out = subprocess.run([sys.executable, script], capture_output=True, text=True, timeout=limit)
+        out = subprocess.run([sys.executable, script], capture_output=True, text=True, timeout=30)
     except subprocess.TimeoutExpired:
-        return f"TICK INPUT MISSING: {script} took over {limit} s. Fix that before any other step of this tick."
+        return f"TICK INPUT MISSING: {script} took over 30 s. Fix that before any other step of this tick."
     if out.returncode != 0 or not out.stdout.strip():
         return f"TICK INPUT MISSING: {script} exited {out.returncode}: {out.stderr.strip()[-400:]}. Fix that first."
     return out.stdout.strip()
@@ -225,8 +234,13 @@ def report():
     # The disk is managed in the background on every report: census.py deletes what the loop made and nobody uses.
     subprocess.Popen([sys.executable, os.path.expanduser("~/.claude/orchestrate/php-sharp/census.py")],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    began = time.time()
     archive_finished()
-    out = targets(limit=100)
+    # targets.py waits on GitHub and git, and lanes() on the disk, so they run at once.
+    with concurrent.futures.ThreadPoolExecutor(2) as pool:
+        lanes_f = pool.submit(lanes)
+        out = targets()
+        lane_rows = lanes_f.result()
     if out.startswith("TICK INPUT MISSING"):
         return out
     lines = out.splitlines()
@@ -268,16 +282,15 @@ def report():
     block += ["", f"  {'Targets, worst first':<36} {'now':>12}  {'24 h ago':>12}  {'goal':>8}  {'':>9}", *[row for _, row in sorted(goals, reverse=True)]]
     block += [f"  commit to shipped {line.split('by release: ', 1)[1]}" for line in lines if line.strip().startswith("by release: ")]
     block += [f"  {line.strip()}" for line in lines if line.strip().startswith("release ETA: ")]
-    mounts = container_mounts()
     block += ["", "Lanes"]
-    for row in lanes().splitlines()[1:-1]:
+    for row in lane_rows.splitlines()[1:-1]:
         parts = row.split()
         lane = parts[0]
         if "no builder" in row:
             state = "no builder"
         elif row.endswith(", done"):
             state = "done, waits for its release"
-        elif row.endswith(", its run is going") or f"worktrees/{lane.lower()}" in mounts:
+        elif row.endswith(", its run is going"):
             state = "working, its run is going"
         elif "idle" in parts:
             minutes = int(parts[parts.index("idle") + 1])
@@ -288,6 +301,10 @@ def report():
         off = target and next((m.group(0) for _, r in goals if target.group(1).strip() in r
                                for m in [re.search(r"\d+\.\dx off|met", r)] if m), "not measured")
         block.append(f"  {lane:<8} {state}; moves " + (f"{target.group(1).strip()}, {off}" if target else "no target"))
+    # The report times itself against 5 s, so its own cost shows on every reply: it grew to over 2 minutes on 11-26
+    # with nothing measuring it.
+    took = time.time() - began
+    block += ["", f"Report  {took:.1f} s / 5 s" + ("" if took <= 5 else f"  {took / 5:.1f}x off")]
     width = len(box) + 2
     return "\n".join(["```text", "╔" + "═" * width + "╗", f"║ {box} ║", "╚" + "═" * width + "╝", "```", "",
                       "```text", *block, "", "Now   ", "Next  ", "```"])
