@@ -778,7 +778,10 @@ jobs:
           fi
           git push origin "FETCH_HEAD:$GITHUB_REF"
       # A release's heyjordanparker/mago-sharp version is the split plus a commit that adds the release's SHA-256s as
-      # composer/sha256sums.txt. php-sharp-composer's plugin refuses an archive whose SHA-256 differs, so the package
+      # composer/sha256sums.txt, and its version as composer/bin/version, which composer/bin/mago downloads the binary
+      # of, so `composer require --dev heyjordanparker/mago-sharp` alone gives a mago that runs, where 0.8.4's refused
+      # every run with "mago's binary is not installed" (#862). php-sharp-composer's plugin refuses an archive whose
+      # SHA-256 differs, as the launcher does, so the package
       # version pins the exact binary, as esbuild's and Biome's npm packages do. The tag pins them for good, so they are
       # the release's sums file, which install.sh checks a download against, and every asset a user downloads from the
       # release must match them, as the draft PUBLISH makes public holds them.
@@ -797,7 +800,7 @@ jobs:
       # A rerun finds the tag an earlier attempt pushed, and leaves it. The tag also carries schema.json, the editor
       # schema of the release's configuration, from the release's own Linux binary run outside any project, so no start
       # and no install of the package writes it.
-      - name: Push the release's tag, with the SHA-256 of every release asset and its configuration's schema
+      - name: Push the release's tag, with the SHA-256 of every release asset, its version and its configuration's schema
         if: env.VERSION
         working-directory: sharp/build/mago-sharp
         run: |
@@ -808,11 +811,12 @@ jobs:
           git fetch "$GITHUB_WORKSPACE" refs/heads/mago-release
           git switch --detach FETCH_HEAD
           cp "$RUNNER_TEMP/published/mago-$VERSION-sha256sums.txt" composer/sha256sums.txt
+          echo "$VERSION" > composer/bin/version
           tar -xzf "$RUNNER_TEMP/published/mago-$VERSION-x86_64-unknown-linux-gnu.tar.gz" -C "$RUNNER_TEMP"
           (cd "$RUNNER_TEMP" && "./mago-$VERSION-x86_64-unknown-linux-gnu/mago" config --schema) > schema.json
-          git add composer/sha256sums.txt schema.json
+          git add composer/sha256sums.txt composer/bin/version schema.json
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit --message "The SHA-256 of every mago $VERSION release asset, and its configuration's schema"
+            commit --message "The SHA-256 of every mago $VERSION release asset, its version and its configuration's schema"
           git push origin "HEAD:refs/tags/v$VERSION"
       - *red-master-issue
       - name: Write the job's CPU-seconds and peak memory
