@@ -7651,8 +7651,8 @@ ZEND_FUNCTION(Sharp_Internal_makeGenericType)
 
 /* Spec section 25: what `Class<T>.enumCases()` gives, an object of the class the class value `of_case` names, the
  * standard library's `EnumCase`, for each case of the enum `type` names, in the order they are declared, with its name,
- * its case and its backing value, null for a pure enum's. Empty for a class value that names no enum. Each is made as
- * the class's constructor would make it, which sets its three get-only properties. */
+ * its case and its backing value, null for a pure enum's. Empty for a class value that names no enum. Each is built
+ * through the class's constructor, spec section 9. */
 ZEND_FUNCTION(Sharp_Internal_enumCases)
 {
 	zend_string *value, *of_case;
@@ -7685,28 +7685,25 @@ ZEND_FUNCTION(Sharp_Internal_enumCases)
 			continue;
 		}
 		zend_object *found = zend_enum_get_case(ce, name);
-		zval entry;
-		if (!found || object_init_ex(&entry, enum_case) == FAILURE) {
+		if (!found) {
 			zval_ptr_dtor(return_value);
 			RETVAL_NULL();
 			RETURN_THROWS();
 		}
-		zval of_case, backing;
-		ZVAL_OBJ(&of_case, found);
+		zval parts[3], entry;
+		ZVAL_STR(&parts[0], name);
+		ZVAL_OBJ(&parts[1], found);
 		if (ce->enum_backing_type != IS_UNDEF) {
-			ZVAL_COPY_VALUE(&backing, zend_enum_fetch_case_value(found));
+			ZVAL_COPY_VALUE(&parts[2], zend_enum_fetch_case_value(found));
 		} else {
-			ZVAL_NULL(&backing);
+			ZVAL_NULL(&parts[2]);
 		}
-		zend_update_property_str(enum_case, Z_OBJ(entry), ZEND_STRL("name"), name);
-		zend_update_property(enum_case, Z_OBJ(entry), ZEND_STRL("value"), &of_case);
-		zend_update_property(enum_case, Z_OBJ(entry), ZEND_STRL("backingValue"), &backing);
-		add_next_index_zval(return_value, &entry);
-		if (EG(exception)) {
+		if (object_init_with_constructor(&entry, enum_case, 3, parts, NULL) == FAILURE) {
 			zval_ptr_dtor(return_value);
 			RETVAL_NULL();
 			RETURN_THROWS();
 		}
+		add_next_index_zval(return_value, &entry);
 	} ZEND_HASH_FOREACH_END();
 }
 
