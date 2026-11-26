@@ -418,17 +418,16 @@ jobs:
         shell: bash
         run: cargo build --locked --release --target=${{ matrix.job.target }}
 
-      # A profile-guided build runs as three steps, so the run's timeline times each (#860). The instrumented mago only
-      # analyzes corpus/ once to write the profile and never ships, so it compiles without [profile.release]'s fat LTO in
-      # one codegen unit, which made the build step 1,535 to 1,740 s on the release runs of 11-24. The optimized build
-      # that ships keeps [profile.release] (#797).
+      # A profile-guided build runs as three steps, so the run's timeline times each (#860). The instrumented build and
+      # the optimized build both compile with [profile.release], as cargo-pgo's flow does: cargo hashes the profile into
+      # each crate's module names, and LLVM finds a local function's profile by its module's name, so an instrumented
+      # build without fat LTO in 16 codegen units left 31,616 functions with no profile on the 0.8.9 release (#897).
       - name: Build the instrumented mago
         if: inputs.assets && matrix.job.pgo
         shell: bash
         run: |
           rm -rf "$CARGO_TARGET_DIR/pgo-profiles"
-          CARGO_PROFILE_RELEASE_LTO=off CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
-            cargo pgo build -- --target=${{ matrix.job.target }}
+          cargo pgo build -- --target=${{ matrix.job.target }}
 
       # mago exits 1 when the analysis finds issues, which the corpus holds, and any other exit, a crash, a kill or a
       # tool error, fails the step, so no binary ships built from a broken profile.
@@ -467,8 +466,8 @@ jobs:
           echo "binary for target '${{ matrix.job.target }}' requires the following GLIBC versions:"
           strings "${{ steps.bin.outputs.BIN_PATH }}" | grep GLIBC_ || echo "No GLIBC version strings found."
 
-      # The calling run's suites check the tree, so this checks only the binary this job builds, as mago.yml's
-      # plain-php job checks the one CI built.
+      # The calling run's suites check the tree, so this checks only the binary this job builds, as sharp.yml's
+      # PLAIN_PHP checks the one CI built.
       - name: The binary prints the release's version, and analyzes and compiles a one-class PHP# project
         if: inputs.assets
         shell: bash
@@ -510,7 +509,7 @@ jobs:
           "$mago" compile
 
       # sharp/bin/check plain-php on the Mac's Homebrew PHP, with the release binary, in the folder that check reads the
-      # test-run mago from, as the Mac's tests run it with the dev build and mago.yml's plain-php with Linux's test-run
+      # test-run mago from, as the Mac's tests run it with the dev build and sharp.yml's PLAIN_PHP with Linux's test-run
       # build.
       - name: Run mago from Composer on plain PHP with the release binary
         if: inputs.assets && runner.os == 'macOS'

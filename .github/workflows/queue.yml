@@ -16,7 +16,7 @@ on:
       - master
   # A pull request's own runs ending can make it ready, and a staging run ending frees staging.
   workflow_run:
-    workflows: [PHP#, Mago, Spec guard]
+    workflows: [PHP#, Spec guard]
     types: [completed]
 permissions:
   contents: read
@@ -49,8 +49,12 @@ jobs:
       # waits. A batch master doesn't hold failed: one that held one pull request leaves that pull request out, with a
       # comment, until its head moves, and one that held more takes its oldest pull request alone, so one broken change
       # never holds the others, unless that pull request is no longer ready, as a draft or with auto-merge off, which
-      # stopped every batch while staging held the failed one (#875). Every other batch takes every ready pull request,
-      # oldest first, as bors-ng's and GitHub's merge queue go on without a pull request that left the queue.
+      # stopped every batch while staging held the failed one (#875). A batch whose run failed only because a runner
+      # stopped answering, as sharp/bin/queue-lost-runner decides, tested no change that failed, so it goes to staging
+      # once more, with the same pull requests at the same heads merged onto the same master, as Zuul's `attempts`
+      # rerun a job whose node failed. A batch that already went once more fails as any batch does (#915). Every other
+      # batch takes every ready pull request, oldest first, as bors-ng's and GitHub's merge queue go on without a pull
+      # request that left the queue.
       - name: Merge the ready pull requests onto master and push them to staging
         shell: bash
         run: |
@@ -63,6 +67,7 @@ jobs:
             exit 0
           fi
           only=
+          retry=false
           if [[ -n $staging ]]; then
             compare=$(gh api "repos/$GITHUB_REPOSITORY/compare/$master...$staging")
             if [[ $(jq -r .status <<< "$compare") == ahead || $(jq -r .status <<< "$compare") == diverged ]]; then
@@ -76,7 +81,27 @@ jobs:
               jq -r '.commits[] | select((.parents | length) == 2 and (.commit.message | startswith("Merge pull request #")))
                 | [(.commit.message | capture("^Merge pull request #(?<n>[0-9]+)").n), .parents[1].sha] | @tsv' \
                 <<< "$compare" | sort -n > failed-batch.tsv
-              if (($(wc -l < failed-batch.tsv) == 1)); then
+              gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/${run##*/}/jobs?per_page=100" > jobs.json
+              mkdir -p annotations
+              for job in $(jq -r '.[].jobs[] | select(.conclusion == "failure") | .id' jobs.json); do
+                gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/check-runs/$job/annotations" > "annotations/$job.json"
+              done
+              retried=false
+              while read -r number head; do
+                if gh api "repos/$GITHUB_REPOSITORY/issues/$number/comments" --paginate --jq '.[].body' \
+                  | grep -qF "<!-- queue: retried at $head -->"; then
+                  retried=true
+                fi
+              done < failed-batch.tsv
+              if [[ $(sharp/bin/queue-lost-runner jobs.json annotations) == lost ]] && ! $retried; then
+                while read -r number head; do
+                  gh pr comment "$number" --body "$run failed only because a runner stopped answering, so the queue sends this pull request's batch to staging once more, at $head.
+          <!-- queue: retried at $head -->"
+                done < failed-batch.tsv
+                retry=true
+                only=$(cut -f 1 failed-batch.tsv | paste -sd ' ' -)
+                echo "$run failed only because a runner stopped answering, so this batch takes pull requests $only again, at the same heads."
+              elif (($(wc -l < failed-batch.tsv) == 1)); then
                 read -r number head < failed-batch.tsv
                 marker="<!-- queue: failed alone at $head -->"
                 if ! gh api "repos/$GITHUB_REPOSITORY/issues/$number/comments" --paginate --jq '.[].body' | grep -qF "$marker"; then
@@ -99,7 +124,13 @@ jobs:
                     | [$checks[] | select((.name // .context) == $name) | (.conclusion // .state)] | length > 0 and all(. == "SUCCESS")))
                 | [.number, .headRefOid, .headRepositoryOwner.login, .headRefName, .title] | @tsv' "${required[@]}" \
             | sort -n > ready.tsv
-          if [[ -n $only ]] && ! cut -f 1 ready.tsv | grep -qx "$only"; then
+          if $retry; then
+            only=$(awk -F '\t' 'NR == FNR { held[$1] = $2; next } held[$1] == $2 { print $1 }' failed-batch.tsv ready.tsv \
+              | paste -sd ' ' -)
+            if [[ -z $only ]]; then
+              echo "No pull request of the batch that lost its runner is ready at the head it held, so this batch takes every ready pull request."
+            fi
+          elif [[ -n $only ]] && ! cut -f 1 ready.tsv | grep -qx "$only"; then
             echo "#$only, the failed batch's oldest pull request, is no longer ready, so this batch takes every ready pull request."
             only=
           fi
@@ -107,7 +138,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           batch=()
           while IFS=$'\t' read -r number head owner branch title; do
-            if [[ -n $only && $number != "$only" ]]; then
+            if [[ -n $only && " $only " != *" $number "* ]]; then
               continue
             fi
             if gh api "repos/$GITHUB_REPOSITORY/issues/$number/comments" --paginate --jq '.[].body' \
