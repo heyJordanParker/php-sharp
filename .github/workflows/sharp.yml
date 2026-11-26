@@ -140,8 +140,10 @@ jobs:
           printf '[profile.dev]\ndebug = false\n' > sharp/build/cargo/config.toml
       - name: Build and install the engine
         run: sharp/bin/build --linux
+      # The engine mago links compiles at autoconf's -O2 without its -g, since no job reads the debug info of mago's
+      # engine: configure.ac's non-debug build adds only -DNDEBUG to the CFLAGS it finds (#911).
       - name: Build the engine mago links
-        run: sharp/docker/run sharp/bin/build-mago --engine
+        run: sharp/docker/run env CFLAGS=-O2 sharp/bin/build-mago --engine
       - name: Build mago and its test binaries
         run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64-engine/install sharp/bin/build-mago --quiet
       # What the suites run: the CLI, phpdbg, which run-tests.php finds beside it for the tests that need it, the install
