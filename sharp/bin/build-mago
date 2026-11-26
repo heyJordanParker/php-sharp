@@ -89,7 +89,7 @@ build_engine() {
   # compiles at -O0 without autoconf's -g, since no job reads its debug info: configure.ac's debug build adds only -O0
   # to the CFLAGS it finds, which in its options configure records with the rest (#955).
   if $debug; then
-    options+=(--enable-debug --enable-zend-test=shared CFLAGS=-O0)
+    options+=(--enable-debug --enable-zend-test CFLAGS=-O0)
   fi
   # Empties the engine's folder but the mago build that sharp/build/<os>-<arch> holds beside a debug engine.
   clear_engine() {
