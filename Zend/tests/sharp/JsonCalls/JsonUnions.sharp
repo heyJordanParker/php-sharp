@@ -1,0 +1,21 @@
+namespace Demo;
+
+import Sharp.Encoding.Json;
+
+public class JsonUnions
+{
+    public static Map<string, (string|int|float|bool)?> scalars(string json) => Json.decode<Map<string, (string|int|float|bool)?>>(json);
+
+    public static Map<string, (float|int)?> floatsFirst(string json) => Json.decode<Map<string, (float|int)?>>(json);
+
+    public static List<T> all<T>(string json) => Json.decode<List<T>>(json);
+
+    public static List<(string|int|float|bool)?> wrapped(string json) => JsonUnions.all<(string|int|float|bool)?>(json);
+
+    public static bool sameType()
+    {
+        (int|float)? number = 3006;
+        List<(int|float)?> numbers = [number];
+        return numbers is List<(float|int)?>;
+    }
+}

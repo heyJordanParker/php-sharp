@@ -2621,6 +2621,11 @@ simple_list:
 			}
 			break;
 		case ZEND_AST_SHARP_TYPE_ARGS:
+			if (!ast->child[0] || ast->child[0]->kind == ZEND_AST_ZVAL) {
+				/* PHP#: the type arguments of a call, written as their type text, the last argument of its list. */
+				smart_str_append(str, zend_ast_get_str(ast->child[1]));
+				break;
+			}
 			if (!ast->child[0]->child[0]) {
 				/* PHP#: `new TItem(…)`, which names no class, written with the type text, as `new X(…)` writes a
 				 * class. */

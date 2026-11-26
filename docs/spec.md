@@ -7453,12 +7453,6 @@ app/Orders/Order.sharp is out of date (app/Shared/Database/BaseModel.php changed
 ```
 
 - **Production leaves the setting empty,** as the runtime images do. A stale deploy is then refused, and no request waits for a compile.
-- **`mago compile` writes `.sharp/preload.php`, which preloads every type it compiled.** A production `php.ini` names it in `opcache.preload`. The file requires the project's Composer autoloader, then each accepted `.sharp` file that declares a type, the packages' in `vendor/` included, so a type whose parent another file declares, plain PHP or PHP#, gets it from the autoloader, as in a request. PHP declares an anonymous class only when its code runs, so the file then loads each type, PHP's own left out, that an anonymous class in a file the preload loads names as its parent, an interface or a trait. Such a file is one Composer's autoloader loads up front, as `illuminate/reflection`'s `helpers.php`, or the file of a type a preloaded type extends. Opcache would warn otherwise that it can't preload the class. A file in an `autoload-dev` folder stays out, so production never preloads a test. The compile rewrites it on every compile:
-
-```text
-opcache.preload = /srv/app/.sharp/preload.php
-```
-
 - **A type error stops the file from running, an import its module's `imports` line leaves out included.** So does a law the checker cannot prove, a compile error that names the law and what is still to show.
 - **A plain PHP class that doesn't satisfy a PHP# type it extends or implements stops `mago compile`** (section 22), and `mago compile` still writes every accepted `.sharp` file.
 - **`mago compile` hides exactly what `mago analyze` hides:** the same `ignore` entries and baseline hide a host rule's error from both, so the two commands report the same errors.

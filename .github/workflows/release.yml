@@ -443,9 +443,13 @@ jobs:
             exit 1
           fi
 
+      # cargo-pgo logs each function the profile lacks, with its module, only at debug level, so the log names the crates
+      # its "PGO profile data was not found" count belongs to (#897).
       - name: Build the release mago with the profile
         if: inputs.assets && matrix.job.pgo
         shell: bash
+        env:
+          RUST_LOG: cargo_pgo=debug
         run: cargo pgo optimize build -- --target=${{ matrix.job.target }}
 
       - name: set binary name
