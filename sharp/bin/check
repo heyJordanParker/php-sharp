@@ -453,7 +453,10 @@ gate_mago_checks() {
   step no_build_id_below_root
   step unchanged_by php scripts/regen-sdk-node-kinds.php
   step rustup run "$rust" cargo fmt --all -- --check
-  step rustup run "$rust" cargo clippy --workspace --all-targets --all-features -- -D warnings
+  # Cargo's build.warnings = "deny" fails the run on any lint once every crate is checked, where -D warnings made a lint
+  # a crate's error, so cargo checked no crate that depends on it, and PR #972's run 45879876019 showed one crate's lint
+  # of two (#977).
+  step env CARGO_BUILD_WARNINGS=deny rustup run "$rust" cargo clippy --workspace --all-targets --all-features --keep-going
   # The test-run binary, which behaves as release's without its fat LTO, where the dev mago logs at DEBUG and reports a
   # missing code that release never prints, as sharp/mago/Cargo.toml explains. sharp/bin/build-mago --test-run builds
   # it into the checkout's one build folder.

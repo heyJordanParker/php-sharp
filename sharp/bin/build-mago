@@ -386,7 +386,8 @@ case $mode in
     failed=()
     cargo_in_target test --workspace --test "${package#mago-}" "$@" -- --test-threads "$jobs" | messages_to_file \
       || failed+=("$package's tests")
-    cargo_in_target clippy -p "$package" --all-targets "$@" -- -D warnings >> "$messages.part.$$" \
+    # With cargo's build.warnings = "deny", as sharp/bin/check's clippy runs (#977).
+    CARGO_BUILD_WARNINGS=deny cargo_in_target clippy -p "$package" --all-targets --keep-going "$@" >> "$messages.part.$$" \
       || failed+=("$package's clippy")
     if ((${#failed[@]})); then
       printf 'Failed: %s\n' "${failed[@]}" >&2
