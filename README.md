@@ -58,7 +58,7 @@ echo $cart->total();
 Run these from the repository root:
 
 ```sh
-sharp/bin/build                   # build the thread-safe engine, sharp/build/<os>-<arch>/sapi/cli/php
+sharp/bin/build-mago --engine --debug # build the thread-safe debug engine, sharp/build/<os>-<arch>/sapi/cli/php
 sharp/bin/test                    # run the PHP# suite, Zend/tests/sharp/
 sharp/bin/test --linux --upstream # run php-src's own suites against the upstream baseline
 sharp/bin/check                   # run the checks a pull request's CI runs, on this machine

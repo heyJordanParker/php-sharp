@@ -101,7 +101,7 @@ ENV PHP_CFLAGS="-fstack-protector-strong -fpic -fpie -O2 -D_LARGEFILE_SOURCE -D_
 ENV PHP_CPPFLAGS="$PHP_CFLAGS"
 ENV PHP_LDFLAGS="-Wl,-O1 -pie"
 
-ENV PHP_VERSION 8.5.12
+ENV PHP_VERSION 8.5.13
 
 COPY --from=source /usr/src/php.tar.xz /usr/src/
 
