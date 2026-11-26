@@ -1,0 +1,21 @@
+namespace Demo;
+
+import Sharp.Encoding.Json;
+
+public class ParsedSets
+{
+    public static List<string> form()
+    {
+        Any? parsed = Json.parse("{\"email\":\"ada@example.com\",\"consent\":\"yes\"}").value;
+        string set = `is Set<string|int>: ${parsed is Set<string|int> ? "true" : "false"}`;
+        string map = `is Map<string, Any?>: ${parsed is Map<string, Any?> ? "true" : "false"}`;
+        return [set, map, `after both tests: ${Json.encode(parsed)}`];
+    }
+
+    public static List<string> tags()
+    {
+        Any? parsed = Json.parse("[\"new\",\"vip\"]").value;
+        string set = `is Set<string>: ${parsed is Set<string> ? "true" : "false"}`;
+        return [set, `after the test: ${Json.encode(parsed)}`];
+    }
+}

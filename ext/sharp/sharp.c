@@ -7937,7 +7937,9 @@ static bool sharp_type_collection_holds(
 		}
 		return holds;
 	}
-	if (type->built_in == SHARP_BUILT_IN_LIST && !zend_array_is_list(Z_ARRVAL_P(value))) {
+	/* Spec section 12: a PHP array is a `List`, and a `Set` the list of its elements, only when it is a list. */
+	if ((type->built_in == SHARP_BUILT_IN_LIST || type->built_in == SHARP_BUILT_IN_SET)
+			&& !zend_array_is_list(Z_ARRVAL_P(value))) {
 		if (problems) {
 			sharp_type_problem(problems, "", type, value);
 		}
