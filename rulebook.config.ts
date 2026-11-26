@@ -17,5 +17,6 @@ export default defineConfig({
     'sharp/require-utility-builds': 'error',
     'sharp/require-one-thread-mago': 'error',
     'sharp/block-local-suites': 'error',
+    'sharp/block-pattern-kills': 'error',
   },
 })
