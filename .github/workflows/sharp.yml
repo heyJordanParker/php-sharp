@@ -133,11 +133,12 @@ jobs:
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
       # sharp/build/cargo is the CARGO_HOME of cargo in the sharp/docker image, so every build of the job reads this
       # config. Without debug info a Mago test binary holds 142 MB where it held 235, so the test binaries MAGO's slices
-      # download are smaller, and a panic still names its file and line.
+      # download are smaller, and a panic still names its file and line. The link strips the debug info the standard
+      # library's prebuilt crates hold too, which no job reads (#911).
       - name: Build without debug info in the sharp/docker image
         run: |
           mkdir -p sharp/build/cargo
-          printf '[profile.dev]\ndebug = false\n' > sharp/build/cargo/config.toml
+          printf '[profile.dev]\ndebug = false\nstrip = "debuginfo"\n' > sharp/build/cargo/config.toml
       - name: Build and install the engine
         run: sharp/bin/build --linux
       - name: Build the engine mago links
