@@ -175,6 +175,8 @@ function makeGenericType(string $type, array $arguments): string {}
 
 function enumCases(string $type): array {}
 
+function attributes(string $type, string $kind, string $name, int $position, string $attribute): array {}
+
 function constants(string $type): array {}
 
 function constant(string $class, string $name): mixed {}

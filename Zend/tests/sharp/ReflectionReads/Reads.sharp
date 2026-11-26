@@ -1,0 +1,33 @@
+namespace ReflectionReads;
+
+import LogicException;
+
+public static class Reads
+{
+    // Two reads of a parameter's attributes each make a new object of its one attribute.
+    public static bool distinctAttributes()
+    {
+        const parameter = typeof(Holder).constructor()?.parameters().getOrNull(0)
+            ?? throw new LogicException("Holder's constructor takes no parameter.");
+        const first = parameter.attributes<Marker>();
+        const second = parameter.attributes<Marker>();
+
+        return first.count() == 1 && second.count() == 1
+            && global.spl_object_id(first[0]) != global.spl_object_id(second[0]);
+    }
+
+    // Two reads of a backed enum's cases give equal lists of its cases, in the order they are declared.
+    public static List<string> shades()
+    {
+        const first = typeof(Shade).enumCases();
+        const second = typeof(Shade).enumCases();
+
+        return first.map(found => found.name + " " + (found.backingValue is string backing ? backing : "none")
+            + " " + (found.value == Shade.Light ? "Light" : found.value == Shade.Dark ? "Dark" : "other")
+            + " " + (first == second ? "equal" : "unequal"));
+    }
+
+    // A pure enum's cases have no backing value.
+    public static List<string> tones()
+        => typeof(Tone).enumCases().map(found => found.name + " " + (found.backingValue == null ? "none" : "backed"));
+}

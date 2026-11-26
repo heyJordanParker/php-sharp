@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: f7fa561c0635fa5e8e340f3b253e74dd8b566ada */
+ * Stub hash: bfde5806d03cb582148e091dd0287879e664caaf */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
@@ -174,6 +174,14 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_makeGenericType, 
 ZEND_END_ARG_INFO()
 
 #define arginfo_Sharp_Internal_enumCases arginfo_Sharp_Internal_properties
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_attributes, 0, 5, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, kind, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, position, IS_LONG, 0)
+	ZEND_ARG_TYPE_INFO(0, attribute, IS_STRING, 0)
+ZEND_END_ARG_INFO()
 
 #define arginfo_Sharp_Internal_constants arginfo_Sharp_Internal_properties
 
@@ -553,6 +561,7 @@ ZEND_FUNCTION(Sharp_Internal_classFacts);
 ZEND_FUNCTION(Sharp_Internal_enumBackingType);
 ZEND_FUNCTION(Sharp_Internal_makeGenericType);
 ZEND_FUNCTION(Sharp_Internal_enumCases);
+ZEND_FUNCTION(Sharp_Internal_attributes);
 ZEND_FUNCTION(Sharp_Internal_constants);
 ZEND_FUNCTION(Sharp_Internal_constant);
 ZEND_FUNCTION(Sharp_Internal_createInstance);
@@ -676,6 +685,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "enumBackingType"), zif_Sharp_Internal_enumBackingType, arginfo_Sharp_Internal_enumBackingType, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "makeGenericType"), zif_Sharp_Internal_makeGenericType, arginfo_Sharp_Internal_makeGenericType, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "enumCases"), zif_Sharp_Internal_enumCases, arginfo_Sharp_Internal_enumCases, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "attributes"), zif_Sharp_Internal_attributes, arginfo_Sharp_Internal_attributes, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "constants"), zif_Sharp_Internal_constants, arginfo_Sharp_Internal_constants, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "constant"), zif_Sharp_Internal_constant, arginfo_Sharp_Internal_constant, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "createInstance"), zif_Sharp_Internal_createInstance, arginfo_Sharp_Internal_createInstance, 0, NULL, NULL)

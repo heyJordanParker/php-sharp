@@ -7649,8 +7649,9 @@ ZEND_FUNCTION(Sharp_Internal_makeGenericType)
 	RETURN_STR_COPY(sharp_type_class_value(result));
 }
 
-/* Spec section 25: what `Class<T>.enumCases()` reads, the cases of the enum `type` names, in the order they are
- * declared. Empty for a class value that names no enum. */
+/* Spec section 25: what `Class<T>.enumCases()` gives, an `EnumCase` of each case of the enum `type` names, in the order
+ * they are declared, with its name, its case and its backing value, null for a pure enum's. Empty for a class value that
+ * names no enum. Each `EnumCase` is made as its constructor would make it, which sets its three get-only properties. */
 ZEND_FUNCTION(Sharp_Internal_enumCases)
 {
 	zend_string *value;
@@ -7668,6 +7669,17 @@ ZEND_FUNCTION(Sharp_Internal_enumCases)
 	if (!(ce->ce_flags & ZEND_ACC_ENUM)) {
 		return;
 	}
+	zend_string *enum_case_name = zend_string_init(ZEND_STRL("Sharp\\EnumCase"), 0);
+	zend_class_entry *enum_case = zend_lookup_class(enum_case_name);
+	zend_string_release(enum_case_name);
+	if (!enum_case) {
+		zval_ptr_dtor(return_value);
+		RETVAL_NULL();
+		if (!EG(exception)) {
+			zend_throw_error(NULL, "Class \"Sharp\\EnumCase\" not found");
+		}
+		RETURN_THROWS();
+	}
 	zend_string *name;
 	zend_class_constant *constant;
 	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(CE_CONSTANTS_TABLE(ce), name, constant) {
@@ -7675,15 +7687,179 @@ ZEND_FUNCTION(Sharp_Internal_enumCases)
 			continue;
 		}
 		zend_object *found = zend_enum_get_case(ce, name);
-		if (!found) {
+		zval entry;
+		if (!found || object_init_ex(&entry, enum_case) == FAILURE) {
 			zval_ptr_dtor(return_value);
 			RETVAL_NULL();
 			RETURN_THROWS();
 		}
-		zval of_case;
-		ZVAL_OBJ_COPY(&of_case, found);
-		add_next_index_zval(return_value, &of_case);
+		zval of_case, backing;
+		ZVAL_OBJ(&of_case, found);
+		if (ce->enum_backing_type != IS_UNDEF) {
+			ZVAL_COPY_VALUE(&backing, zend_enum_fetch_case_value(found));
+		} else {
+			ZVAL_NULL(&backing);
+		}
+		zend_update_property_str(enum_case, Z_OBJ(entry), ZEND_STRL("name"), name);
+		zend_update_property(enum_case, Z_OBJ(entry), ZEND_STRL("value"), &of_case);
+		zend_update_property(enum_case, Z_OBJ(entry), ZEND_STRL("backingValue"), &backing);
+		add_next_index_zval(return_value, &entry);
+		if (EG(exception)) {
+			zval_ptr_dtor(return_value);
+			RETVAL_NULL();
+			RETURN_THROWS();
+		}
 	} ZEND_HASH_FOREACH_END();
+}
+
+/* The method `name` of `ce` whose attributes `Class<T>`'s members read, as ClassMembers.reflectedMethod reflects it: a
+ * method by its name, or a property's accessor, `$name::get` or `$name::set`, a static's hidden `name#get` or `name#set`
+ * and an instance property's hook. Throws for a name `ce` runs no method of. */
+static zend_function *sharp_attributed_method(zend_class_entry *ce, zend_string *name)
+{
+	zend_function *function = NULL;
+	const char *separator = ZSTR_LEN(name) > 1 && ZSTR_VAL(name)[0] == '$'
+		? zend_memnstr(ZSTR_VAL(name) + 1, "::", 2, ZSTR_VAL(name) + ZSTR_LEN(name))
+		: NULL;
+	if (!separator) {
+		function = sharp_method_named(ce, name);
+	} else {
+		zend_string *property = zend_string_init(ZSTR_VAL(name) + 1, separator - ZSTR_VAL(name) - 1, 0);
+		const char *kind = separator + 2;
+		zend_string *hidden = zend_strpprintf(0, "%s#%s", ZSTR_VAL(property), kind);
+		function = sharp_method_named(ce, hidden);
+		zend_string_release(hidden);
+		if (!function) {
+			zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, property);
+			if (info && info->hooks) {
+				function = info->hooks[strcmp(kind, "get") == 0 ? ZEND_PROPERTY_HOOK_GET : ZEND_PROPERTY_HOOK_SET];
+			}
+		}
+		zend_string_release(property);
+	}
+	if (!function) {
+		zend_throw_error(NULL, "Method %s::%s() does not exist", ZSTR_VAL(ce->name), ZSTR_VAL(name));
+	}
+
+	return function;
+}
+
+/* Spec section 1: what each member's `attributes<T>()` gives, a new object of each attribute of the class the class value
+ * `attribute` names, or of a class that extends or implements it, on the declaration `kind` of the class value `type`, as PHP's
+ * reflection reads one with ReflectionAttribute::IS_INSTANCEOF and makes each with newInstance(): "class", the
+ * method `name` for "method", its parameter at `position` for "parameter", the property or field `name`, or the
+ * storage of an `extern` one, for "property", none for one with no storage, and the constant or enum case `name` for
+ * "constant". A class's and a method's attributes include those of each `extern` line that names it, spec section 29. */
+ZEND_FUNCTION(Sharp_Internal_attributes)
+{
+	zend_string *value, *kind, *name, *attribute;
+	zend_long position;
+
+	ZEND_PARSE_PARAMETERS_START(5, 5)
+		Z_PARAM_STR(value)
+		Z_PARAM_STR(kind)
+		Z_PARAM_STR(name)
+		Z_PARAM_LONG(position)
+		Z_PARAM_STR(attribute)
+	ZEND_PARSE_PARAMETERS_END();
+
+	const sharp_type *arguments;
+	zend_class_entry *ce = sharp_class_value_declaring(value, &arguments);
+	if (!ce) {
+		RETURN_THROWS();
+	}
+	const sharp_type *attribute_arguments;
+	zend_class_entry *base = sharp_class_value_declaring(attribute, &attribute_arguments);
+	if (!base) {
+		RETURN_THROWS();
+	}
+
+	HashTable *attributes = NULL;
+	zend_class_entry *scope = ce;
+	zend_string *filename = NULL;
+	uint32_t target, offset = 0;
+	if (zend_string_equals_literal(kind, "class")) {
+		attributes = sharp_class_attributes(ce);
+		target = ZEND_ATTRIBUTE_TARGET_CLASS;
+	} else if (zend_string_equals_literal(kind, "method") || zend_string_equals_literal(kind, "parameter")) {
+		zend_function *function = sharp_attributed_method(ce, name);
+		if (!function) {
+			RETURN_THROWS();
+		}
+		scope = function->common.scope;
+		filename = function->type == ZEND_USER_FUNCTION ? function->op_array.filename : NULL;
+		if (zend_string_equals_literal(kind, "method")) {
+			attributes = sharp_function_attributes(function);
+			target = ZEND_ATTRIBUTE_TARGET_METHOD;
+		} else {
+			attributes = function->common.attributes;
+			offset = (uint32_t) position + 1;
+			target = ZEND_ATTRIBUTE_TARGET_PARAMETER;
+		}
+	} else if (zend_string_equals_literal(kind, "property")) {
+		zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, name);
+		if (!info) {
+			zend_string *stored = zend_string_concat2(ZSTR_VAL(name), ZSTR_LEN(name), ZEND_STRL("#extern"));
+			info = zend_hash_find_ptr(&ce->properties_info, stored);
+			zend_string_release(stored);
+		}
+		if (!info) {
+			RETURN_EMPTY_ARRAY();
+		}
+		attributes = info->attributes;
+		scope = info->ce;
+		target = ZEND_ATTRIBUTE_TARGET_PROPERTY;
+	} else if (zend_string_equals_literal(kind, "constant")) {
+		zend_class_constant *constant = zend_hash_find_ptr(CE_CONSTANTS_TABLE(ce), name);
+		if (!constant) {
+			zend_throw_error(NULL, "Constant %s::%s does not exist", ZSTR_VAL(ce->name), ZSTR_VAL(name));
+			RETURN_THROWS();
+		}
+		attributes = constant->attributes;
+		scope = constant->ce;
+		target = ZEND_ATTRIBUTE_TARGET_CLASS_CONST;
+	} else {
+		zend_argument_value_error(2, "must be \"class\", \"method\", \"parameter\", \"property\" or \"constant\"");
+		RETURN_THROWS();
+	}
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+	if (!attributes) {
+		RETURN_EMPTY_ARRAY();
+	}
+
+	if (!filename && target != ZEND_ATTRIBUTE_TARGET_METHOD && target != ZEND_ATTRIBUTE_TARGET_PARAMETER
+			&& scope->type == ZEND_USER_CLASS) {
+		filename = scope->info.user.filename;
+	}
+	zend_attribute *found;
+	array_init(return_value);
+	ZEND_HASH_PACKED_FOREACH_PTR(attributes, found) {
+		if (found->offset != offset) {
+			continue;
+		}
+		zend_class_entry *attribute_ce = zend_lookup_class_ex(found->name, found->lcname, 0);
+		if (!attribute_ce) {
+			if (EG(exception)) {
+				break;
+			}
+			continue;
+		}
+		if (!instanceof_function(attribute_ce, base)) {
+			continue;
+		}
+		zval object;
+		if (zend_get_attribute_instance(&object, attributes, found, scope, target, filename) != SUCCESS) {
+			break;
+		}
+		add_next_index_zval(return_value, &object);
+	} ZEND_HASH_FOREACH_END();
+	if (EG(exception)) {
+		zval_ptr_dtor(return_value);
+		RETVAL_NULL();
+		RETURN_THROWS();
+	}
 }
 
 /* The type the class constant `constant`, named `name`, declares, read on a class value of `ce` whose type arguments are
