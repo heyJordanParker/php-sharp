@@ -5,7 +5,7 @@ The engine refuses a compiled file written for another SHARP_UNIT_ABI, as compil
 require __DIR__ . '/project.inc';
 
 $root = compile_project('abi', ['Shop.sharp' => SHOP, 'Counter.sharp' => COUNTER]);
-$compiled = "$root/.sharp/Shop.sharpc";
+$compiled = "$root/.sharp/current/Shop.sharpc";
 overwrite($compiled, 8, chr(ord(file_get_contents($compiled)[8]) ^ 0xff));
 
 refusal("$root/Shop.sharp");
@@ -25,7 +25,7 @@ foreach (LIBRARY_MODULE as $library) {
     $files["vendor/heyjordanparker/php-sharp-composer/library/Sharp/$library.sharp"] = file_get_contents("$package/library/Sharp/$library.sharp");
 }
 $root = compile_project('abi-emit', $files);
-overwrite("$root/.sharp/app/Payer.sharpc", 8, "\x28\xdb\x0d\xf4\x4c\x54\xe7\xd6\x69\xe2\x78\x75\x6c\x26\x62\x11");
+overwrite("$root/.sharp/current/app/Payer.sharpc", 8, "\x28\xdb\x0d\xf4\x4c\x54\xe7\xd6\x69\xe2\x78\x75\x6c\x26\x62\x11");
 
 refusal("$root/app/Payer.sharp");
 remove_project($root);

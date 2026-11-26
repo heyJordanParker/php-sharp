@@ -69,11 +69,10 @@ foreach (['App\Mail\Mailer', 'App\Missing', 'App\Mail\SmtpMailer', 'Egg', 'Loose
 var_dump($container->has('App\Missing'), $container->has('App\Mail\SmtpMailer'), $container->has('Egg'));
 Sharp\Internal\endTest();
 
-// A module edited since its compile is refused each time the container reads it, never skipped. Panel's own compiled
-// file lists the module as an input, as its imports pass the module's list, so Panel is loaded before the edit, as an
-// app that already holds it, and only the module's read meets the edit.
+// A module whose compiled file is gone is refused each time the container reads it, never skipped. Panel is loaded
+// before the module's compiled file goes, as an app that already holds it, so only the module's read meets it.
 class_exists('App\Shop\Admin\Panel');
-file_put_contents("$root/app/Shop/Admin/Module.sharp", CONTAINER_APP['app/Shop/Admin/Module.sharp'] . "\n");
+unlink(realpath("$root/.sharp/current/app/Shop/Admin/Module.sharpc"));
 foreach ([1, 2] as $attempt) {
     try {
         $container->get('App\Shop\Admin\Panel');
@@ -97,6 +96,6 @@ GuardedReceipt: RuntimeException: the guard failed
 bool(false)
 bool(false)
 bool(true)
-Panel, attempt 1: CompileError: app/Shop/Admin/Module.sharp is out of date (app/Shop/Admin/Module.sharp changed). Run vendor/bin/mago compile.
-Panel, attempt 2: CompileError: app/Shop/Admin/Module.sharp is out of date (app/Shop/Admin/Module.sharp changed). Run vendor/bin/mago compile.
+Panel, attempt 1: CompileError: app/Shop/Admin/Module.sharp isn't compiled. Run vendor/bin/mago compile.
+Panel, attempt 2: CompileError: app/Shop/Admin/Module.sharp isn't compiled. Run vendor/bin/mago compile.
 the request goes on

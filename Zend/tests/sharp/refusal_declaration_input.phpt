@@ -8,7 +8,7 @@ const MONEY = "namespace Demo;\n\npublic class Money\n{\n    public int amount()
 const LABEL = "namespace Demo;\n\npublic class Label\n{\n    public static string name() => typeof(Money);\n}\n";
 
 $root = compile_project('declaration-input', ['Money.sharp' => MONEY, 'Label.sharp' => LABEL]);
-$label = "$root/.sharp/Label.sharpc";
+$label = "$root/.sharp/current/Label.sharpc";
 $compiled = file_get_contents($label);
 refusal("$root/Label.sharp");
 
