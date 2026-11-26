@@ -8,4 +8,4 @@ require __DIR__ . '/vendor/autoload.php';
 echo Demo\Shop::run(4), "\n";
 ?>
 --EXPECT--
-13
+12
