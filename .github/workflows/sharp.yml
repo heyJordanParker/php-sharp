@@ -865,6 +865,7 @@ jobs:
       actions: write
       contents: read
       issues: write
+      pull-requests: write
     steps:
       # Only for the actions below, and sharp/bin/record, which the usage action writes the job's line in the build
       # record with.
@@ -885,11 +886,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          # shellcheck disable=SC2016 # The program is jq's, whose $job the shell must not expand.
+          # shellcheck disable=SC2016 # The program is jq's, whose $job and $id the shell must not expand.
           gh run view "$GITHUB_RUN_ID" --json jobs \
-            --jq '.jobs[] | .name as $job | .steps[] | select(.conclusion == "failure") | [$job, .name] | @tsv' \
+            --jq '.jobs[] | .name as $job | .databaseId as $id | .steps[] | select(.conclusion == "failure")
+              | [$job, .name, ($id | tostring)] | @tsv' \
             > "$RUNNER_TEMP/failed-steps"
-          while IFS=$'\t' read -r job step; do
+          while IFS=$'\t' read -r job step _; do
             title=${job//%/%25}
             title=${title//,/%2C}
             title=${title//:/%3A}
@@ -899,6 +901,31 @@ jobs:
           if [[ -s $RUNNER_TEMP/failed-steps ]]; then
             exit 1
           fi
+      # A pull request's run that failed a step ends cancelled, so it reads as cancelled: runs 45805680524 and
+      # 45810230196 were read so. This comments the run's link and each failed job and step on the pull request, with a
+      # test step's Failed lines, which name each failed test, as the queue comments a pull request it leaves out (#943).
+      # A push run opens the red-master issue below instead. curl reads each job's log, since gh api refuses a response
+      # that holds terminal escape sequences, as every test log does, and printed none on run 45836685722.
+      - name: Comment each failed step on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PULL: ${{ github.event.pull_request.number }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [[ ! -s $RUNNER_TEMP/failed-steps ]]; then
+            exit 0
+          fi
+          {
+            echo "Run $RUN failed, so the rest of it was cancelled:"
+            while IFS=$'\t' read -r job step id; do
+              echo "- \`$job\` › $step"
+              curl -sSfL -H "Authorization: Bearer $GH_TOKEN" "$GITHUB_API_URL/repos/$GH_REPO/actions/jobs/$id/logs" \
+                | sed -E 's/^[0-9T:.-]+Z //; s/\x1b\[[0-9;]*m//g' | grep '^Failed: ' | head -n 20 | sed 's/^/  - /' || true
+            done < "$RUNNER_TEMP/failed-steps"
+          } > "$RUNNER_TEMP/failed-comment.md"
+          gh pr comment "$PULL" --body-file "$RUNNER_TEMP/failed-comment.md"
       - name: Every job passed
         if: always()
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
