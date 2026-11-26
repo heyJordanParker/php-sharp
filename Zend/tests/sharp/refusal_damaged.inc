@@ -7,7 +7,7 @@ require __DIR__ . '/project.inc';
 $refusal_settings ??= [];
 
 $root = compile_project('damaged', ['Shop.sharp' => SHOP, 'Counter.sharp' => COUNTER]);
-$compiled = "$root/.sharp/Shop.sharpc";
+$compiled = "$root/.sharp/current/Shop.sharpc";
 $bytes = file_get_contents($compiled);
 ['inputs' => $inputs, 'nodes' => $nodes, 'children' => $children, 'root' => $top] = unpack('Vinputs/Vnodes/Vchildren/Vroot', $bytes, 80);
 $first_node = 160 + 56 * $inputs;

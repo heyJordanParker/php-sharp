@@ -1,0 +1,22 @@
+namespace InheritedFields;
+
+import Sharp.Encoding.Json;
+
+public static class Reads
+{
+    private static DecodeChild child() => typeof(DecodeChild).decode(["key": "a", "label": "b"]);
+
+    public static string decoded() => "label=" + Reads.child().label + " key=" + Reads.child().key;
+
+    public static string encoded() => Json.encode(Reads.child());
+
+    public static string roundTripped()
+    {
+        DecodeChild read = typeof(DecodeChild).decode(typeof(DecodeChild).encode(Reads.child()));
+
+        return "label=" + read.label + " key=" + read.key;
+    }
+
+    public static string secretRoundTripped()
+        => Json.encode(typeof(Child).decode(typeof(Child).encode(typeof(Child).decode(["secret": "s"]))));
+}
