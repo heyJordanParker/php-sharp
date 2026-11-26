@@ -18,7 +18,7 @@ permissions:
 # Each pull request's run is in a group of its own, as GitHub's documented per-pull-request concurrency is, where a
 # push to the pull request cancels its run in progress, so no push to one pull request cancels another's run: one group
 # for every lane cancelled the pending runs of PRs #792 and #864, which then had no CI_PASSED, and queue.yml never took
-# them (#872). A pull request's run uses no Mac, since MACOS runs only in a staging run, so runs at once cost only
+# them (#872). A pull request's run uses no Mac, since MAC_TESTS and MACOS run only in a staging run, so runs at once cost only
 # hosted runners. staging runs one push at a time, and queue.yml pushes it only while no staging run is in progress. A
 # failed job cancels any run, which can no longer pass: a pull request's, and a staging run's, which can no longer land
 # or publish either, so queue.yml's next batch takes its place, as .github/actions/cancel-failed-run explains. Each
@@ -270,7 +270,7 @@ jobs:
   # Ubuntu 24.04's glibc 2.39 is older than the 2.41 of the sharp/docker image's Debian, so the mago it builds runs in
   # that image, where SPEED counts it, and on PLAIN_PHP's runner. On ubuntu-latest, Ubuntu 26.04 since November 2026, it
   # needed glibc 2.43, and SPEED failed on run 45139352435 with "version `GLIBC_2.43' not found". The workspace's tests
-  # run in MAGO, on BUILD_LINUX's build, and on macOS in MACOS.
+  # run in MAGO, on BUILD_LINUX's build, and on macOS in MAC_TESTS.
   MAGO_CHECKS:
     needs: [CHANGES, BUILD_MAGO_ENGINE]
     runs-on: ubuntu-24.04
@@ -349,8 +349,7 @@ jobs:
   # upstream's carthage-software/mago at the release this checker left from, as an extension host does,
   # installs no second checker, and one that requires a later release installs nothing. Then runs mago on
   # a one-class .sharp project with the binary MAGO_CHECKS built, and sharp/phpunit's tests, which stop. On macOS,
-  # MACOS, which release.yml defines, runs the same check on its dev build, and in a release's push on the release
-  # binary.
+  # MAC_TESTS runs the same check on its dev build, and in a release's push MACOS runs it on the release binary.
   PLAIN_PHP:
     needs: [CHANGES, MAGO_CHECKS]
     runs-on: ubuntu-latest
@@ -813,33 +812,126 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
-  # The run's one Mac job, which release.yml defines, so in a release's push the Mac's binary builds in it after the
-  # tests, as release.yml explains. It runs only in a staging run, on the tree that lands, so each landed tree crosses
-  # the Mac once, and a pull request's own run is Linux's alone. assets is true only in a staging push whose version's
-  # GitHub release isn't published, as sharp/bin/check --release finds. Each attestation names the run's commit as the
-  # one it was built from, which is the commit LAND moves master to and PUBLISH tags, and RELEASE fills the draft
-  # release with what that call built. A called workflow's jobs may ask only for permissions its caller grants: actions to cancel a failed run,
-  # id-token and attestations to attest the release's assets, and pull-requests to read the release's notes.
-  MACOS:
+  # The Mac's checks, which LAND waits on through CI_PASSED, so a batch lands once its checks pass and its release
+  # builds after: CI_PASSED needed all of release.yml, which a job can need only whole, so staging runs 45885782543,
+  # 45891373320 and 45896663080 landed at 40.1 to 40.3 min, after the Mac's profile-guided build, where every check had
+  # passed by 21.5 (#952). It runs only in a staging run, on the tree that lands, so each landed tree crosses the Mac
+  # once, and a pull request's own run is Linux's alone. One engine serves the tests, the debug one: only a debug engine
+  # runs ZEND_ASSERT and reports a leak, so mago's tests run on it as the PHP# suite does. Three Linux checks can't run
+  # on macOS: the JIT, which Apple silicon has no thread-safe build of, as ext/opcache/config.m4 warns, the upstream
+  # tests, whose sharp/baseline/linux holds Linux's results, and sharp/bin/hosts, which builds FrankenPHP in the
+  # sharp/docker image.
+  MAC_TESTS:
     needs: CHANGES
     if: github.event_name != 'pull_request'
-    uses: ./.github/workflows/release.yml
-    with:
-      assets: ${{ contains(needs.CHANGES.outputs.missing, 'assets') }}
-      version: ${{ needs.CHANGES.outputs.version }}
-      pulls: ${{ needs.CHANGES.outputs.pulls }}
+    runs-on: macos-arm64-local
     permissions:
       actions: write
+      contents: read
+    steps:
+      # actions/checkout's clean removes every file an earlier job of the Mac runner's one work folder left, sharp/build
+      # among them, so the job builds everything from its tree.
+      - name: checkout source code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+      # mago's cache folder, where the law checker builds its Lean library, in the checkout's build folder, as
+      # sharp/docker/run puts it on Linux, so no job reads a build an earlier job left in the runner's home.
+      - name: Keep mago's cache folder in the checkout
+        run: echo "XDG_CACHE_HOME=$GITHUB_WORKSPACE/sharp/build/cache" >> "$GITHUB_ENV"
+      # A job never installs on the self-hosted Mac, so it checks that Homebrew already has the build's formulae.
+      - name: Homebrew has the build's formulae
+        env:
+          FORMULAE: autoconf bison re2c pkgconf icu4c libsodium oniguruma
+        run: |
+          # shellcheck disable=SC2086 # FORMULAE is a list of formulae.
+          brew list --versions $FORMULAE
+      - name: Build the debug engine mago links and the PHP# suite runs on
+        run: sharp/bin/build-mago --engine --debug
+      # mago and every test binary of the workspace, in the dev profile, which keeps the debug assertions and overflow
+      # checks the tests need, linked with the engine the step before built, as BUILD_LINUX builds them.
+      - name: Build mago and its test binaries
+        env:
+          MAGO_ENGINE: ${{ github.workspace }}/sharp/build/darwin-arm64/install
+        run: sharp/bin/build-mago --quiet
+      - name: Install elan and Lean
+        uses: ./.github/actions/setup-lean
+      # One sharp/bin/test runs the PHP# suite and mago's workspace tests in one pool of the Mac's cores, the
+      # whole-project proof of mago convert among them, as sharp/bin/test explains. The doc tests and the property tests,
+      # which cargo builds on every core in the target the step before last built, run after it, alone. Each run writes
+      # sharp/build/test-report.xml, so the pool's moves aside before the second run writes its own.
+      - name: Test PHP# and mago's workspace
+        env:
+          MAGO_ENGINE: ${{ github.workspace }}/sharp/build/darwin-arm64/install
+        run: |
+          status=0
+          sharp/bin/test --no-build --mago --census --spec --differential --phpunit || status=$?
+          if [[ -f sharp/build/test-report.xml ]]; then
+            mv sharp/build/test-report.xml sharp/build/test-report-pool.xml
+          fi
+          sharp/bin/test --mago --cargo-built || status=$?
+          echo "The test step took $SECONDS s."
+          exit "$status"
+      # Each suite's time and each test's, which the timeline shows as the one step above (#855).
+      - name: Upload the test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-report
+          path: |
+            sharp/build/test-report-pool.xml
+            sharp/build/test-report.xml
+          if-no-files-found: warn
+      # sharp/bin/check plain-php on the Mac's Homebrew PHP, with the dev build the suites ran, in the folder that check
+      # reads the test-run mago from.
+      - name: Run mago from Composer on plain PHP, and stop sharp/phpunit's tests on it
+        run: |
+          mkdir -p "$RUNNER_TEMP/target/test-run"
+          cp sharp/build/darwin-arm64/mago/debug/mago "$RUNNER_TEMP/target/test-run/mago"
+          CARGO_TARGET_DIR="$RUNNER_TEMP/target" sharp/bin/check plain-php
+      - *cancel-failed-run
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+      # Every process the job started ends with it, as release.yml's Mac entry explains.
+      - name: End every process the job started
+        if: always()
+        run: |
+          ps -axwwo pid=,command= | awk -v self=$$ '$1 != self && index($0, ENVIRON["GITHUB_WORKSPACE"])' > "$RUNNER_TEMP/left"
+          while read -r pid command; do
+            echo "::notice title=Ended a process the job left::$pid ${command//%/%25}"
+            if ! kill -KILL "$pid" 2> /dev/null; then
+              echo "$pid had already ended."
+            fi
+          done < "$RUNNER_TEMP/left"
+  # The release's assets, which release.yml builds, after MAC_TESTS on the one Mac, and only in a staging push whose
+  # version's GitHub release isn't published, as sharp/bin/check --release finds. LAND doesn't wait for it, so a
+  # release build that fails after its batch landed opens the red-master issue from release.yml, and is fixed forward.
+  # Each attestation names the run's commit as the one it was built from, which is the commit LAND moves master to and
+  # PUBLISH tags, and RELEASE fills the draft release with what that call built. A called workflow's jobs may ask only
+  # for permissions its caller grants: id-token and attestations to attest the release's assets, issues to open the
+  # red-master issue, and pull-requests to read the release's notes.
+  MACOS:
+    needs: [CHANGES, MAC_TESTS]
+    if: github.event_name != 'pull_request' && contains(needs.CHANGES.outputs.missing, 'assets')
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.CHANGES.outputs.version }}
+      pulls: ${{ needs.CHANGES.outputs.pulls }}
+      range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
+    permissions:
       attestations: write
       contents: read
       id-token: write
+      issues: write
       pull-requests: read
-  # This workflow's one required check. It needs every job that runs on every push and pull request, and fails unless
-  # each of them passed, MACOS and IMAGE skipped on a pull request alone: Mago's among them, MAGO_CHECKS, PLAIN_PHP,
-  # which runs mago from Composer on plain PHP, and SPEED, which counts what proving and compiling cost (#853). In
-  # a release's push MACOS also builds the release's assets, so a failed build fails CI_PASSED, which opens the issue of
-  # a red staging run. LAND, RELEASE, PUBLISH and COMPOSER run only in a staging run, after the checks, so each opens
-  # that issue itself when it fails.
+  # This workflow's one required check. It needs every check job, and fails unless each of them passed, MAC_TESTS and
+  # IMAGE skipped on a pull request alone: Mago's among them, MAGO_CHECKS, PLAIN_PHP, which runs mago from Composer on
+  # plain PHP, and SPEED, which counts what proving and compiling cost (#853). It needs no release build, so LAND merges
+  # once the checks pass (#952). MACOS, LAND, RELEASE, PUBLISH and COMPOSER run only in a staging run, after the checks,
+  # so each opens the issue of a red staging run itself when it fails.
   CI_PASSED:
     if: always() && (github.event_name == 'push' || github.event_name == 'pull_request')
     needs:
@@ -855,7 +947,7 @@ jobs:
       - SPEC
       - HOSTS
       - WORKFLOWS
-      - MACOS
+      - MAC_TESTS
       - IMAGE
     runs-on: ubuntu-24.04
     permissions:
@@ -927,7 +1019,7 @@ jobs:
         if: always()
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: ${{ github.event_name == 'pull_request' && 'MACOS, IMAGE' || '' }}
+          allowed-skips: ${{ github.event_name == 'pull_request' && 'MAC_TESTS, IMAGE' || '' }}
           jobs: ${{ toJSON(needs) }}
       # As .github/actions/red-master-issue explains. LAND, RELEASE, PUBLISH and COMPOSER run it by its anchor.
       - &red-master-issue
@@ -1496,7 +1588,7 @@ jobs:
   # --release explains, and a rerun leaves what an earlier attempt published. It opens the red-master issue when it
   # fails, since CI_PASSED doesn't need it.
   RELEASE:
-    needs: [CHANGES, BUILD_MAGO_ENGINE, BUILD_LINUX, MAGO_CHECKS, PLAIN_PHP, SPEED, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, WORKFLOWS, MACOS, IMAGE, LAND]
+    needs: [CHANGES, BUILD_MAGO_ENGINE, BUILD_LINUX, MAGO_CHECKS, PLAIN_PHP, SPEED, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, WORKFLOWS, MAC_TESTS, MACOS, IMAGE, LAND]
     # failure() and cancelled() count no needed job that ended cancelled: cancelled() is true only when the run is
     # cancelled, and a job past its timeout-minutes ends cancelled. Run 45455237056's IMAGE (linux/arm64) did, and
     # RELEASE then made its release public with no image and no Composer tag. So it also reads each needed job's result.
