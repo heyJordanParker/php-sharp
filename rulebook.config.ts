@@ -18,5 +18,6 @@ export default defineConfig({
     'sharp/require-one-thread-mago': 'error',
     'sharp/block-local-suites': 'error',
     'sharp/block-pattern-kills': 'error',
+    'sharp/block-deletes-from-listings': 'error',
   },
 })
