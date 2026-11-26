@@ -144,7 +144,7 @@ def targets():
 
 # The speed targets, by the name targets.py prints. The language owner set speed as a standing priority on 11-24,
 # triaged like any other problem: each one off its goal is an intake entry headed `## Speed: <name>` (TRIAGE.md).
-SPEED_TARGETS = ("edit CPU", "edit peak memory", "Mac job, last green", "longest CI job, last green",
+SPEED_TARGETS = ("edit CPU", "edit peak memory", "CI run, pull request", "CI run, staging",
                  "longest local loop, last 24 h")
 
 
@@ -250,17 +250,20 @@ def report():
              (re.match(r"\s+(.+?): first measured (\d\d-\d\d \d\d:\d\dZ|now)$", line) for line in lines) if m}
     goals = []
     for line in lines[start + 1:]:
-        found = re.match(r"\s+(.+?): ([\d.]+)( ?[A-Za-z]*) / ([\d.]+)( ?[A-Za-z]*) (MET|x([\d.]+))(?:, (?:run \d+ )?(.+))?$", line)
+        # A target the owner has set no goal for shows `/ unset`, and sorts after every target with a goal.
+        found = re.match(r"\s+(.+?): ([\d.]+)( ?[A-Za-z-]*) / (?:([\d.]+)( ?[A-Za-z-]*) (MET|x([\d.]+))|(unset))(?:, (?:run \d+ )?(.+))?$", line)
         if found:
             name = re.sub(r",? (mean|last green)$", "", found.group(1)).replace("->", " to ")
-            off = 0.0 if found.group(6) == "MET" else float(found.group(7))
-            when = f"  ({found.group(8)})" if found.group(8) else ""
+            unset = found.group(8) is not None
+            off = -1.0 if unset else 0.0 if found.group(6) == "MET" else float(found.group(7))
+            when = f"  ({found.group(9)})" if found.group(9) else ""
             before, moved = trend.get(found.group(1), ("", ""))
             since = first.get(found.group(1))
             day = f"{float(before):.1f}{found.group(3)}" if before else f"new {since[6:]}" if since else "none"
             mark = "  ROSE" if moved == "ROSE" else ""
-            goals.append((off, f"  {name:<36} {found.group(2) + found.group(3):>12}  {day:>12}  {found.group(4) + found.group(5):>8}  "
-                                f"{'met' if off == 0 else f'{off:.1f}x off':>9}{mark}{when}"))
+            goal = "unset" if unset else found.group(4) + found.group(5)
+            verdict = "no goal" if unset else "met" if off == 0 else f"{off:.1f}x off"
+            goals.append((off, f"  {name:<36} {found.group(2) + found.group(3):>12}  {day:>12}  {goal:>8}  {verdict:>9}{mark}{when}"))
     block += ["", f"  {'Targets, worst first':<36} {'now':>12}  {'24 h ago':>12}  {'goal':>8}  {'':>9}", *[row for _, row in sorted(goals, reverse=True)]]
     block += [f"  commit to shipped {line.split('by release: ', 1)[1]}" for line in lines if line.strip().startswith("by release: ")]
     block += [f"  {line.strip()}" for line in lines if line.strip().startswith("release ETA: ")]
