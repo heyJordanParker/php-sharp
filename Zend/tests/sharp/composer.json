@@ -175,6 +175,7 @@
             "ReflectedConstants\\": "ReflectedConstants/",
             "ReflectedMembers\\": "ReflectedMembers/",
             "ReflectedTypes\\": "ReflectedTypes/",
+            "ReflectionReads\\": "ReflectionReads/",
             "RootBound\\": "RootBound/",
             "Rush\\": "RushOrders/",
             "SelfMembers\\": "SelfMembers/",
