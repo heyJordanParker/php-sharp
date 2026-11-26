@@ -83,10 +83,13 @@ build_engine() {
     esac
   done < <("$root/sharp/docker/runtime/configure-options")
   # Only a debug engine runs ZEND_ASSERT and reports a leak, and the suite's observer and executor tests run on
-  # zend_test. It compiles at -O0 without autoconf's -g, since no job reads its debug info: configure.ac's debug build
-  # adds only -O0 to the CFLAGS it finds, which in its options configure records with the rest (#955).
+  # zend_test, which builds as a shared extension the phpt runner loads for each test that names it: built in, its
+  # exported copy_file_range took glibc's place in every Linux binary that links the engine, where Rust's
+  # std::fs::copy reached it on a thread no engine started, and it faulted reading zend_test's globals (#967). It
+  # compiles at -O0 without autoconf's -g, since no job reads its debug info: configure.ac's debug build adds only -O0
+  # to the CFLAGS it finds, which in its options configure records with the rest (#955).
   if $debug; then
-    options+=(--enable-debug --enable-zend-test CFLAGS=-O0)
+    options+=(--enable-debug --enable-zend-test=shared CFLAGS=-O0)
   fi
   # Empties the engine's folder but the mago build that sharp/build/<os>-<arch> holds beside a debug engine.
   clear_engine() {
@@ -221,6 +224,11 @@ build_engine() {
     "$root/sapi/embed" "$engine/main" "$engine/Zend" -name '*.h' -newer "$installed" -print -quit)" ]]; then
     "$record" "make install" -- make -C "$engine" install-headers install-programs >/dev/null
     touch "$installed"
+  fi
+  # A debug engine's shared zend_test builds and installs into the extension folder its php reads, where the phpt
+  # runner finds it. The install copies one file, so it runs on each build.
+  if $debug; then
+    "$record" "make install-modules" -- make -C "$engine" -j"$("$root/sharp/bin/jobs")" install-modules >/dev/null
   fi
   # libphp.so changes with any object, so its install runs whenever the link made a newer one.
   if $shared && [[ ! -f "$engine/install/lib/libphp.so" || "$engine/libs/libphp.so" -nt "$engine/install/lib/libphp.so" ]]; then
