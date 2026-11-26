@@ -46,6 +46,7 @@ public class Parameter
     // PHP's reflection of the parameter, through its method's, so a property accessor's `value` is reached as the
     // accessor is.
     private ReflectionParameter reflected()
-        => ClassMembers.reflectedMethod(this.declaringClass, this.method).getParameters()[this.position]
+        => (ClassMembers.reflectedMethod(this.declaringClass, this.method).getParameters() as List<ReflectionParameter>)
+            ?.getOrNull(this.position)
             ?? throw new ValueError("The engine gave a parameter its method does not take.");
 }
