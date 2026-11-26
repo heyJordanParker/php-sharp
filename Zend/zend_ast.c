@@ -2621,6 +2621,11 @@ simple_list:
 			}
 			break;
 		case ZEND_AST_SHARP_TYPE_ARGS:
+			if (!ast->child[0] || ast->child[0]->kind == ZEND_AST_ZVAL) {
+				/* PHP#: the type arguments of a call, written as their type text, the last argument of its list. */
+				smart_str_append(str, zend_ast_get_str(ast->child[1]));
+				break;
+			}
 			if (!ast->child[0]->child[0]) {
 				/* PHP#: `new TItem(…)`, which names no class, written with the type text, as `new X(…)` writes a
 				 * class. */
@@ -2636,10 +2641,6 @@ simple_list:
 			/* PHP#: a `new` whose type arguments, or a value whose check, PHP has no syntax for, as in the message of
 			 * an assert(). */
 			zend_ast_export_ex(str, ast->child[0], priority, indent);
-			break;
-		case ZEND_AST_SHARP_CALL_TYPE_ARGS:
-			/* PHP#: the type arguments of a call, written as their type text, the last argument of its list. */
-			smart_str_append(str, zend_ast_get_str(ast->child[0]));
 			break;
 		case ZEND_AST_SHARP_IS_TYPE:
 			/* PHP#: a test of type arguments, written with the type text, as `instanceof` writes a class. */

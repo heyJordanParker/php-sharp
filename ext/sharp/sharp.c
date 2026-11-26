@@ -15179,9 +15179,47 @@ static const zend_op *sharp_frame_call(const zend_execute_data *frame)
 	return call->op1_type == IS_TMP_VAR ? call : NULL;
 }
 
-/* The written order of the type argument `index` the call that pushed `frame` gave it, see
- * ZEND_AST_SHARP_CALL_TYPE_ARGS, or NULL when it wrote none. `#i` in it is the order of the type argument i the
- * caller's own call gave it, so a generic wrapper's order reaches the call it makes, as its type arguments do. */
+/* The type argument `index` of the type list `text`, `Map<string, #0>` of `Map<string, #0>, int`, from `*at` to `*end`:
+ * the list split at each comma outside its brackets. Empty past its last one. */
+static void sharp_type_list_argument(const zval *text, uint32_t index, const char **at, const char **end)
+{
+	const char *next = Z_STRVAL_P(text), *stop = next + Z_STRLEN_P(text);
+	uint32_t depth = 0, argument = 0;
+
+	*at = next;
+	for (; next < stop; next++) {
+		if (*next == '<' || *next == '(' || *next == '[') {
+			depth++;
+		} else if (*next == '>' || *next == ')' || *next == ']') {
+			depth--;
+		} else if (*next == ',' && !depth) {
+			if (argument++ == index) {
+				*end = next;
+				return;
+			}
+			*at = next + sizeof(", ") - 1;
+		}
+	}
+	*end = argument == index ? stop : *at;
+}
+
+static zend_string *sharp_frame_written_order(const zend_execute_data *frame, uint32_t index);
+
+/* Appends to `order` the written order the call that pushed `frame` gave its type argument `#i`, at `at`. */
+static void sharp_order_append_parameter(smart_str *order, const zend_execute_data *frame, const char *at)
+{
+	zend_string *named = sharp_frame_written_order(frame, (uint32_t) ZEND_STRTOUL(at + 1, NULL, 10));
+	if (named) {
+		smart_str_appends(order, order->s ? ", " : "");
+		smart_str_append(order, named);
+		zend_string_release(named);
+	}
+}
+
+/* The written order of the type argument `index` the call that pushed `frame` gave it, see ZEND_AST_SHARP_TYPE_ARGS, or
+ * NULL when it wrote none. `#i` in it is the order of the type argument i the caller's own call gave it, and so is each
+ * `#i` the type argument's text names when the call wrote it no order, so a generic wrapper's order reaches the call it
+ * makes, as its type arguments do. */
 static zend_string *sharp_frame_written_order(const zend_execute_data *frame, uint32_t index)
 {
 	const zend_op *call = sharp_frame_call(frame);
@@ -15211,20 +15249,22 @@ static zend_string *sharp_frame_written_order(const zend_execute_data *frame, ui
 	end = split ? split : end;
 
 	smart_str order = {0};
+	if (at == end) {
+		sharp_type_list_argument(RT_CONSTANT(type_args, type_args->op2), index, &at, &end);
+		for (; at < end; at++) {
+			if (*at == '#') {
+				sharp_order_append_parameter(&order, caller, at);
+			}
+		}
+	}
 	while (at < end) {
 		const char *comma = zend_memnstr(at, ", ", sizeof(", ") - 1, end);
 		const char *stop = comma ? comma : end;
-		zend_string *named = NULL;
 		if (*at == '#') {
-			named = sharp_frame_written_order(caller, (uint32_t) ZEND_STRTOUL(at + 1, NULL, 10));
-		}
-		if (*at != '#' && *at != '$') {
+			sharp_order_append_parameter(&order, caller, at);
+		} else if (*at != '$') {
 			smart_str_appends(&order, order.s ? ", " : "");
 			smart_str_appendl(&order, at, stop - at);
-		} else if (named) {
-			smart_str_appends(&order, order.s ? ", " : "");
-			smart_str_append(&order, named);
-			zend_string_release(named);
 		}
 		at = comma ? comma + sizeof(", ") - 1 : end;
 	}

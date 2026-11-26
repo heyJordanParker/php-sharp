@@ -4146,11 +4146,13 @@ static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_fun
 		return true;
 	}
 
-	/* A PHP# generic call ends its arguments with the type arguments it gives the method, a
-	 * ZEND_AST_SHARP_CALL_TYPE_ARGS, which the call op takes. */
+	/* A PHP# generic call ends its arguments with the type arguments it gives the method, a ZEND_AST_SHARP_TYPE_ARGS
+	 * without a `new`, whose child 0 is NULL or their written order, which the call op takes. */
 	zend_ast_list *args = zend_ast_get_list(args_ast);
 	zend_ast *type_args_ast = NULL;
-	if (args->children && args->child[args->children - 1]->kind == ZEND_AST_SHARP_CALL_TYPE_ARGS) {
+	if (args->children && args->child[args->children - 1]->kind == ZEND_AST_SHARP_TYPE_ARGS
+		&& (!args->child[args->children - 1]->child[0]
+			|| args->child[args->children - 1]->child[0]->kind == ZEND_AST_ZVAL)) {
 		type_args_ast = args->child[--args->children];
 	}
 
@@ -4163,7 +4165,7 @@ static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_fun
 	 * Fiber that suspends inside an argument suspends before they exist, so no suspended frame holds them. */
 	znode type_args_node;
 	if (type_args_ast) {
-		zend_compile_sharp_type_args(&type_args_node, type_args_ast->child[0], type_args_ast->child[1]);
+		zend_compile_sharp_type_args(&type_args_node, type_args_ast->child[1], type_args_ast->child[0]);
 		/* zend_ast_destroy frees the node with the list. */
 		args->children++;
 	}
@@ -5706,7 +5708,7 @@ static zend_ast *zend_sharp_declared_type(zend_ast *type_ast, zend_string **shar
 
 /* Emits the ZEND_SHARP_TYPE_ARGS that resolves the type arguments `text_ast` spells into `result`, or this's when
  * `text_ast` is NULL, as `new Self` gives them. The literal after the text, and after the class name an open text
- * names, is the written order `order_ast` holds, or empty, see ZEND_AST_SHARP_CALL_TYPE_ARGS. */
+ * names, is the written order `order_ast` holds, or empty, see ZEND_AST_SHARP_TYPE_ARGS. */
 static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast, zend_ast *order_ast)
 {
 	zend_op *opline = zend_emit_op_tmp(result, ZEND_SHARP_TYPE_ARGS, NULL, NULL);

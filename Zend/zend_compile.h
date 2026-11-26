@@ -1358,7 +1358,7 @@ static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 #define ZEND_SHARP_TYPE_ARGS_OPEN 1
 
 /* The literal of a ZEND_SHARP_TYPE_ARGS with a CONST op2 that holds the written order of its type arguments, or an empty
- * string, see ZEND_AST_SHARP_CALL_TYPE_ARGS: right after the text, or after the class name literals of an open one. */
+ * string, see ZEND_AST_SHARP_TYPE_ARGS: right after the text, or after the class name literals of an open one. */
 #define ZEND_SHARP_TYPE_ARGS_ORDER(opline) \
 	(RT_CONSTANT(opline, (opline)->op2) \
 		+ ((opline)->op1_type == IS_CV || (opline)->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN ? 3 : 1))
