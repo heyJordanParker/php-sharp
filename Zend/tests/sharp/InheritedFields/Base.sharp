@@ -1,0 +1,6 @@
+namespace InheritedFields;
+
+public abstract class Base
+{
+    private string secret { get; set; } = "";
+}

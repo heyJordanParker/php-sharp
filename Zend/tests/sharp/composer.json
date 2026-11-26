@@ -124,6 +124,7 @@
                 "NamesImports/"
             ],
             "Indexers\\": "Indexers/",
+            "InheritedFields\\": "InheritedFields/",
             "IntBounds\\": "IntBounds/",
             "InterfaceInit\\": "InterfaceInit/",
             "InterfaceMembers\\": "InterfaceMembers/",
