@@ -12,8 +12,8 @@ name: Release
 # version moved to the start of each cycle, every run on next built the profile-guided release, and run 44997846679 took
 # 45 minutes, 16.5 of them the release build alone after every check had ended. LAND doesn't wait for this workflow, as
 # a merge queue gates on the tests and a release pipeline builds the artifacts after the merge (#952), so a failed
-# build opens the red-master issue and is fixed forward. Its attestations name this workflow as their signer, which
-# install.sh and mago self-update verify, so the binaries build here and nowhere else.
+# release job opens the red-master issue from red_master_issue and is fixed forward. Its attestations name this
+# workflow as their signer, which install.sh and mago self-update verify, so the binaries build here and nowhere else.
 on:
   workflow_call:
     inputs:
@@ -211,7 +211,6 @@ jobs:
       contents: read
       id-token: write
       attestations: write
-      issues: write
     strategy:
       fail-fast: false
       matrix:
@@ -473,15 +472,6 @@ jobs:
           path: ${{ steps.package.outputs.PKG_PATH }}
           if-no-files-found: error
 
-      # A failed release build cancels no run, since its batch lands on the checks alone, and opens the issue of a red
-      # staging run, as .github/actions/red-master-issue explains, under the title sharp.yml's jobs open it with.
-      - name: Open an issue for the failed staging run
-        if: failure() && github.event_name == 'push'
-        uses: ./.github/actions/red-master-issue
-        with:
-          title: A staging run failed PHP# CI
-          range: ${{ inputs.range }}
-
       - name: Write the job's CPU-seconds and peak memory
         if: always()
         uses: ./.github/actions/usage
@@ -568,3 +558,24 @@ jobs:
           name: sha256sums
           path: ${{ runner.temp }}/mago-${{ env.VERSION }}-sha256sums.txt
           if-no-files-found: error
+
+  # A failed release job cancels no run, since its batch lands on the checks alone, and opens the issue of a red staging
+  # run from this one job, as .github/actions/red-master-issue explains, under the title sharp.yml's jobs open it with.
+  # failure() is true here when any job it needs failed, so a failed crate_metadata, source_archive, build or sums opens
+  # it the same way.
+  red_master_issue:
+    name: Open an issue for the failed release
+    runs-on: ubuntu-latest
+    needs: [crate_metadata, source_archive, build, sums]
+    if: failure() && github.event_name == 'push'
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: checkout source code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Open an issue for the failed staging run
+        uses: ./.github/actions/red-master-issue
+        with:
+          title: A staging run failed PHP# CI
+          range: ${{ inputs.range }}
