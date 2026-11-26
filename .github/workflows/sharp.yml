@@ -155,7 +155,13 @@ jobs:
       - name: Build the engine the suites run on and mago links
         run: sharp/docker/run sharp/bin/build-mago --engine --debug
       - name: Build mago and its test binaries
-        run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64/install sharp/bin/build-mago --quiet
+        run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64/install sharp/bin/build-mago --quiet --timings
+      - name: Upload cargo's timing report of the mago build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cargo-timings-linux
+          path: sharp/build/linux-x86_64/mago/cargo-timings/
+          if-no-files-found: error
       # What the suites run: the CLI, phpdbg, which run-tests.php finds beside it for the tests that need it, the install
       # sharp/bin/hosts builds FrankenPHP against, and mago. The libphp.a mago linked stays out, since no suite links it.
       # An artifact keeps no file's mode, so the files travel in a tar, compressed here, since Actions would compress
