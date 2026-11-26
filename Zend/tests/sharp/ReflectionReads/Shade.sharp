@@ -1,0 +1,7 @@
+namespace ReflectionReads;
+
+public enum Shade : string
+{
+    case Light = "light";
+    case Dark = "dark";
+}
