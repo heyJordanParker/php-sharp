@@ -15,7 +15,8 @@ set -euo pipefail
 # share again under new hashes (#908). It builds the PHP# engine mago links first. `--engine` builds the engine alone,
 # which a CI job runs first, and a cargo check or clippy never needs. `--engine --debug` builds it as the PHP# suite
 # runs it, with --enable-debug and zend_test, in sharp/build/<os>-<arch> beside the suite's php and phpdbg, so the Mac
-# job builds one engine, which mago links too and the suite runs on. `--test-run` builds the mago of the test-run
+# job builds one engine, which mago links too and the suite runs on, and on Linux BUILD_LINUX does too, with the shared
+# libphp.so sharp/bin/hosts builds FrankenPHP against (#955). `--test-run` builds the mago of the test-run
 # profile, which behaves as release's without its fat LTO, as sharp/mago/Cargo.toml explains, into test-run/mago, for
 # sharp/bin/check. `--cargo-tests` builds and runs the tests cargo builds only as it runs them: the doc tests, and
 # mago-codex's property tests, which build with a feature of their own. `--crate <package>` builds and runs the
@@ -54,7 +55,9 @@ trap 'rm -f "$target"/*.json.part.$$ ${library:+"$library/system-libs.part.$$" "
 # The PHP# engine mago links, which runs the extension hosts inside mago, one interpreter per analysis thread. It builds
 # with the options sharp/docker/runtime/configure-options prints, the runtime image's, so a host runs inside mago with
 # the extensions an app runs with. Four options change: the embed SAPI builds as a static library, which mago links
-# into its own binary, each shared extension links in too, since a static engine loads no shared extension, readline
+# into its own binary, but for Linux's debug engine, whose libphp.so sharp/bin/hosts builds FrankenPHP against, and whose
+# shared build compiles the same objects, since the CLI and phpdbg keep libtool's static objects on, each shared
+# extension links in too, since a static engine loads no shared extension, readline
 # runs on libedit, since GNU readline is GPL, which mago can't link, and the Argon2 password hashes come from sodium,
 # whose archive holds Argon2's own functions under the names libargon2's archive gives them, so one link can't hold both.
 # MAGO_ENGINE names an engine built elsewhere, as a CI job builds one with --engine first, which mago links as it is.
@@ -65,10 +68,14 @@ build_engine() {
   else
     engine="$root/sharp/build/$platform-engine"
   fi
+  shared=false
+  if $debug && [[ "$(uname -s)" == Linux ]]; then
+    shared=true
+  fi
   options=(--prefix="$engine/install")
   while IFS= read -r option; do
     case "$option" in
-      --enable-embed) options+=(--enable-embed=static) ;;
+      --enable-embed) if $shared; then options+=("$option"); else options+=(--enable-embed=static); fi ;;
       --with-readline) options+=(--with-libedit) ;;
       --with-password-argon2) ;;
       *=shared) options+=("${option%=shared}") ;;
@@ -76,9 +83,13 @@ build_engine() {
     esac
   done < <("$root/sharp/docker/runtime/configure-options")
   # Only a debug engine runs ZEND_ASSERT and reports a leak, and the suite's observer and executor tests run on
-  # zend_test.
+  # zend_test, which builds as a shared extension the phpt runner loads for each test that names it: built in, its
+  # exported copy_file_range took glibc's place in every Linux binary that links the engine, where Rust's
+  # std::fs::copy reached it on a thread no engine started, and it faulted reading zend_test's globals (#967). It
+  # compiles at -O0 without autoconf's -g, since no job reads its debug info: configure.ac's debug build adds only -O0
+  # to the CFLAGS it finds, which in its options configure records with the rest (#955).
   if $debug; then
-    options+=(--enable-debug --enable-zend-test)
+    options+=(--enable-debug --enable-zend-test=shared CFLAGS=-O0)
   fi
   # Empties the engine's folder but the mago build that sharp/build/<os>-<arch> holds beside a debug engine.
   clear_engine() {
@@ -195,10 +206,14 @@ build_engine() {
   # The cargo build of ext/sharp's Rust library, which make runs, reads CARGO_BUILD_JOBS as its jobs.
   # shellcheck disable=SC2016 # The variables are make's, which make expands.
   read -r -a linked <<< "$(make -s -C "$engine" -f Makefile -f - print-objects <<< 'print-objects: ; @echo $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS)')"
-  # A debug engine also makes the two binaries the PHP# suite runs, from the same objects.
+  # A debug engine also makes the two binaries the PHP# suite runs, from the same objects, and on Linux the libphp.so
+  # sharp/bin/hosts builds FrankenPHP against.
   programs=()
   if $debug; then
     programs=(sapi/cli/php sapi/phpdbg/phpdbg)
+  fi
+  if $shared; then
+    programs+=(libphp.la)
   fi
   CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")" "$record" make -- \
     make -C "$engine" -j"$("$root/sharp/bin/jobs")" "${linked[@]}" "${programs[@]}" >/dev/null
@@ -209,6 +224,15 @@ build_engine() {
     "$root/sapi/embed" "$engine/main" "$engine/Zend" -name '*.h' -newer "$installed" -print -quit)" ]]; then
     "$record" "make install" -- make -C "$engine" install-headers install-programs >/dev/null
     touch "$installed"
+  fi
+  # A debug engine's shared zend_test builds and installs into the extension folder its php reads, where the phpt
+  # runner finds it. The install copies one file, so it runs on each build.
+  if $debug; then
+    "$record" "make install-modules" -- make -C "$engine" -j"$("$root/sharp/bin/jobs")" install-modules >/dev/null
+  fi
+  # libphp.so changes with any object, so its install runs whenever the link made a newer one.
+  if $shared && [[ ! -f "$engine/install/lib/libphp.so" || "$engine/libs/libphp.so" -nt "$engine/install/lib/libphp.so" ]]; then
+    "$record" "make install-sapi" -- make -C "$engine" install-sapi >/dev/null
   fi
 
   # So the archive mago links holds those objects, and the static archive of each library the link names, so the linker
