@@ -1328,7 +1328,9 @@ impl CodebaseMetadata {
 
     /// The fields of a PHP# struct's or class's stored form, which its `parse` reads and `Json.encode` writes, spec
     /// section 10: its main constructor's parameters in order, then each other stored property, whatever its write
-    /// visibility, so a `private set` one and a machine's are kept. A computed property stores nothing. A parameter
+    /// visibility, so a `private set` one and a machine's are kept: its own, then each one a PHP# ancestor declares,
+    /// nearest first, as `fields()` orders them, and none a plain PHP ancestor declares. A property a nearer class
+    /// declares again is one field. A computed property stores nothing. A parameter
     /// that declares its property is that property's one field. A property the main constructor sets on every path may
     /// be left out, and is read once, by the parameter, when a parameter reads its key. Any other property a
     /// parameter's key names is a second field of that key, which the struct check refuses.
@@ -1359,36 +1361,51 @@ impl CodebaseMetadata {
         let set_by_constructor = constructor
             .and_then(|constructor| constructor.method_metadata.as_ref())
             .map(|constructor| &constructor.assigned_properties);
-        let properties = self.get_class_like(class).into_iter().flat_map(|metadata| {
-            metadata
-                .struct_properties()
-                .into_iter()
-                .filter(|property| !property.flags.is_promoted_property())
-                .filter_map(|property| {
-                    let r#type = property.type_metadata.as_ref().or(property.type_declaration_metadata.as_ref())?;
-                    let name = property.name.0.as_bytes();
-                    let name = name.strip_prefix(b"$").unwrap_or(name);
-                    let set_by_constructor =
-                        set_by_constructor.is_some_and(|assigned| assigned.contains(&property.name.0));
-                    if set_by_constructor && parameters.iter().any(|parameter| parameter.key == name) {
-                        return None;
-                    }
-                    let (key, omits_null) = field_key(&property.attributes, name);
+        let main_class = self.get_declaring_method_class(class, word("__construct"));
+        let Some(metadata) = self.get_class_like(class) else {
+            return parameters;
+        };
+        let ancestors = std::iter::successors(Some(metadata), |metadata| {
+            metadata.direct_parent_class.and_then(|parent| self.get_class_like(parent))
+        })
+        .take(metadata.all_parent_classes.len() + 1)
+        .enumerate()
+        .filter(|(depth, ancestor)| *depth == 0 || ancestor.flags.is_sharp())
+        .map(|(_, ancestor)| ancestor);
+        let mut declared: HashSet<&[u8]> = HashSet::default();
+        let mut properties = Vec::new();
+        for ancestor in ancestors {
+            for property in ancestor.struct_properties() {
+                let name = property.name.0.as_bytes();
+                let name = name.strip_prefix(b"$").unwrap_or(name);
+                let nearest = declared.insert(name);
+                let parameter = property.flags.is_promoted_property() && main_class == Some(ancestor.name);
+                if parameter || !nearest {
+                    continue;
+                }
+                let Some(r#type) = property.type_metadata.as_ref().or(property.type_declaration_metadata.as_ref())
+                else {
+                    continue;
+                };
+                let set_by_constructor = set_by_constructor.is_some_and(|assigned| assigned.contains(&property.name.0));
+                if set_by_constructor && parameters.iter().any(|parameter| parameter.key == name) {
+                    continue;
+                }
+                let (key, omits_null) = field_key(&property.attributes, name);
 
-                    Some(ParsedField {
-                        name,
-                        key,
-                        omits_null,
-                        r#type: &r#type.type_union,
-                        has_default: property.flags.has_default() || set_by_constructor,
-                        is_parameter: false,
-                        span: property.name_span,
-                    })
-                })
-                .collect::<Vec<_>>()
-        });
+                properties.push(ParsedField {
+                    name,
+                    key,
+                    omits_null,
+                    r#type: &r#type.type_union,
+                    has_default: property.flags.has_default() || set_by_constructor,
+                    is_parameter: false,
+                    span: property.name_span,
+                });
+            }
+        }
 
-        parameters.iter().copied().chain(properties).collect()
+        parameters.into_iter().chain(properties).collect()
     }
 
     /// Retrieves magic `@property*` metadata, potentially from an inherited tag.

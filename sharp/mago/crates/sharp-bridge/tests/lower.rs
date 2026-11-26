@@ -35125,7 +35125,71 @@ fn parse_reads_each_field_as_its_type() {
     );
 }
 
-const SIZE: &str = "namespace App;\n\npublic struct Size\n{\n    public int width { get; init; }\n    public int depth { get; init; }\n}\n";
+/// Spec section 10: a class's stored form holds every stored property it inherits from a PHP# parent after its own,
+/// so `#fields` lists the main constructor's `label`, then the parent's `key`, which `decode` reads and `Json.encode`
+/// writes.
+#[test]
+fn fields_list_a_stored_property_a_class_inherits_from_its_php_sharp_parent() {
+    let lowered = Lowered::with(
+        "namespace App;\n\ninternal final class DecodeChild : DecodeParent\n{\n    internal DecodeChild(internal string label { get; }) { }\n}\n",
+        &[(
+            "src/App/DecodeParent.sharp",
+            "namespace App;\n\ninternal abstract class DecodeParent\n{\n    internal string key { get; set; } = \"\";\n}\n",
+        )],
+    );
+
+    assert_eq!(
+        lowered.declared("#fields"),
+        indoc! {r##"
+            METHOD [17] "#fields" @3-3
+              PARAM_LIST
+              null
+              STMT_LIST
+                RETURN
+                  ARRAY [3]
+                    ARRAY_ELEM
+                      ARRAY [3]
+                        ARRAY_ELEM
+                          ZVAL "label"
+                          null
+                        ARRAY_ELEM
+                          ZVAL "label"
+                          null
+                        ARRAY_ELEM
+                          ZVAL "string"
+                          null
+                        ARRAY_ELEM
+                          ZVAL true
+                          null
+                        ARRAY_ELEM
+                          ZVAL false
+                          null
+                      null
+                    ARRAY_ELEM
+                      ARRAY [3]
+                        ARRAY_ELEM
+                          ZVAL "key"
+                          null
+                        ARRAY_ELEM
+                          ZVAL "key"
+                          null
+                        ARRAY_ELEM
+                          ZVAL "string"
+                          null
+                        ARRAY_ELEM
+                          ZVAL false
+                          null
+                        ARRAY_ELEM
+                          ZVAL true
+                          null
+                      null
+              null
+              null
+        "##}
+    );
+}
+
+const SIZE: &str ="namespace App;\n\npublic struct Size\n{\n    public int width { get; init; }\n    public int depth { get; init; }\n}\n";
 
 /// ```php
 /// public function copies(\App\Size $size, int $depth): \App\Size
