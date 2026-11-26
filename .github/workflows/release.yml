@@ -418,17 +418,16 @@ jobs:
         shell: bash
         run: cargo build --locked --release --target=${{ matrix.job.target }}
 
-      # A profile-guided build runs as three steps, so the run's timeline times each (#860). The instrumented mago only
-      # analyzes corpus/ once to write the profile and never ships, so it compiles without [profile.release]'s fat LTO in
-      # one codegen unit, which made the build step 1,535 to 1,740 s on the release runs of 11-24. The optimized build
-      # that ships keeps [profile.release] (#797).
+      # A profile-guided build runs as three steps, so the run's timeline times each (#860). The instrumented build and
+      # the optimized build both compile with [profile.release], as cargo-pgo's flow does: cargo hashes the profile into
+      # each crate's module names, and LLVM finds a local function's profile by its module's name, so an instrumented
+      # build without fat LTO in 16 codegen units left 31,616 functions with no profile on the 0.8.9 release (#897).
       - name: Build the instrumented mago
         if: inputs.assets && matrix.job.pgo
         shell: bash
         run: |
           rm -rf "$CARGO_TARGET_DIR/pgo-profiles"
-          CARGO_PROFILE_RELEASE_LTO=off CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
-            cargo pgo build -- --target=${{ matrix.job.target }}
+          cargo pgo build -- --target=${{ matrix.job.target }}
 
       # mago exits 1 when the analysis finds issues, which the corpus holds, and any other exit, a crash, a kill or a
       # tool error, fails the step, so no binary ships built from a broken profile.
