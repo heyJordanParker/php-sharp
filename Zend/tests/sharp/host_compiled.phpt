@@ -7,7 +7,8 @@ require __DIR__ . '/project.inc';
 $root = compile_project('host-compiled', ['Counter.sharp' => COUNTER, 'Shop.sharp' => SHOP]);
 $folder = "$root-hosts";
 remove_project($folder);
-rename("$root/.sharp", $folder);
+rename(realpath("$root/.sharp/current"), $folder);
+remove_project("$root/.sharp");
 file_put_contents("$root/Broken.sharp", "namespace Demo;\n\nclass Broken\n{\n    public int run() => \"text\";\n}\n");
 file_put_contents("$root/Later.sharp", "namespace Demo;\n\nclass Later\n{\n}\n");
 file_put_contents("$folder/report.json", json_encode(['issues' => [[

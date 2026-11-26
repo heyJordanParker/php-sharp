@@ -9,14 +9,18 @@ set -euo pipefail
 # features without the tests' dev-dependencies, and compiled 129 of its 393 units apart from it (#847).
 # Every script that builds sharp/mago builds it here, with the jobs sharp/bin/jobs prints, so one place keeps the build
 # folder the size of one fresh build of each kind, as the prune below explains (#730). Every argument goes to cargo,
-# such as --quiet. It builds the PHP# engine mago links first. `--engine` builds the engine alone, which a CI job
-# runs first, and a cargo check or clippy never needs. `--engine --debug` builds it as the PHP# suite runs it, with
-# --enable-debug and zend_test, in sharp/build/<os>-<arch> beside the suite's php and phpdbg, so the Mac job builds one
-# engine, which mago links too and the suite runs on. `--test-run` builds the mago of the test-run profile, which
-# behaves as release's without its fat LTO, as sharp/mago/Cargo.toml explains, into test-run/mago, for sharp/bin/check.
-# `--cargo-tests` builds and runs the tests cargo builds only as it runs them: the doc tests, and mago-codex's property
-# tests, which build with a feature of their own. `--crate <package>` builds and runs one crate's tests, as `cargo test
-# -p` runs them, then its clippy, so a builder's loop on one crate is in the build record and keeps its units.
+# such as --quiet. Each crate's integration test takes the crate's name without mago-, so `--test syntax` builds
+# mago-syntax's test binary alone, from the units the workspace's build holds. Every build selects the whole workspace,
+# since a cargo run that selects fewer packages resolves their features apart from it and compiles the crates they
+# share again under new hashes (#908). It builds the PHP# engine mago links first. `--engine` builds the engine alone,
+# which a CI job runs first, and a cargo check or clippy never needs. `--engine --debug` builds it as the PHP# suite
+# runs it, with --enable-debug and zend_test, in sharp/build/<os>-<arch> beside the suite's php and phpdbg, so the Mac
+# job builds one engine, which mago links too and the suite runs on. `--test-run` builds the mago of the test-run
+# profile, which behaves as release's without its fat LTO, as sharp/mago/Cargo.toml explains, into test-run/mago, for
+# sharp/bin/check. `--cargo-tests` builds and runs the tests cargo builds only as it runs them: the doc tests, and
+# mago-codex's property tests, which build with a feature of their own. `--crate <package>` builds and runs the
+# package's integration test, as `--test` names it, then the package's clippy, so a builder's loop on one crate is in
+# the build record and keeps its units.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 # Each run leaves its line in the build record, with each step's under it, see sharp/bin/record.
 [[ ${SHARP_RECORDED:-} == sharp/bin/build-mago ]] || exec "$root/sharp/bin/record" sharp/bin/build-mago -- "$0" "$@"
@@ -198,7 +202,14 @@ build_engine() {
   fi
   CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")" "$record" make -- \
     make -C "$engine" -j"$("$root/sharp/bin/jobs")" "${linked[@]}" "${programs[@]}" >/dev/null
-  "$record" "make install" -- make -C "$engine" install-headers install-programs >/dev/null
+  # The install copies the headers, php-config and phpize, which change only with a configure or a header, never with
+  # an object, so it runs only when one of those is newer than the last install.
+  installed="$engine/install/installed"
+  if [[ ! -f $installed || $stamp -nt $installed ]] || [[ -n "$(find "$root/Zend" "$root/main" "$root/TSRM" "$root/ext" \
+    "$root/sapi/embed" "$engine/main" "$engine/Zend" -name '*.h' -newer "$installed" -print -quit)" ]]; then
+    "$record" "make install" -- make -C "$engine" install-headers install-programs >/dev/null
+    touch "$installed"
+  fi
 
   # So the archive mago links holds those objects, and the static archive of each library the link names, so the linker
   # finds every symbol in one archive whatever order they need each other in. libsharp.a stays out: it bundles a Rust
@@ -293,23 +304,11 @@ fi
 # Each kind of build keeps cargo's messages about it in a file of its own under $target, one JSON object per line, among
 # them every file it made or found fresh and the folder each build script wrote, while the diagnostics print as cargo
 # prints them: build.json, whose test binaries sharp/bin/test runs, as a CI job does on another job's build with
-# sharp/bin/test --no-build, build-<packages>.json for a build of the packages a -p or --package names, bin.json,
-# test-run.json, cargo-tests.json and crate-<package>.json. So no build overwrites another kind's file, and the prune
-# keeps every unit each one names. A failed build leaves no file, so no run takes a build that failed for one that
-# passed.
-packages=()
-if [[ $mode == tests ]]; then
-  previous=
-  for argument in "$@"; do
-    case $previous,$argument in
-      -p,* | --package,*) packages+=("$argument") ;;
-      *,--package=*) packages+=("${argument#--package=}") ;;
-    esac
-    previous=$argument
-  done
-fi
+# sharp/bin/test --no-build, bin.json, test-run.json, cargo-tests.json and crate-<package>.json. So no build overwrites
+# another kind's file, and the prune keeps every unit each one names. A failed build leaves no file, so no run takes a
+# build that failed for one that passed.
 case $mode in
-  tests) messages=$target/build${packages[*]+-$(IFS=-; echo "${packages[*]}")}.json ;;
+  tests) messages=$target/build.json ;;
   crate) messages=$target/crate-$package.json ;;
   *) messages=$target/$mode.json ;;
 esac
@@ -338,14 +337,7 @@ messages_to_file() {
 }
 case $mode in
   tests)
-    # A -p or --package among the arguments builds only the packages it names: cargo resolves their features apart from
-    # the workspace's, so the shared crates they use compile once more into the target, and later builds of the same
-    # list compile only what a change reaches.
-    scope=(--workspace)
-    if ((${#packages[@]})); then
-      scope=()
-    fi
-    cargo_in_target test "${scope[@]}" --no-run "$@" > "$messages.part.$$"
+    cargo_in_target test --workspace --no-run "$@" > "$messages.part.$$"
     ;;
   bin)
     cargo_in_target test --workspace --no-run --test suite "$@" > "$messages.part.$$"
@@ -368,7 +360,8 @@ case $mode in
     # The crate's tests, then its clippy, whose messages print nothing but JSON. Both run, and the build fails when
     # either did.
     failed=()
-    cargo_in_target test -p "$package" "$@" -- --test-threads "$jobs" | messages_to_file || failed+=("$package's tests")
+    cargo_in_target test --workspace --test "${package#mago-}" "$@" -- --test-threads "$jobs" | messages_to_file \
+      || failed+=("$package's tests")
     cargo_in_target clippy -p "$package" --all-targets "$@" -- -D warnings >> "$messages.part.$$" \
       || failed+=("$package's clippy")
     if ((${#failed[@]})); then

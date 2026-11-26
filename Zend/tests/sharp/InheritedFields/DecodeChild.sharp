@@ -1,0 +1,6 @@
+namespace InheritedFields;
+
+internal final class DecodeChild : DecodeParent
+{
+    internal DecodeChild(internal string label { get; }) { }
+}

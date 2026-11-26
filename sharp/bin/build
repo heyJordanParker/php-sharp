@@ -17,12 +17,18 @@ for arg in "$@"; do
     --linux) linux=true ;;
     --clean) clean=true; container_command+=("$arg") ;;
     --release) release=true; container_command+=("$arg") ;;
-    *) echo "usage: sharp/bin/build [--clean] [--linux] [--release]" >&2; exit 2 ;;
+    *) echo "usage: sharp/bin/build --linux [--clean] [--release]" >&2; exit 2 ;;
   esac
 done
 
 if $linux; then
   exec "$root/sharp/docker/run" "${container_command[@]}"
+fi
+# It builds the Linux engine, in the sharp/docker image its --linux runs it in. On macOS sharp/bin/test builds the
+# debug engine CI's Mac job runs every suite on, with sharp/bin/build-mago --engine --debug (#851).
+if [[ "$(uname -s)" != Linux ]]; then
+  echo "usage: sharp/bin/build --linux [--clean] [--release]" >&2
+  exit 2
 fi
 
 build_dir="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
@@ -53,20 +59,9 @@ flags=(
   --with-zip
   --with-zlib
   --with-curl
+  --with-pgsql
+  --with-pdo-pgsql
 )
-
-if [[ "$(uname -s)" == Darwin ]]; then
-  brew_opt="$(brew --prefix)/opt"
-  export PATH="$brew_opt/bison/bin:$PATH"
-  export PKG_CONFIG_PATH="$brew_opt/icu4c/lib/pkgconfig:$brew_opt/curl/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
-  flags+=(
-    --with-pgsql="$brew_opt/libpq"
-    --with-pdo-pgsql="$brew_opt/libpq"
-    --with-iconv="$brew_opt/libiconv"
-  )
-else
-  flags+=(--with-pgsql --with-pdo-pgsql)
-fi
 
 if ! $release; then
   flags+=(--enable-debug)
@@ -88,15 +83,12 @@ fi
 
 # The build configures again when what configure reads changed: its flags, the compilers in CC and CXX, which
 # configure writes into the Makefile, so ccache's wrapper joins a build only through it, and the content of each
-# tracked file configure reads, such as a *.in file it writes a file from. On Linux the build runs in the sharp/docker
-# image, so the image's Dockerfile is one of them. The content counts, not the time: a checkout of another branch gives
+# tracked file configure reads, such as a *.in file it writes a file from. The build runs in the sharp/docker image, so
+# the image's Dockerfile is one of them. The content counts, not the time: a checkout of another branch gives
 # every file it rewrites a new time, which says nothing of what the build was configured from, and on the self-hosted
 # Mac, whose jobs of every branch share one build, a configure took 12 of the Mac build's 50.5 minutes on release pull
 # request #395's run.
-inputs=(configure.ac '*.m4' '*.in' '*Makefile.frag' '*Makefile.global' Zend/zend_modules.h ':(exclude)sharp')
-if [[ "$(uname -s)" == Linux ]]; then
-  inputs+=(sharp/docker/Dockerfile)
-fi
+inputs=(configure.ac '*.m4' '*.in' '*Makefile.frag' '*Makefile.global' Zend/zend_modules.h ':(exclude)sharp' sharp/docker/Dockerfile)
 configured="$(
   printf '%s\n' "${flags[@]}" "CC=${CC:-}" "CXX=${CXX:-}"
   cd "$root"
@@ -114,15 +106,7 @@ fi
 # ext/sharp's Rust library, which make builds with cargo, reads CARGO_BUILD_JOBS as its jobs.
 CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")"
 export CARGO_BUILD_JOBS
-# sharp/bin/hosts runs on Linux alone and links FrankenPHP against the libphp the build installs, so only Linux builds
-# every target and installs. Elsewhere make builds the two binaries the suites run and nothing else reads: sharp_build_id.h
-# holds the commit, so every commit relinks what holds ext/sharp, and on MACOS run 45051337556 libphp.so's link took 84
-# s, libphp.dylib's 169 s and the install 123 s of the step's 392 s. configure takes the same flags everywhere, since
-# other flags would rebuild a Mac's engine from nothing.
-if [[ "$(uname -s)" == Linux ]]; then
-  "$record" make -- make -C "$build_dir" -j"$CARGO_BUILD_JOBS" >/dev/null
-  "$record" "make install" -- make -C "$build_dir" install >/dev/null
-else
-  "$record" make -- make -C "$build_dir" -j"$CARGO_BUILD_JOBS" sapi/cli/php sapi/phpdbg/phpdbg >/dev/null
-fi
+# sharp/bin/hosts links FrankenPHP against the libphp the build installs, so it builds every target and installs.
+"$record" make -- make -C "$build_dir" -j"$CARGO_BUILD_JOBS" >/dev/null
+"$record" "make install" -- make -C "$build_dir" install >/dev/null
 "$build_dir/sapi/cli/php" -v

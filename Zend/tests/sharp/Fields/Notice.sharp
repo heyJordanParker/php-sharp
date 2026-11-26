@@ -1,0 +1,7 @@
+namespace Fields;
+
+// A struct whose one property only the object's creation writes.
+public struct Notice
+{
+    public string key { get; init; }
+}

@@ -56,6 +56,12 @@ extern PHP_JSON_API zend_class_entry *php_json_exception_ce;
 #include "sharp_version.h"
 
 #define SHARP_COMPILED_FOLDER ".sharp"
+/* The link in the compiled folder that names the generation every compiled file is read from, which each compile
+ * writes anew and switches the link to: the bridge's unit::CURRENT_GENERATION. */
+#define SHARP_CURRENT_GENERATION "current"
+/* The file of a generation each process reading it holds a shared flock on, so no compile deletes the generation
+ * meanwhile: the bridge's unit::GENERATION_LOCK. */
+#define SHARP_GENERATION_LOCK "generation.lock"
 /* How the path of an input that stands for the .sharp files of its folder ends: the bridge's unit::SOURCE_LISTING. */
 #define SHARP_SOURCE_LISTING "/*.sharp"
 #define SHARP_LISTENERS "listeners.php"
@@ -96,6 +102,9 @@ typedef struct {
 ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	HashTable folder_roots;
 	HashTable request_stamps;
+	/* For the request: the generation it reads each project's compiled files from, by the project's root. See
+	 * sharp_request_generation. */
+	HashTable request_generations;
 	/* For the request: each listener table emit read, by its path, and each event class's listeners, by its entry. */
 	HashTable listener_tables;
 	HashTable event_listeners;
@@ -130,6 +139,13 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	/* Spec section 25: what reflection read this request, under a key sharp_reflected spells the rows it gave, so a
 	 * class's declarations are read once. NULL until there is one. */
 	HashTable *request_reflected;
+	/* Spec section 10: the fields of each struct or class sharp_read_struct read this request, a sharp_struct_fields by
+	 * the address of its entry, so its `#fields` runs and its field types are read once a request. NULL until there is
+	 * one. */
+	HashTable *request_struct_fields;
+	/* The type each class value sharp_class_value_of read from its text this request, by the address of its interned
+	 * string, so a class's name is read once a request. NULL until there is one. */
+	HashTable *request_read_class_values;
 	/* Spec section 32: Sharp\Container's bindings, under "namespace id" a list of the modules that bind it, each a
 	 * list of its rows, the base modules' and the environment modules' apart; the paths of the module files it read;
 	 * each test file's module, under the exact name of the one PHP# class the file declares, and the one of the test
@@ -372,6 +388,8 @@ typedef struct {
 	const char *changed;
 	size_t changed_length;
 	sharp_unit unit;
+	/* Whether it comes from a generation whose every input the process found current, so no input is checked again. */
+	bool trusted;
 } sharp_compiled;
 
 static int64_t sharp_mtime_ns(const zend_stat_t *status)
@@ -512,6 +530,7 @@ static bool sharp_holds_compiled_folder(const char *folder, size_t length)
 }
 
 static zend_string *sharp_environment_variable(const char *name, size_t name_length);
+static bool sharp_compiles_on_demand(void);
 
 /* The folder an extension host's worker reads the project's compiled files from: mago starts each worker of a host with
  * SHARP_ROOT, the project's root, and SHARP_COMPILED, the folder outside the project where it compiled the project for
@@ -535,21 +554,199 @@ static zend_string *sharp_host_compiled(const char *path, size_t length, size_t 
 	return folder;
 }
 
+typedef enum {
+	SHARP_GENERATION_UNCHECKED,
+	SHARP_GENERATION_CURRENT,
+	SHARP_GENERATION_STALE,
+} sharp_generation_verdict;
+
+/* A generation of a project's .sharp folder, which mago compile writes once and never changes: its folder, the
+ * descriptor of its lock file while a request of the process reads it, else -1, how many requests do, and whether every
+ * input its compiled files record was current when the process first checked it. */
+typedef struct {
+	zend_string *folder;
+	int lock;
+	uint32_t readers;
+	sharp_generation_verdict verdict;
+} sharp_generation;
+
+/* Each generation the process has read, by its folder, so a server's process checks a generation once. */
+static HashTable sharp_generations;
+#ifdef ZTS
+static MUTEX_T sharp_generations_lock;
+# define SHARP_GENERATIONS_LOCK() tsrm_mutex_lock(sharp_generations_lock)
+# define SHARP_GENERATIONS_UNLOCK() tsrm_mutex_unlock(sharp_generations_lock)
+#else
+# define SHARP_GENERATIONS_LOCK()
+# define SHARP_GENERATIONS_UNLOCK()
+#endif
+
+static void sharp_generation_free(zval *entry)
+{
+	sharp_generation *generation = Z_PTR_P(entry);
+
+	if (generation->lock >= 0) {
+		close(generation->lock);
+	}
+	zend_string_release(generation->folder);
+	pefree(generation, true);
+}
+
+/* The descriptor of the lock file of the generation in folder, under its shared lock, or -1 when the generation is gone,
+ * as a compile deletes one whose exclusive lock it gets: the file the descriptor locks must still be the one at its
+ * path. */
+static int sharp_lock_generation(const zend_string *folder)
+{
+	zend_string *path = zend_string_concat3(ZSTR_VAL(folder), ZSTR_LEN(folder), "/", 1, SHARP_GENERATION_LOCK,
+		sizeof(SHARP_GENERATION_LOCK) - 1);
+	int fd = open(ZSTR_VAL(path), O_RDONLY | O_CLOEXEC);
+	zend_stat_t held, there;
+
+	while (fd >= 0 && flock(fd, LOCK_SH) != 0) {
+		if (errno != EINTR) {
+			close(fd);
+			fd = -1;
+		}
+	}
+	if (fd >= 0 && (zend_fstat(fd, &held) != 0 || VCWD_STAT(ZSTR_VAL(path), &there) != 0
+			|| held.st_ino != there.st_ino || held.st_dev != there.st_dev)) {
+		close(fd);
+		fd = -1;
+	}
+	zend_string_release(path);
+
+	return fd;
+}
+
+/* The generation the process reads from folder, its lock held for one more request, or NULL when it is gone. */
+static sharp_generation *sharp_hold_generation(const zend_string *folder)
+{
+	sharp_generation *generation;
+
+	SHARP_GENERATIONS_LOCK();
+	generation = zend_hash_str_find_ptr(&sharp_generations, ZSTR_VAL(folder), ZSTR_LEN(folder));
+	if (!generation) {
+		generation = pemalloc(sizeof(*generation), true);
+		generation->folder = zend_string_init(ZSTR_VAL(folder), ZSTR_LEN(folder), true);
+		generation->lock = -1;
+		generation->readers = 0;
+		generation->verdict = SHARP_GENERATION_UNCHECKED;
+		zend_hash_str_add_new_ptr(&sharp_generations, ZSTR_VAL(folder), ZSTR_LEN(folder), generation);
+	}
+	if (generation->lock < 0) {
+		generation->lock = sharp_lock_generation(folder);
+	}
+	if (generation->lock >= 0) {
+		generation->readers++;
+	} else {
+		generation = NULL;
+	}
+	SHARP_GENERATIONS_UNLOCK();
+
+	return generation;
+}
+
+/* Lets the generation's lock go once no request of the process reads it. */
+static void sharp_let_generation_go(sharp_generation *generation)
+{
+	SHARP_GENERATIONS_LOCK();
+	if (--generation->readers == 0) {
+		close(generation->lock);
+		generation->lock = -1;
+	}
+	SHARP_GENERATIONS_UNLOCK();
+}
+
+/* The generation the request reads every compiled file of the project at the root, the first root_length bytes of path,
+ * from: the one the project's .sharp/current link names when the request first reads one, held until the request ends,
+ * so a compile meanwhile changes nothing the request reads. NULL when the link names no generation there is. */
+static sharp_generation *sharp_request_generation(const char *path, size_t root_length)
+{
+	sharp_generation *generation = zend_hash_str_find_ptr(&SHARP_G(request_generations), path, root_length);
+	zend_string *link, *tried = NULL;
+	char name[MAXPATHLEN];
+	ssize_t length;
+
+	if (generation) {
+		return generation;
+	}
+	link = zend_strpprintf(0, "%.*s/" SHARP_COMPILED_FOLDER "/" SHARP_CURRENT_GENERATION, (int) root_length, path);
+	/* A compile switches the link before it deletes the generation it replaced, so a generation gone since the link
+	 * named it leaves the link naming a newer one. */
+	while (!generation && (length = readlink(ZSTR_VAL(link), name, sizeof(name) - 1)) > 0) {
+		zend_string *folder = zend_strpprintf(0, "%.*s/" SHARP_COMPILED_FOLDER "/%.*s", (int) root_length, path,
+			(int) length, name);
+
+		if (tried && zend_string_equals(tried, folder)) {
+			zend_string_release(folder);
+			break;
+		}
+		generation = sharp_hold_generation(folder);
+		if (tried) {
+			zend_string_release(tried);
+		}
+		tried = folder;
+	}
+	if (tried) {
+		zend_string_release(tried);
+	}
+	zend_string_release(link);
+	if (generation) {
+		zend_hash_str_add_new_ptr(&SHARP_G(request_generations), path, root_length, generation);
+	}
+
+	return generation;
+}
+
+/* Lets go of the generation the request reads the project at the root, the first root_length bytes of path, from, so
+ * the request reads the one a compile it ran wrote. */
+static void sharp_forget_generation(const char *path, size_t root_length)
+{
+	sharp_generation *generation = zend_hash_str_find_ptr(&SHARP_G(request_generations), path, root_length);
+
+	if (generation) {
+		sharp_let_generation_go(generation);
+		zend_hash_str_del(&SHARP_G(request_generations), path, root_length);
+	}
+}
+
+static void sharp_let_generations_go(void)
+{
+	sharp_generation *generation;
+
+	ZEND_HASH_FOREACH_PTR(&SHARP_G(request_generations), generation) {
+		sharp_let_generation_go(generation);
+	} ZEND_HASH_FOREACH_END();
+	zend_hash_clean(&SHARP_G(request_generations));
+}
+
 /* The folder that holds the compiled files of the project whose root is the first root_length bytes of the path of
- * length bytes: the host's folder for a worker of an extension host, else the project's .sharp folder. */
-static zend_string *sharp_compiled_folder(const char *path, size_t length, size_t root_length)
+ * length bytes: the host's folder for a worker of an extension host, else the generation of the project's .sharp folder
+ * the request reads, which generation gets when it is not NULL, or the current link itself when there is none, which
+ * holds no file. */
+static zend_string *sharp_compiled_folder(const char *path, size_t length, size_t root_length,
+	sharp_generation **generation)
 {
 	size_t host_root_length;
 	zend_string *host = sharp_host_compiled(path, length, &host_root_length);
+	sharp_generation *read;
 
+	if (generation) {
+		*generation = NULL;
+	}
 	if (host && host_root_length == root_length) {
 		return host;
 	}
 	if (host) {
 		zend_string_release(host);
 	}
+	read = sharp_request_generation(path, root_length);
+	if (generation) {
+		*generation = read;
+	}
 
-	return zend_string_concat3(path, root_length, "/", 1, SHARP_COMPILED_FOLDER, sizeof(SHARP_COMPILED_FOLDER) - 1);
+	return read ? zend_string_init(ZSTR_VAL(read->folder), ZSTR_LEN(read->folder), false)
+		: zend_strpprintf(0, "%.*s/" SHARP_COMPILED_FOLDER "/" SHARP_CURRENT_GENERATION, (int) root_length, path);
 }
 
 static bool sharp_find_root(const zend_string *source, size_t *root_length)
@@ -591,10 +788,11 @@ static bool sharp_find_root(const zend_string *source, size_t *root_length)
 	return true;
 }
 
-static zend_string *sharp_read_compiled(const sharp_compiled *compiled)
+/* The bytes of the compiled file of the source, from the generation it gets, or NULL when there is none. */
+static zend_string *sharp_read_compiled(const sharp_compiled *compiled, sharp_generation **generation)
 {
 	const char *source = ZSTR_VAL(compiled->source);
-	zend_string *folder = sharp_compiled_folder(source, ZSTR_LEN(compiled->source), compiled->root_length);
+	zend_string *folder = sharp_compiled_folder(source, ZSTR_LEN(compiled->source), compiled->root_length, generation);
 	zend_string *path = zend_strpprintf(0, "%s%.*sc", ZSTR_VAL(folder),
 		(int) (ZSTR_LEN(compiled->source) - compiled->root_length), source + compiled->root_length);
 	php_stream *stream;
@@ -682,7 +880,7 @@ static const uint8_t *sharp_compiled_declarations(const zend_string *path, size_
 	}
 	length = strlen(real);
 	if (length > root_length && real[root_length] == '/' && memcmp(real, ZSTR_VAL(path), root_length) == 0) {
-		zend_string *folder = sharp_compiled_folder(real, length, root_length);
+		zend_string *folder = sharp_compiled_folder(real, length, root_length, NULL);
 		zend_string *compiled = zend_strpprintf(0, "%s%sc", ZSTR_VAL(folder), real + root_length);
 		int file = VCWD_OPEN(ZSTR_VAL(compiled), O_RDONLY);
 		sharp_unit_header header;
@@ -743,6 +941,108 @@ static bool sharp_input_current(const sharp_compiled *compiled, const sharp_inpu
 	zend_string_release(path);
 
 	return current;
+}
+
+/* Whether every input the compiled file at path records is as it was compiled, the project's root being the first
+ * root_length bytes of root. A file the engine can't read the inputs of is left to its own load, which refuses it. */
+static bool sharp_unit_inputs_current(const char *path, const zend_string *root, size_t root_length)
+{
+	sharp_compiled compiled = {0};
+	const sharp_unit_header *header;
+	const sharp_input *inputs;
+	php_stream *stream = php_stream_open_wrapper(path, "rb", STREAM_DISABLE_OPEN_BASEDIR, NULL);
+	zend_string *bytes;
+	bool current = true;
+
+	if (!stream) {
+		return true;
+	}
+	bytes = php_stream_copy_to_mem(stream, PHP_STREAM_COPY_ALL, 0);
+	php_stream_close(stream);
+	if (!bytes || ZSTR_LEN(bytes) < sizeof(sharp_unit_header)) {
+		if (bytes) {
+			zend_string_release(bytes);
+		}
+		return true;
+	}
+	header = (const sharp_unit_header *) ZSTR_VAL(bytes);
+	inputs = (const sharp_input *) (ZSTR_VAL(bytes) + sizeof(sharp_unit_header));
+	if (memcmp(header->magic, SHARP_UNIT_MAGIC, sizeof(header->magic)) == 0
+			&& memcmp(header->abi, SHARP_UNIT_ABI, sizeof(header->abi)) == 0
+			&& sizeof(sharp_unit_header)
+				+ sizeof(sharp_input) * (uint64_t) header->input_count
+				+ sizeof(sharp_node) * (uint64_t) header->node_count
+				+ sizeof(uint32_t) * (uint64_t) header->children_count
+				+ header->texts_size == ZSTR_LEN(bytes)) {
+		compiled.source = (zend_string *) root;
+		compiled.root_length = root_length;
+		compiled.unit.texts = ZSTR_VAL(bytes) + ZSTR_LEN(bytes) - header->texts_size;
+		for (uint32_t i = 0; current && i < header->input_count; i++) {
+			current = !sharp_text_fits(header, inputs[i].path) || sharp_input_current(&compiled, &inputs[i]);
+		}
+	}
+	zend_string_release(bytes);
+
+	return current;
+}
+
+/* Whether every input each compiled file under folder records is as it was compiled, the project's root being the
+ * first root_length bytes of root. */
+static bool sharp_folder_inputs_current(const zend_string *folder, const zend_string *root, size_t root_length)
+{
+	DIR *directory = VCWD_OPENDIR(ZSTR_VAL(folder));
+	struct dirent *entry;
+	bool current = true;
+
+	while (current && directory && (entry = readdir(directory))) {
+		size_t name_length = strlen(entry->d_name);
+		zend_string *path;
+		zend_stat_t status;
+
+		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+			continue;
+		}
+		path = zend_string_concat3(ZSTR_VAL(folder), ZSTR_LEN(folder), "/", 1, entry->d_name, name_length);
+		if (VCWD_STAT(ZSTR_VAL(path), &status) == 0 && S_ISDIR(status.st_mode)) {
+			current = sharp_folder_inputs_current(path, root, root_length);
+		} else if (name_length > sizeof(SHARP_FILE_EXTENSION "c") - 1 && memcmp(entry->d_name + name_length
+				- (sizeof(SHARP_FILE_EXTENSION "c") - 1), SHARP_FILE_EXTENSION "c", sizeof(SHARP_FILE_EXTENSION "c") - 1) == 0) {
+			current = sharp_unit_inputs_current(ZSTR_VAL(path), root, root_length);
+		}
+		zend_string_release(path);
+	}
+	if (directory) {
+		closedir(directory);
+	}
+
+	return current;
+}
+
+/* Whether the compiled files of the generation are trusted without a check of their inputs: the process checked every
+ * input its compiled files record once, the first time it read it, and found each current. A process that compiles on
+ * demand checks each file it loads instead, so each request runs the code on disk. */
+static bool sharp_generation_trusted(sharp_generation *generation, const char *path, size_t root_length)
+{
+	sharp_generation_verdict verdict;
+
+	if (!generation || sharp_compiles_on_demand()) {
+		return false;
+	}
+	SHARP_GENERATIONS_LOCK();
+	verdict = generation->verdict;
+	SHARP_GENERATIONS_UNLOCK();
+	if (verdict == SHARP_GENERATION_UNCHECKED) {
+		zend_string *root = zend_string_init(path, root_length, false);
+
+		verdict = sharp_folder_inputs_current(generation->folder, root, root_length)
+			? SHARP_GENERATION_CURRENT : SHARP_GENERATION_STALE;
+		zend_string_release(root);
+		SHARP_GENERATIONS_LOCK();
+		generation->verdict = verdict;
+		SHARP_GENERATIONS_UNLOCK();
+	}
+
+	return verdict == SHARP_GENERATION_CURRENT;
 }
 
 /* Whether a compiled file was compiled against a standard library built for this engine's native bodies: its native
@@ -929,7 +1229,7 @@ static sharp_state sharp_check(sharp_compiled *compiled, const char *source, siz
 	if (!sharp_native_current(header->native_fingerprint)) {
 		return SHARP_OTHER_LIBRARY;
 	}
-	if (source) {
+	if (source && !compiled->trusted) {
 		uint8_t hash[16];
 
 		sharp_hash_bytes(source, source_length, hash);
@@ -943,7 +1243,7 @@ static sharp_state sharp_check(sharp_compiled *compiled, const char *source, siz
 		if (!sharp_text_fits(header, inputs[i].path)) {
 			return SHARP_NOT_COMPILED;
 		}
-		if (!sharp_input_current(compiled, &inputs[i])) {
+		if (!compiled->trusted && !sharp_input_current(compiled, &inputs[i])) {
 			compiled->changed = compiled->unit.texts + inputs[i].path.offset;
 			compiled->changed_length = inputs[i].path.len;
 			return SHARP_OUT_OF_DATE;
@@ -967,7 +1267,11 @@ static void sharp_locate(sharp_compiled *compiled, const char *filename)
 		: zend_string_init(filename, strlen(filename), 0);
 	compiled->rooted = sharp_find_root(compiled->source, &compiled->root_length);
 	if (compiled->rooted) {
-		compiled->bytes = sharp_read_compiled(compiled);
+		sharp_generation *generation;
+
+		compiled->bytes = sharp_read_compiled(compiled, &generation);
+		compiled->trusted = compiled->bytes
+			&& sharp_generation_trusted(generation, ZSTR_VAL(compiled->source), compiled->root_length);
 	}
 }
 
@@ -1280,6 +1584,8 @@ static bool sharp_lock_compiles(const char *path, size_t root_length)
 		sharp_unlock_compiles();
 		return false;
 	}
+	/* A compile another request ran while this one waited wrote a newer generation, which the request reads from now. */
+	sharp_forget_generation(path, root_length);
 
 	return true;
 }
@@ -1409,6 +1715,7 @@ static void sharp_run_compile_command(const char *path, size_t root_length)
 		sharp_decode_report(output);
 	}
 	SHARP_G(compile_command_failure) = sharp_command_failure(child, start_error, status, errors);
+	sharp_forget_generation(path, root_length);
 }
 
 /* For a worker of an extension host, reads report.json, the checker's report mago wrote beside the files it compiled
@@ -6676,10 +6983,10 @@ static bool sharp_is_init(const zend_property_info *info, zend_string *name)
  * static `name`, by the code that called the standard library member whose body made the internal call `execute_data`,
  * as .NET's FieldInfo.GetValue and SetValue reach a field. The code reaches the storage as a direct use from it would,
  * and a written value is checked against its type as `Property.set` checks it, since `writeField` runs in strict mode
- * (PHP_MINIT_FUNCTION). The storage of an `init` property takes a write only while it holds no value, as only the
- * object's creation writes it. No code a project wrote runs, so a receiver whose class gives the property an accessor,
- * as a PHP 8.4 subclass may by declaring it again, and statics whose initial values have not run throw Error rather than
- * run that code. */
+ * (PHP_MINIT_FUNCTION). The storage of an `init` property takes a write only while it holds no value, and takes it
+ * from the declaring class's scope, as the object's creation writes it, since `init` compiles to `protected(set)`. No
+ * code a project wrote runs, so a receiver whose class gives the property an accessor, as a PHP 8.4 subclass may by
+ * declaring it again, and statics whose initial values have not run throw Error rather than run that code. */
 static void sharp_storage_use(zend_execute_data *execute_data, zend_object *receiver, zend_string *class_name,
 	zend_string *name, zval *value, zval *return_value)
 {
@@ -6721,11 +7028,13 @@ static void sharp_storage_use(zend_execute_data *execute_data, zend_object *rece
 			member, use, ZSTR_VAL(ce->name), ZSTR_VAL(name), ZSTR_VAL(receiver->ce->name), member);
 		RETURN_THROWS();
 	}
-	if (value && info && IS_VALID_PROPERTY_OFFSET(info->offset) && !Z_ISUNDEF_P(OBJ_PROP(receiver, info->offset))
-			&& sharp_is_init(info, name)) {
-		zend_throw_error(NULL, "`set` writes the storage of %s::$%s, which `init` lets the object's creation write "
-			"once, and it holds a value", ZSTR_VAL(info->ce->name), ZSTR_VAL(name));
-		RETURN_THROWS();
+	if (value && info && IS_VALID_PROPERTY_OFFSET(info->offset) && sharp_is_init(info, name)) {
+		if (!Z_ISUNDEF_P(OBJ_PROP(receiver, info->offset))) {
+			zend_throw_error(NULL, "`set` writes the storage of %s::$%s, which `init` lets the object's creation write "
+				"once, and it holds a value", ZSTR_VAL(info->ce->name), ZSTR_VAL(name));
+			RETURN_THROWS();
+		}
+		scope = info->ce;
 	}
 	if (!value) {
 		zval read;
@@ -6882,12 +7191,26 @@ static const sharp_type *sharp_class_value_of(const zend_string *value)
 	if (type) {
 		return type->members[0];
 	}
+	HashTable **read = &SHARP_G(request_read_class_values);
+	zend_ulong address = (zend_ulong) (uintptr_t) value;
+	type = ZSTR_IS_INTERNED(value) && *read ? zend_hash_index_find_ptr(*read, address) : NULL;
+	if (type) {
+		return type;
+	}
 	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
 	sharp_type_node *node = sharp_class_value_read(value, &reader);
 	type = node ? sharp_type_node_interned(node, &reader) : NULL;
 	zend_arena_destroy(reader.arena);
 	if (!type) {
 		zend_value_error("\"%s\" is no class value: it names no type", ZSTR_VAL(value));
+		return NULL;
+	}
+	if (ZSTR_IS_INTERNED(value)) {
+		if (!*read) {
+			ALLOC_HASHTABLE(*read);
+			zend_hash_init(*read, 8, NULL, NULL, false);
+		}
+		zend_hash_index_add_new_ptr(*read, address, (void *) type);
 	}
 
 	return type;
@@ -12495,13 +12818,23 @@ static bool sharp_listener_table_stale(const char *path, size_t root_length, con
  * it, and outside a compile a table whose inputs changed since mago compile wrote it makes the request run the
  * command, as an out-of-date compiled file does, and the table it writes is read instead. Throws and returns NULL when
  * the table is damaged. */
-static HashTable *sharp_listener_table(const char *path, size_t root_length)
+/* The path of the listener table in the generation the request reads the root, the first root_length bytes of path,
+ * from. */
+static zend_string *sharp_listener_table_path(const char *path, size_t root_length)
 {
-	zend_string *folder = sharp_compiled_folder(path, strlen(path), root_length);
-	zend_string *table_path = zend_string_concat2(ZSTR_VAL(folder), ZSTR_LEN(folder), "/" SHARP_LISTENERS, sizeof("/" SHARP_LISTENERS) - 1);
-	zval *known = zend_hash_find(&SHARP_G(listener_tables), table_path);
+	zend_string *folder = sharp_compiled_folder(path, strlen(path), root_length, NULL);
+	zend_string *table_path = zend_string_concat2(ZSTR_VAL(folder), ZSTR_LEN(folder), "/" SHARP_LISTENERS,
+		sizeof("/" SHARP_LISTENERS) - 1);
 
 	zend_string_release(folder);
+
+	return table_path;
+}
+
+static HashTable *sharp_listener_table(const char *path, size_t root_length)
+{
+	zend_string *table_path = sharp_listener_table_path(path, root_length);
+	zval *known = zend_hash_find(&SHARP_G(listener_tables), table_path);
 	bool developing = SHARP_G(compile_command) && *SHARP_G(compile_command);
 	zval table;
 
@@ -12510,13 +12843,18 @@ static HashTable *sharp_listener_table(const char *path, size_t root_length)
 		return Z_ARRVAL_P(known);
 	}
 	sharp_read_listener_table(table_path, developing, &table);
-	/* A compile another request ran while this one waited for the lock may have written the table. */
+	/* A compile another request ran while this one waited for the lock may have written the table, in a newer
+	 * generation, as the compile the request runs does. */
 	if (sharp_listener_table_stale(path, root_length, &table) && sharp_lock_compiles(path, root_length)) {
 		zval_ptr_dtor(&table);
+		zend_string_release(table_path);
+		table_path = sharp_listener_table_path(path, root_length);
 		sharp_read_listener_table(table_path, true, &table);
 		if (sharp_listener_table_stale(path, root_length, &table)) {
 			zval_ptr_dtor(&table);
 			sharp_run_compile_command(path, root_length);
+			zend_string_release(table_path);
+			table_path = sharp_listener_table_path(path, root_length);
 			sharp_read_listener_table(table_path, true, &table);
 		}
 		sharp_unlock_compiles();
@@ -13404,14 +13742,123 @@ static void sharp_read_whole(const sharp_type *type, zval *value, sharp_read *re
 	ZVAL_COPY_VALUE(&read->texts, &outer_texts);
 }
 
-/* The class whose terms the type text of the field `name` of the struct or class `ce`'s `#fields` is written in: the
- * class that declares its property, as `PaginatedList<TItem>` declares `items` for `OrderPage : PaginatedList<Order>`,
- * or `ce` for a main constructor parameter that holds no property. */
-static const zend_class_entry *sharp_field_scope(const zend_class_entry *ce, zend_string *name)
+/* The class among `ce` and its parents that the row `parts` of `ce`'s `#fields` names as the one that declares its
+ * field: the class whose terms the field's type text is written in, as `PaginatedList<TItem>` declares `items` for
+ * `OrderPage : PaginatedList<Order>`, and in whose scope the field is written, so a parent's private property is. */
+static const zend_class_entry *sharp_field_scope(const zend_class_entry *ce, HashTable *parts)
 {
-	const zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, name);
+	zend_string *declaring = Z_STR_P(zend_hash_index_find(parts, 5));
+	for (const zend_class_entry *scope = ce; scope; scope = scope->parent) {
+		if (zend_string_equals_ci(scope->name, declaring)) {
+			return scope;
+		}
+	}
+	ZEND_ASSERT(0 && "a #fields row names its class or one of its parents");
 
-	return info ? info->ce : ce;
+	return ce;
+}
+
+/* A field of a struct or class as a row of its `#fields` gives it, spec section 10: its name, the key it is stored under,
+ * its type as written, the order a list of it keeps or NULL, the class that declares it, whose terms its type is written
+ * in and in whose scope it is written, and whether the main constructor takes it and whether it may be missing. */
+typedef struct {
+	zend_string *name;
+	zend_string *key;
+	zend_string *written;
+	zend_string *order;
+	const zend_class_entry *scope;
+	bool parameter;
+	bool optional;
+} sharp_struct_field;
+
+/* The fields of a struct or class, read once a request from its `#fields`, and their types for each type arguments it
+ * is read with, by their address, 0 for none: a list of a type for each field, in the fields' order. */
+typedef struct {
+	HashTable types;
+	uint32_t count;
+	sharp_struct_field fields[];
+} sharp_struct_fields;
+
+static void sharp_struct_field_types_free(zval *entry)
+{
+	efree(Z_PTR_P(entry));
+}
+
+static void sharp_struct_fields_free(zval *entry)
+{
+	sharp_struct_fields *table = Z_PTR_P(entry);
+
+	for (uint32_t i = 0; i < table->count; i++) {
+		zend_string_release(table->fields[i].name);
+		zend_string_release(table->fields[i].key);
+		zend_string_release(table->fields[i].written);
+		if (table->fields[i].order) {
+			zend_string_release(table->fields[i].order);
+		}
+	}
+	zend_hash_destroy(&table->types);
+	efree(table);
+}
+
+/* The fields of the struct or class `ce`, which its `#fields` gives on the first read of it in the request. */
+static sharp_struct_fields *sharp_struct_fields_of(zend_class_entry *ce)
+{
+	HashTable **tables = &SHARP_G(request_struct_fields);
+	zend_ulong address = (zend_ulong) (uintptr_t) ce;
+	sharp_struct_fields *table = *tables ? zend_hash_index_find_ptr(*tables, address) : NULL;
+	if (table) {
+		return table;
+	}
+	zend_function *fields = zend_hash_str_find_ptr(&ce->function_table, "#fields", sizeof("#fields") - 1);
+	zval rows;
+	zend_call_known_function(fields, NULL, ce, &rows, 0, NULL, NULL);
+	table = emalloc(offsetof(sharp_struct_fields, fields) + zend_hash_num_elements(Z_ARRVAL(rows)) * sizeof(sharp_struct_field));
+	table->count = 0;
+	zend_hash_init(&table->types, 2, NULL, sharp_struct_field_types_free, false);
+	zval *row;
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL(rows), row) {
+		HashTable *parts = Z_ARRVAL_P(row);
+		zval *order = zend_hash_index_find(parts, 6);
+		sharp_struct_field *field = &table->fields[table->count++];
+		field->name = zend_string_copy(Z_STR_P(zend_hash_index_find(parts, 0)));
+		field->key = zend_string_copy(Z_STR_P(zend_hash_index_find(parts, 1)));
+		field->written = zend_string_copy(Z_STR_P(zend_hash_index_find(parts, 2)));
+		field->order = order ? zend_string_copy(Z_STR_P(order)) : NULL;
+		field->scope = sharp_field_scope(ce, parts);
+		field->parameter = Z_TYPE_P(zend_hash_index_find(parts, 3)) == IS_TRUE;
+		field->optional = Z_TYPE_P(zend_hash_index_find(parts, 4)) == IS_TRUE;
+	} ZEND_HASH_FOREACH_END();
+	zval_ptr_dtor(&rows);
+	if (!*tables) {
+		ALLOC_HASHTABLE(*tables);
+		zend_hash_init(*tables, 8, NULL, sharp_struct_fields_free, false);
+	}
+	zend_hash_index_add_new_ptr(*tables, address, table);
+
+	return table;
+}
+
+/* The type of each of `table`'s fields of `ce`, read with the type arguments `arguments` or none, each read once a
+ * request. */
+static const sharp_type **sharp_struct_field_types(sharp_struct_fields *table, const zend_class_entry *ce,
+	const sharp_type *arguments)
+{
+	zend_ulong address = (zend_ulong) (uintptr_t) arguments;
+	const sharp_type **types = zend_hash_index_find_ptr(&table->types, address);
+	if (types) {
+		return types;
+	}
+	types = safe_emalloc(MAX(table->count, 1), sizeof(*types), 0);
+	for (uint32_t i = 0; i < table->count; i++) {
+		const sharp_struct_field *field = &table->fields[i];
+		const sharp_type *list =
+			sharp_declared_types(ZSTR_VAL(field->written), ZSTR_LEN(field->written), field->scope, ce, arguments);
+		ZEND_ASSERT(list != NULL && "the compile writes each field's type as one PHP# type");
+		types[i] = list->members[0];
+	}
+	zend_hash_index_add_new_ptr(&table->types, address, types);
+
+	return types;
 }
 
 /* Spec section 10: builds in `built` the struct or class `ce`, of the type arguments `arguments` or none, from `value`,
@@ -13421,9 +13868,9 @@ static const zend_class_entry *sharp_field_scope(const zend_class_entry *ce, zen
  * problem otherwise. With any problem `built` stays undefined, and `value`'s path is among the read's failed paths. */
 static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments, zval *value, sharp_read *read, zval *built)
 {
-	zend_function *fields = zend_hash_str_find_ptr(&ce->function_table, "#fields", sizeof("#fields") - 1);
-	zval rows, parameters, properties;
-	zend_call_known_function(fields, NULL, ce, &rows, 0, NULL, NULL);
+	sharp_struct_fields *table = sharp_struct_fields_of(ce);
+	const sharp_type **types = sharp_struct_field_types(table, ce, arguments);
+	zval parameters, properties;
 	array_init(&parameters);
 	array_init(&properties);
 	HashTable *problems = Z_ARRVAL_P(read->found.problems);
@@ -13433,19 +13880,13 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 	const zend_class_entry *holder = read->holder;
 	const zend_string *holder_field = read->field;
 
-	zval *row;
-	ZEND_HASH_FOREACH_VAL(Z_ARRVAL(rows), row) {
-		HashTable *parts = Z_ARRVAL_P(row);
-		zend_string *name = Z_STR_P(zend_hash_index_find(parts, 0));
-		zend_string *key = Z_STR_P(zend_hash_index_find(parts, 1));
-		zend_string *written = Z_STR_P(zend_hash_index_find(parts, 2));
-		zval *into = Z_TYPE_P(zend_hash_index_find(parts, 3)) == IS_TRUE ? &parameters : &properties;
-		bool optional = Z_TYPE_P(zend_hash_index_find(parts, 4)) == IS_TRUE;
-		zval *written_order = zend_hash_index_find(parts, 5);
-		const sharp_type *types =
-			sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), sharp_field_scope(ce, name), ce, arguments);
-		ZEND_ASSERT(types != NULL && "the compile writes each field's type as one PHP# type");
-		const sharp_type *type = types->members[0];
+	/* A parameter is passed by its name, and a property is kept by its field's place, since a parent's private property
+	 * and the class's own may share a name. */
+	for (uint32_t i = 0; i < table->count; i++) {
+		const sharp_struct_field *row = &table->fields[i];
+		zend_string *name = row->name;
+		zend_string *key = row->key;
+		const sharp_type *type = types[i];
 		if (length) {
 			smart_str_appendc(&read->found.path, '.');
 		}
@@ -13457,18 +13898,26 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 		if (field) {
 			zval field_value;
 			ZVAL_COPY_DEREF(&field_value, field);
-			read->order = written_order ? Z_STR_P(written_order) : NULL;
+			read->order = row->order;
 			read->holder = ce;
 			read->field = name;
 			sharp_read_whole(type, &field_value, read);
 			read->holder = holder;
 			read->field = holder_field;
-			zend_hash_update(Z_ARRVAL_P(into), name, &field_value);
-		} else if (!optional) {
+			if (row->parameter) {
+				zend_hash_update(Z_ARRVAL(parameters), name, &field_value);
+			} else {
+				zend_hash_index_update(Z_ARRVAL(properties), i, &field_value);
+			}
+		} else if (!row->optional) {
 			zval missing;
 			if (type->kind == SHARP_TYPE_NULLABLE || zend_string_equals_literal(type->text, "Any?")) {
 				ZVAL_NULL(&missing);
-				zend_hash_update(Z_ARRVAL_P(into), name, &missing);
+				if (row->parameter) {
+					zend_hash_update(Z_ARRVAL(parameters), name, &missing);
+				} else {
+					zend_hash_index_update(Z_ARRVAL(properties), i, &missing);
+				}
 			} else {
 				ZVAL_STRINGL(&missing, "missing", sizeof("missing") - 1);
 				sharp_read_note(read->found.problems, read, &missing);
@@ -13479,9 +13928,8 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 		if (EG(exception)) {
 			break;
 		}
-	} ZEND_HASH_FOREACH_END();
+	}
 	read->order = order;
-	zval_ptr_dtor(&rows);
 
 	if (!EG(exception) && zend_hash_num_elements(problems) > found) {
 		sharp_read_fail(read);
@@ -13502,13 +13950,14 @@ static void sharp_read_struct(zend_class_entry *ce, const sharp_type *arguments,
 		for (uint32_t i = 0; readonly && i < ce->default_properties_count; i++) {
 			Z_PROP_FLAG_P(OBJ_PROP_NUM(object, i)) |= IS_PROP_REINITABLE;
 		}
-		zend_string *property;
+		zend_ulong index;
 		zval *property_value;
-		ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL(properties), property, property_value) {
+		ZEND_HASH_FOREACH_NUM_KEY_VAL(Z_ARRVAL(properties), index, property_value) {
 			if (EG(exception)) {
 				break;
 			}
-			zend_update_property_ex(sharp_field_scope(ce, property), object, property, property_value);
+			const sharp_struct_field *row = &table->fields[index];
+			zend_update_property_ex(row->scope, object, row->name, property_value);
 		} ZEND_HASH_FOREACH_END();
 		for (uint32_t i = 0; readonly && i < ce->default_properties_count; i++) {
 			Z_PROP_FLAG_P(OBJ_PROP_NUM(object, i)) &= ~IS_PROP_REINITABLE;
@@ -14460,7 +14909,7 @@ static bool sharp_fields_store(zend_class_entry *ce, const sharp_type *arguments
 			return false;
 		}
 		const sharp_type *types =
-			sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), sharp_field_scope(ce, name), ce, arguments);
+			sharp_declared_types(ZSTR_VAL(written), ZSTR_LEN(written), sharp_field_scope(ce, parts), ce, arguments);
 		ZEND_ASSERT(types != NULL && "the compile writes each field's type as one PHP# type");
 		const sharp_type *key = sharp_type_unstored_key(types->members[0]);
 		if (key) {
@@ -16972,8 +17421,10 @@ static PHP_MINIT_FUNCTION(sharp)
 	zend_hash_init(&sharp_types, 64, NULL, sharp_type_free, true);
 	zend_hash_init(&sharp_type_lists, 64, NULL, sharp_type_free, true);
 	zend_hash_init(&sharp_class_values, 8, NULL, NULL, true);
+	zend_hash_init(&sharp_generations, 4, NULL, sharp_generation_free, true);
 #ifdef ZTS
 	sharp_types_lock = tsrm_mutex_alloc();
+	sharp_generations_lock = tsrm_mutex_alloc();
 #endif
 
 	sharp_next_compile_file = zend_compile_file;
@@ -16993,8 +17444,10 @@ static PHP_MSHUTDOWN_FUNCTION(sharp)
 	zend_hash_destroy(&sharp_class_values);
 	zend_hash_destroy(&sharp_type_lists);
 	zend_hash_destroy(&sharp_types);
+	zend_hash_destroy(&sharp_generations);
 #ifdef ZTS
 	tsrm_mutex_free(sharp_types_lock);
+	tsrm_mutex_free(sharp_generations_lock);
 #endif
 
 	return SUCCESS;
@@ -17014,6 +17467,7 @@ static PHP_GSHUTDOWN_FUNCTION(sharp)
 static PHP_RINIT_FUNCTION(sharp)
 {
 	zend_hash_init(&SHARP_G(request_stamps), 8, NULL, sharp_free_pointer, false);
+	zend_hash_init(&SHARP_G(request_generations), 1, NULL, NULL, false);
 	zend_hash_init(&SHARP_G(listener_tables), 0, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(event_listeners), 0, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(class_attributes), 0, NULL, sharp_free_attribute_table, false);
@@ -17095,6 +17549,8 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 	}
 	/* A fatal error while the request held the lock, as one reading the listener table it compiled, ends it here. */
 	sharp_unlock_compiles();
+	sharp_let_generations_go();
+	zend_hash_destroy(&SHARP_G(request_generations));
 	zval_ptr_dtor(&SHARP_G(arguments));
 	ZVAL_UNDEF(&SHARP_G(arguments));
 
@@ -17104,6 +17560,8 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 /* Runs after the request's objects are freed, so no slot still points into the request's types. */
 static ZEND_MODULE_POST_ZEND_DEACTIVATE_D(sharp)
 {
+	sharp_type_request_table_free(&SHARP_G(request_struct_fields));
+	sharp_type_request_table_free(&SHARP_G(request_read_class_values));
 	sharp_type_request_table_free(&SHARP_G(request_spelled_lists));
 	sharp_type_request_table_free(&SHARP_G(request_reflected));
 	sharp_type_request_table_free(&SHARP_G(request_class_values));
