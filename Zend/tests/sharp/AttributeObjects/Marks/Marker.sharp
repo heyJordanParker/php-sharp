@@ -1,0 +1,7 @@
+namespace AttributeObjects.Marks;
+
+[Attribute]
+internal class Marker
+{
+    public Marker() { }
+}

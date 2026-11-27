@@ -1,0 +1,6 @@
+namespace AttributeObjects.Marks;
+
+internal class Holder
+{
+    public Holder([Marker] private string first) { }
+}
