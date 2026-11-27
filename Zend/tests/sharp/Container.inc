@@ -4,7 +4,8 @@ require __DIR__ . '/project.inc';
 
 // An app whose modules bind each lifetime and each kind of value, with an environment module and a nested namespace's
 // module that overrides its parent's, beside the standard library's module, the classes it binds, Events and Scope, as
-// a Composer project holds them, and a stub of PHPUnit's TestCase, which a test file's class extends, in phpunit/.
+// a Composer project holds them, and stubs of PHPUnit's TestCase, which a test file's class extends and PHPUnit creates
+// with each test's name, and of its Extension, in phpunit/.
 // container_project compiles it with $files, loads it with container_load, and returns the project's folder.
 function container_project(string $name, array $files = []): string
 {
@@ -16,7 +17,8 @@ function container_project(string $name, array $files = []): string
     }
     $root = compile_project($name, CONTAINER_APP + $files + $classes + [
         "$library/composer.json" => '{"name": "heyjordanparker/php-sharp-composer"}',
-        'phpunit/Framework/TestCase.sharp' => "namespace PHPUnit.Framework;\n\npublic abstract class TestCase\n{\n}\n",
+        'phpunit/Framework/TestCase.sharp' => "namespace PHPUnit.Framework;\n\npublic abstract class TestCase\n{\n    public TestCase(public string name { get; }) { }\n}\n",
+        'phpunit/Runner/Extension/Extension.sharp' => "namespace PHPUnit.Runner.Extension;\n\nimport Sharp.IO.Console;\n\npublic interface Extension\n{\n    void bootstrap() uses Console;\n}\n",
     ]);
     container_load($root);
 

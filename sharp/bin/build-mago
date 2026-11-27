@@ -364,6 +364,8 @@ messages_to_file() {
     fi
   done
 }
+# Every git a test starts reads no system or global git config, as sharp/bin/test runs the tests (#1067).
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
 case $mode in
   tests)
     cargo_in_target test --workspace --no-run "$@" > "$messages.part.$$"

@@ -810,8 +810,11 @@ function harness_files(string $root): array
 
 /**
  * Writes a project folder: the harness without the files whose names $files declare, the standard library, and $files.
- * Its composer.json says it is a library, so section 5's strict rules, which an application's code meets, leave an
- * example whose classes nothing else uses alone.
+ * The library is installed as a release installs it, with the compiled files and codex of its package's .sharp folder,
+ * and mago.toml includes vendor/, so the project's compile reads the library compiled, as a consumer project's does
+ * (#373). Its composer.json says it
+ * is a library, so section 5's strict rules, which an application's code meets, leave an example whose classes nothing
+ * else uses alone.
  */
 function write_project(string $root, string $folder, array $harness, array $files): void
 {
@@ -822,11 +825,14 @@ function write_project(string $root, string $folder, array $harness, array $file
         }
     }
     put("$folder/" . PACKAGE_FOLDER . '/composer.json', file_get_contents("$root/" . PACKAGE . '/composer.json'));
-    $library = new RecursiveIteratorIterator(new RecursiveDirectoryIterator("$root/" . PACKAGE . '/library', FilesystemIterator::SKIP_DOTS));
-    foreach ($library as $file) {
-        put("$folder/" . PACKAGE_FOLDER . '/library/' . substr($file->getPathname(), strlen("$root/" . PACKAGE . '/library/')), file_get_contents($file->getPathname()));
+    put("$folder/" . PACKAGE_FOLDER . '/.sharp/library.codex', file_get_contents("$root/" . PACKAGE . '/.sharp/library.codex'));
+    foreach (['library', '.sharp/current/library'] as $part) {
+        $library = new RecursiveIteratorIterator(new RecursiveDirectoryIterator("$root/" . PACKAGE . "/$part", FilesystemIterator::SKIP_DOTS));
+        foreach ($library as $file) {
+            put("$folder/" . PACKAGE_FOLDER . '/' . substr($file->getPathname(), strlen("$root/" . PACKAGE . '/')), file_get_contents($file->getPathname()));
+        }
     }
-    put("$folder/mago.toml", "[source]\npaths = [\".\"]\nextensions = [\"sharp\", \"php\"]\n");
+    put("$folder/mago.toml", "[source]\npaths = [\".\"]\nincludes = [\"vendor\"]\nextensions = [\"sharp\", \"php\"]\n");
     put("$folder/composer.json", "{\"type\": \"library\", \"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}, \"autoload-dev\": {\"psr-4\": {\"Tests\\\\\": \"tests/\"}}}\n");
     foreach ($files as $file) {
         put("$folder/$file[path]", $file['contents']);
@@ -1658,7 +1664,7 @@ function remove(string $path): void
     }
     $entries = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
     foreach ($entries as $entry) {
-        $entry->isDir() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());
+        $entry->isDir() && !$entry->isLink() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());
     }
     rmdir($path);
 }
