@@ -7787,13 +7787,115 @@ static zend_function *sharp_attributed_method(zend_class_entry *ce, zend_string 
 	return function;
 }
 
-/* Spec section 1: what each member's `attributes<T>()` gives, a new object of each attribute of the class the class value
- * `attribute` names, or of a class that extends or implements it, or of every attribute for a class value that names no
- * class, as the root bound `Object`'s, on the declaration `kind` of the class value `type`, as PHP's
- * reflection reads one with ReflectionAttribute::IS_INSTANCEOF and makes each with newInstance(): "class", the
- * method `name` for "method", its parameter at `position` for "parameter", the property or field `name`, or the
- * storage of an `extern` one, for "property", none for one with no storage, and the constant or enum case `name` for
- * "constant". A class's and a method's attributes include those of each `extern` line that names it, spec section 29. */
+/* The attributes of a declaration that `Internal.attributes` and `Internal.attributeData` read, and where they read
+ * them: the declaring table, the offset of a parameter's, the scope and file the attributes are written in, the target
+ * PHP checks an attribute class against, and the class an attribute's class must be or extend, NULL for every one. */
+typedef struct {
+	HashTable *attributes;
+	uint32_t offset;
+	zend_class_entry *scope;
+	zend_string *filename;
+	uint32_t target;
+	zend_class_entry *base;
+} sharp_attribute_reads;
+
+/* Spec section 1: the attributes of the class the class value `attribute` names, or of a class that extends or implements
+ * it, or every attribute for a class value that names no class, as the root bound `Object`'s, on the declaration `kind`
+ * of the class value `type`, as PHP's reflection reads one with ReflectionAttribute::IS_INSTANCEOF: "class", the method
+ * `name` for "method", its parameter at `position` for "parameter", the property or field `name`, or the storage of an
+ * `extern` one, for "property", none for one with no storage, and the constant or enum case `name` for "constant". A
+ * class's and a method's attributes include those of each `extern` line that names it, spec section 29. False with the
+ * exception thrown, else `reads` holds them, with no table for a declaration that has none. */
+static bool sharp_attributes_read(zend_string *type, zend_string *kind, zend_string *name, zend_long position,
+	zend_string *attribute, sharp_attribute_reads *reads)
+{
+	const sharp_type *arguments;
+	zend_class_entry *ce = sharp_class_value_declaring(type, &arguments);
+	if (!ce) {
+		return false;
+	}
+	reads->base = sharp_class_value_class(attribute);
+	if (EG(exception)) {
+		return false;
+	}
+
+	reads->attributes = NULL;
+	reads->scope = ce;
+	reads->filename = NULL;
+	reads->offset = 0;
+	if (zend_string_equals_literal(kind, "class")) {
+		reads->attributes = sharp_class_attributes(ce);
+		reads->target = ZEND_ATTRIBUTE_TARGET_CLASS;
+	} else if (zend_string_equals_literal(kind, "method") || zend_string_equals_literal(kind, "parameter")) {
+		zend_function *function = sharp_attributed_method(ce, name);
+		if (!function) {
+			return false;
+		}
+		reads->scope = function->common.scope;
+		reads->filename = function->type == ZEND_USER_FUNCTION ? function->op_array.filename : NULL;
+		if (zend_string_equals_literal(kind, "method")) {
+			reads->attributes = sharp_function_attributes(function);
+			reads->target = ZEND_ATTRIBUTE_TARGET_METHOD;
+		} else {
+			reads->attributes = function->common.attributes;
+			reads->offset = (uint32_t) position + 1;
+			reads->target = ZEND_ATTRIBUTE_TARGET_PARAMETER;
+		}
+	} else if (zend_string_equals_literal(kind, "property")) {
+		zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, name);
+		if (!info) {
+			zend_string *stored = zend_string_concat2(ZSTR_VAL(name), ZSTR_LEN(name), ZEND_STRL("#extern"));
+			info = zend_hash_find_ptr(&ce->properties_info, stored);
+			zend_string_release(stored);
+		}
+		if (!info) {
+			return true;
+		}
+		reads->attributes = info->attributes;
+		reads->scope = info->ce;
+		reads->target = ZEND_ATTRIBUTE_TARGET_PROPERTY;
+	} else if (zend_string_equals_literal(kind, "constant")) {
+		zend_class_constant *constant = zend_hash_find_ptr(CE_CONSTANTS_TABLE(ce), name);
+		if (!constant) {
+			zend_throw_error(NULL, "Constant %s::%s does not exist", ZSTR_VAL(ce->name), ZSTR_VAL(name));
+			return false;
+		}
+		reads->attributes = constant->attributes;
+		reads->scope = constant->ce;
+		reads->target = ZEND_ATTRIBUTE_TARGET_CLASS_CONST;
+	} else {
+		zend_argument_value_error(2, "must be \"class\", \"method\", \"parameter\", \"property\" or \"constant\"");
+		return false;
+	}
+	if (EG(exception)) {
+		return false;
+	}
+
+	if (!reads->filename && reads->target != ZEND_ATTRIBUTE_TARGET_METHOD
+			&& reads->target != ZEND_ATTRIBUTE_TARGET_PARAMETER && reads->scope->type == ZEND_USER_CLASS) {
+		reads->filename = reads->scope->info.user.filename;
+	}
+
+	return true;
+}
+
+/* Whether `reads` takes the attribute `found` of its table: one of its declaration, whose class is its base or extends
+ * or implements it. False with an exception thrown when looking the class up threw. */
+static bool sharp_attribute_selected(const sharp_attribute_reads *reads, const zend_attribute *found)
+{
+	if (found->offset != reads->offset) {
+		return false;
+	}
+	if (!reads->base) {
+		return true;
+	}
+	zend_class_entry *attribute_ce = zend_lookup_class_ex(found->name, found->lcname, 0);
+
+	return attribute_ce && !EG(exception) && instanceof_function(attribute_ce, reads->base);
+}
+
+/* Spec section 1: what each member's `attributes<T>()` gives, a new object of each attribute sharp_attributes_read reads,
+ * as PHP's reflection makes each with newInstance(). */
 ZEND_FUNCTION(Sharp_Internal_attributes)
 {
 	zend_string *value, *kind, *name, *attribute;
@@ -7807,95 +7909,168 @@ ZEND_FUNCTION(Sharp_Internal_attributes)
 		Z_PARAM_STR(attribute)
 	ZEND_PARSE_PARAMETERS_END();
 
-	const sharp_type *arguments;
-	zend_class_entry *ce = sharp_class_value_declaring(value, &arguments);
-	if (!ce) {
+	sharp_attribute_reads reads;
+	if (!sharp_attributes_read(value, kind, name, position, attribute, &reads)) {
 		RETURN_THROWS();
 	}
-	zend_class_entry *base = sharp_class_value_class(attribute);
-	if (EG(exception)) {
-		RETURN_THROWS();
-	}
-
-	HashTable *attributes = NULL;
-	zend_class_entry *scope = ce;
-	zend_string *filename = NULL;
-	uint32_t target, offset = 0;
-	if (zend_string_equals_literal(kind, "class")) {
-		attributes = sharp_class_attributes(ce);
-		target = ZEND_ATTRIBUTE_TARGET_CLASS;
-	} else if (zend_string_equals_literal(kind, "method") || zend_string_equals_literal(kind, "parameter")) {
-		zend_function *function = sharp_attributed_method(ce, name);
-		if (!function) {
-			RETURN_THROWS();
-		}
-		scope = function->common.scope;
-		filename = function->type == ZEND_USER_FUNCTION ? function->op_array.filename : NULL;
-		if (zend_string_equals_literal(kind, "method")) {
-			attributes = sharp_function_attributes(function);
-			target = ZEND_ATTRIBUTE_TARGET_METHOD;
-		} else {
-			attributes = function->common.attributes;
-			offset = (uint32_t) position + 1;
-			target = ZEND_ATTRIBUTE_TARGET_PARAMETER;
-		}
-	} else if (zend_string_equals_literal(kind, "property")) {
-		zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, name);
-		if (!info) {
-			zend_string *stored = zend_string_concat2(ZSTR_VAL(name), ZSTR_LEN(name), ZEND_STRL("#extern"));
-			info = zend_hash_find_ptr(&ce->properties_info, stored);
-			zend_string_release(stored);
-		}
-		if (!info) {
-			RETURN_EMPTY_ARRAY();
-		}
-		attributes = info->attributes;
-		scope = info->ce;
-		target = ZEND_ATTRIBUTE_TARGET_PROPERTY;
-	} else if (zend_string_equals_literal(kind, "constant")) {
-		zend_class_constant *constant = zend_hash_find_ptr(CE_CONSTANTS_TABLE(ce), name);
-		if (!constant) {
-			zend_throw_error(NULL, "Constant %s::%s does not exist", ZSTR_VAL(ce->name), ZSTR_VAL(name));
-			RETURN_THROWS();
-		}
-		attributes = constant->attributes;
-		scope = constant->ce;
-		target = ZEND_ATTRIBUTE_TARGET_CLASS_CONST;
-	} else {
-		zend_argument_value_error(2, "must be \"class\", \"method\", \"parameter\", \"property\" or \"constant\"");
-		RETURN_THROWS();
-	}
-	if (EG(exception)) {
-		RETURN_THROWS();
-	}
-	if (!attributes) {
+	if (!reads.attributes) {
 		RETURN_EMPTY_ARRAY();
 	}
 
-	if (!filename && target != ZEND_ATTRIBUTE_TARGET_METHOD && target != ZEND_ATTRIBUTE_TARGET_PARAMETER
-			&& scope->type == ZEND_USER_CLASS) {
-		filename = scope->info.user.filename;
-	}
 	zend_attribute *found;
 	array_init(return_value);
-	ZEND_HASH_PACKED_FOREACH_PTR(attributes, found) {
-		if (found->offset != offset) {
-			continue;
-		}
-		if (base) {
-			zend_class_entry *attribute_ce = zend_lookup_class_ex(found->name, found->lcname, 0);
+	ZEND_HASH_PACKED_FOREACH_PTR(reads.attributes, found) {
+		if (!sharp_attribute_selected(&reads, found)) {
 			if (EG(exception)) {
 				break;
 			}
-			if (!attribute_ce || !instanceof_function(attribute_ce, base)) {
-				continue;
-			}
+			continue;
 		}
 		zval object;
-		if (zend_get_attribute_instance(&object, attributes, found, scope, target, filename) != SUCCESS) {
+		if (zend_get_attribute_instance(&object, reads.attributes, found, reads.scope, reads.target, reads.filename)
+				!= SUCCESS) {
 			break;
 		}
 		add_next_index_zval(return_value, &object);
+	} ZEND_HASH_FOREACH_END();
+	if (EG(exception)) {
+		zval_ptr_dtor(return_value);
+		RETVAL_NULL();
+		RETURN_THROWS();
+	}
+}
+
+/* The call of the constructor of the attribute `found`, whose written arguments are `given`, its positional ones in
+ * order, and `named`, its named ones by name, into the list `arguments`, as C#'s `CustomAttributeData` stores it: one
+ * value for each parameter, in parameter order, a positional argument at its place, a named one at its parameter's,
+ * and a left-out parameter's default, evaluated in the constructor's scope as PHP evaluates it for the call. Each extra
+ * positional argument follows, as the call passes it to a variadic or ignored parameter. False with the Error PHP's own
+ * call throws for an attribute class that doesn't exist or takes no arguments, a named argument no parameter has, and
+ * a parameter with neither an argument nor a default. */
+static bool sharp_attribute_call(const zend_attribute *found, HashTable *given, HashTable *named, zval *arguments)
+{
+	zend_class_entry *ce = zend_lookup_class_ex(found->name, found->lcname, 0);
+	if (!ce) {
+		if (!EG(exception)) {
+			zend_throw_error(NULL, "Attribute class \"%s\" not found", ZSTR_VAL(found->name));
+		}
+		return false;
+	}
+	const zend_function *constructor = ce->constructor;
+	uint32_t count = constructor ? constructor->common.num_args : 0;
+	if (!constructor && (zend_hash_num_elements(given) || zend_hash_num_elements(named))) {
+		zend_throw_error(NULL, "Attribute class %s does not have a constructor, cannot pass arguments", ZSTR_VAL(ce->name));
+		return false;
+	}
+	for (uint32_t i = 0; i < count; i++) {
+		zval value;
+		const char *parameter = sharp_parameter_name(constructor, i);
+		zval *written = zend_hash_index_find(given, i);
+		if (!written) {
+			written = zend_hash_str_find(named, parameter, strlen(parameter));
+		}
+		if (written) {
+			ZVAL_COPY(&value, written);
+			zend_hash_str_del(named, parameter, strlen(parameter));
+		} else if (!sharp_parameter_default(constructor, i, &value)) {
+			zend_throw_error(zend_ce_argument_count_error,
+				"%s::__construct(): Argument #%" PRIu32 " ($%s) not passed", ZSTR_VAL(ce->name), i + 1, parameter);
+			return false;
+		} else if (Z_TYPE(value) == IS_CONSTANT_AST && zval_update_constant_ex(&value, constructor->common.scope) != SUCCESS) {
+			zval_ptr_dtor(&value);
+			return false;
+		}
+		add_next_index_zval(arguments, &value);
+	}
+	zend_string *unknown;
+	ZEND_HASH_FOREACH_STR_KEY(named, unknown) {
+		zend_throw_error(NULL, "Unknown named parameter $%s", ZSTR_VAL(unknown));
+		return false;
+	} ZEND_HASH_FOREACH_END();
+	zend_ulong index;
+	zval *extra;
+	ZEND_HASH_FOREACH_NUM_KEY_VAL(given, index, extra) {
+		if (index >= count) {
+			Z_TRY_ADDREF_P(extra);
+			add_next_index_zval(arguments, extra);
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return true;
+}
+
+/* Spec section 25: what each member's `attributeData<T>()` gives, an object of the class the class value `data` names,
+ * the standard library's `AttributeData`, for each attribute sharp_attributes_read reads, in declaration order: the
+ * class value of its class as written, and the call of its constructor, sharp_attribute_call, each argument evaluated
+ * where the attribute is written, as its constructor would receive it. It builds no attribute, so no attribute's
+ * constructor runs. */
+ZEND_FUNCTION(Sharp_Internal_attributeData)
+{
+	zend_string *value, *kind, *name, *attribute, *data;
+	zend_long position;
+
+	ZEND_PARSE_PARAMETERS_START(6, 6)
+		Z_PARAM_STR(value)
+		Z_PARAM_STR(kind)
+		Z_PARAM_STR(name)
+		Z_PARAM_LONG(position)
+		Z_PARAM_STR(attribute)
+		Z_PARAM_STR(data)
+	ZEND_PARSE_PARAMETERS_END();
+
+	const sharp_type *data_arguments;
+	zend_class_entry *data_ce = sharp_class_value_declaring(data, &data_arguments);
+	if (!data_ce) {
+		RETURN_THROWS();
+	}
+	sharp_attribute_reads reads;
+	if (!sharp_attributes_read(value, kind, name, position, attribute, &reads)) {
+		RETURN_THROWS();
+	}
+	if (!reads.attributes) {
+		RETURN_EMPTY_ARRAY();
+	}
+
+	zend_attribute *found;
+	array_init(return_value);
+	ZEND_HASH_PACKED_FOREACH_PTR(reads.attributes, found) {
+		if (!sharp_attribute_selected(&reads, found)) {
+			if (EG(exception)) {
+				break;
+			}
+			continue;
+		}
+		zval given, named, parts[2];
+		array_init(&given);
+		array_init(&named);
+		zend_execute_data *call = zend_attribute_frame_push(found, reads.scope, reads.filename);
+		bool evaluated = true;
+		for (uint32_t i = 0; i < found->argc; i++) {
+			zval argument;
+			if (zend_get_attribute_value(&argument, found, i, reads.scope) != SUCCESS) {
+				evaluated = false;
+				break;
+			}
+			if (found->args[i].name) {
+				zend_hash_update(Z_ARRVAL(named), found->args[i].name, &argument);
+			} else {
+				add_next_index_zval(&given, &argument);
+			}
+		}
+		zend_attribute_frame_pop(call);
+		ZVAL_STR_COPY(&parts[0], found->name);
+		array_init(&parts[1]);
+		evaluated = evaluated && sharp_attribute_call(found, Z_ARRVAL(given), Z_ARRVAL(named), &parts[1]);
+		zval entry;
+		zend_result built = evaluated ? object_init_with_constructor(&entry, data_ce, 2, parts, NULL) : FAILURE;
+		zval_ptr_dtor(&given);
+		zval_ptr_dtor(&named);
+		zval_ptr_dtor(&parts[0]);
+		zval_ptr_dtor(&parts[1]);
+		if (built == FAILURE) {
+			break;
+		}
+		add_next_index_zval(return_value, &entry);
 	} ZEND_HASH_FOREACH_END();
 	if (EG(exception)) {
 		zval_ptr_dtor(return_value);

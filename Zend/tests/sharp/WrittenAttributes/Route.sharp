@@ -1,0 +1,13 @@
+namespace WrittenAttributes;
+
+import Attribute;
+
+[Attribute]
+public class Route
+{
+    public Route(
+        public string path { get; },
+        public string method { get; } = "POST",
+        public int priority { get; } = 0
+    ) { }
+}

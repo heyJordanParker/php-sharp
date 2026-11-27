@@ -339,47 +339,64 @@ ZEND_API zend_result zend_get_attribute_value(zval *ret, zend_attribute *attr, u
 	return SUCCESS;
 }
 
+/* PHP#: pushes the dummy call frame an attribute's arguments and constructor run in, when `filename` is given, and
+ * returns it for zend_attribute_frame_pop, or NULL when none is pushed. It makes the code look as if it ran where the
+ * attribute `attribute_data` occurs: at its line of `filename`, with its strict types, and in the scope of the
+ * declaration the attribute is written on, so an argument and the constructor build where `new` of them could be written
+ * there: an `internal` class read in its own namespace builds, spec section 5. */
+ZEND_API zend_execute_data *zend_attribute_frame_push(zend_attribute *attribute_data, zend_class_entry *scope, zend_string *filename)
+{
+	if (!filename) {
+		return NULL;
+	}
+
+	zend_function dummy_func;
+	zend_op *opline;
+
+	memset(&dummy_func, 0, sizeof(zend_function));
+
+	zend_execute_data *call = zend_vm_stack_push_call_frame_ex(
+		ZEND_MM_ALIGNED_SIZE_EX(sizeof(zend_execute_data), sizeof(zval)) +
+		ZEND_MM_ALIGNED_SIZE_EX(sizeof(zend_op), sizeof(zval)) +
+		ZEND_MM_ALIGNED_SIZE_EX(sizeof(zend_function), sizeof(zval)),
+		0, &dummy_func, 0, NULL);
+
+	opline = (zend_op*)(call + 1);
+	memset(opline, 0, sizeof(zend_op));
+	opline->opcode = ZEND_DO_FCALL;
+	opline->lineno = attribute_data->lineno;
+
+	call->opline = opline;
+	call->call = NULL;
+	call->return_value = NULL;
+	call->func = (zend_function*)(call->opline + 1);
+	call->prev_execute_data = EG(current_execute_data);
+
+	memset(call->func, 0, sizeof(zend_function));
+	call->func->type = ZEND_USER_FUNCTION;
+	call->func->op_array.fn_flags =
+		attribute_data->flags & ZEND_ATTRIBUTE_STRICT_TYPES ? ZEND_ACC_STRICT_TYPES : 0;
+	call->func->op_array.fn_flags |= ZEND_ACC_CALL_VIA_TRAMPOLINE;
+	call->func->op_array.filename = filename;
+	call->func->op_array.scope = scope;
+
+	EG(current_execute_data) = call;
+
+	return call;
+}
+
+/* PHP#: pops the frame zend_attribute_frame_push pushed, if it pushed one. */
+ZEND_API void zend_attribute_frame_pop(zend_execute_data *call)
+{
+	if (call) {
+		EG(current_execute_data) = call->prev_execute_data;
+		zend_vm_stack_free_call_frame(call);
+	}
+}
+
 ZEND_API zend_result zend_get_attribute_object(zval *obj, zend_class_entry *attribute_ce, zend_attribute *attribute_data, zend_class_entry *scope, zend_string *filename)
 {
-	zend_execute_data *call = NULL;
-
-	if (filename) {
-		/* Set up dummy call frame that makes it look like the attribute was invoked
-		 * from where it occurs in the code. PHP#: the frame runs in the scope of the declaration the attribute is
-		 * written on, so the constructor builds where `new` of the attribute could be written there: an `internal`
-		 * attribute class read in its own namespace builds, spec section 5. */
-		zend_function dummy_func;
-		zend_op *opline;
-
-		memset(&dummy_func, 0, sizeof(zend_function));
-
-		call = zend_vm_stack_push_call_frame_ex(
-			ZEND_MM_ALIGNED_SIZE_EX(sizeof(zend_execute_data), sizeof(zval)) +
-			ZEND_MM_ALIGNED_SIZE_EX(sizeof(zend_op), sizeof(zval)) +
-			ZEND_MM_ALIGNED_SIZE_EX(sizeof(zend_function), sizeof(zval)),
-			0, &dummy_func, 0, NULL);
-
-		opline = (zend_op*)(call + 1);
-		memset(opline, 0, sizeof(zend_op));
-		opline->opcode = ZEND_DO_FCALL;
-		opline->lineno = attribute_data->lineno;
-
-		call->opline = opline;
-		call->call = NULL;
-		call->return_value = NULL;
-		call->func = (zend_function*)(call->opline + 1);
-		call->prev_execute_data = EG(current_execute_data);
-
-		memset(call->func, 0, sizeof(zend_function));
-		call->func->type = ZEND_USER_FUNCTION;
-		call->func->op_array.fn_flags =
-			attribute_data->flags & ZEND_ATTRIBUTE_STRICT_TYPES ? ZEND_ACC_STRICT_TYPES : 0;
-		call->func->op_array.fn_flags |= ZEND_ACC_CALL_VIA_TRAMPOLINE;
-		call->func->op_array.filename = filename;
-		call->func->op_array.scope = scope;
-
-		EG(current_execute_data) = call;
-	}
+	zend_execute_data *call = zend_attribute_frame_push(attribute_data, scope, filename);
 
 	zval *args = NULL;
 	HashTable *named_params = NULL;
@@ -421,10 +438,7 @@ ZEND_API zend_result zend_get_attribute_object(zval *obj, zend_class_entry *attr
 		zend_array_destroy(named_params);
 	}
 
-	if (filename) {
-		EG(current_execute_data) = call->prev_execute_data;
-		zend_vm_stack_free_call_frame(call);
-	}
+	zend_attribute_frame_pop(call);
 
 	return result;
 }
