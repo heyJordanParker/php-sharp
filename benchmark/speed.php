@@ -12,7 +12,8 @@ declare(strict_types=1);
  * Usage: php benchmark/speed.php <mago> [--project <folder>] [--baseline <file>] [--write <file>]
  *
  * <mago> is the test-run build, which behaves as the release users run. It writes c2ks and the law corpus with
- * benchmark/c2k.php into a temporary folder and compiles each from cold, then edits app/M66/Score.sharp of c2ks in
+ * benchmark/c2k.php into a temporary folder, has <mago> compile the standard library package each one installed, as a
+ * release compiles the one it ships, and compiles each from cold, then edits app/M66/Score.sharp of c2ks in
  * place, which no law reaches, for a whole `mago analyze`. With --write, it writes what it measured and the commit it
  * measured as a baseline, which only the SPEED job writes, since instructions differ between machines. With
  * --baseline, it exits 1 when any law of the baseline counts more than 1.2 times its heartbeats or ends unproven where
@@ -120,6 +121,7 @@ function measure_generated(string $mago, string $root): array
         $started = microtime(true);
         $project = "{$root}/{$kind}";
         run([PHP_BINARY, __DIR__ . '/c2k.php', $kind, $project], getcwd());
+        run_mago($mago, ['compile'], "{$project}/vendor/heyjordanparker/php-sharp-composer");
         $log = run_mago($mago, ['compile'], $project);
         $laws = laws($log);
         if ($laws === []) {
