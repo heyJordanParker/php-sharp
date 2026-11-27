@@ -6671,7 +6671,7 @@ methods[0].parameters()[1].hasConstantDefault;                // true
 methods[0].parameters()[1].defaultValue();                    // 1
 ```
 
-**A class value takes any type apart,** so the type a member declares reads whole, as `typeof` gives it, and never as a text to parse. `kind()` gives its `TypeKind`: `Named` for a type with a name and its arguments, as `int`, `List<int>` and `Crate<Mark>`, `Union`, `Intersection`, `Tuple`, `Function` or `TypeParameter`. `isNullable()` holds for `T?` and a union that holds null, and `nonNullable()` gives the type without it. Each other member reads the type without its `?`: `typeArguments()`, each whole, and `genericDefinition()`, the generic type with no type arguments, for a named type; `unionMembers()` for a union, which never holds null; `intersectionMembers()` for an intersection, as `[typeof(Billable), typeof(Shippable)]` for `Shippable & Billable`, in the order PHP# spells the type; `tupleElements()`, each a `TupleElement` with its `name`, null for an element written without one, and its `type`; `parameterTypes()` and `returnType()` for a function type; and `bound()` for a type parameter, `Any?` where none is written, since such a type parameter takes `int` too (section 11). `typeParameters()` gives a generic type's type parameters, and a type parameter's `name()` is its own. A member of another kind gives `[]`, or throws `OutOfRangeException` where it gives one value. `makeGenericType(arguments)` gives the type with its type arguments, and throws `InvalidArgumentException` on a count or a bound they break:
+**A class value takes any type apart,** so the type a member declares reads whole, as `typeof` gives it, and never as a text to parse. `kind()` gives its `TypeKind`: `Named` for a type with a name and its arguments, as `int`, `List<int>` and `Crate<Mark>`, `Union`, `Intersection`, `Tuple`, `Function` or `TypeParameter`. `isNullable()` holds for `T?` and a union that holds null, and `nonNullable()` gives the type without it. Each other member reads the type without its `?`: `typeArguments()`, each whole, and `genericDefinition()`, the generic type with no type arguments, for a named type; `unionMembers()` for a union, which never holds null; `intersectionMembers()` for an intersection, as `[typeof(Billable), typeof(Shippable)]` for `Shippable & Billable`, in the order PHP# spells the type; `tupleElements()`, each a `TupleElement` with its `name`, null for an element written without one, and its `type`; `parameterTypes()` and `returnType()` for a function type; and `bound()` for a type parameter, `Any?` where none is written, since such a type parameter takes `int` too (section 11). `typeParameters()` gives a generic type's type parameters, and a type parameter's `name()` is its own. A member of another kind gives `[]`, or throws `OutOfRangeException` where it gives one value. `makeGenericType(arguments)` gives the type with its type arguments, and throws `InvalidArgumentException` on a count or a bound they break. `isAssignableTo(other)` holds when a value of the type fits `other`, as `is` answers it for such a value, so a framework that holds two class values only while the code runs, as a container binding an interface to a class, tests one against the other. Generic types follow their type parameters' variance, and unions and nullable types fit as `is` fits them:
 
 <!-- example taking-types-apart -->
 ```csharp
@@ -6700,6 +6700,14 @@ typeof(Holder).typeParameters()[0].bound() == typeof(Any?);        // true
 typeof(List<int>).genericDefinition() == typeof(List);             // true
 typeof(List).makeGenericType([typeof(int)]) == typeof(List<int>);  // true
 typeof(int?).nonNullable() == typeof(int);                         // true
+```
+
+<!-- example class-value-assignable: statements
+public class CardPayment : Payment { }
+-->
+```csharp
+typeof(CardPayment).isAssignableTo(typeof(Payment));            // true
+typeof(List<int>).isAssignableTo(typeof(Iterable<Any?>));       // true, as `is` answers it
 ```
 
 **A class value reads every fact its class's declaration states:** `baseType()`, the class it extends with the type arguments it gives it, or null; `interfaces()`, each with its type arguments; `traits()`, the plain PHP traits it, the classes it extends and those traits use, each once (section 22); `isAbstract()`, `isInterface()`, `isStruct()` and `isEnum()`; and an enum's `enumBackingType()`, null for a pure enum, and `enumCases()`, each an `EnumCase` with its `name`, its `value`, the case itself, its `backingValue`, null for a pure enum's, and `attributes<TAttribute : Object>()`:

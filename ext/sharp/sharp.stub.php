@@ -173,6 +173,8 @@ function enumBackingType(string $type): ?string {}
 
 function makeGenericType(string $type, array $arguments): string {}
 
+function isAssignable(string $type, string $other): bool {}
+
 function enumCases(string $type, string $case): array {}
 
 function attributes(string $type, string $kind, string $name, int $position, string $attribute): array {}

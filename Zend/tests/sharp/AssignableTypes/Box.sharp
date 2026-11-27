@@ -1,0 +1,6 @@
+namespace AssignableTypes;
+
+public class Box<T>
+{
+    public Box(public T item { get; }) { }
+}

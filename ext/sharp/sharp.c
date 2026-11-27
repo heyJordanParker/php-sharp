@@ -7666,6 +7666,37 @@ ZEND_FUNCTION(Sharp_Internal_makeGenericType)
 	RETURN_STR_COPY(sharp_type_class_value(result));
 }
 
+/* Spec section 25: `Class<T>.isAssignableTo(other)`, whether a value of the type the class value `value` holds fits the
+ * type the class value `other` holds, as `is` answers it for such a value: sharp_type_fits, which a type argument's
+ * bound is checked with, so generic types follow each type parameter's variance and unions, nullable types,
+ * intersections, tuples and function types fit as `is` fits them. A ValueError for a string that reads as no type, as
+ * sharp_class_value_of gives it. */
+ZEND_FUNCTION(Sharp_Internal_isAssignable)
+{
+	zend_string *value, *other;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_STR(value)
+		Z_PARAM_STR(other)
+	ZEND_PARSE_PARAMETERS_END();
+
+	const sharp_type *type = sharp_class_value_of(value);
+	const sharp_type *bound = type ? sharp_class_value_of(other) : NULL;
+	if (!bound) {
+		RETURN_THROWS();
+	}
+	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
+	sharp_type_reader read_type = sharp_type_reader_of(ZSTR_VAL(type->text), ZSTR_LEN(type->text), reader.arena);
+	sharp_type_node *given = sharp_type_read(&read_type);
+	sharp_type_reader read_bound = sharp_type_reader_of(ZSTR_VAL(bound->text), ZSTR_LEN(bound->text), read_type.arena);
+	sharp_type_node *wanted = sharp_type_read(&read_bound);
+	reader.arena = read_bound.arena;
+	ZEND_ASSERT(given && wanted);
+	bool fits = sharp_type_fits(given, wanted, &reader);
+	zend_arena_destroy(reader.arena);
+	RETURN_BOOL(fits);
+}
+
 /* Spec section 25: what `Class<T>.enumCases()` gives, an object of the class the class value `of_case` names, the
  * standard library's `EnumCase`, for each case of the enum `type` names, in the order they are declared, with its name,
  * its case and its backing value, null for a pure enum's. Empty for a class value that names no enum. Each is built
