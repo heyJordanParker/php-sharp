@@ -19,8 +19,11 @@ public class Reader
     public bool heldRecordsValues(Give give)
     {
         const records = give.params;
-        List<Any?> rows = records.values();
-        return rows.count() == 1;
+        if (records is Map<int|string, Any?> map) {
+            List<Any?> rows = map.values();
+            return rows.count() == 1;
+        }
+        return false;
     }
 
     public bool recordsMap(Give give) => give.params is Map<int|string, Any?>;
