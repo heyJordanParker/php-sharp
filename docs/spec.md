@@ -6639,7 +6639,7 @@ fields[1].visibility == Visibility.Private;                 // true
 typeof(Map<string, int>).typeArguments() == [typeof(string), typeof(int)];   // true
 ```
 
-**`methods()` reads the methods a class declares.** It gives a `List<Method>` of every instance and static method, at every visibility, the class's own first and then those it inherits, in the order they are declared, without the constructor, which `constructor()` gives. It gives no method the compile makes for the engine, whose name holds `#`, as a class's `#fields`, and plain PHP's reflection, `get_class_methods()` and `method_exists()` find none either, since no PHP code can declare such a name. A `Method` has its `name`, its result `type` whole, `typeof(void)` for a `void` method and `typeof(never)` for a `never` one, which a `Class<void>` and a `Class<never>` hold, compare and key a `Map` as any class value, though no local is `void`, `isStatic`, `isVirtual`, `isAbstract`, `isOverride`, its `declaringClass` and `visibility`, as a `Property` has them, `attributes<TAttribute : Object>()`, and `parameters()`, a `List<Parameter>`. A `Parameter` has its `name`, `type`, `isOptional`, which holds when a call may leave it out, `isVariadic`, `hasConstantDefault`, which holds when it has a default that runs no code, `defaultValue()`, and `attributes<TAttribute : Object>()`. `defaultValue()` evaluates a default that runs no code, as `null`, `0`, `[]`, a constant or an enum case, and throws `ValueError` for one that runs code, a `new`, a call or a lambda, without running any of it, so a reader reads it under any `uses` (section 29). A reader that fills a call's missing arguments leaves such an argument out, and the call runs the default under its own effects. A parameter without a default throws `OutOfRangeException`, as `first` does when nothing matches. The type arguments of the class value stand for the class's type parameters, a class value without them reads each as the type parameter itself, and a plain PHP method gives its PHP types as PHP# writes them, as `properties()` does:
+**`methods()` reads the methods a class declares.** It gives a `List<Method>` of every instance and static method, at every visibility, the class's own first and then those it inherits, in the order they are declared, without the constructor, which `constructor()` gives. It gives no method the compile makes for the engine, whose name holds `#`, as a class's `#fields`, and plain PHP's reflection, `get_class_methods()` and `method_exists()` find none either, since no PHP code can declare such a name. A `Method` has its `name`, its result `type` whole, `typeof(void)` for a `void` method and `typeof(never)` for a `never` one, which a `Class<void>` and a `Class<never>` hold, compare and key a `Map` as any class value, though no local is `void`, `isStatic`, `isVirtual`, `isAbstract`, `isOverride`, its `declaringClass` and `visibility`, as a `Property` has them, `attributes<TAttribute : Object>()`, and `parameters()`, a `List<Parameter>`. A `Parameter` has its `name`, `type`, `isOptional`, which holds when a call may leave it out, `isVariadic`, `hasConstantDefault`, which holds when it has a default that runs no code, `defaultValue()`, and `attributes<TAttribute : Object>()`. `defaultValue()` evaluates a default built from constants, by the rule a constant's value follows, as `null`, `0`, `[]`, `[:]`, a constant or an enum case, and throws `ValueError` for one that runs code, a `new`, a call or a lambda, without running any of it, so a reader reads it under any `uses` (section 29). A reader that fills a call's missing arguments leaves such an argument out, and the call runs the default under its own effects. A parameter without a default throws `OutOfRangeException`, as `first` does when nothing matches. The type arguments of the class value stand for the class's type parameters, a class value without them reads each as the type parameter itself, and a plain PHP method gives its PHP types as PHP# writes them, as `properties()` does:
 
 <!-- example declared-methods -->
 ```csharp
@@ -6671,7 +6671,7 @@ methods[0].parameters()[1].hasConstantDefault;                // true
 methods[0].parameters()[1].defaultValue();                    // 1
 ```
 
-**A class value takes any type apart,** so the type a member declares reads whole, as `typeof` gives it, and never as a text to parse. `kind()` gives its `TypeKind`: `Named` for a type with a name and its arguments, as `int`, `List<int>` and `Crate<Mark>`, `Union`, `Intersection`, `Tuple`, `Function` or `TypeParameter`. `isNullable()` holds for `T?` and a union that holds null, and `nonNullable()` gives the type without it. Each other member reads the type without its `?`: `typeArguments()`, each whole, and `genericDefinition()`, the generic type with no type arguments, for a named type; `unionMembers()` for a union, which never holds null; `intersectionMembers()` for an intersection, as `[typeof(Billable), typeof(Shippable)]` for `Shippable & Billable`, in the order PHP# spells the type; `tupleElements()`, each a `TupleElement` with its `name`, null for an element written without one, and its `type`; `parameterTypes()` and `returnType()` for a function type; and `bound()` for a type parameter, `Any?` where none is written, since such a type parameter takes `int` too (section 11). `typeParameters()` gives a generic type's type parameters, and a type parameter's `name()` is its own. A member of another kind gives `[]`, or throws `OutOfRangeException` where it gives one value. `makeGenericType(arguments)` gives the type with its type arguments, and throws `InvalidArgumentException` on a count or a bound they break:
+**A class value takes any type apart,** so the type a member declares reads whole, as `typeof` gives it, and never as a text to parse. `kind()` gives its `TypeKind`: `Named` for a type with a name and its arguments, as `int`, `List<int>` and `Crate<Mark>`, `Union`, `Intersection`, `Tuple`, `Function` or `TypeParameter`. `isNullable()` holds for `T?` and a union that holds null, and `nonNullable()` gives the type without it. Each other member reads the type without its `?`: `typeArguments()`, each whole, and `genericDefinition()`, the generic type with no type arguments, for a named type; `unionMembers()` for a union, which never holds null; `intersectionMembers()` for an intersection, as `[typeof(Billable), typeof(Shippable)]` for `Shippable & Billable`, in the order PHP# spells the type; `tupleElements()`, each a `TupleElement` with its `name`, null for an element written without one, and its `type`; `parameterTypes()` and `returnType()` for a function type; and `bound()` for a type parameter, `Any?` where none is written, since such a type parameter takes `int` too (section 11). `typeParameters()` gives a generic type's type parameters, and a type parameter's `name()` is its own. A member of another kind gives `[]`, or throws `OutOfRangeException` where it gives one value. `makeGenericType(arguments)` gives the type with its type arguments, and throws `InvalidArgumentException` on a count or a bound they break. `isAssignableTo(other)` holds when a value of the type fits `other`, as `is` answers it for such a value, so a framework that holds two class values only while the code runs, as a container binding an interface to a class, tests one against the other. Generic types follow their type parameters' variance, and unions and nullable types fit as `is` fits them:
 
 <!-- example taking-types-apart -->
 ```csharp
@@ -6700,6 +6700,14 @@ typeof(Holder).typeParameters()[0].bound() == typeof(Any?);        // true
 typeof(List<int>).genericDefinition() == typeof(List);             // true
 typeof(List).makeGenericType([typeof(int)]) == typeof(List<int>);  // true
 typeof(int?).nonNullable() == typeof(int);                         // true
+```
+
+<!-- example class-value-assignable: statements
+public class CardPayment : Payment { }
+-->
+```csharp
+typeof(CardPayment).isAssignableTo(typeof(Payment));            // true
+typeof(List<int>).isAssignableTo(typeof(Iterable<Any?>));       // true, as `is` answers it
 ```
 
 **A class value reads every fact its class's declaration states:** `baseType()`, the class it extends with the type arguments it gives it, or null; `interfaces()`, each with its type arguments; `traits()`, the plain PHP traits it, the classes it extends and those traits use, each once (section 22); `isAbstract()`, `isInterface()`, `isStruct()` and `isEnum()`; and an enum's `enumBackingType()`, null for a pure enum, and `enumCases()`, each an `EnumCase` with its `name`, its `value`, the case itself, its `backingValue`, null for a pure enum's, and `attributes<TAttribute : Object>()`:
@@ -6757,7 +6765,7 @@ constants[2].declaringClass == typeof(Limits);                // true
 constants[2].value();                                         // throws Error
 ```
 
-**`constructor()` and `createInstance` reach a class's constructor through its class value.** `constructor()` gives a `Constructor`, with its `visibility`, `parameters()` and `attributes<TAttribute : Object>()`, or null for a class without one. `createInstance(arguments)` creates an object of the class, with the class value's type arguments, by its constructor with the `List<Any?>` of arguments, which the calling code reaches as a direct `new` would. It throws `InvalidArgumentException` for an abstract class, an interface or an enum, and for arguments the constructor's parameters don't take. A `Property` reads the state of such an object:
+**`constructor()` and `createInstance` reach a class's constructor through its class value.** `constructor()` gives a `Constructor`, with its `visibility`, `parameters()` and `attributes<TAttribute : Object>()`, or null for a class without one. `createInstance(arguments)` creates an object of the class, with the class value's type arguments, by its constructor with the `List<Any?>` of arguments, which the calling code reaches as a direct `new` would. It throws `InvalidArgumentException` for an abstract class, an interface or an enum, and for arguments the constructor's parameters don't take. Its arguments are a list built while the code runs, so it may have every effect (section 29). A `Property` reads the state of such an object:
 
 - **`isInitialized(receiver)`** holds when the property holds a value, so it is false for a `late` property no code has set. A `late` property is set once, so there is no reset.
 - **`getter()` and `setter()`** give the property's `get` and `set` accessors as a `Method`, named `$name::get` and `$name::set` as PHP names a property hook, or null for a plain stored property. That is how code tells a property with accessors apart. Their `createDelegate` and `createInvoker` give a function that reads or writes the property, as `get` and `set` do.
@@ -7092,6 +7100,60 @@ type.attributes<Listen>();                       // Class's own method
 type.attributes<int>();                          // compile error: int is not an Object
 type.defaultTag();                               // compile error: a class value reflects, and calls no static
 new (kind)(key);                                 // compile error: kind is a string, not a Class
+```
+
+**`new (type)(…)` has the effects of the `required` constructor of the class `type`'s `Class<T>` names,** as `new T(…)` has them (section 29). `type` may hold a subclass, and a constructor below a `required` one adds no effect to it, so every class `type` holds builds with those effects. A class nothing can extend, `final` or a struct, has its own constructor's effects. `createInstance` takes a list of arguments built while the code runs, so it may have every effect, as `Property.get` does:
+
+<!-- example class-value-effects
+extern Disk uses Database;
+extern Mail uses Mailer;
+public effect abstract class Mailer { public abstract void deliver(); }
+-->
+```csharp
+namespace App.Shop;
+
+import Vendor.Outbox.Mail;
+import Vendor.Storage.Disk;
+
+public class Saved { public required Saved() { Disk.save(); } }          // effect: Database
+public class Note { public required Note() { } }                         // no effects
+
+public interface Maker { Saved make(); }                                 // pure
+public interface Storing { Saved make() uses Database; }
+public interface Noting { Note make(); }
+
+public class StoringMaker : Storing
+{
+    public StoringMaker(private Class<Saved> type) { }
+    public Saved make() => new (this.type)();                            // compiles
+}
+
+public class ValueMaker : Maker
+{
+    public ValueMaker(private Class<Saved> type) { }
+    public Saved make() => new (this.type)();                            // compile error: reaches Saved.Saved, which has the effect Database
+}
+
+public class NoteMaker : Noting
+{
+    public NoteMaker(private Class<Note> notes) { }
+    public Note make() => new (this.notes)();                            // compiles: Note's constructor has no effects
+}
+
+public class Building
+{
+    public Saved build() => typeof(Saved).createInstance([]);           // compiles: a Saved, where no uses limits the method
+}
+
+public class Making : Maker
+{
+    public Saved make() => typeof(Saved).createInstance([]);            // compile error: createInstance may have every effect
+}
+
+public class Archived : Saved
+{
+    public required Archived() : super() { Mail.send(); }               // compile error: Archived's constructor adds the effect Mailer, which Saved's doesn't have
+}
 ```
 
 **A class value of a generic class can carry its type arguments or leave them out.** `typeof(PaginatedList<Order>)` is a `Class<PaginatedList<Order>>`, and `new (pages)()` creates a `PaginatedList<Order>`. A `Class<PaginatedList>` leaves them out, so `new` names them, `new (any)<Order>()`, or takes them from its arguments or the declared type its object goes into, as any `new` does (section 11). `new (any)()` that nothing fixes them for is a compile error.
@@ -7905,7 +7967,8 @@ extern now uses Clock;               // compile error: a bare name names a class
 - **One line for a class covers its members, and a method's own line overrides its class's line.** After `extern CarbonImmutable uses none;` and `extern CarbonImmutable.now uses Clock;`, `CarbonImmutable.now()` has the effect `Clock` and `date.addDays(1)` is pure.
 - **A call has the effects of the line of the class, trait or interface that declares the method it calls,** and nothing passes from the class a call goes through or from the call that returned the object. A facade's docblock `@method` declares the method on the facade, so `DB.table(…)` takes `DB`'s line. `new` takes the line of the class it creates, as `new ValueError("empty")` takes `ValueError`'s, or of the nearest plain PHP class a PHP# class extends, and a read of a property takes the line of the class that declares it. `StripeClient.charges().create(…)` has the effects of `StripeClient`'s line for `charges()`, and of the line of the class `charges()` returns for `create(…)`, which a project declares on its own, so `Order.all().sum("total")` has only `Database` from `all()` after `extern Collection uses none;`.
 - **A plain PHP trait's member is one body, so its `extern` line covers every class that takes the member from the trait.** After `extern Dispatchable.dispatch uses Database;`, `ReceiveEvent.dispatch(…)` has the effect `Database` where `ReceiveEvent` lists `Dispatchable` in its header. A class that writes `dispatch` itself runs its own body, which the line does not cover.
-- **Reflection has the effects of the code it runs** (section 25). `Property.get` and `Property.set` run an accessor no `uses` can name, so each may have every effect. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` and `Method.createInvoker` are pure, and a call of the value each gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`.
+- **Reflection has the effects of the code it runs** (section 25). `Property.get` and `Property.set` run an accessor no `uses` can name, so each may have every effect, and so may `createInstance`, which takes a list of arguments built while the code runs and may build any subclass. `new (type)(…)` has the effects of the `required` constructor of the class `type`'s `Class<T>` names, as `new T(…)` has them. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` and `Method.createInvoker` are pure, and a call of the value each gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`.
+- **A constructor below a `required` one adds no effect to it,** as an implementation adds none to its interface method, since `new (type)(…)` of a `Class<Saved>` may build any subclass of `Saved` with the effects of `Saved`'s constructor alone (section 25). A subclass constructor that also sends mail is a compile error that names the effect it adds.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way. `mago convert` writes `extern X uses any;` there for each plain PHP class a converted file reaches that has no line, so the converted file compiles, and the project narrows each `uses any` to the effects it knows.
 - **An `extern` line takes any attribute, which the class, method or function it declares carries as its own,** as every declaration takes one (section 1). The checker reads it as the declaration's, so a `[DynamicallyAccessed]` written on a class's line marks a library's attribute class or base class whose source carries no mark, as `[DynamicallyAccessed] extern Model uses Database;` marks Eloquent's `Model` (section 5). At run time PHP#'s `typeof(X).attributes<T>()` and `Method.attributes<T>()`, and plain PHP's `ReflectionClass`, `ReflectionMethod` and `ReflectionFunction` `getAttributes()`, give the declaration's own attributes and then the line's, though no code loads the file that holds the line. A method takes them on the line of the class that declares it, so an attributed line of a method the class only inherits is a compile error that names that class. An `extern namespace` line (section 23) declares nothing, so an attribute on it is a compile error. `import` and `extern` stay separate lines.
 
