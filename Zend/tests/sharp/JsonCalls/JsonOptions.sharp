@@ -1,0 +1,7 @@
+namespace Demo;
+
+// Select options keyed by row id, which JSON writes as an object whose keys are all digits.
+public struct JsonOptions
+{
+    public JsonOptions(public Map<string, string> labels { get; }) { }
+}

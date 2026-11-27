@@ -14758,6 +14758,35 @@ static void sharp_read_collection(zend_class_entry *ce, zval *value)
 	}
 }
 
+static sharp_table_object *sharp_table_object_create(zend_class_entry *ce, uint32_t size);
+
+/* The Map a read of `Map<string, TValue>` makes of the PHP array `value`, spec section 12: each key is a `string`, the
+ * int key PHP's array makes of an all-digit key such as "4156" the string of its digits, as a JSON object's keys are
+ * strings. A Map read back keeps its own keys, so its int key is still checked as an int. */
+static void sharp_read_string_keyed_map(zval *value)
+{
+	sharp_table_object *map = sharp_table_object_create(sharp_ce_map, zend_hash_num_elements(Z_ARRVAL_P(value)));
+	zend_ulong index;
+	zend_string *name;
+	zval *element;
+	ZEND_HASH_FOREACH_KEY_VAL(Z_ARRVAL_P(value), index, name, element) {
+		zval key;
+		if (name) {
+			ZVAL_STR_COPY(&key, name);
+		} else {
+			ZVAL_STR(&key, zend_long_to_str((zend_long) index));
+		}
+		bool put = sharp_table_put(&map->table, &key, element);
+		zval_ptr_dtor(&key);
+		if (!put) {
+			OBJ_RELEASE(&map->std);
+			return;
+		}
+	} ZEND_HASH_FOREACH_END();
+	zval_ptr_dtor(value);
+	ZVAL_OBJ(value, &map->std);
+}
+
 /* The place of the union member `member`, at `index` in the union's own order, in `order`, the classes and scalar
  * types a field's declaration writes in its order, `App.Card, App.Bank` or `string, int`. A member `order` doesn't
  * name comes after every one it names, in the union's own order. */
@@ -15158,7 +15187,9 @@ static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *re
 			}
 			return;
 		case SHARP_BUILT_IN_SET:
-		case SHARP_BUILT_IN_MAP:
+		case SHARP_BUILT_IN_MAP: {
+			/* A PHP array's int key may be PHP's form of an all-digit string, while a Map's int key is an int. */
+			bool php_array = Z_TYPE_P(value) == IS_ARRAY;
 			if (type->built_in == SHARP_BUILT_IN_MAP && Z_TYPE_P(value) == IS_OBJECT && Z_OBJCE_P(value) == sharp_ce_map) {
 				sharp_read_map_entries(value);
 				if (EG(exception)) {
@@ -15168,11 +15199,17 @@ static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *re
 			if (Z_TYPE_P(value) == IS_ARRAY) {
 				bool keyed = type->built_in == SHARP_BUILT_IN_MAP;
 				sharp_read_elements(type->members[keyed ? 1 : 0], value, read, keyed);
-				if (!EG(exception)) {
-					sharp_read_collection(type->built_in == SHARP_BUILT_IN_MAP ? sharp_ce_map : sharp_ce_set, value);
+				if (EG(exception)) {
+					return;
+				}
+				if (php_array && keyed && type->members[0]->built_in == SHARP_BUILT_IN_STRING) {
+					sharp_read_string_keyed_map(value);
+				} else {
+					sharp_read_collection(keyed ? sharp_ce_map : sharp_ce_set, value);
 				}
 			}
 			return;
+		}
 		case SHARP_BUILT_IN_NONE:
 			break;
 		default:

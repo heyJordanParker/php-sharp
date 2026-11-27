@@ -1,0 +1,17 @@
+namespace Demo;
+
+import Sharp.Encoding.Json;
+
+// Spec section 12: a key read into a `Map<string, TValue>` is a `string`, an all-digit key such as `"4156"` included,
+// through `Json.decode<T>`, a struct's generated `parse` and `typeof(T).decode`. Each reads the keys in PHP# code,
+// since a Map a plain PHP caller receives is a PHP array, which holds `"4156"` as an int again.
+public static class JsonKeys
+{
+    public static List<string> named(string json) => Json.decode<Map<string, string>>(json).keys();
+
+    public static string? label(string json) => Json.decode<Map<string, string>>(json).get("4156");
+
+    public static List<string> options(string json) => Json.decode<JsonOptions>(json).labels.keys();
+
+    public static List<string> decoded(Any? value) => typeof(JsonOptions).decode(value).labels.keys();
+}
