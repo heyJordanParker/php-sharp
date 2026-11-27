@@ -25,7 +25,7 @@ public class Import
             return new ExitCode(64);
         }
 
-        return ExitCode.SUCCESS;
+        return ExitCode.success;
     }
 }
 

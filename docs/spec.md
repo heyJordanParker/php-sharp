@@ -1156,7 +1156,7 @@ public class Prune
     {
         if (failed) {
             this.console.writeError("Prune failed");         // compiles: the message goes to standard error
-            this.process.exit(ExitCode.FAILURE);             // compiles: ends the process with status 1
+            this.process.exit(ExitCode.failure);             // compiles: ends the process with status 1
             this.process.exit(2);                            // compile error: Process.exit takes an ExitCode, as new ExitCode(2)
         }
         this.console.writeLine(`Pruned ${pruned} carts`);    // compiles
@@ -7526,14 +7526,14 @@ public class Import
             return new ExitCode(64);          // sysexits' EX_USAGE: bad arguments
         }
 
-        return ExitCode.SUCCESS;
+        return ExitCode.success;
     }
 }
 ```
 
 - `main` is `public void main()`, `public ExitCode main()` or `public Result<ExitCode, TError> main()`. It takes no parameters, and any other `main` is a compile error.
 - When PHP runs the file as its script, the CLI's script, a server's script or `auto_prepend_file`, the engine builds the class through the container, as it builds a class that declares an `on` method, with no module binding, and calls `main`. Before it builds the class, the engine loads the project's Composer autoloader.
-- `ExitCode`, in `Sharp.System`, is the status a program ends with. `new ExitCode(code)` throws `ValueError` for a code outside 0 to 255, and `ExitCode.SUCCESS` is 0 and `ExitCode.FAILURE` is 1.
+- `ExitCode`, in `Sharp.System`, is the status a program ends with. `new ExitCode(code)` throws `ValueError` for a code outside 0 to 255, and `ExitCode.success` is 0 and `ExitCode.failure` is 1.
 - A `void` `main` returns to PHP, as a web front controller that names the `.sharp` file as the server's script does, and as a prepend does, so a script exits 0.
 
 **Each way a program ends exits with its own code, so a failed program never exits 0,** after Rust's `Termination`: 0 is success, 1 is a failure the program returns, and 101 is a bug.
@@ -7541,7 +7541,7 @@ public class Import
 | The program | Exits with |
 |---|---|
 | A `void` `main` returns | 0 |
-| An `ExitCode` `main` returns `code` | that code: `SUCCESS` 0, `FAILURE` 1, `new ExitCode(64)` 64 |
+| An `ExitCode` `main` returns `code` | that code: `ExitCode.success` 0, `ExitCode.failure` 1, `new ExitCode(64)` 64 |
 | A `Result` `main` returns `Ok(code)` | that code |
 | A `Result` `main` returns `Err(error)` | 1, after it writes `Error: ` and `error.message` to standard error |
 | A throw escapes `main` | 101, after the exception handler plain PHP installed runs, or PHP reports the uncaught throw |
@@ -7604,7 +7604,7 @@ public class Load
     {
         const rows = try this.reader.read(this.environment.arguments[1]);   // an Err writes "Error: file missing" and exits 1
         this.store.save(rows);
-        return Result.Ok(ExitCode.SUCCESS);
+        return Result.Ok(ExitCode.success);
     }
 }
 ```
