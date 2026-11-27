@@ -397,6 +397,28 @@ no_build_id_below_root() {
     return 1
   fi
 }
+# A test asserts what the code did, never how long the machine took, since a wall-time bound fails on a loaded machine
+# and not on wrong code (#958). So test code reads no elapsed wall time and loops on no Instant::now() against a
+# deadline: a test of a deadline advances a mago_database::clock::FakeClock, a wait for another process's event is a
+# poll_until with a ceiling, and a test that waits real time asserts the error and the CPU used. Test code is each file
+# under a tests folder, and each source file from its `mod tests` on. clippy refuses std::thread::sleep everywhere but
+# mago_database::clock.
+no_wall_time_in_tests() {
+  local found
+  # shellcheck disable=SC2016 # The program is awk's, whose $0 the shell must not expand.
+  found="$(find src tests crates -name '*.rs' -print0 | xargs -0 awk '
+    FNR == 1 { testing = FILENAME ~ /(^|\/)tests\// }
+    /^ *(pub(\(crate\))? )?mod tests/ { testing = 1 }
+    testing && (/\.elapsed\(\)/ || /Instant::now\(\) *[<>]=?|[<>]=? *(std::time::)?Instant::now\(\)/) {
+      print FILENAME ":" FNR ": " $0
+    }
+  ')"
+  if [[ -n $found ]]; then
+    echo "$found"
+    echo "A test reads elapsed wall time or loops on Instant::now() against a deadline. Take a clock: advance a mago_database::clock::FakeClock in a test of a deadline, and wait for another process's event with mago_database::clock::poll_until (#958)." >&2
+    return 1
+  fi
+}
 # cargo install puts typos in the folder cargo keeps installed tools in, which cargo finds its own subcommands in, but
 # which a Mac with Homebrew's rustup leaves off PATH. That folder can hold an older rustup's rustc, so it never joins
 # PATH.
@@ -446,6 +468,7 @@ gate_mago_checks() {
   step no_notify
   step no_crate_version
   step no_build_id_below_root
+  step no_wall_time_in_tests
   step unchanged_by php scripts/regen-sdk-node-kinds.php
   step rustup run "$rust" cargo fmt --all -- --check
   # Cargo's build.warnings = "deny" fails the run on any lint once every crate is checked, where -D warnings made a lint
