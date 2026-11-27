@@ -17,7 +17,8 @@ public class Coin
 
     public static List<int> spent(List<Coin> coins, int cents)
     {
-        coins.remove(new Coin(cents));
-        return coins.map(coin => coin.cents);
+        let left = coins;
+        left.remove(new Coin(cents));
+        return left.map(coin => coin.cents);
     }
 }

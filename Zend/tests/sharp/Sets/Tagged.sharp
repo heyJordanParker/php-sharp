@@ -18,15 +18,16 @@ public class Tagged
 
     public static List<Any> strings(Set<string> tags)
     {
-        const added = tags.add("vip");
-        const again = tags.add("vip");
-        const removed = tags.remove("new");
-        const absent = tags.remove("none");
+        let tagged = tags;
+        const added = tagged.add("vip");
+        const again = tagged.add("vip");
+        const removed = tagged.remove("new");
+        const absent = tagged.remove("none");
         let joined = "";
-        for (const tag of tags) {
+        for (const tag of tagged) {
             joined = joined + tag + ";";
         }
-        return [added, again, removed, absent, tags.contains("5"), tags.contains("new"), tags.count(), tags.toList(), joined];
+        return [added, again, removed, absent, tagged.contains("5"), tagged.contains("new"), tagged.count(), tagged.toList(), joined];
     }
 
     public static List<Any> reads(Set<string> tags)
@@ -46,17 +47,19 @@ public class Tagged
     public static List<Any> ints(Set<int> ids)
     {
         Set<int> more = [3, 1, 3];
-        return [ids.add(4), ids.add(4), ids.remove(7), ids.contains(2), ids.toList(), more.toList(), ids.sumOf(id => id)];
+        let held = ids;
+        return [held.add(4), held.add(4), held.remove(7), held.contains(2), held.toList(), more.toList(), held.sumOf(id => id)];
     }
 
     public static List<Any> cases(Set<Standing> states)
     {
         Set<Size> sizes = [Size.Large, Size.Small, Size.Large];
-        const closed = states.add(Standing.Closed);
-        const active = states.add(Standing.Active);
-        const has = states.contains(Standing.Closed);
-        const removed = states.remove(Standing.Active);
-        return [closed, active, has, removed, states.toList(), sizes.toList(), sizes.contains(Size.Small)];
+        let held = states;
+        const closed = held.add(Standing.Closed);
+        const active = held.add(Standing.Active);
+        const has = held.contains(Standing.Closed);
+        const removed = held.remove(Standing.Active);
+        return [closed, active, has, removed, held.toList(), sizes.toList(), sizes.contains(Size.Small)];
     }
 
     public List<Any> properties(Standing state)
@@ -79,7 +82,8 @@ public class Tagged
         const added = this.tags.add(this.next());
         const named = this.tags.toList();
         this.tags.clear();
-        return [copied, kept, added, this.calls, named, this.tags.toList(), maybe?.add("x"), maybe?.contains("x"), maybe?.count()];
+        let given = maybe;
+        return [copied, kept, added, this.calls, named, this.tags.toList(), given?.add("x"), given?.contains("x"), given?.count()];
     }
 
     private Set<string> copy() => this.tags;

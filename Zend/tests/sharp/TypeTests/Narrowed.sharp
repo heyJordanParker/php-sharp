@@ -57,10 +57,11 @@ public static class Narrowed
 
     public static Any? grown(Any? value)
     {
-        if (value is List<int>) {
-            value.add(2);
+        let held = value;
+        if (held is List<int>) {
+            held.add(2);
         }
 
-        return value;
+        return held;
     }
 }
