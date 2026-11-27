@@ -19,16 +19,16 @@ permissions:
 # push to the pull request cancels its run in progress, so no push to one pull request cancels another's run: one group
 # for every lane cancelled the pending runs of PRs #792 and #864, which then had no CI_PASSED, and queue.yml never took
 # them (#872). A pull request's run uses no Mac, since MAC_TESTS and MACOS run only in a staging run, so runs at once cost only
-# hosted runners. staging runs one push at a time, and queue.yml pushes it only while no staging run is in progress. A
-# failed job cancels a staging or push run, which can no longer land or publish, so queue.yml's next batch and the Mac
+# hosted runners. Each staging push's run is in a group of its own too, and queue.yml pushes staging once every staging
+# run has landed, so the next batch's run starts while the last one's release builds, and the one Mac runs the next
+# MAC_TESTS once that release's Mac entry ends (#1023). A failed job cancels a staging or push run, which can no longer land or publish, so queue.yml's next batch and the Mac
 # take its place, as .github/actions/cancel-failed-run explains. A pull request's run runs every job to its end, so one
 # run reports every failure: each of PR #972's runs reported one failed test, as its cancel stopped the jobs that
 # would have printed the rest, and a newer push still cancels it through this group (#983). Each schedule and dispatch
 # runs in a group of its own.
 concurrency:
   group: >-
-    ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.url
-      || (github.event_name == 'push' && github.ref) || github.run_id }}
+    ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.url || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   # CI_PASSED is this workflow's one required check. Every pull request's push runs every Linux suite, whatever it
@@ -1045,16 +1045,20 @@ jobs:
   # a tree one run tested whole, and that run publishes it (#843). The push is a fast-forward with the deploy key, which master merge gate lets past its pull request rule and its QUEUE check, a check no run
   # reports, so no pull request reaches master another way. git refuses a push that isn't a fast-forward, and master
   # history refuses one with no bypass, so a master that moved fails LAND, and queue.yml merges the batch again onto it.
-  # GitHub marks each pull request whose head master now holds merged.
+  # GitHub marks each pull request whose head master now holds merged. A release's tag v<version> goes on the commit in
+  # the same atomic push, so the next batch's run, which queue.yml starts once this one landed, takes the next version
+  # while this run's release still builds (#1023). LAND then starts queue.yml, since no event of its own does.
   LAND:
     needs: [CHANGES, CI_PASSED]
     if: ${{ !failure() && !cancelled() && needs.CI_PASSED.result == 'success' && github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     permissions:
+      actions: write
       contents: read
       issues: write
     env:
       GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.CHANGES.outputs.bump == 'true' && needs.CHANGES.outputs.version || '' }}
     steps:
       - name: git checkout, with the deploy key that pushes master
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1064,11 +1068,13 @@ jobs:
       # The checkout holds this commit alone, and git refuses to push over a ref whose commit it doesn't hold, with
       # "fetch first": run 45690564801's LAND failed so on #873's green batch. So the fetch reaches master's tip, as
       # queue.yml's reach the merge base, and git sees the push is a fast-forward.
-      - name: Move master to this run's commit
+      - name: Move master to this run's commit, and tag a release's version on it
         run: |
           ahead=$(gh api "repos/$GITHUB_REPOSITORY/compare/master...$GITHUB_SHA" --jq .ahead_by)
           git fetch --quiet --no-tags --depth=$((ahead + 1)) origin "$GITHUB_SHA"
-          git push origin "$GITHUB_SHA:refs/heads/master"
+          git push --atomic origin "$GITHUB_SHA:refs/heads/master" ${VERSION:+"$GITHUB_SHA:refs/tags/v$VERSION"}
+      - name: Start queue.yml, as staging is free for the next batch
+        run: gh workflow run queue.yml --ref master
       - *red-master-issue
   # Splits sharp/composer and sharp/mago and pushes them to master of heyJordanParker/php-sharp-composer and
   # heyJordanParker/mago-sharp, whose webhooks tell Packagist, once every check of the staging run passed and LAND moved
@@ -1308,8 +1314,8 @@ jobs:
             fi
             echo "$kind=${sources[*]}" >> "$GITHUB_OUTPUT"
           done
-      # GitHub creates the tag on the draft's target, this run's commit, as it publishes the draft.
-      - name: Publish the release, which creates tag v<version> on this run's commit
+      # The draft takes tag v<version>, which LAND pushed on this run's commit, as GitHub publishes it.
+      - name: Publish the release on tag v<version> of this run's commit
         if: contains(env.MISSING, 'assets')
         run: |
           gh release edit "v$VERSION" --draft=false
@@ -1587,12 +1593,13 @@ jobs:
         with:
           end: true
   # Fills the draft GitHub release of the version CHANGES found with the files MACOS's call of release.yml built, once
-  # every job before it passed and LAND moved master to this run's commit. The draft has no tag: it targets the commit,
-  # and PUBLISH creates tag v<version> when it makes the draft public, then tags the images, and COMPOSER pushes the
-  # Composer packages' tags after it. So no part of a release is public, its tag included, before every part is in, and
-  # a run that fails leaves an untagged draft, so the next run takes the same version: v0.7.0 and v0.8.3 were tagged
-  # while RELEASE tagged, never published, and skipped for good (#854). Each part publishes once, as sharp/bin/check
-  # --release explains, and a rerun leaves what an earlier attempt published. It opens the red-master issue when it
+  # every job before it passed and LAND moved master to this run's commit and tagged v<version> on it. The draft
+  # targets the commit, PUBLISH makes it public on that tag, then tags the images, and COMPOSER pushes the Composer
+  # packages' tags after it. So no part of a release is public before every part is in. The tag reserves the version, so
+  # the next batch's run takes the next one, and a run that fails after LAND leaves a tagged draft, which a rerun of that
+  # run publishes: v0.7.0 and v0.8.3 were tagged while RELEASE tagged, never published, and skipped for good, since
+  # each next run took the version after them (#854). Each part publishes once, as sharp/bin/check --release explains,
+  # and a rerun leaves what an earlier attempt published. It opens the red-master issue when it
   # fails, since CI_PASSED doesn't need it.
   RELEASE:
     needs: [CHANGES, BUILD_MAGO_ENGINE, BUILD_LINUX, MAGO_CHECKS, PLAIN_PHP, SPEED, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, WORKFLOWS, MAC_TESTS, MACOS, IMAGE, LAND]
@@ -1712,12 +1719,13 @@ jobs:
             done
           done
           echo "Every asset matches its SHA-256 and its attestation, and was built from tree $TREE."
-      # The release stays an untagged draft that targets this run's commit until PUBLISH, so a failure anywhere leaves
-      # nothing public. A draft of the version that targets another commit is a failed run's, whose assets are another
+      # The release stays a draft that targets this run's commit until PUBLISH, so a failure anywhere leaves nothing
+      # public. A draft of the version that targets another commit is a failed run's, whose assets are another
       # tree's, so it is deleted and made again: only a token that may write sees a draft. GitHub refused this job's
       # token a release on a commit whose workflows differ from master's, with HTTP 403 on runs 45025602373 and
-      # 45027728255, as master moved during each run: LAND moved master to this commit, and queue.yml pushes staging
-      # only once this run ended, so master is this commit while the run runs. Each asset the draft lacks uploads
+      # 45027728255, as master moved during each run: LAND moved master to this commit, and the next batch's run can
+      # land only after its MAC_TESTS, which the one Mac starts once this run's Mac entry of MACOS ends, so master is
+      # this commit while RELEASE and PUBLISH run. Each asset the draft lacks uploads
       # alone, and one it holds at another size, or whose upload never finished, uploads again, so a later run
       # finishes an upload GitHub broke off: gh release upload --clobber stopped at its first failed asset on 0.8.3's
       # run 45637122432, with "HTTP 422: ReleaseAsset.name already exists" after a GitHub 500, and left the draft

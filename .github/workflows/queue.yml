@@ -18,6 +18,9 @@ on:
   workflow_run:
     workflows: [PHP#, Spec guard]
     types: [completed]
+  # A staging run's LAND frees staging before its run ends, so LAND starts the queue: a workflow_dispatch is the one event
+  # a job's GITHUB_TOKEN can start a run with.
+  workflow_dispatch:
 permissions:
   contents: read
 # One batch at a time, and a newer event waits for the one in progress, which may have pushed staging meanwhile.
@@ -45,8 +48,11 @@ jobs:
         with:
           ssh-key: ${{ secrets.PHP_SHARP_DEPLOY_KEY }}
           ref: master
-      # staging holds master's tip and the last batch merged onto it. While a staging run of it hasn't ended, the batch
-      # waits. A batch master doesn't hold failed: one that held one pull request leaves that pull request out, with a
+      # staging holds master's tip and the last batch merged onto it. While a staging run of it hasn't landed, the batch
+      # waits. A run has landed once its LAND job ended, which moved master and pushed the version's tag, or was skipped,
+      # as the run failed: the next batch's run then starts while this one's release builds, and takes the next version,
+      # as GitHub's merge queue starts the next group once a group's required checks pass (#1023). A batch master doesn't
+      # hold failed: one that held one pull request leaves that pull request out, with a
       # comment, until its head moves, and one that held more takes its oldest pull request alone, so one broken change
       # never holds the others, unless that pull request is no longer ready, as a draft or with auto-merge off, which
       # stopped every batch while staging held the failed one (#875). A batch whose run failed only because a runner
@@ -60,12 +66,20 @@ jobs:
         run: |
           master=$(git ls-remote origin refs/heads/master | cut -f 1)
           staging=$(git ls-remote origin refs/heads/staging | cut -f 1)
-          busy=$(gh run list --workflow sharp.yml --branch staging --event push --limit 20 --json status \
-            --jq '[.[] | select(.status != "completed")] | length')
-          if ((busy > 0)); then
-            echo "A staging run hasn't ended, so the next batch waits for it."
-            exit 0
-          fi
+          # Whether the run's LAND job ended. A request that fails counts as not landed, so the batch waits.
+          landed() {
+            local ended
+            ended=$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$1/jobs?per_page=100" \
+              | jq '[.[].jobs[] | select(.name == "LAND" and .status == "completed")] | length')
+            ((ended > 0))
+          }
+          for run in $(gh run list --workflow sharp.yml --branch staging --event push --limit 20 --json databaseId,status \
+            --jq '.[] | select(.status != "completed") | .databaseId'); do
+            if ! landed "$run"; then
+              echo "Staging run $run hasn't landed, so the next batch waits for it."
+              exit 0
+            fi
+          done
           only=
           retry=false
           if [[ -n $staging ]]; then
@@ -74,8 +88,8 @@ jobs:
               # GitHub creates a push's run seconds after the push, so a staging commit with no ended run yet waits.
               read -r status run < <(gh run list --workflow sharp.yml --branch staging --event push --commit "$staging" \
                 --limit 1 --json status,url --jq '.[0] | "\(.status) \(.url)"')
-              if [[ $status != completed ]]; then
-                echo "staging's run of $staging hasn't ended, so the next batch waits for it."
+              if [[ $status != completed ]] && ! landed "${run##*/}"; then
+                echo "staging's run of $staging hasn't landed, so the next batch waits for it."
                 exit 0
               fi
               jq -r '.commits[] | select((.parents | length) == 2 and (.commit.message | startswith("Merge pull request #")))
