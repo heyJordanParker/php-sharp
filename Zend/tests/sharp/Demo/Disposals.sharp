@@ -1,0 +1,54 @@
+namespace Demo;
+
+public class Disposals
+{
+    public static string returned()
+    {
+        const trail = new Trail();
+        trail.note(Disposals.answer(trail));
+        return trail.written();
+    }
+
+    public static string ended()
+    {
+        const trail = new Trail();
+        Disposals.nested(trail);
+        return trail.written();
+    }
+
+    public static string thrown()
+    {
+        const trail = new Trail();
+        try {
+            Disposals.failing(trail);
+        } catch (RuntimeException failure) {
+            trail.note(`caught ${failure.getMessage()}`);
+        }
+        return trail.written();
+    }
+
+    private static string answer(Trail trail)
+    {
+        using first = new Released("first", trail);
+        using second = new Released("second", trail);
+        trail.note("body");
+        return "returned";
+    }
+
+    private static void nested(Trail trail)
+    {
+        using outer = new Released("outer", trail);
+        if (trail.written() != "") {
+            using inner = new Released("inner", trail);
+            trail.note("inner block");
+        }
+        trail.note("outer block");
+    }
+
+    private static void failing(Trail trail)
+    {
+        using first = new Released("first", trail);
+        using second = new Released("second", trail);
+        throw new RuntimeException("failed");
+    }
+}

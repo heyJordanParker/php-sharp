@@ -7,6 +7,9 @@
 # Its tests are sources, not the files run-tests.php writes from a .phpt test.
 !/phpunit/tests/**/*.php
 
+# The standard library's compiled files and codex, written by sharp/bin/build-mago
+/composer/.sharp/
+
 # The hosts fixture's packages and compiled files, written by sharp/bin/hosts
 /hosts/vendor/
 /hosts/.sharp/
