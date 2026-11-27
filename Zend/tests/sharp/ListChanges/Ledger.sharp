@@ -49,9 +49,9 @@ public class Ledger
     {
         List<List<int>> grid = [[1]];
         grid[0].add(2);
-        const kept = grid.filter(row => true);
+        let kept = grid.filter(row => true);
         kept[0].add(3);
-        return grid;
+        return [grid[0], kept[0]];
     }
 
     public static List<List<int>> added()
@@ -64,31 +64,42 @@ public class Ledger
     // The removed element goes first, before the List it left.
     public static List<string> removedAt(List<string> items, int index)
     {
-        const removed = items.removeAt(index);
-        items.insert(0, removed);
-        return items;
+        let moved = items;
+        const removed = moved.removeAt(index);
+        moved.insert(0, removed);
+        return moved;
     }
 
     public static List<string> left(List<string> items, int index)
     {
-        items.removeAt(index);
-        return items;
+        let rest = items;
+        rest.removeAt(index);
+        return rest;
     }
 
-    public static string removedFirst(List<string> items) => items.removeFirst();
+    public static string removedFirst(List<string> items)
+    {
+        let rest = items;
+        return rest.removeFirst();
+    }
 
     // `set` gives the element it replaced, as Kotlin's does, and the index write it runs gives the value it stores.
     public static List<int> replaced(List<int> items)
     {
-        const old = items.set(0, 9);
-        const stored = items[1] = 7;
-        return [old, stored, items[0], items[1]];
+        let changed = items;
+        const old = changed.set(0, 9);
+        const stored = changed[1] = 7;
+        return [old, stored, changed[0], changed[1]];
     }
 
     public static List<bool> emptiness(List<string> items) => [items.isEmpty(), items.isNotEmpty()];
 
     // A null before `?.` skips the change and the rest of the chain.
-    public static int? lastCount(List<List<int>>? rows) => rows?.removeLast().count();
+    public static int? lastCount(List<List<int>>? rows)
+    {
+        let rest = rows;
+        return rest?.removeLast().count();
+    }
 
     // A lambda captures `items` itself, so `keep` can hand plain PHP a reference to it, and the change `add` makes
     // and the one `write` makes through that reference both reach the List this method returns.
@@ -110,9 +121,9 @@ public class Ledger
             grid[0].removeAt(5);
         } catch (OutOfRangeException refused) {
         }
-        const kept = grid.filter(row => true);
+        let kept = grid.filter(row => true);
         kept[0].add(3);
-        return grid;
+        return [grid[0], kept[0]];
     }
 
     public static List<List<int>> copiedAfterThrow()
@@ -124,7 +135,7 @@ public class Ledger
         }
         List<List<int>> copy = grid;
         copy[0].add(3);
-        return grid;
+        return [grid[0], copy[0]];
     }
 
     // A member's value runs the member's static method, whose `Map` takes the element type it is called with.

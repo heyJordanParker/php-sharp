@@ -150,7 +150,7 @@ Named arguments use `label: "Name"`, the same "name: value" form used everywhere
 
 ## 2. Variables
 
-Variables have no `$`. A local is declared with `let`, which can be reassigned, or `const`, which cannot.
+Variables have no `$`. A local is declared with `let`, which can change, or `const`, which never changes: it is never reassigned, and a collection it holds is never changed in place.
 
 <!-- example inferred-locals: statements
 private Account account = new Account();
@@ -170,6 +170,33 @@ let total = 0;              // type inferred, can be reassigned
 Money? total = null;        // type written, can be reassigned
 const plan = this.plan();   // type inferred, cannot be reassigned
 const Plan plan = …;        // type written, cannot be reassigned
+```
+
+**A parameter never changes,** as a `const` local never does. A method that should change its caller's collection is a `ref` extension (section 26), and one that computes a new value returns it.
+
+<!-- example parameters-never-change: members -->
+```csharp
+private static void add(Map<string, List<string>> index, string name)
+{
+    index[name] = [name];        // compile error: `index` is a parameter, so it never changes, and its caller never sees this write. Change the caller's map with a `ref` extension, or return a changed copy.
+}
+
+private static int next(int n)
+{
+    n = n + 1;                   // compile error: `n` is a parameter, so it never changes. Declare a local: `let changed = n + 1;`
+    return n;
+}
+```
+
+**A local changed and never read is a compile error,** because its change goes nowhere.
+
+<!-- example changed-never-read: statements -->
+```csharp
+const seen = [1];
+seen.add(2);                     // compile error: `seen` is `const`, so the list it holds never changes. Declare it with `let` to change it.
+
+let copy = seen;
+copy.add(3);                     // compile error: `copy` is changed here and never read, so the change is lost.
 ```
 
 **A PHP# keyword, such as `let`, `match` or `emit`, names a local only with `@` before it.** Every other word names one as it is, such as `empty`, `list` and `print`:
@@ -1903,7 +1930,7 @@ a.count();   // 1
 b.count();   // 2
 -->
 
-**A method that changes a collection it was given changes its own copy.** It returns the collection when the caller should see the change:
+**A method returns a new collection when its caller should see the change,** since a parameter never changes (section 2):
 
 <!-- example changed-copy-returned: statements in Cart
 List<Line> lines = [new Line()];
@@ -1912,8 +1939,7 @@ Line shipping = new Line();
 ```csharp
 public static List<Line> withShipping(List<Line> lines, Line shipping)
 {
-    lines.add(shipping);
-    return lines;
+    return [...lines, shipping];
 }
 
 lines = Cart.withShipping(lines, shipping);   // the caller keeps the change
@@ -1934,7 +1960,7 @@ public class Order
 
 order.lines.add(line);    // compile error outside Order: lines has a private set
 let copy = order.lines;
-copy.add(line);           // changes only copy
+copy.add(line);           // compile error: `copy` is changed here and never read, so the change is lost.
 ```
 
 **Element types are checked where a collection enters PHP# from plain PHP,** not on every write. Plain PHP can change only its own copy, so a wrong element reaches PHP# code only by crossing in:
@@ -2150,6 +2176,7 @@ int|string id = 1;
 const first = lines[0];       // throws OutOfRangeException when lines is empty
 lines[0] = line;              // replaces the element at 0; throws OutOfRangeException when lines is empty
 plans["pro"] = pro;           // inserts or replaces
+plans.count();                // compiles: reads plans
 items[-1];                    // throws OutOfRangeException: write items.last()
 items.last();                 // the last item
 items.getOrNull(5);           // null: index 5 is missing
@@ -2344,6 +2371,8 @@ lines.remove(line);           // by value: the first equal element, and true whe
 lines.clear();
 plans["pro"] = pro;
 plans.remove("pro");          // by key
+lines.count();                // 0
+plans.count();                // 0
 ```
 
 A `List`'s `removeAt(i)` removes the element at index `i` and returns it, `removeFirst()` and `removeLast()` remove the first and the last element and return it, and `set(i, v)`, which `list[i] = v` runs, replaces the element at `i` and returns the one it replaced. Each throws `OutOfRangeException` on an empty list or an index outside the list. A `Map`'s `set(key, value)`, which `map[key] = value` runs, inserts the key with the value, or replaces the value of an equal key. `isEmpty()` and `isNotEmpty()` tell whether a `List`, a `Map` or a `Set` holds no element.
@@ -2362,6 +2391,7 @@ Map<string, Plan> plans = ["pro": new Plan()];
 List<string> tags = ["a", "b", "a"];
 tags.remove("a");                     // true, and tags is ["b", "a"]
 tags.remove("z");                     // false, and tags is unchanged
+tags.count();                         // 2
 lines.filter(l => l.free);            // List<Line>, renumbered
 plans.filter(p => p.active);          // Map<string, Plan>, keys kept
 ```
@@ -4697,7 +4727,7 @@ float area = 0.0;
 -->
 ```csharp
 if (shape is Circle circle) {
-    area = circle.radius;              // compiles: here shape is a Circle
+    area += circle.radius;             // compiles: here shape is a Circle
 }
 circle.radius;                         // compile error: `circle` exists only where `shape is Circle circle` is true
 ```
