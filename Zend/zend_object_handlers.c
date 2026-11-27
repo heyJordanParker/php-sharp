@@ -1945,31 +1945,59 @@ static size_t zend_sharp_namespace_length(const zend_string *name)
 	return separator ? (size_t) (separator - ZSTR_VAL(name)) : 0;
 }
 
+/* PHP#: the interface whose default body `func` is, when `scope` runs it as a method it takes from the trait
+ * `Interface\Defaults` that holds the interface's default bodies, spec section 22, or NULL for any other method. PHP#
+ * declares no other trait, so a PHP# method a class takes from a trait is one, and sharp_type_scope follows it to the
+ * trait, or to the interface for a generic one, whose trait's header names it. A plain PHP trait's method is NULL. */
+static const zend_class_entry *zend_sharp_default_body_interface(const zend_class_entry *scope, const zend_function *func)
+{
+	if (!(func->common.fn_flags & ZEND_ACC_TRAIT_CLONE) || !sharp_function_is_sharp(func)) {
+		return NULL;
+	}
+	const zend_class_entry *written = sharp_type_scope(scope, func);
+	if (written->ce_flags & ZEND_ACC_TRAIT) {
+		/* The trait is declared after its interface, in the interface's file, and is named in its namespace. */
+		zend_string *name = zend_string_init(ZSTR_VAL(written->name), zend_sharp_namespace_length(written->name), 0);
+		written = zend_lookup_class_ex(name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+		zend_string_release_ex(name, 0);
+	}
+
+	return written && (written->ce_flags & ZEND_ACC_INTERFACE) ? written : NULL;
+}
+
 /* PHP#: the name of the code the frame `frame` runs, by which spec section 5 reads the namespace it runs in: its
- * class, or with no class its function, or NULL for top-level code and a closure outside any class, which run in no
- * namespace. */
+ * class, or the interface whose default body it runs, or with no class its function, or NULL for top-level code and a
+ * closure outside any class, which run in no namespace. An interface's default body runs as a method the implementing
+ * class takes from the trait that holds the interface's default bodies, with that class as its scope, and is written
+ * in the interface, as sharp_type_scope finds it. So it reaches the `internal` members of the interface's namespace in
+ * every class that implements it, as the checker grants it and as C# grants a default interface member's body by
+ * where it is declared. A plain PHP trait's method stays its class's own code, as PHP copies it into the class. */
 ZEND_API const zend_string *zend_sharp_frame_code_name(const zend_execute_data *frame)
 {
 	if (!frame) {
 		return NULL;
 	}
-	if (frame->func->common.scope) {
-		return frame->func->common.scope->name;
+	const zend_class_entry *scope = frame->func->common.scope;
+	if (scope) {
+		const zend_class_entry *written = zend_sharp_default_body_interface(scope, frame->func);
+
+		return (written ? written : scope)->name;
 	}
 
 	return frame->func->common.fn_flags & ZEND_ACC_CLOSURE ? NULL : frame->func->common.function_name;
 }
 
-/* PHP#: the name of the code that runs in `scope`, as zend_sharp_frame_code_name gives it: the class, or with no class
- * that of the nearest user code, which is the frame zend_get_executed_scope reads a NULL scope from. */
+/* PHP#: the name of the code that runs in `scope`, as zend_sharp_frame_code_name gives it for the nearest user code,
+ * which is the frame zend_get_executed_scope reads `scope` from, when that frame runs in `scope` or `scope` is NULL.
+ * Otherwise the class `scope`. */
 ZEND_API const zend_string *zend_sharp_code_name(const zend_class_entry *scope)
 {
-	if (scope) {
-		return scope->name;
-	}
 	const zend_execute_data *ex = EG(current_execute_data);
 	while (ex && (!ex->func || !ZEND_USER_CODE(ex->func->type))) {
 		ex = ex->prev_execute_data;
+	}
+	if (scope && (!ex || ex->func->common.scope != scope)) {
+		return scope->name;
 	}
 
 	return zend_sharp_frame_code_name(ex);
