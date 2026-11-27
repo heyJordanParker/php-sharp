@@ -1,0 +1,9 @@
+namespace InternalAttributes;
+
+public class Reader
+{
+    public static int count()
+    {
+        return typeof(Holder).constructor()?.parameters().getOrNull(0)?.attributes<Marker>().count() ?? -1;
+    }
+}
