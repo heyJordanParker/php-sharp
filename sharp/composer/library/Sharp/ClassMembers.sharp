@@ -10,7 +10,7 @@ extern Internal.methods uses none;
 extern Internal.properties uses none;
 extern Internal.constructor uses none;
 extern Internal.hiddenMethod uses none;
-extern Internal.createInstance uses none;
+extern Internal.createInstance uses any;
 extern Internal.typeArguments uses none;
 extern Internal.typeKind uses none;
 extern Internal.isNullable uses none;
@@ -27,6 +27,7 @@ extern Internal.enumCases uses none;
 extern Internal.attributes uses any;
 extern Internal.constants uses none;
 extern Internal.makeGenericType uses none;
+extern Internal.isAssignable uses none;
 extern Internal.withTag uses none;
 extern Internal.tag uses none;
 extern Internal.parseAs uses none;
@@ -297,6 +298,11 @@ public static class ClassMembers
         // type parameters, and on an argument outside its parameter's bound.
         public Class<Any?> makeGenericType(List<Class<Any?>> arguments)
             => ClassMembers.classValue(Internal.makeGenericType(type, arguments));
+
+        // Whether a value of the type fits `other`, as `is` answers it for such a value, spec section 25:
+        // `typeof(CardPayment).isAssignableTo(typeof(Payment))` for a class that implements `Payment`, and
+        // `typeof(List<int>).isAssignableTo(typeof(Iterable<Any?>))`. Generic types, unions and nullable types included.
+        public bool isAssignableTo(Class<Any?> other) => Internal.isAssignable(type, other);
     }
 
     extension<T>(Class<T> type)
@@ -349,7 +355,8 @@ public static class ClassMembers
         // A new object of the class, with the class value's type arguments, created by its constructor with
         // `arguments`. The calling code reaches the constructor as a
         // direct `new` would. Throws InvalidArgumentException for an abstract class, an interface or an enum, and for
-        // arguments the constructor's parameters don't take.
+        // arguments the constructor's parameters don't take. Its arguments are a runtime list, and the class value may
+        // hold any subclass, so it may have every effect, as `Property.get` may, spec section 29.
         public T createInstance(List<Any?> arguments) => Internal.createInstance(type, arguments);
 
         // The variant of the family the class is whose `[Key]` is `tag`, spec section 10, or null for a name it has no

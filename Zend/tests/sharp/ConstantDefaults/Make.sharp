@@ -1,0 +1,18 @@
+namespace ConstantDefaults;
+
+public static class Make
+{
+    public static string tag(string name, Map<string, int> sizes = [:]) => `${name}:${sizes.count()}`;
+
+    public static int sized(Map<string, int> sizes = ["small": 2]) => sizes.count();
+
+    public static int leveled(Map<Level, int> levels = [Level.Low: 1]) => levels.count();
+
+    public static int marked(Set<string> marks = ["a", "b"]) => marks.count();
+
+    public static string drafted(Draft draft = new Draft()) => draft.title;
+
+    public static int counted(Map<string, int> counts = ["at": Make.base()]) => counts.count();
+
+    public static int base() => 1;
+}
