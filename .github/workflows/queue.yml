@@ -146,10 +146,15 @@ jobs:
               echo "#$number failed alone at $head, so it waits for a new head."
               continue
             fi
-            # Each fetch reaches the merge base of master and the head, so the merge finds it in a shallow history.
-            read -r behind ahead < <(gh api "repos/$GITHUB_REPOSITORY/compare/$master...$head" --jq '"\(.behind_by) \(.ahead_by)"')
-            git fetch --quiet --no-tags --depth=$((behind + 1)) origin "+$master:refs/remotes/origin/master"
-            git fetch --quiet --no-tags --depth=$((ahead + 1)) origin "+refs/pull/$number/head:refs/queue/$number"
+            # The merge runs against the merge base GitHub computes on its servers, with git merge-tree, the merge
+            # GitHub built --write-tree (git 2.38) and --merge-base (git 2.40) for, so it needs master, the head and
+            # that base at depth 1 and no history. git merge found the base itself in a shallow history, where history
+            # a pull request merged ahead of it brought in hid that one base was an ancestor of the other: #1008's
+            # merge in the 03:27 batch found 8255a3ea51f and 59d1d960acb, where full history has 8255a3ea51f alone,
+            # and it conflicted in files no other pull request of the batch changed (#1002).
+            base=$(gh api "repos/$GITHUB_REPOSITORY/compare/$master...$head" --jq .merge_base_commit.sha)
+            git fetch --quiet --no-tags --depth=1 origin "+$master:refs/remotes/origin/master" \
+              "+refs/pull/$number/head:refs/queue/$number" "$base"
             if [[ $(git rev-parse "refs/queue/$number") != "$head" ]]; then
               echo "#$number's head moved past $head, the commit its checks passed on, so it waits for its new checks."
               continue
@@ -157,11 +162,20 @@ jobs:
             if ((${#batch[@]} == 0)); then
               git checkout --quiet --detach "$master"
             fi
-            if git merge --quiet --no-ff -m "Merge pull request #$number from $owner/$branch" -m "$title" "$head"; then
+            # merge-tree exits 0 with the merged tree and 1 with a conflict, and any other exit is git's own failure.
+            status=0
+            tree=$(git merge-tree --write-tree --merge-base="$base" HEAD "$head") || status=$?
+            if ((status == 0)); then
+              merged=$(git commit-tree "$tree" -p HEAD -p "$head" \
+                -m "Merge pull request #$number from $owner/$branch" -m "$title")
+              git checkout --quiet --detach "$merged"
               batch+=("$number")
               continue
             fi
-            git merge --abort
+            if ((status != 1)); then
+              echo "git merge-tree failed on #$number with exit $status." >&2
+              exit "$status"
+            fi
             marker="<!-- queue: conflicts at $head -->"
             if ! gh api "repos/$GITHUB_REPOSITORY/issues/$number/comments" --paginate --jq '.[].body' | grep -qF "$marker"; then
               gh pr comment "$number" --body "This pull request conflicts with master or with a pull request merged ahead of it in the queue's batch, so the queue left it out. Make it again on master.
