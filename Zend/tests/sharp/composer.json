@@ -169,6 +169,7 @@
             "Payloads\\": "Payloads/",
             "PlainWrites\\": "PlainWrites/",
             "Polymorphic\\": "Polymorphic/",
+            "Prebuilt\\": "Prebuilt/",
             "PreloadedLambdas\\": "PreloadedLambdas/",
             "Preloaded\\": "Preloaded/",
             "Promoted\\": "Promoted/",

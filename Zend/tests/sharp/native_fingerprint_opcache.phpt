@@ -19,10 +19,7 @@ $files = [
     'vendor/composer/installed.json' => '{"packages": [{"name": "heyjordanparker/php-sharp-composer", "version": "9.9.x-dev"}]}',
     'app/Clock.sharp' => "namespace App;\n\npublic class Clock\n{\n    public string now() => \"noon\";\n}\n",
 ];
-foreach (LIBRARY_MODULE as $library) {
-    $files["vendor/heyjordanparker/php-sharp-composer/library/Sharp/$library.sharp"] = file_get_contents("$package/library/Sharp/$library.sharp");
-}
-$root = compile_project('native-fingerprint-opcache', $files);
+$root = compile_project('native-fingerprint-opcache', $files + standard_library('vendor/heyjordanparker/php-sharp-composer'));
 $clock = var_export("$root/app/Clock.sharp", true);
 $other = '<?php return ' . var_export(['fingerprint' => '0123456789abcdef0123456789abcdef', 'bodies' => []], true) . ';';
 $run = <<<PHP

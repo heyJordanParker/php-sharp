@@ -6893,6 +6893,8 @@ typeof(Card).tag();                                 // "card", from [Key("card")
 typeof(JourneyStatus).tag();                        // null: the machine is no variant
 ```
 
+**`decode(value)` builds a `T` from a stored value, as `T`'s `parse` reads it (section 10),** lists, maps and scalars already read, and throws one `InvalidFields` that lists every bad part. It has the effects of the reader it runs where the checker knows which one that is (section 29): `T`'s own `parse` for a `final` class, a struct or a class whose constructor is `required`, below which no constructor adds an effect, and each declared variant's for a family. A type that is no class runs only the readers of the classes it holds, so `typeof(int).decode(5)` is pure and `typeof(List<Saved>).decode(rows)` has `Saved`'s reader's effects. `decode` of any other class may build a subclass whose constructor differs, so it may have every effect, as `createInstance` may:
+
 <!-- example class-decode: statements
 public machine LinkStatus : string
 {
@@ -6910,6 +6912,53 @@ public class Page
 const row = ["status": "draft", "title": "Home"];
 typeof(Page).decode(row);                       // a Page whose status is LinkStatus.Draft, read by its tag
 typeof(Page).decode(["title": 5]);              // throws InvalidFields: title: expected string, got int 5
+```
+
+<!-- example decode-effects
+extern Disk uses Database;
+-->
+```csharp
+namespace App.Shop;
+
+import Vendor.Storage.Disk;
+
+public class Saved { public required Saved() { Disk.save(); } }          // effect: Database
+public final class Note { public Note(public string text { get; }) { } }
+public class Ledger { public Ledger(public int total { get; }) { } }     // open, constructor not required
+public final class Tally { public Tally(public int total { get; }) { } }
+
+public interface Reader { Any? read(Any? row); }                         // pure
+public interface Storing { Any? read(Any? row) uses Database; }
+
+public class SavedReader : Reader
+{
+    public Any? read(Any? row) => typeof(Saved).decode(row);            // compile error: reaches Saved.Saved, which calls Disk.save with the effect Database
+}
+
+public class StoredReader : Storing
+{
+    public Any? read(Any? row) => typeof(Saved).decode(row);            // compiles
+}
+
+public class NoteReader : Reader
+{
+    public Any? read(Any? row) => typeof(Note).decode(row);             // compiles: Note's reader has no effects
+}
+
+public class LedgerReader : Reader
+{
+    public Any? read(Any? row) => typeof(Ledger).decode(row);           // compile error: decode of Ledger may have every effect, since a subclass's constructor may differ
+}
+
+public class TallyReader : Reader
+{
+    public Any? read(Any? row) => typeof(Tally).decode(row);            // compiles: no class extends Tally
+}
+
+public class NotesReader : Reader
+{
+    public Any? read(Any? row) => typeof(List<Note>).decode(row);       // compiles: a list runs its elements' readers
+}
 ```
 
 **Each reflection value keys a `Map` and joins a `Set` as the member it reflects,** however often reflection read it. Two `Method`s, two `Property`s, two `Field`s, two `Constant`s and two `Constructor`s are equal when one class declares them under one name, two `Parameter`s when they are one position of one method, two `EnumCase`s when they are one case of one enum, and two `TupleElement`s when they have one name, or none, and one type. Equal values share their `hash()`, so `Map<Method, List<Relation>>` compiles:
@@ -8038,7 +8087,7 @@ extern now uses Clock;               // compile error: a bare name names a class
 - **One line for a class covers its members, and a method's own line overrides its class's line.** After `extern CarbonImmutable uses none;` and `extern CarbonImmutable.now uses Clock;`, `CarbonImmutable.now()` has the effect `Clock` and `date.addDays(1)` is pure.
 - **A call has the effects of the line of the class, trait or interface that declares the method it calls,** and nothing passes from the class a call goes through or from the call that returned the object. A facade's docblock `@method` declares the method on the facade, so `DB.table(…)` takes `DB`'s line. `new` takes the line of the class it creates, as `new ValueError("empty")` takes `ValueError`'s, or of the nearest plain PHP class a PHP# class extends, and a read of a property takes the line of the class that declares it. `StripeClient.charges().create(…)` has the effects of `StripeClient`'s line for `charges()`, and of the line of the class `charges()` returns for `create(…)`, which a project declares on its own, so `Order.all().sum("total")` has only `Database` from `all()` after `extern Collection uses none;`.
 - **A plain PHP trait's member is one body, so its `extern` line covers every class that takes the member from the trait.** After `extern Dispatchable.dispatch uses Database;`, `ReceiveEvent.dispatch(…)` has the effect `Database` where `ReceiveEvent` lists `Dispatchable` in its header. A class that writes `dispatch` itself runs its own body, which the line does not cover.
-- **Reflection has the effects of the code it runs** (section 25). `Property.get` and `Property.set` run an accessor no `uses` can name, so each may have every effect, and so may `createInstance`, which takes a list of arguments built while the code runs and may build any subclass. `new (type)(…)` has the effects of the `required` constructor of the class `type`'s `Class<T>` names, as `new T(…)` has them. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` and `Method.createInvoker` are pure, and a call of the value each gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`. `attributeData<T>()` builds no attribute, so it is pure.
+- **Reflection has the effects of the code it runs** (section 25). `Property.get` and `Property.set` run an accessor no `uses` can name, so each may have every effect, and so may `createInstance`, which takes a list of arguments built while the code runs and may build any subclass. `new (type)(…)` has the effects of the `required` constructor of the class `type`'s `Class<T>` names, as `new T(…)` has them. `decode` has the effects of the reader it runs, a class's `parse` (section 10), where the checker knows which one that is: a `final` class's, a struct's, a family's declared variants' or a class's whose constructor is `required`. A type that is no class runs only the readers of the classes it holds, so `typeof(int).decode(…)` is pure, and `decode` of any other class may have every effect, as `createInstance` may. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` and `Method.createInvoker` are pure, and a call of the value each gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`. `attributeData<T>()` builds no attribute, so it is pure.
 - **A constructor below a `required` one adds no effect to it,** as an implementation adds none to its interface method, since `new (type)(…)` of a `Class<Saved>` may build any subclass of `Saved` with the effects of `Saved`'s constructor alone (section 25). A subclass constructor that also sends mail is a compile error that names the effect it adds.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way. `mago convert` writes `extern X uses any;` there for each plain PHP class a converted file reaches that has no line, so the converted file compiles, and the project narrows each `uses any` to the effects it knows.
 - **An `extern` line takes any attribute, which the class, method or function it declares carries as its own,** as every declaration takes one (section 1). The checker reads it as the declaration's, so a `[DynamicallyAccessed]` written on a class's line marks a library's attribute class or base class whose source carries no mark, as `[DynamicallyAccessed] extern Model uses Database;` marks Eloquent's `Model` (section 5). At run time PHP#'s `typeof(X).attributes<T>()` and `Method.attributes<T>()`, and plain PHP's `ReflectionClass`, `ReflectionMethod` and `ReflectionFunction` `getAttributes()`, give the declaration's own attributes and then the line's, though no code loads the file that holds the line. A method takes them on the line of the class that declares it, so an attributed line of a method the class only inherits is a compile error that names that class. An `extern namespace` line (section 23) declares nothing, so an attribute on it is a compile error. `import` and `extern` stay separate lines.

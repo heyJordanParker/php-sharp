@@ -402,6 +402,20 @@ case $mode in
 esac
 mv "$messages.part.$$" "$messages"
 
+# PHP# compiles the standard library once, as a release does: the mago this run built compiles sharp/composer, the
+# library's own package, into sharp/composer/.sharp, with the library's codex, which every project's compile reads in
+# place of the library's sources. The copies of the package sharp/bin/test and the mago tests install carry the folder.
+case $mode in
+  tests | bin | test-run)
+    built="$target/debug/mago"
+    if [[ $mode == test-run ]]; then
+      built="$target/test-run/mago"
+    fi
+    (cd "$root/sharp/composer" \
+      && "$record" "mago compile of the standard library" -- "$built" --no-version-check --threads "$jobs" compile)
+    ;;
+esac
+
 # Cargo never deletes a copy of a crate it no longer uses, so every edit that rebuilt a crate left the build before it
 # beside the new one: sharp/build/darwin-arm64/mago/debug held 13 GiB on 2026-11-23, where a fresh build holds 4.4 (#730).
 # So after each build that passed, each profile folder a build names keeps only the units some build named. Cargo

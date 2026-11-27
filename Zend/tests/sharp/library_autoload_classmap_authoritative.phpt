@@ -6,11 +6,7 @@ require __DIR__ . '/project.inc';
 
 $package = dirname(__DIR__, 3) . '/sharp/composer';
 $library = 'vendor/heyjordanparker/php-sharp-composer';
-$files = [];
-foreach (LIBRARY_MODULE as $member) {
-    $files["$library/library/Sharp/$member.sharp"] = file_get_contents("$package/library/Sharp/$member.sharp");
-}
-$root = compile_project('library-autoload-classmap-authoritative', $files + [
+$root = compile_project('library-autoload-classmap-authoritative', standard_library($library) + [
     'mago.toml' => "[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n",
     "$library/composer.json" => '{"name": "heyjordanparker/php-sharp-composer"}',
     "$library/autoload.php" => file_get_contents("$package/autoload.php"),
