@@ -411,8 +411,8 @@ public final class OrderTest : TestCase {
 
 <!-- example framework-model -->
 ```csharp
-// app/Tenant/Store/Entities/CartOffer.sharp
-namespace App.Tenant.Store.Entities;
+// app/Offers/CartOffer.sharp
+namespace App.Offers;
 
 import Illuminate.Database.Eloquent.Casts.Attribute;
 import Illuminate.Database.Eloquent.Model;

@@ -1,4 +1,4 @@
-namespace App.Tenant.Store.Entities;
+namespace App.Offers;
 
 import Illuminate.Database.Eloquent.Model;
 
