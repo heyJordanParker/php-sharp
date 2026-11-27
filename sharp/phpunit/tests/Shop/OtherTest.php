@@ -6,14 +6,15 @@ namespace Tests\Shop;
 
 use App\Shop\Checkout;
 use PHPUnit\Framework\TestCase;
-use Tests\Probe;
 
 // A test whose file declares no test module, run after CheckoutTest: it gets the base modules.
 final class OtherTest extends TestCase
 {
     public function testUsesTheBaseModules(): void
     {
-        $this->assertSame('smtp', Probe::mailer());
+        $checkout = (new \Sharp\Container())->get(Checkout::class);
+        $this->assertInstanceOf(Checkout::class, $checkout);
+        $this->assertSame('smtp', $checkout->usedMailer()->name());
     }
 
     // A PHP# object is built only through its constructor, spec section 9, and the double PHPUnit generates skips it.
