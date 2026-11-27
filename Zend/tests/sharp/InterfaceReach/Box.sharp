@@ -1,0 +1,10 @@
+namespace InterfaceReach;
+
+public final class Box
+{
+    public int opened { get; private set; } = 0;
+
+    internal int seal { get; } = 7;
+
+    internal void open() { this.opened = this.opened + 1; }
+}
