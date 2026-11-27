@@ -8759,6 +8759,18 @@ public Result<int, PaymentError> total(Cart cart) => Result.Ok((try this.gateway
 public Result<int, PaymentError> cartTotal => Result.Ok((try this.gateway.charge(this.cart)).total);   // the getter returns the failure
 ```
 
+**A statement that discards a `Result` is a compile error,** as Rust's `#[must_use]` on `Result` warns, since the failure it holds would be lost. A `Result` kept in a variable, passed up with `try` or matched is never refused.
+
+<!-- example discarded-result: members
+private CheckoutGateway gateway = new CheckoutGateway();
+-->
+```csharp
+public void pay(Cart cart)
+{
+    this.gateway.charge(cart);                        // compile error: `this.gateway.charge` returns a Result: handle it with try, match, ok() or unwrap()
+}
+```
+
 `try`/`catch` blocks remain for exceptions, which are now mostly limited to the edges, such as wrapping a plain PHP exception.
 
 Methods declare no thrown exceptions, and the checker never reports an undeclared one.
