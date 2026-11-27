@@ -749,22 +749,31 @@ static zend_string *sharp_compiled_folder(const char *path, size_t length, size_
 		: zend_strpprintf(0, "%.*s/" SHARP_COMPILED_FOLDER "/" SHARP_CURRENT_GENERATION, (int) root_length, path);
 }
 
+/* The root of the source's project: the nearest folder above it that holds a .sharp folder. For a worker of an extension
+ * host, a source in the host's project is rooted at SHARP_ROOT, whose files the host's folder holds, unless a folder
+ * between them holds its own .sharp folder, as the standard library's package holds the files PHP# compiled at its
+ * release. */
 static bool sharp_find_root(const zend_string *source, size_t *root_length)
 {
 	const char *path = ZSTR_VAL(source);
 	size_t folder = ZSTR_LEN(source);
-	zend_string *host = sharp_host_compiled(path, folder, root_length);
+	size_t host_root_length = 0;
+	zend_string *host = sharp_host_compiled(path, folder, &host_root_length);
+	bool hosted = host != NULL;
 	zval root;
 
 	if (host) {
 		zend_string_release(host);
-		return true;
 	}
 
 	do {
 		zval *known;
 
 		folder = sharp_parent(path, folder);
+		if (hosted && folder <= host_root_length) {
+			*root_length = host_root_length;
+			break;
+		}
 		known = zend_hash_str_find(&SHARP_G(folder_roots), path, folder);
 		if (known) {
 			*root_length = Z_LVAL_P(known);

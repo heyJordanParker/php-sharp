@@ -115,6 +115,7 @@
 12	sharp/mago/tests/laws.rs::a_law_follows_an_enum_s_case_a_move_copies_through_a_test_that_names_one_case
 12	sharp/mago/tests/laws.rs::compile_proves_a_law_over_map_filter_and_count
 12	sharp/mago/tests/main.rs::compile::a_later_run_rewrites_the_hosts_folder_only_once_the_hosts_reading_it_are_done
+12	sharp/mago/tests/main.rs::sharp::compile_accepts_a_project_call_of_an_extern_method_its_library_package_compiled
 11	sharp/mago/tests/laws.rs::a_claim_true_only_because_its_own_arithmetic_overflows_is_not_proven
 11	sharp/mago/tests/laws.rs::a_false_law_over_a_chain_of_tests_on_one_value_is_not_proven
 11	sharp/mago/tests/laws.rs::a_false_law_over_a_nullable_field_a_move_copies_is_not_proven
@@ -344,7 +345,6 @@
 3	sharp/mago/tests/main.rs::external_analyzer_lifecycle::an_issue_filter_that_never_finishes_fails_at_the_deadline_naming_its_file
 3	sharp/mago/tests/main.rs::sharp::a_tuple_a_collection_local_holds_unpacks_into_its_element_types
 3	sharp/mago/tests/main.rs::sharp::analyze_reports_only_the_second_extern_of_a_class
-3	sharp/mago/tests/main.rs::sharp::compile_accepts_extern_methods_in_the_vendored_standard_library
 3	sharp/mago/tests/main.rs::sharp::compile_and_analyze_print_json_under_mago_reporting_format_in_github_actions
 3	sharp/mago/tests/main.rs::sharp::move_takes_a_namespace_with_its_module_and_deletes_the_folder_it_empties
 2	sharp/mago/crates/analyzer/tests/main.rs::sharp::a_binding_that_needs_itself_or_holds_a_scoped_service_in_a_singleton_is_refused
