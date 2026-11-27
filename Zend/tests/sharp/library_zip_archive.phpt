@@ -1,5 +1,5 @@
 --TEST--
-PHP# ZipArchive creates an archive with an entry from text and one from a file, writes it when closed, an empty one too, reopens it, lists, reads and extracts every entry, one added since it opened too, gives null for a missing entry, writes and reads an entry as Bytes with every byte kept and reads it as text with U+FFFD for a byte that is not UTF-8, and throws with the path and libzip's reason for a file that isn't a ZIP, a missing file to add, or a close that cannot write, with no PHP warning
+PHP# ZipArchive creates an archive with an entry from text and one from a file, writes it when disposed, by a `using` local at its block's end, an empty one too, reopens it, lists, reads and extracts every entry, one added since it opened too, gives null for a missing entry, writes and reads an entry as Bytes with every byte kept and reads it as text with U+FFFD for a byte that is not UTF-8, and throws with the path and libzip's reason for a file that isn't a ZIP, a missing file to add, or a dispose that cannot write, with no PHP warning
 --FILE--
 <?php
 require __DIR__ . '/effect_classes.inc';
@@ -18,7 +18,7 @@ foreach (['readme.txt', 'data/report.csv', 'later.txt'] as $entry) {
 var_dump(ZipQueries::emptyCount("$folder/empty.zip"));
 echo json_encode(ZipQueries::bytesRoundTrip("$folder/bytes.zip", "a\xFF\x00"), JSON_UNESCAPED_UNICODE), "\n";
 
-foreach ([fn () => ZipQueries::openArchive("$folder/report.csv"), fn () => ZipQueries::openArchive("$folder/missing.zip"), fn () => ZipQueries::addMissing("$folder/other.zip", "$folder/missing.csv"), fn () => ZipQueries::closeUnwritable("$folder/missing/notes.zip")] as $refused) {
+foreach ([fn () => ZipQueries::openArchive("$folder/report.csv"), fn () => ZipQueries::openArchive("$folder/missing.zip"), fn () => ZipQueries::addMissing("$folder/other.zip", "$folder/missing.csv"), fn () => ZipQueries::disposeUnwritable("$folder/missing/notes.zip")] as $refused) {
     try {
         $refused();
     } catch (RuntimeException $error) {
@@ -54,4 +54,4 @@ int(0)
 RuntimeException: ZipArchive.open: "<folder>/report.csv" cannot be opened: Not a zip archive
 RuntimeException: ZipArchive.open: "<folder>/missing.zip" cannot be opened: No such file
 RuntimeException: ZipArchive.addFile: "<folder>/missing.csv" is not a file
-RuntimeException: ZipArchive.close: "<folder>/missing/notes.zip" cannot be written: Failure to create temporary file: No such file or directory
+RuntimeException: ZipArchive.dispose: "<folder>/missing/notes.zip" cannot be written: Failure to create temporary file: No such file or directory

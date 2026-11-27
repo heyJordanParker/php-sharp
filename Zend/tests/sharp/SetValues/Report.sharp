@@ -64,7 +64,7 @@ public class Report
     public static List<string> emitted()
     {
         Report.heard = [];
-        const listening = Events.on<Tagged>(e => Report.heard.add(Report.described(e)));
+        using listening = Events.on<Tagged>(e => Report.heard.add(Report.described(e)));
         emit new Tagged(["vip", "new", "vip"], 7);
 
         return Report.heard;

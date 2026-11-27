@@ -104,8 +104,9 @@ jobs:
   # with --no-build. Each of the 8 suite jobs built them itself for 2 to 5 minutes on release pull request #363's run,
   # where the bump rebuilt every Mago crate in each, so a run built the same code 8 times. The suites wait for it, so its
   # minutes are on every suite's path. sharp/bin/build-mago --engine --debug builds the one engine in the sharp/docker
-  # image that the suites run on and mago links, as the Mac job builds it, with the libphp.so HOSTS builds FrankenPHP
-  # against, so it waits for no other build: it waited 4.8 minutes for BUILD_MAGO_ENGINE's on run 45834816959 (#955).
+  # image that the suites run on and mago links, as the Mac job builds it, with the libphp.so UPSTREAM_AND_HOSTS builds
+  # FrankenPHP against, so it waits for no other build: it waited 4.8 minutes for BUILD_MAGO_ENGINE's on run
+  # 45834816959 (#955).
   # sharp/bin/build-mago then builds mago with every test binary, which MAGO's slices run, so Linux
   # builds Mago's dev target once per run, where Mago's own workflow's build job built it a second time for 122 seconds
   # on dfa6e7e2941's run. It also runs the checks of generated files, since one of them reads the header
@@ -192,8 +193,9 @@ jobs:
       - name: Test the doc tests and the property tests
         run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64/install sharp/bin/test --mago --cargo-built
       # sharp/bin/test's report of each suite's and each test's time, which the timeline shows as one step (#855). Its
-      # run writes it to sharp/build/test-report.xml, in the checkout the sharp/docker image mounts. UPSTREAM and ASAN
-      # repeat this step by its anchor, and LINUX's and MAGO's slices name theirs by their shard.
+      # run writes it to sharp/build/test-report.xml, in the checkout the sharp/docker image mounts.
+      # UPSTREAM_AND_HOSTS and ASAN repeat this step by its anchor, and LINUX's and MAGO's slices name theirs by their
+      # shard.
       - &upload-test-report
         name: Upload the test report
         if: ${{ !cancelled() }}
@@ -460,14 +462,15 @@ jobs:
         with:
           end: true
 
-  # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in three slices, each without opcache, in shared
+  # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in two slices, each without opcache, in shared
   # memory twice per process, and under the tracing JIT production runs with the opcache. The slices balance by the
   # seconds sharp/baseline/seconds lists, and the one that weighs least runs mago convert's whole-project proof, as
   # sharp/bin/test explains. The last slice also runs the census, the differential and PHPUnit. A hosted runner can be
-  # 1.9 times slower than another on the same slice, so a slice's share sets how long a slow draw holds the run: with
-  # two slices, LINUX (2/2) on an AMD EPYC 7763 ran its 246 s of modes in 474 s on run 45038360121.
+  # 1.9 times slower than another on the same slice: LINUX (2/2) on an AMD EPYC 7763 ran its 246 s of modes in 474 s on
+  # run 45038360121. The test jobs after BUILD_LINUX run in 8 slots, where 14 asked for a slot at once and waited up to
+  # 13 minutes for one on staging run 46050402034, and the MAGO_CHECKS chain or the Mac ends after them (#957).
   LINUX:
-    name: LINUX (${{ matrix.shard }}/3)
+    name: LINUX (${{ matrix.shard }}/2)
     needs: [CHANGES, BUILD_LINUX]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -478,7 +481,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2]
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
@@ -496,8 +499,8 @@ jobs:
       # one, where a download takes 1 to 38 s. So each download stops at a limit, and one that failed or stopped runs
       # once more. download-artifact's own retries start only once blob storage answers, so a request it never answers
       # waits for the limit: SPEC (1/4) of run 46019058360 waited 5 minutes on each try. Of the day's 628 first tries of
-      # this 124 MB artifact, the slowest that finished took 17 s, so each try stops after 1 minute. UPSTREAM, SPEC and
-      # HOSTS repeat these two steps by their anchors.
+      # this 124 MB artifact, the slowest that finished took 17 s, so each try stops after 1 minute. SPEC and
+      # UPSTREAM_AND_HOSTS repeat these two steps by their anchors.
       - &download-build-linux
         name: Download BUILD_LINUX's engine and mago
         id: download
@@ -519,8 +522,8 @@ jobs:
         run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
       - name: Test PHP#
         run: >-
-          sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/3
-          ${{ matrix.shard == 3 && '--census --differential --phpunit' || '' }}
+          sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/2
+          ${{ matrix.shard == 2 && '--census --differential --phpunit' || '' }}
       - &upload-shard-test-report
         name: Upload the test report
         if: ${{ !cancelled() }}
@@ -535,12 +538,12 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
-  # sharp/mago's workspace tests on Linux, a fifth of the tests each, which sharp/bin/test --mago --shard balances by
+  # sharp/mago's workspace tests on Linux, a third of the tests each, which sharp/bin/test --mago --shard balances by
   # the seconds sharp/baseline/seconds lists, by exact name, on BUILD_LINUX's test binaries. BUILD_LINUX runs the doc
-  # tests and the property tests, which need its target. When BUILD_LINUX ran the fifth slice itself, the suites
-  # started 376 s after its last upload, on run 45016081891.
+  # tests and the property tests, which need its target. When BUILD_LINUX ran a slice itself, the suites started 376 s
+  # after its last upload, on run 45016081891. Three slices, as LINUX's two explain (#957).
   MAGO:
-    name: MAGO (${{ matrix.shard }}/5)
+    name: MAGO (${{ matrix.shard }}/3)
     needs: [CHANGES, BUILD_LINUX]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -551,7 +554,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3]
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
@@ -583,8 +586,8 @@ jobs:
           path: ${{ runner.temp }}
       - name: Unpack BUILD_LINUX's test binaries
         run: tar --zstd -xf "$RUNNER_TEMP/tests.tar.zst"
-      - name: Test a fifth of the workspace's tests
-        run: sharp/bin/test --linux --mago --no-build --shard ${{ matrix.shard }}/5
+      - name: Test a third of the workspace's tests
+        run: sharp/bin/test --linux --mago --no-build --shard ${{ matrix.shard }}/3
       - *upload-shard-test-report
       - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
@@ -592,103 +595,15 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
-  # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before, and
-  # sharp/bin/spec's self-test. The upstream tests leave out Zend/tests/sharp, which the LINUX slices run in every mode:
-  # with it, its fixtures' compile and the tests took 281 s of this job's 361 on run 45051337556, the slowest Linux job.
-  UPSTREAM:
-    needs: [CHANGES, BUILD_LINUX]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      actions: write
-      contents: read
-      packages: read
-    env:
-      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
-      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-    steps:
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Measure the job's CPU-seconds and peak memory
-        uses: ./.github/actions/usage
-      - name: Log in to ghcr.io
-        env:
-          TOKEN: ${{ github.token }}
-        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      - *download-build-linux
-      - *download-build-linux-again
-      - name: Unpack BUILD_LINUX's engine and mago
-        run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
-      - name: Test upstream
-        run: sharp/bin/test --linux --no-build --upstream
-      - *upload-test-report
-      # sharp/bin/test --spec runs the self-test with every example, which SPEC checks in slices, so this runs the
-      # self-test alone, with BUILD_LINUX's mago, as sharp/bin/test passes it.
-      - name: Check sharp/bin/spec's rules on sharp/spec-self-test.md
-        run: |
-          build="sharp/build/linux-$(uname -m)"
-          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --self-test
-      - *cancel-failed-run
-      - name: Write the job's CPU-seconds and peak memory
-        if: always()
-        uses: ./.github/actions/usage
-        with:
-          end: true
-  # Every code example in docs/spec.md and README.md, compared with sharp/baseline/spec, in four slices of the examples.
-  # Each slice runs sharp/bin/spec on BUILD_LINUX's engine and mago, as sharp/bin/test --spec does. Five slices checked
-  # their examples in 123 to 161 seconds on release pull request #343's run.
-  SPEC:
-    name: SPEC (${{ matrix.shard }}/4)
-    needs: [CHANGES, BUILD_LINUX]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      actions: write
-      contents: read
-      packages: read
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    env:
-      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
-      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-    steps:
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Measure the job's CPU-seconds and peak memory
-        uses: ./.github/actions/usage
-      - name: Log in to ghcr.io
-        env:
-          TOKEN: ${{ github.token }}
-        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      - *download-build-linux
-      - *download-build-linux-again
-      - name: Unpack BUILD_LINUX's engine and mago
-        run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
-      - name: Check the examples of docs/spec.md and README.md
-        run: |
-          build="sharp/build/linux-$(uname -m)"
-          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/4
-      # mago downloads Lean into lean/lean-<version>-<platform> of its cache folder only when it finds no pinned Lean,
-      # beside the law checker's builds, which lean/ holds under their hashes. The sharp/docker image carries the pinned
-      # Lean, as sharp/docker/Dockerfile explains.
-      - name: mago downloaded no Lean
-        run: |
-          if compgen -G 'sharp/build/cache/mago/lean/lean-*' > /dev/null; then
-            echo "::error::mago downloaded Lean into sharp/build/cache/mago/lean, so the sharp/docker image's Lean was missing."
-            exit 1
-          fi
-          echo "mago ran the examples' laws on the sharp/docker image's Lean, $(cat sharp/mago/crates/sharp-lean/lean/lean-toolchain), and downloaded none."
-      - *cancel-failed-run
-      - name: Write the job's CPU-seconds and peak memory
-        if: always()
-        uses: ./.github/actions/usage
-        with:
-          end: true
-  # The fixture in sharp/hosts, served from FrankenPHP's worker mode, with FrankenPHP built with Go against
-  # BUILD_LINUX's installed engine, and BUILD_LINUX's mago.
-  HOSTS:
+  # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before,
+  # sharp/bin/spec's self-test, and the fixture in sharp/hosts, served from FrankenPHP's worker mode, with FrankenPHP
+  # built with Go against BUILD_LINUX's installed engine, and BUILD_LINUX's mago. The upstream tests leave out
+  # Zend/tests/sharp, which the LINUX slices run in every mode: with it, its fixtures' compile and the tests took 281 s
+  # of UPSTREAM's 361 on run 45051337556, the slowest Linux job. UPSTREAM and HOSTS were two jobs of about 2.7 minutes
+  # each, and one job asks for one slot of the 8 the test jobs after BUILD_LINUX take, as LINUX's explain. In a pull
+  # request's run the fixture is served whether the upstream steps passed or failed, so one run reports the failures of
+  # both, and a staging run's failed upstream step cancels the run at once, as it did when HOSTS was its own job (#957).
+  UPSTREAM_AND_HOSTS:
     needs: [CHANGES, BUILD_LINUX]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -711,9 +626,73 @@ jobs:
       - *download-build-linux
       - *download-build-linux-again
       - name: Unpack BUILD_LINUX's engine and mago
+        id: unpack
         run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
+      - name: Test upstream
+        run: sharp/bin/test --linux --no-build --upstream
+      - *upload-test-report
+      # sharp/bin/test --spec runs the self-test with every example, which SPEC checks in slices, so this runs the
+      # self-test alone, with BUILD_LINUX's mago, as sharp/bin/test passes it.
+      - name: Check sharp/bin/spec's rules on sharp/spec-self-test.md
+        run: |
+          build="sharp/build/linux-$(uname -m)"
+          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --self-test
       - name: Serve the fixture from FrankenPHP
+        if: ${{ !cancelled() && steps.unpack.outcome == 'success' && (success() || github.event_name == 'pull_request') }}
         run: sharp/bin/hosts --linux --no-build
+      - *cancel-failed-run
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+  # Every code example in docs/spec.md and README.md, compared with sharp/baseline/spec, in two slices of the examples.
+  # Each slice runs sharp/bin/spec on BUILD_LINUX's engine and mago, as sharp/bin/test --spec does. Four slices checked
+  # their examples in 159 s each on average over pull request runs 46054131856 to 46056690187, and two slices, as
+  # LINUX's explain (#957).
+  SPEC:
+    name: SPEC (${{ matrix.shard }}/2)
+    needs: [CHANGES, BUILD_LINUX]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ github.token }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - *download-build-linux
+      - *download-build-linux-again
+      - name: Unpack BUILD_LINUX's engine and mago
+        run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
+      - name: Check the examples of docs/spec.md and README.md
+        run: |
+          build="sharp/build/linux-$(uname -m)"
+          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/2
+      # mago downloads Lean into lean/lean-<version>-<platform> of its cache folder only when it finds no pinned Lean,
+      # beside the law checker's builds, which lean/ holds under their hashes. The sharp/docker image carries the pinned
+      # Lean, as sharp/docker/Dockerfile explains.
+      - name: mago downloaded no Lean
+        run: |
+          if compgen -G 'sharp/build/cache/mago/lean/lean-*' > /dev/null; then
+            echo "::error::mago downloaded Lean into sharp/build/cache/mago/lean, so the sharp/docker image's Lean was missing."
+            exit 1
+          fi
+          echo "mago ran the examples' laws on the sharp/docker image's Lean, $(cat sharp/mago/crates/sharp-lean/lean/lean-toolchain), and downloaded none."
       - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
@@ -915,9 +894,8 @@ jobs:
       - SPEED
       - LINUX
       - MAGO
-      - UPSTREAM
+      - UPSTREAM_AND_HOSTS
       - SPEC
-      - HOSTS
       - WORKFLOWS
       - MAC_TESTS
       - IMAGE

@@ -281,6 +281,7 @@ final class AnalyzerCodeModuleGenerator
         'parameter-change',
         'const-local-change',
         'using-not-disposable',
+        'unowned-disposable',
         'extend-final-class',
         'non-existent-class-constant',
         'possibly-false-argument',
@@ -404,6 +405,7 @@ final class AnalyzerCodeModuleGenerator
         'method-name-case',
         'test-class-super-call',
         'test-method-parameter',
+        'discarded-result',
     ];
 
     /**
