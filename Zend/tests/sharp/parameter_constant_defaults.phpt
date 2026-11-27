@@ -21,6 +21,12 @@ function attempt(string $label, Closure $body): void
 attempt('tag hasConstantDefault', fn () => Probe::hasConstantDefault('tag'));
 attempt('tag defaultValue', fn () => Probe::defaultValue('tag'));
 attempt('tag invoked with ["a"]', fn () => Probe::invoke('tag', ['a']));
+attempt('a string written into tag\'s default from plain PHP', function () {
+    $sizes = Probe::table('tag');
+    $sizes['wide'] = 'text';
+
+    return $sizes['wide'];
+});
 attempt('tag called with "a"', fn () => Make::tag('a'));
 attempt('sized defaultValue', fn () => Probe::defaultValue('sized'));
 attempt('leveled defaultValue', fn () => Probe::defaultValue('leveled'));
@@ -37,6 +43,7 @@ attempt('counted invoked with []', fn () => Probe::invoke('counted', []));
 tag hasConstantDefault: true
 tag defaultValue: 'Map<string, int> of 0: '
 tag invoked with ["a"]: 'a:0'
+a string written into tag's default from plain PHP: TypeError: Cannot assign string to Map<string, int>: ["wide"] expected int, got string 'text'
 tag called with "a": 'a:0'
 sized defaultValue: 'Map<string, int> of 1: small'
 leveled defaultValue: 'Map<Level, int> of 1: Low=1'

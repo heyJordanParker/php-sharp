@@ -5981,9 +5981,21 @@ static const char *sharp_parameter_name(const zend_function *func, uint32_t offs
 	return ((const zend_internal_arg_info *) func->common.arg_info)[offset].name;
 }
 
+static bool sharp_ast_is_table_new(const zend_ast *ast)
+{
+	if (ast->kind != ZEND_AST_NEW || ast->child[0]->kind != ZEND_AST_ZVAL
+		|| Z_TYPE_P(zend_ast_get_zval(ast->child[0])) != IS_STRING) {
+		return false;
+	}
+	const zend_string *name = zend_ast_get_str(ast->child[0]);
+
+	return zend_string_equals_literal_ci(name, "Sharp\\Map") || zend_string_equals_literal_ci(name, "Sharp\\Set");
+}
+
 /* Whether PHP runs code when it evaluates the constant expression `ast`: a `new`, a call, a closure or an arrow
  * function, compiled or not, as a .sharp file's computed value, `(static function () { return …; })()`, is. A constant,
- * a class constant, an enum case and an operator on them run none. */
+ * a class constant, an enum case, an operator on them, and a `Map` or `Set` literal of them, which builds the table with
+ * its type arguments, run none. */
 static bool sharp_ast_runs_code(zend_ast *ast)
 {
 	if (!ast) {
@@ -5993,6 +6005,11 @@ static bool sharp_ast_runs_code(zend_ast *ast)
 		case ZEND_AST_ZVAL:
 		case ZEND_AST_CONSTANT:
 			return false;
+		case ZEND_AST_SHARP_TYPE_ARGS:
+			if (sharp_ast_is_table_new(ast->child[0])) {
+				return sharp_ast_runs_code(ast->child[0]->child[1]);
+			}
+			return true;
 		case ZEND_AST_OP_ARRAY:
 		case ZEND_AST_NEW:
 		case ZEND_AST_CALL:

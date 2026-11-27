@@ -10,6 +10,15 @@ public static class Probe
 
     public static bool hasConstantDefault(string name) => Probe.last(name).hasConstantDefault;
 
+    public static Object table(string name)
+    {
+        if (Probe.last(name).defaultValue() is Object table) {
+            return table;
+        }
+
+        throw new LogicException(`The default of ${name} is no table.`);
+    }
+
     public static string defaultValue(string name)
     {
         const value = Probe.last(name).defaultValue();
