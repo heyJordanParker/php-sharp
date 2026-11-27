@@ -44,7 +44,7 @@ Five **state** labels:
 - `needs-triage`: the maintainer has to evaluate it
 - `needs-info`: waiting on the reporter for a repro
 - `ready-for-agent`: verified and briefed, ready for a builder
-- `ready-for-human`: a change to what a PHP# program says or means, which the language owner decides
+- `ready-for-human`: a change to what a PHP# program says or means, which the language owner decides. Before one reaches the language owner, check it against this line again. One that changes neither is the maintainer's own: relabel it, then brief, close or research it. The language owner gets one designed proposal at a time, never a list of open issues.
 - `wontfix`: will not be built
 
 One **priority** label:
