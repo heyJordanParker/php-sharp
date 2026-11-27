@@ -3520,7 +3520,7 @@ public class Tracker<T : DatabaseEntity>
 }
 ```
 
-**Listening for a while:** `Events.on<RowImported>(e => …)` starts a listener and returns a handle. The listener stops when the handle goes out of scope:
+**Listening for a while:** `Events.on<RowImported>(e => …)` starts a listener and returns a handle, a `Listening`, which is `Disposable` (section 2). Its owner stops the listener by disposing it, as a `using` local does when its block ends:
 
 <!-- example scoped-listener: members
 public class ProgressBar { public void advance() { } }
@@ -3535,7 +3535,7 @@ public class ImportScreen
 
     public void import(string path)
     {
-        const listening = Events.on<RowImported>(e => this.progress.advance());   // listens until import returns
+        using listening = Events.on<RowImported>(e => this.progress.advance());   // stops when the method returns
         this.importer.run(path);
     }
 }
@@ -8209,7 +8209,7 @@ public ExampleRun(private Echo echo) { }
 this.echo.back("one line");   // "one line"
 -->
 
-**`ZipArchive`, in `Sharp.IO`, reads and writes a ZIP archive.** `ZipArchive.open(path)` opens one to read and to add to, and `ZipArchive.create(path)` makes a new one in place of any file at `path`. `list()` gives each entry's name in the archive's order, and `read(name)` gives an entry's text, or null when the archive has none. `write(name, text)` adds an entry from text and `addFile(file, name)` one from a file, each in place of an entry of that name, and `extractTo(directory)` writes every entry into a folder. The changes reach the file when `close()` runs, and an archive with no entries is written too. Each member reads or writes files, so code that calls one has the effect `Files`. A failure throws `RuntimeException` with the path and libzip's reason, as `ZipArchive.open: "report.csv" cannot be opened: Not a zip archive`:
+**`ZipArchive`, in `Sharp.IO`, reads and writes a ZIP archive.** `ZipArchive.open(path)` opens one to read and to add to, and `ZipArchive.create(path)` makes a new one in place of any file at `path`. `list()` gives each entry's name in the archive's order, and `read(name)` gives an entry's text, or null when the archive has none. `write(name, text)` adds an entry from text and `addFile(file, name)` one from a file, each in place of an entry of that name, and `extractTo(directory)` writes every entry into a folder. A `ZipArchive` is `Disposable` (section 2), and the changes reach the file when its owner disposes it, as a `using` local does when its block ends. An archive with no entries is written too. Each member reads or writes files, so code that calls one has the effect `Files`. A failure throws `RuntimeException` with the path and libzip's reason, as `ZipArchive.open: "report.csv" cannot be opened: Not a zip archive`:
 
 <!-- example zip-archive -->
 ```csharp
@@ -8222,13 +8222,16 @@ public class Export
 {
     public void pack(string path, string report)
     {
-        const archive = ZipArchive.create(path);
+        using archive = ZipArchive.create(path);
         archive.write("readme.txt", "Totals by month");
-        archive.addFile(report, "data/report.csv");
-        archive.close();                                                  // compiles: Export has the effect Files
+        archive.addFile(report, "data/report.csv");                       // compiles: Export has the effect Files
     }
 
-    public string? readme(string path) => ZipArchive.open(path).read("readme.txt");
+    public string? readme(string path)
+    {
+        using archive = ZipArchive.open(path);
+        return archive.read("readme.txt");
+    }
 }
 ```
 

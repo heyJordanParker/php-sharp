@@ -11968,19 +11968,22 @@ static sharp_scope *sharp_scope_start(void)
 	return scope;
 }
 
+/* Spec section 2: Sharp\Disposable, the interface of a value its owner disposes. */
+static zend_class_entry *sharp_ce_disposable;
+
 /* The service, or each one a binding of a list holds, that is Disposable disposes, spec section 2. Each runs as a
  * finally block does: what a dispose() throws takes the throw already pending as its previous, and the next service
  * still disposes. */
-static void sharp_dispose_service(zval *service, zend_class_entry *disposable)
+static void sharp_dispose_service(zval *service)
 {
 	if (Z_TYPE_P(service) == IS_ARRAY) {
 		zval *element;
 		ZEND_HASH_REVERSE_FOREACH_VAL(Z_ARRVAL_P(service), element) {
-			sharp_dispose_service(element, disposable);
+			sharp_dispose_service(element);
 		} ZEND_HASH_FOREACH_END();
 		return;
 	}
-	if (Z_TYPE_P(service) != IS_OBJECT || !instanceof_function(Z_OBJCE_P(service), disposable)) {
+	if (Z_TYPE_P(service) != IS_OBJECT || !instanceof_function(Z_OBJCE_P(service), sharp_ce_disposable)) {
 		return;
 	}
 
@@ -11992,20 +11995,12 @@ static void sharp_dispose_service(zval *service, zend_class_entry *disposable)
 }
 
 /* Spec section 32: the services kept in services that are Disposable dispose, newest first, as nested using locals
- * do: a service is kept once the services it needs are, so each disposes before what it needs. A service is
- * Disposable only once its class, and with it the interface, is loaded. */
+ * do: a service is kept once the services it needs are, so each disposes before what it needs. */
 static void sharp_dispose_services(HashTable *services)
 {
-	zend_string *name = zend_string_init_interned("Sharp\\Disposable", sizeof("Sharp\\Disposable") - 1, false);
-	zend_class_entry *disposable = zend_lookup_class_ex(name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
-	zend_string_release(name);
-	if (!disposable) {
-		return;
-	}
-
 	zval *service;
 	ZEND_HASH_REVERSE_FOREACH_VAL(services, service) {
-		sharp_dispose_service(service, disposable);
+		sharp_dispose_service(service);
 	} ZEND_HASH_FOREACH_END();
 }
 
@@ -16127,6 +16122,15 @@ ZEND_METHOD(Sharp_Listening, __construct)
 	ZEND_PARSE_PARAMETERS_NONE();
 }
 
+/* Spec section 15: the handle is Disposable, so its owner stops its listener, as a using local does at its block's
+ * end. Dropping the handle still stops it, and a second stop does nothing. */
+ZEND_METHOD(Sharp_Listening, dispose)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	sharp_listening_stop(sharp_listening_from(Z_OBJ_P(ZEND_THIS)));
+}
+
 /* Spec section 15: Events.on starts a listener of the type named type, which hears every event of that type until the
  * handle it returns is destroyed. */
 ZEND_FUNCTION(Sharp_Internal_listen)
@@ -18023,7 +18027,8 @@ static PHP_MINIT_FUNCTION(sharp)
 	sharp_delegate_call = zend_hash_str_find_ptr(&sharp_ce_delegate->function_table, "call", sizeof("call") - 1);
 	sharp_delegate_call->common.fn_flags |= ZEND_ACC_STRICT_TYPES;
 
-	sharp_ce_listening = register_class_Sharp_Listening();
+	sharp_ce_disposable = register_class_Sharp_Disposable();
+	sharp_ce_listening = register_class_Sharp_Listening(sharp_ce_disposable);
 	sharp_ce_listening->create_object = sharp_listening_create;
 	memcpy(&sharp_listening_handlers, &std_object_handlers, sizeof(zend_object_handlers));
 	sharp_listening_handlers.offset = XtOffsetOf(sharp_listening, std);
