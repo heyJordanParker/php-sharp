@@ -4,7 +4,7 @@ Steps 1 to 3 govern every architectural call the maintainer makes: the checker, 
 
 ## 1. Read the system before deciding a change to it
 
-Read the whole spec section the change touches, every decision it cites, the standard library code and the checker or engine code that implement it, and the tests beside them. Then write steps 1 to 3 into one research file in the scratchpad before step 4 starts: how the system does the job today, end to end, every ruling it touches quoted from the rulings record, and the one precedent system's whole shape. A call made before that reading is neither built nor sent, and an issue filed as `ready-for-human` carries the problem and what was verified, never a proposal not yet researched.
+Read the whole spec section the change touches, every decision it cites, the standard library code and the checker or engine code that implement it, and the tests beside them. Then write steps 1 to 3 into one research file in the scratchpad before step 4 starts: how the system does the job today, end to end, every ruling it touches quoted from the rulings record, and the one precedent system's whole shape. Each construct a proposal's program uses, such as a binding form, a type a binding takes or a module header, is quoted in the research file from the spec, or compiled there with the released `mago` with its output. A construct the research file doesn't show is not in the program. A call made before that reading is neither built nor sent, and an issue filed as `ready-for-human` carries the problem and what was verified, never a proposal not yet researched.
 
 ## 2. Hold every rule to the bar
 
