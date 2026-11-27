@@ -1,0 +1,26 @@
+namespace ExternProperties;
+
+import Lib.JsonRow;
+
+extern JsonRow uses none;
+
+// An `extern` Map property whose plain PHP `__get` gives a PHP array, as `json_decode` does, enters PHP# as the `Map`
+// it declares, spec section 14.3, so a `Map` member reads it.
+public class Answers : JsonRow
+{
+    public extern Map<string, string?> answers { get; set; }
+
+    public static List<string> read()
+    {
+        const row = new Answers();
+        Map<string, string?> parsed = ["color": "red"];
+        row.answers = parsed;
+        Map<string, string?> answers = row.answers;
+        List<string> lines = [];
+        for (const [name, answer] of answers) {
+            lines.add(`${name}: ${answers.get(name) ?? "none"}`);
+        }
+
+        return lines;
+    }
+}
