@@ -1,7 +1,8 @@
 namespace App.Stubs;
 
+import Illuminate.Database.Eloquent.Casts.Attribute as EloquentAttribute;
 import Illuminate.Database.Eloquent.Factories.HasFactory;
-import Illuminate.Database.Eloquent.Model;
+import Illuminate.Database.Eloquent.Relations.BelongsTo;
 import Illuminate.Database.Query.Builder;
 import Illuminate.Foundation.Application;
 import Illuminate.Http.Request;
@@ -15,13 +16,14 @@ import Illuminate.Support.Str as SupportStr;
 
 extern event JobFailed uses none;
 extern Application uses any;
+extern BelongsTo uses any;
 extern Builder uses any;
 extern DB uses any;
+extern EloquentAttribute uses any;
 extern File uses any;
 extern HasFactory uses any;
 extern HttpFacade uses any;
 extern Log uses any;
-extern Model uses any;
 extern Redis uses any;
 extern Request uses any;
 extern SupportStr uses any;

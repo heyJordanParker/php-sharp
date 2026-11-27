@@ -40,4 +40,16 @@ abstract class Model
     {
         return null;
     }
+
+    /**
+     * @template TRelated of Model
+     *
+     * @param class-string<TRelated> $related
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<TRelated, $this>
+     */
+    public function belongsTo(string $related): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return new \Illuminate\Database\Eloquent\Relations\BelongsTo();
+    }
 }

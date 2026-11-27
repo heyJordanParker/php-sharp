@@ -1,0 +1,26 @@
+namespace Arrivals;
+
+import Lib.MessageBag;
+import Sharp.Encoding.Json;
+
+extern MessageBag uses none;
+
+// Plain PHP's `array<V>` is a `List<V>` or a `Map<int|string, V>`, spec section 12, so it keeps the array plain PHP
+// gave, and its keys decide what `is`, `as` and `Json.encode` see.
+public class Messages
+{
+    public static List<string> read()
+    {
+        const bag = new MessageBag();
+        const messages = bag.messages();
+        const cast = messages as Map<string, List<string>>;
+        List<string> lines = [Json.encode(messages), cast == null ? "null" : "map"];
+        for (const given of messages.values()) {
+            if (given is List<string> list) {
+                lines.add(list[0]);
+            }
+        }
+
+        return lines;
+    }
+}
