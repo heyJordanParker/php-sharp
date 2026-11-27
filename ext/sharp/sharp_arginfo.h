@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 5509a86d6bba7925506e46588c4a5aeafadac502 */
+ * Stub hash: 5df27c3a3b03453519ec19360f7084f83c805dee */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
@@ -504,8 +504,12 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Container_has, 0, 1,
 	ZEND_ARG_TYPE_INFO(0, id, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
+#define arginfo_class_Sharp_Disposable_dispose arginfo_Sharp_Internal_endTest
+
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Sharp_Listening___construct, 0, 0, 0)
 ZEND_END_ARG_INFO()
+
+#define arginfo_class_Sharp_Listening_dispose arginfo_Sharp_Internal_endTest
 
 #define arginfo_class_Sharp_Internal_Sequence___construct arginfo_class_Sharp_Listening___construct
 
@@ -658,6 +662,7 @@ ZEND_METHOD(Sharp_Position, __construct);
 ZEND_METHOD(Sharp_Container, get);
 ZEND_METHOD(Sharp_Container, has);
 ZEND_METHOD(Sharp_Listening, __construct);
+ZEND_METHOD(Sharp_Listening, dispose);
 ZEND_METHOD(Sharp_Internal_Sequence, __construct);
 ZEND_METHOD(Sharp_Internal_Sequence, from);
 ZEND_METHOD(Sharp_Internal_Sequence, filter);
@@ -796,8 +801,14 @@ static const zend_function_entry class_Sharp_Container_methods[] = {
 	ZEND_FE_END
 };
 
+static const zend_function_entry class_Sharp_Disposable_methods[] = {
+	ZEND_RAW_FENTRY("dispose", NULL, arginfo_class_Sharp_Disposable_dispose, ZEND_ACC_PUBLIC|ZEND_ACC_ABSTRACT, NULL, NULL)
+	ZEND_FE_END
+};
+
 static const zend_function_entry class_Sharp_Listening_methods[] = {
 	ZEND_ME(Sharp_Listening, __construct, arginfo_class_Sharp_Listening___construct, ZEND_ACC_PRIVATE)
+	ZEND_ME(Sharp_Listening, dispose, arginfo_class_Sharp_Listening_dispose, ZEND_ACC_PUBLIC)
 	ZEND_FE_END
 };
 
@@ -878,12 +889,23 @@ static zend_class_entry *register_class_Sharp_ContainerError(zend_class_entry *c
 	return class_entry;
 }
 
-static zend_class_entry *register_class_Sharp_Listening(void)
+static zend_class_entry *register_class_Sharp_Disposable(void)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Disposable", class_Sharp_Disposable_methods);
+	class_entry = zend_register_internal_interface(&ce);
+
+	return class_entry;
+}
+
+static zend_class_entry *register_class_Sharp_Listening(zend_class_entry *class_entry_Sharp_Disposable)
 {
 	zend_class_entry ce, *class_entry;
 
 	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Listening", class_Sharp_Listening_methods);
 	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE);
+	zend_class_implements(class_entry, 1, class_entry_Sharp_Disposable);
 
 	return class_entry;
 }
