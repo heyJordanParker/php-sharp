@@ -76,8 +76,10 @@ def mods_off(session):
             f"him to restart.\n\n")
 
 
-def free_gib():
-    return int(subprocess.run(["df", "-g", "/System/Volumes/Data"], capture_output=True, text=True).stdout.split("\n")[1].split()[3])
+def free_gb():
+    """The free space Finder shows the language owner, purgeable space included, in decimal GB."""
+    script = 'tell application "Finder" to get free space of startup disk'
+    return int(float(subprocess.run(["osascript", "-e", script], capture_output=True, text=True).stdout) / 1e9)
 
 
 def unrunnable_steps():
@@ -131,9 +133,9 @@ def lanes():
     stalled += [f"{' and '.join(held)} both hold {path}" for path, held in owners.items() if len(held) > 1]
     # The disk check lives here as well as in SKILL.md step 3: that step was deleted on 11-23 00:48, and on 11-24 the
     # disk sat at 0.5 to 4 GiB from 06:56 to 10:14 with the lanes stopped (log.md 11-24 10:14).
-    free = free_gib()
+    free = free_gb()
     if free < 60:
-        stalled.append(f"disk {free} GiB free: SKILL.md step 3" + (", and no build starts" if free < 20 else ""))
+        stalled.append(f"disk {free} GB free: SKILL.md step 3" + (", and no build starts" if free < 20 else ""))
     stalled += unrunnable_steps()
     head = "LANES:"
     act = ("ACT FIRST: " + "; ".join(stalled) + ".") if stalled else "Every builder worked in the last 30 minutes."
@@ -248,7 +250,7 @@ def report():
     eta = next((re.match(r"\s*release ETA: (\S+) (\d\d-\d\d \d\d:\d\d)", line) for line in lines
                 if line.strip().startswith("release ETA: ")), None)
     box = f"{eta.group(1)} ships {eta.group(2)}" if eta else "No release in flight"
-    block = [f"Disk  {free_gib()} GiB free", "", "Progress"]
+    block = [f"Disk  {free_gb()} GB free", "", "Progress"]
     for line in lines:
         found = re.match(r"\s+(ALL|\S+) (\[[^\]]+\])\s+(.*)", line)
         if found and not line.strip().startswith("#"):
