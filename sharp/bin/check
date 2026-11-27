@@ -405,6 +405,7 @@ no_build_id_below_root() {
 # mago_database::clock.
 no_wall_time_in_tests() {
   local found
+  # shellcheck disable=SC2016 # The program is awk's, whose $0 the shell must not expand.
   found="$(find src tests crates -name '*.rs' -print0 | xargs -0 awk '
     FNR == 1 { testing = FILENAME ~ /(^|\/)tests\// }
     /^ *(pub(\(crate\))? )?mod tests/ { testing = 1 }
