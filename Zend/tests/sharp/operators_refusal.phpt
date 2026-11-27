@@ -74,7 +74,7 @@ public class Refusals
     {
         let area = 0.0;
         if (shape is Circle circle) {
-            area = circle.radius;
+            area += circle.radius;
         }
         return circle.radius;
     }
@@ -92,7 +92,7 @@ public class Refusals
     public int drained(int remaining)
     {
         while (remaining) {
-            remaining -= 1;
+            return remaining - 1;
         }
         return remaining;
     }

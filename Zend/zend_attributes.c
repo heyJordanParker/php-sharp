@@ -426,6 +426,89 @@ ZEND_API zend_result zend_get_attribute_object(zval *obj, zend_class_entry *attr
 	return result;
 }
 
+/* The object the attribute `data` of the table `attributes` makes, as ReflectionAttribute::newInstance makes it: its
+ * class must be an attribute class that allows `target`, and a user attribute that is not repeatable must appear once. */
+ZEND_API zend_result zend_get_attribute_instance(zval *obj, HashTable *attributes, zend_attribute *data, zend_class_entry *scope, uint32_t target, zend_string *filename)
+{
+	zend_class_entry *ce;
+	zend_attribute *marker;
+
+	if (NULL == (ce = zend_lookup_class(data->name))) {
+		zend_throw_error(NULL, "Attribute class \"%s\" not found", ZSTR_VAL(data->name));
+		return FAILURE;
+	}
+
+	if (NULL == (marker = zend_get_attribute_str(ce->attributes, ZEND_STRL("attribute")))) {
+		zend_throw_error(NULL, "Attempting to use non-attribute class \"%s\" as attribute", ZSTR_VAL(data->name));
+		return FAILURE;
+	}
+
+	/* This code can be reached under one of three possible conditions:
+	 * - the attribute is an internal attribute, and it had the target and
+	 *   and repetition validated already
+	 * - the attribute is an internal attribute and repetition was validated
+	 *   already, the internal validator might have been run if the target was
+	 *   correct, but any error would have been stored in
+	 *   `zend_attribute.validation_error` instead of being thrown due to the
+	 *   presence of #[DelayedTargetValidation]
+	 * - the attribute is a user attribute, and neither target nor repetition
+	 *   have been validated.
+	 */
+	uint32_t flags = zend_attribute_attribute_get_flags(marker, ce);
+	if (EG(exception)) {
+		return FAILURE;
+	}
+
+	/* No harm in always running target validation, for internal attributes
+	 * without #[DelayedTargetValidation] it isn't necessary but will always
+	 * succeed. */
+	if (!(target & flags)) {
+		zend_string *location = zend_get_attribute_target_names(target);
+		zend_string *allowed = zend_get_attribute_target_names(flags);
+
+		zend_throw_error(NULL, "Attribute \"%s\" cannot target %s (allowed targets: %s)",
+			ZSTR_VAL(data->name), ZSTR_VAL(location), ZSTR_VAL(allowed)
+		);
+
+		zend_string_release(location);
+		zend_string_release(allowed);
+
+		return FAILURE;
+	}
+
+	if (data->validation_error != NULL) {
+		/* Delayed validation errors should only be set for internal attributes. */
+		ZEND_ASSERT(ce->type == ZEND_INTERNAL_CLASS);
+		/* Delayed validation errors should only be set when
+		 * #[\DelayedTargetValidation] is used. Searching for the attribute is
+		 * more expensive than just an assertion and so we don't worry about it
+		 * for non-debug builds. See discussion on GH-18817. */
+#if ZEND_DEBUG
+		zend_attribute *delayed_target_validation = zend_get_attribute_str(
+			attributes,
+			"delayedtargetvalidation",
+			strlen("delayedtargetvalidation")
+		);
+		ZEND_ASSERT(delayed_target_validation != NULL);
+#endif
+		zend_throw_exception(zend_ce_error, ZSTR_VAL(data->validation_error), 0);
+		return FAILURE;
+	}
+
+	/* Repetition validation is done even if #[DelayedTargetValidation] is used
+	 * and so can be skipped for internal attributes. */
+	if (ce->type == ZEND_USER_CLASS) {
+		if (!(flags & ZEND_ATTRIBUTE_IS_REPEATABLE)) {
+			if (zend_is_attribute_repeated(attributes, data)) {
+				zend_throw_error(NULL, "Attribute \"%s\" must not be repeated", ZSTR_VAL(data->name));
+				return FAILURE;
+			}
+		}
+	}
+
+	return zend_get_attribute_object(obj, ce, data, scope, filename);
+}
+
 static const char *target_names[] = {
 	"class",
 	"function",

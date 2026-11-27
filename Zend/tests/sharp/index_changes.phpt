@@ -245,14 +245,14 @@ array(10) {
   [9]=>
   NULL
 }
-OutOfRangeException: Undefined array key 9 in Grid.sharp on line 170
-OutOfRangeException: Undefined array key 9 in Grid.sharp on line 172
-OutOfRangeException: Undefined array key 9 in Grid.sharp on line 174
-OutOfRangeException: Undefined array key 9 in Grid.sharp on line 176
-OutOfRangeException: Undefined array key 9 in Grid.sharp on line 178
-OutOfRangeException: Undefined array key 9 in Grid.sharp on line 180
-OutOfRangeException: Undefined array key 9 in Grid.sharp on line 182
-OutOfRangeException: Undefined array key 9 in Grid.sharp on line 195
+OutOfRangeException: Undefined array key 9 in Grid.sharp on line 186
+OutOfRangeException: Undefined array key 9 in Grid.sharp on line 193
+OutOfRangeException: Undefined array key 9 in Grid.sharp on line 200
+OutOfRangeException: Undefined array key 9 in Grid.sharp on line 204
+OutOfRangeException: Undefined array key 9 in Grid.sharp on line 206
+OutOfRangeException: Undefined array key 9 in Grid.sharp on line 208
+OutOfRangeException: Undefined array key 9 in Grid.sharp on line 210
+OutOfRangeException: Undefined array key 9 in Grid.sharp on line 223
 int(0)
 array(2) {
   [0]=>
@@ -260,29 +260,29 @@ array(2) {
   [1]=>
   bool(false)
 }
-OutOfRangeException: Undefined array key 9 in Grid.sharp on line 184
+OutOfRangeException: Undefined array key 9 in Grid.sharp on line 212
 array(2) {
   [0]=>
   int(3)
   [1]=>
   NULL
 }
-OutOfRangeException: Undefined array key 9 in Grid.sharp on line 186
+OutOfRangeException: Undefined array key 9 in Grid.sharp on line 214
 array(2) {
   [0]=>
   string(6) "size 3"
   [1]=>
   string(4) "none"
 }
-OutOfRangeException: Undefined array key 9 in Grid.sharp on line 188
+OutOfRangeException: Undefined array key 9 in Grid.sharp on line 216
 array(2) {
   [0]=>
   int(1)
   [1]=>
   int(5)
 }
-OutOfRangeException: Undefined array key 2 in Grid.sharp on line 214
-OutOfRangeException: Undefined array key -1 in Grid.sharp on line 214
+OutOfRangeException: Undefined array key 2 in Grid.sharp on line 243
+OutOfRangeException: Undefined array key -1 in Grid.sharp on line 243
 array(6) {
   [0]=>
   int(12)
@@ -311,7 +311,7 @@ array(3) {
   [2]=>
   float(1.75)
 }
-OutOfRangeException: Undefined array key 5 in Grid.sharp on line 240
+OutOfRangeException: Undefined array key 5 in Grid.sharp on line 275
 array(2) {
   [0]=>
   array(2) {
@@ -381,11 +381,11 @@ array(2) {
     int(3)
   }
 }
-OutOfRangeException: Undefined array key 5 in Grid.sharp on line 118
-OutOfRangeException: Undefined array key 1 in Grid.sharp on line 55
-OutOfRangeException: Undefined array key 2 in Grid.sharp on line 124
-OutOfRangeException: Undefined array key 9 in Grid.sharp on line 200
-OutOfRangeException: Undefined array key 9 in Grid.sharp on line 206
+OutOfRangeException: Undefined array key 5 in Grid.sharp on line 126
+OutOfRangeException: Undefined array key 1 in Grid.sharp on line 57
+OutOfRangeException: Undefined array key 2 in Grid.sharp on line 133
+OutOfRangeException: Undefined array key 9 in Grid.sharp on line 228
+OutOfRangeException: Undefined array key 9 in Grid.sharp on line 234
 int(8)
 OutOfRangeException: Undefined array key 5 in Point.sharp on line 32
 array(7) {

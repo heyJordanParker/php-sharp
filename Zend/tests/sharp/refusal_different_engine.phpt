@@ -5,7 +5,7 @@ The engine refuses a compiled file whose magic is not a .sharpc file's, as compi
 require __DIR__ . '/project.inc';
 
 $root = compile_project('different-engine', ['Shop.sharp' => SHOP, 'Counter.sharp' => COUNTER]);
-overwrite("$root/.sharp/Shop.sharpc", 0, 'XHARPC');
+overwrite("$root/.sharp/current/Shop.sharpc", 0, 'XHARPC');
 
 refusal("$root/Shop.sharp");
 remove_project($root);

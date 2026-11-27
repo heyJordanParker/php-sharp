@@ -1,0 +1,8 @@
+namespace ReflectionReads;
+
+import Attribute;
+
+[Attribute]
+public class Marker
+{
+}

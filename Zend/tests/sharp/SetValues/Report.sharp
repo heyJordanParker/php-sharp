@@ -45,9 +45,10 @@ public class Report
 
     public static int left(List<Set<int>> rows, Set<int> row)
     {
-        rows.remove(row);
+        let rest = rows;
+        rest.remove(row);
 
-        return rows.count();
+        return rest.count();
     }
 
     public static int distinct(List<Set<int>> rows) => rows.toSet().count();

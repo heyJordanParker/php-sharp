@@ -176,6 +176,17 @@ part() {
   fi
 }
 
+# On macOS a run builds one engine, the debug one CI's Mac job builds, runs every suite on and links mago with, in
+# sharp/build/<os>-<arch> beside its php and phpdbg, so no other engine build empties that folder (#851). The sharp/docker
+# image's run tests the engine sharp/bin/build built there.
+if [[ $os == darwin ]]; then
+  export MAGO_ENGINE="${MAGO_ENGINE:-$build_dir/install}"
+  if $build; then
+    part "sharp/bin/build-mago --engine --debug"
+    "$root/sharp/bin/build-mago" --engine --debug
+  fi
+fi
+
 # One pool of the run's jobs runs every test of the run, both lanes of the Mac's job among them, as cargo-nextest runs a
 # workspace: a slot runs one process on one thread with a list of tests, and the heaviest unit waiting starts the
 # moment a slot frees, so the run holds at most its jobs threads and no slot idles while a unit waits. A test
@@ -196,6 +207,8 @@ unit_then=()
 unit_keys=()
 unit_part=()
 unit_junit=()
+unit_results=()
+unit_mode=()
 queued=()
 sorted=true
 # The part of the run the units added next belong to: its name, a tab, and the command that runs it alone.
@@ -228,6 +241,8 @@ add_unit() {
   unit_keys[unit]=''
   unit_part[unit]=$adding
   unit_junit[unit]=''
+  unit_results[unit]=''
+  unit_mode[unit]=''
   unit_count=$((unit_count + 1))
 }
 # A failed step of the unit, with the part the unit belongs to and the command that runs that part alone.
@@ -333,6 +348,16 @@ run_pool() {
     if [[ -f $TMPDIR/unit-$u.failed ]]; then
       mapfile -t reported < "$TMPDIR/unit-$u.failed"
     fi
+    # A failed run-tests batch names each test that failed in it, from the results run-tests.php wrote, where its heading
+    # names only the batch's first file: run 45817904815 printed "55 tests from …plain_declared_class_closures.phpt" for
+    # a failed type_arguments_entry_collection.phpt (#943). A batch that failed with no test failing keeps its heading.
+    if ((status != 0 || ${#reported[@]})) && [[ -n ${unit_results[u]} && -f ${unit_results[u]} ]]; then
+      mapfile -t tests < <(awk -F '\t' -v mode="${unit_mode[u]}" \
+        '$1 == "FAILED" || $1 == "BORKED" || $1 == "LEAKED" { print mode ": " $2 }' "${unit_results[u]}")
+      if ((${#tests[@]})); then
+        reported=("${tests[@]}")
+      fi
+    fi
     if ((status != 0 && ${#reported[@]} == 0)); then
       reported=("${unit_heading[u]}")
     fi
@@ -356,6 +381,8 @@ run_pool() {
   unit_keys=()
   unit_part=()
   unit_junit=()
+  unit_results=()
+  unit_mode=()
 }
 
 # The run's report, sharp/build/test-report.xml in the JUnit XML format, which CI's test jobs upload, so each suite's and
@@ -597,22 +624,25 @@ if $mago && ! $cargo_built; then
   # Each binary's tests, as its --list prints them, by the binary's index. A binary that can't list them fails the run:
   # its --list ran in a pipe whose failure nothing read, so its empty list read as a binary with no tests, and the run
   # ran none of them and passed. libtest prints each test's own wall time after its result with --report-time, which
-  # stable Rust's libtest takes only under RUSTC_BOOTSTRAP. libtest-mimic's harness has no such option, and its --help
-  # doesn't name it.
+  # stable Rust's libtest takes only under RUSTC_BOOTSTRAP. libtest-mimic's harness has no such option. One launch tells
+  # them apart: libtest's --list ends with a count, as "948 tests, 0 benchmarks", and libtest-mimic's prints only its
+  # tests. Its own part times the launches, which took about 50 s at no CPU on run 45830629343's Mac job (#953).
+  part "the list of each test binary's tests"
   declare -A listed=() libtests=()
   for ((b = 0; b < ${#binaries[@]}; b++)); do
     IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
-    if ! names="$(cd "$folder" && "$executable" --list --format terse)"; then
+    if ! names="$(cd "$folder" && "$executable" --list)"; then
       echo "${executable##*/}, from ${folder#"$root"/}, couldn't list its tests, so none of them runs." >&2
       failed+=("the list of ${executable##*/}'s tests")
       continue
     fi
     listed[$b]="$(sed -n 's/: test$//p' <<< "$names")"
     libtests[$b]=false
-    if [[ $("$executable" --help) == *--report-time* ]]; then
+    if [[ ${names##*$'\n'} =~ ^[0-9]+\ tests?,\ [0-9]+\ benchmarks?$ ]]; then
       libtests[$b]=true
     fi
   done
+  part
 
   # Each test weighs the seconds sharp/baseline/seconds lists under its binary's source file and its name, as
   # sharp/mago/tests/main.rs::compile::<name>, and a test the file doesn't list ran under 1.5 s, so it weighs 1. A
@@ -835,16 +865,16 @@ done | LC_ALL=C sort -u)
 
 php="$build_dir/sapi/cli/php"
 if [[ ! -x "$php" ]]; then
-  echo "$php is missing. Run sharp/bin/build first." >&2
+  echo "$php is missing. Run sharp/bin/build-mago --engine --debug first." >&2
   exit 1
 fi
 
-# A build folder an older sharp/bin/build configured can hold an engine without thread safety, which PHP# no longer
+# A build folder an older build configured can hold an engine without thread safety, which PHP# no longer
 # runs, at the tree's version, the root package's in sharp/mago/Cargo.toml.
 version="$(sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q;}' "$root/sharp/mago/Cargo.toml")"
 engine_version="$("$php" -n --ri sharp | sed -n 's/^Version => //p')"
 if [[ "$engine_version" != "$version" || "$("$php" -n -r 'echo PHP_ZTS;')" != 1 ]]; then
-  echo "The engine $php is $engine_version$("$php" -n -r 'echo PHP_ZTS ? "" : " without thread safety";'), but the tree is the thread-safe $version. Run sharp/bin/build." >&2
+  echo "The engine $php is $engine_version$("$php" -n -r 'echo PHP_ZTS ? "" : " without thread safety";'), but the tree is the thread-safe $version. Run sharp/bin/build-mago --engine --debug." >&2
   exit 1
 fi
 
@@ -978,6 +1008,8 @@ add_test_units() {
         --set-timeout 120 \
         "${options[@]}" "${group[@]}"
       unit_junit[unit]="$TMPDIR/junit-$m-$l"
+      unit_results[unit]="$TMPDIR/results-$m-$l"
+      unit_mode[unit]=${modes[m]}
       hold_keys "$unit" "${list_keys[l]}"
       if [[ -z $previous ]]; then
         ready_unit "$unit"

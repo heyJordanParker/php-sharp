@@ -34,7 +34,7 @@ public class Shelf
         const rows = (Map<string, int>|List<int> value) => Shelf.rowsText(value);
         const names = (List<int>|List<string> value) => Shelf.namesText(value);
         const data = (Bytes|string value) => Shelf.dataText(value);
-        const seen = [rows(["a": 1]), rows([1, 2]), names(["x"]), names([1, 2, 3]), data("hi".toBytes()), data("hi")];
+        let seen = [rows(["a": 1]), rows([1, 2]), names(["x"]), names([1, 2, 3]), data("hi".toBytes()), data("hi")];
 
         this.rows = ["a": 1, "b": 2];
         seen.add(Shelf.rowsText(this.rows));

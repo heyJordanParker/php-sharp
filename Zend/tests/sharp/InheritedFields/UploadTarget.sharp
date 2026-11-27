@@ -1,0 +1,6 @@
+namespace InheritedFields;
+
+public struct UploadTarget
+{
+    public UploadTarget(public Url url { get; }) { }
+}

@@ -1,35 +1,33 @@
 name: Release
 
-# Runs the run's one Mac job, and builds a release's assets: the mago binary per platform with its attestation, Mago's
-# source archives, the SHA-256 of every asset and the release's notes. PHP# and Mago release at one version, which
-# sharp.yml's CHANGES finds from the tags and passes in, and each job that builds writes it into its checkout's
-# sharp/mago/Cargo.toml first, where mago reads it and the engine builds it into ext/sharp's sharp_version.h. The notes
-# are the ## Changelog sections of the pull requests the release merges, so the list of releases on GitHub is the
-# changelog.
+# Builds a release's assets: the mago binary per platform with its attestation, Mago's source archives, the SHA-256 of
+# every asset and the release's notes. PHP# and Mago release at one version, which sharp.yml's CHANGES finds from the
+# tags and passes in, and each job that builds writes it into its checkout's sharp/mago/Cargo.toml first, where mago
+# reads it and the engine builds it into ext/sharp's sharp_version.h. The notes are the ## Changelog sections of the
+# pull requests the release merges, so the list of releases on GitHub is the changelog.
 #
-# sharp.yml's MACOS calls this workflow in every run. A release builds its binaries once, as Humble and Farley's
-# Continuous Delivery asks: only a push to master whose version's GitHub release isn't published sets assets,
-# and sharp.yml's RELEASE publishes exactly the files it built in that run. A pull request's run never builds them: once
-# the version moved to the start of each cycle, every run on next built the profile-guided release, and run 44997846679
-# took 45 minutes, 16.5 of them the release build alone after every check had ended. Its attestations name this workflow
-# as their signer, which install.sh and mago self-update verify, so the binaries build here and nowhere else, and the
-# Mac's job is defined here too, so the Mac's binary builds in the job that ran the Mac's tests and the release takes the
-# Mac once: on a release's push run, 45294287723, the Mac's binary job started 59.6 minutes after the Mac's test job ended,
-# while the runner took pull request runs' Mac jobs first.
+# sharp.yml's MACOS calls this workflow in a staging run whose version's GitHub release isn't published, once the Mac's
+# checks in MAC_TESTS passed. A release builds its binaries once, as Humble and Farley's Continuous Delivery asks, and
+# sharp.yml's RELEASE publishes exactly the files it built in that run. A pull request's run never builds them: once the
+# version moved to the start of each cycle, every run on next built the profile-guided release, and run 44997846679 took
+# 45 minutes, 16.5 of them the release build alone after every check had ended. LAND doesn't wait for this workflow, as
+# a merge queue gates on the tests and a release pipeline builds the artifacts after the merge (#952), so a failed
+# release job opens the red-master issue from red_master_issue and is fixed forward. Its attestations name this
+# workflow as their signer, which install.sh and mago self-update verify, so the binaries build here and nowhere else.
 on:
   workflow_call:
     inputs:
-      assets:
-        description: true in a push to master whose version's GitHub release isn't published, which builds the release's assets. Otherwise only the Mac's job runs, and only its tests.
-        type: boolean
-        required: true
       version:
-        description: With assets, the release's version, <major>.<minor>.<patch>, which tag v<version> names once it is published.
+        description: The release's version, <major>.<minor>.<patch>, which tag v<version> names once it is published.
+        type: string
+        required: true
+      pulls:
+        description: The numbers of the pull requests merged since the last release, separated by spaces.
         type: string
         required: false
         default: ''
-      pulls:
-        description: With assets, the numbers of the pull requests merged since the last release, separated by spaces.
+      range:
+        description: The commits the staging run tests, as <base>..<sha>, which the red-master issue names.
         type: string
         required: false
         default: ''
@@ -48,7 +46,6 @@ defaults:
 jobs:
   crate_metadata:
     name: extract crate metadata
-    if: inputs.assets
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -195,24 +192,12 @@ jobs:
         with:
           end: true
 
-  # The run's one Mac job, aarch64-apple-darwin's entry, and in a release's push each platform's binary. The Mac's entry
-  # runs on the Mac's one build of the engine, the debug engine, which mago links and the PHP# suite runs on, the one
-  # arm64 build of it, and the dev build of mago and every test binary, on a disk that ignores case. It runs every test
-  # LINUX, MAGO, SPEC and UPSTREAM's spec self-test run: the PHP# suite without opcache and in opcache's shared memory,
-  # mago convert's whole-project proof, the census, the differential, PHPUnit, the spec's self-test and examples, every
-  # workspace test, tests/laws.rs among them, the doc tests and the property tests, then plain-php. Three Linux checks
-  # can't run on macOS: the JIT, which Apple silicon has no thread-safe build of, as ext/opcache/config.m4 warns, the
-  # upstream tests, whose sharp/baseline/linux holds Linux's results, and sharp/bin/hosts, which builds FrankenPHP in the
-  # sharp/docker image. As four jobs, MACOS, tests (macOS), release-build and the release's macOS build, they queued
-  # one after another on the Mac, and three of them ran the engine step: 700, 1,443 and 940 s on a release's green run
-  # 44740612180. In a release's push, the Mac's entry then builds the Mac's binary in the same checkout, after its tests.
-  #
-  # The binaries' targets are the ones PHP# runs on: macOS on Apple silicon, on the self-hosted Apple silicon runners,
-  # since GitHub's macos-latest never started on throwaway bump #248: twice its jobs ended "not acquired by Runner of type
-  # hosted even after multiple attempts", for macOS arm64's capacity, so a release that waits on it can't publish. And
-  # glibc Linux on arm64 and x86_64, each built on a runner of its own architecture, which builds the PHP# engine mago
-  # links from its Ubuntu's static archives: 24.04's on arm64, so that binary runs on glibc 2.39 and later, and 22.04's on
-  # x86_64, so that one runs on glibc 2.35 and later. Only a run with assets has the Linux entries.
+  # Each platform's binary. The binaries' targets are the ones PHP# runs on: macOS on Apple silicon, on the self-hosted
+  # Apple silicon runners, since GitHub's macos-latest never started on throwaway bump #248: twice its jobs ended "not
+  # acquired by Runner of type hosted even after multiple attempts", for macOS arm64's capacity, so a release that waits
+  # on it can't publish. And glibc Linux on arm64 and x86_64, each built on a runner of its own architecture, which
+  # builds the PHP# engine mago links from its Ubuntu's static archives: 24.04's on arm64, so that binary runs on glibc
+  # 2.39 and later, and 22.04's on x86_64, so that one runs on glibc 2.35 and later.
   #
   # `pgo: true` builds with profile-guided optimization, profiled on corpus/. Only aarch64-apple-darwin sets it. On the
   # M2 Max, fat LTO with one codegen unit and this profile analyzed and compiled a 14,860-file vendor tree in 15% fewer
@@ -222,20 +207,17 @@ jobs:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     needs: crate_metadata
-    # crate_metadata runs only with assets, and the Mac's entry runs its tests without it.
-    if: ${{ !failure() && !cancelled() }}
     permissions:
-      actions: write
       contents: read
       id-token: write
       attestations: write
     strategy:
       fail-fast: false
       matrix:
-        job: >-
-          ${{ fromJSON(format('[{0}{1}]',
-            '{"target": "aarch64-apple-darwin", "os": "macos-arm64-local", "pgo": true}',
-            inputs.assets && ', {"target": "aarch64-unknown-linux-gnu", "os": "ubuntu-24.04-arm"}, {"target": "x86_64-unknown-linux-gnu", "os": "ubuntu-22.04"}' || '')) }}
+        job:
+          - { target: aarch64-apple-darwin, os: macos-arm64-local, pgo: true }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm }
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04 }
 
     steps:
       # actions/checkout's clean removes every file an earlier job of the Mac runner's one work folder left, sharp/build
@@ -261,83 +243,18 @@ jobs:
           # shellcheck disable=SC2086 # FORMULAE is a list of formulae.
           brew list --versions $FORMULAE
 
-      # One engine for the tests, the debug one: only a debug engine runs ZEND_ASSERT and reports a leak, so mago's tests
-      # run on it as the PHP# suite does, where the job built a -O2 engine for mago beside it, 4.0 to 6.2 minutes of each
-      # run. The release's binary links the -O2 engine users get, which a release's push builds after the tests.
-      - name: Build the debug engine mago links and the PHP# suite runs on
-        if: runner.os == 'macOS'
-        working-directory: ${{ github.workspace }}
-        run: sharp/bin/build-mago --engine --debug
-
-      # mago and every test binary of the workspace, in the dev profile, which keeps the debug assertions and overflow
-      # checks the tests need, linked with the engine the step before last built, as sharp.yml's BUILD_LINUX builds them.
-      - name: Build mago and its test binaries
-        if: runner.os == 'macOS'
-        working-directory: ${{ github.workspace }}
-        env:
-          MAGO_ENGINE: ${{ github.workspace }}/sharp/build/darwin-arm64/install
-        run: sharp/bin/build-mago --quiet
-
-      - name: Install elan and Lean
-        if: runner.os == 'macOS'
-        uses: ./.github/actions/setup-lean
-
-      # One sharp/bin/test runs the PHP# suite and mago's workspace tests in one pool of the Mac's cores, the
-      # whole-project proof of mago convert among them, as sharp/bin/test explains. The doc tests and the property tests,
-      # which cargo builds on every core in the target the step before last built, run after it, alone. Each run writes
-      # sharp/build/test-report.xml, so the pool's moves aside before the second run writes its own.
-      - name: Test PHP# and mago's workspace
-        if: runner.os == 'macOS'
-        working-directory: ${{ github.workspace }}
-        env:
-          MAGO_ENGINE: ${{ github.workspace }}/sharp/build/darwin-arm64/install
-        run: |
-          status=0
-          sharp/bin/test --no-build --mago --census --spec --differential --phpunit || status=$?
-          if [[ -f sharp/build/test-report.xml ]]; then
-            mv sharp/build/test-report.xml sharp/build/test-report-pool.xml
-          fi
-          sharp/bin/test --mago --cargo-built || status=$?
-          echo "The test step took $SECONDS s."
-          exit "$status"
-
-      # Each suite's time and each test's, which the timeline shows as the one step above (#855).
-      - name: Upload the test reports
-        if: ${{ runner.os == 'macOS' && !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: test-report
-          path: |
-            sharp/build/test-report-pool.xml
-            sharp/build/test-report.xml
-          if-no-files-found: warn
-
-      # sharp/bin/check plain-php on the Mac's Homebrew PHP, with the dev build the suites ran, in the folder that check
-      # reads the test-run mago from.
-      - name: Run mago from Composer on plain PHP, and stop sharp/phpunit's tests on it
-        if: runner.os == 'macOS'
-        working-directory: ${{ github.workspace }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/target/test-run"
-          cp sharp/build/darwin-arm64/mago/debug/mago "$RUNNER_TEMP/target/test-run/mago"
-          CARGO_TARGET_DIR="$RUNNER_TEMP/target" sharp/bin/check plain-php
-
       # The release build's target folder, beside the dev builds sharp/.cargo's config names, which the steps below read.
-      # It goes after the tests, which build in the dev target.
       - name: Point CARGO_TARGET_DIR at the release target
-        if: inputs.assets
         shell: bash
         run: echo "CARGO_TARGET_DIR=$GITHUB_WORKSPACE/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago-release" >> "$GITHUB_ENV"
 
       - name: set version env variable
-        if: inputs.assets
         id: version
         shell: bash
         run: echo "VERSION=${{ needs.crate_metadata.outputs.version }}" >> "$GITHUB_OUTPUT"
 
       # Before the engine's build, which reads it into sharp_version.h, and mago's.
       - name: Write the release's version into the checkout
-        if: inputs.assets
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
@@ -348,7 +265,6 @@ jobs:
         uses: ./.github/actions/engine-packages
 
       - name: install Rust toolchain
-        if: inputs.assets
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: ${{ needs.crate_metadata.outputs.msrv }}
@@ -356,7 +272,7 @@ jobs:
 
       # cargo install puts cargo-pgo in the runner's CARGO_HOME, which the Mac's runner keeps, so it installs it once.
       - name: install PGO tools
-        if: inputs.assets && matrix.job.pgo
+        if: matrix.job.pgo
         shell: bash
         run: |
           rustup component add llvm-tools-preview
@@ -365,7 +281,6 @@ jobs:
           fi
 
       - name: show version information (Rust, cargo, GCC)
-        if: inputs.assets
         shell: bash
         run: |
           set -x
@@ -382,7 +297,7 @@ jobs:
       # token: Composer 2.9.3 refuses a github-oauth token holding "-", "/", "+" or "=", and refused the job's token
       # so on run 45016534123, while it sends a bearer token as it is.
       - name: setup PHP corpus for PGO profiling
-        if: inputs.assets && matrix.job.pgo
+        if: matrix.job.pgo
         shell: bash
         working-directory: sharp/mago/corpus
         env:
@@ -391,44 +306,47 @@ jobs:
 
       # The PHP# engine mago links, which sharp/bin/build-mago --engine builds for the runner's own platform.
       - name: Build the engine mago links
-        if: inputs.assets
         shell: bash
         working-directory: ${{ github.workspace }}
         run: sharp/bin/build-mago --engine
 
+      # The Mac keeps the pinned Lean, which the law checker builds with, so the step below downloads none.
+      - name: Install elan and Lean
+        if: runner.os == 'macOS'
+        uses: ./.github/actions/setup-lean
+
       # The law checker's build for the job's platform, which mago embeds and unpacks on the first compile that
       # proves a law, so no machine builds the checker with lake and a binary runs only its own checker. Only the
       # archive ships, and the example writes the same one in any profile, so it runs in the dev profile, where the
-      # release profile compiled 175 crates in 2m33s of release run 45544095366's 3m59s step. On the Mac it runs the
-      # example "Build mago and its test binaries" compiled, since a cargo run -p resolves its features apart from the
-      # workspace's and compiles the shared crates again, as sharp/bin/build-mago explains.
+      # release profile compiled 175 crates in 2m33s of release run 45544095366's 3m59s step.
       - name: Build the law checker mago embeds
-        if: inputs.assets
         shell: bash
         run: |
-          if [[ $RUNNER_OS == macOS ]]; then
-            "$GITHUB_WORKSPACE/sharp/build/darwin-arm64/mago/debug/examples/checker" "$RUNNER_TEMP/checker.tar.zst"
-          else
-            cargo run --locked -p mago-sharp-lean --example checker -- "$RUNNER_TEMP/checker.tar.zst"
-          fi
+          cargo run --locked -p mago-sharp-lean --example checker -- "$RUNNER_TEMP/checker.tar.zst"
           echo "MAGO_CHECKER_ARCHIVE=$RUNNER_TEMP/checker.tar.zst" >> "$GITHUB_ENV"
 
-      # mago exits 1 when the analysis finds issues, which the corpus holds, and any other exit, a crash, a kill or a
-      # tool error, fails the build, so no binary ships built from a broken profile. The instrumented mago only analyzes
-      # corpus/ once to write the profile and never ships, so it compiles without [profile.release]'s fat LTO in one
-      # codegen unit, which made the build step 1,535 to 1,740 s on the release runs of 11-24. The optimized build that
-      # ships keeps [profile.release] (#797).
       - name: build
-        if: inputs.assets
+        if: ${{ !matrix.job.pgo }}
+        shell: bash
+        run: cargo build --locked --release --target=${{ matrix.job.target }}
+
+      # A profile-guided build runs as three steps, so the run's timeline times each (#860). The instrumented build and
+      # the optimized build both compile with [profile.release], as cargo-pgo's flow does: cargo hashes the profile into
+      # each crate's module names, and LLVM finds a local function's profile by its module's name, so an instrumented
+      # build without fat LTO in 16 codegen units left 31,616 functions with no profile on the 0.8.9 release (#897).
+      - name: Build the instrumented mago
+        if: matrix.job.pgo
         shell: bash
         run: |
-          if [[ "${{ matrix.job.pgo }}" != "true" ]]; then
-            cargo build --locked --release --target=${{ matrix.job.target }}
-            exit
-          fi
           rm -rf "$CARGO_TARGET_DIR/pgo-profiles"
-          CARGO_PROFILE_RELEASE_LTO=off CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
-            cargo pgo build -- --target=${{ matrix.job.target }}
+          cargo pgo build -- --target=${{ matrix.job.target }}
+
+      # mago exits 1 when the analysis finds issues, which the corpus holds, and any other exit, a crash, a kill or a
+      # tool error, fails the step, so no binary ships built from a broken profile.
+      - name: Profile the instrumented mago on corpus/
+        if: matrix.job.pgo
+        shell: bash
+        run: |
           status=0
           LLVM_PROFILE_FILE="$CARGO_TARGET_DIR/pgo-profiles/mago_%m_%p.profraw" \
             "$CARGO_TARGET_DIR/${{ matrix.job.target }}/release/mago" --workspace corpus/ analyze --reporting-format count || status=$?
@@ -436,10 +354,17 @@ jobs:
             echo "::error::The instrumented mago analyzed corpus/ with exit code $status, where an analysis that finds the corpus's issues exits 1."
             exit 1
           fi
-          cargo pgo optimize build -- --target=${{ matrix.job.target }}
+
+      # cargo-pgo logs each function the profile lacks, with its module, only at debug level, so the log names the crates
+      # its "PGO profile data was not found" count belongs to (#897).
+      - name: Build the release mago with the profile
+        if: matrix.job.pgo
+        shell: bash
+        env:
+          RUST_LOG: cargo_pgo=debug
+        run: cargo pgo optimize build -- --target=${{ matrix.job.target }}
 
       - name: set binary name
-        if: inputs.assets
         id: bin
         shell: bash
         run: |
@@ -456,10 +381,9 @@ jobs:
           echo "binary for target '${{ matrix.job.target }}' requires the following GLIBC versions:"
           strings "${{ steps.bin.outputs.BIN_PATH }}" | grep GLIBC_ || echo "No GLIBC version strings found."
 
-      # The calling run's suites check the tree, so this checks only the binary this job builds, as mago.yml's
-      # plain-php job checks the one CI built.
+      # The calling run's suites check the tree, so this checks only the binary this job builds, as sharp.yml's
+      # PLAIN_PHP checks the one CI built.
       - name: The binary prints the release's version, and analyzes and compiles a one-class PHP# project
-        if: inputs.assets
         shell: bash
         env:
           VERSION: ${{ needs.crate_metadata.outputs.version }}
@@ -499,10 +423,9 @@ jobs:
           "$mago" compile
 
       # sharp/bin/check plain-php on the Mac's Homebrew PHP, with the release binary, in the folder that check reads the
-      # test-run mago from, as the Mac's tests run it with the dev build and mago.yml's plain-php with Linux's test-run
-      # build.
+      # test-run mago from, as sharp.yml's MAC_TESTS runs it with the dev build and PLAIN_PHP with Linux's test-run build.
       - name: Run mago from Composer on plain PHP with the release binary
-        if: inputs.assets && runner.os == 'macOS'
+        if: runner.os == 'macOS'
         shell: bash
         working-directory: ${{ github.workspace }}
         env:
@@ -513,7 +436,6 @@ jobs:
           CARGO_TARGET_DIR="$RUNNER_TEMP/target" sharp/bin/check plain-php
 
       - name: create tarball (main binary)
-        if: inputs.assets
         id: package
         shell: bash
         run: |
@@ -539,24 +461,16 @@ jobs:
           echo "PKG_PATH=${PKG_STAGING}/${PKG_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Generate artifact attestation (binary)
-        if: inputs.assets
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: ${{ steps.package.outputs.PKG_PATH }}
 
       - name: "Artifact upload: tarball"
-        if: inputs.assets
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.package.outputs.PKG_NAME }}
           path: ${{ steps.package.outputs.PKG_PATH }}
           if-no-files-found: error
-
-      # A failed job cancels any run, which can no longer pass: a pull request's, a merge queue's, and a push's, which
-      # can no longer publish either, as .github/actions/cancel-failed-run explains.
-      - name: Cancel the run, which can no longer pass
-        if: failure()
-        uses: ./.github/actions/cancel-failed-run
 
       - name: Write the job's CPU-seconds and peak memory
         if: always()
@@ -644,3 +558,24 @@ jobs:
           name: sha256sums
           path: ${{ runner.temp }}/mago-${{ env.VERSION }}-sha256sums.txt
           if-no-files-found: error
+
+  # A failed release job cancels no run, since its batch lands on the checks alone, and opens the issue of a red staging
+  # run from this one job, as .github/actions/red-master-issue explains, under the title sharp.yml's jobs open it with.
+  # failure() is true here when any job it needs failed, so a failed crate_metadata, source_archive, build or sums opens
+  # it the same way.
+  red_master_issue:
+    name: Open an issue for the failed release
+    runs-on: ubuntu-latest
+    needs: [crate_metadata, source_archive, build, sums]
+    if: failure() && github.event_name == 'push'
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: checkout source code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Open an issue for the failed staging run
+        uses: ./.github/actions/red-master-issue
+        with:
+          title: A staging run failed PHP# CI
+          range: ${{ inputs.range }}

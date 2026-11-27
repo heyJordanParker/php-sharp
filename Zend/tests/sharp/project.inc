@@ -49,6 +49,8 @@ function run_mago(string $root): void
     if ($status !== 0) {
         throw new RuntimeException(implode("\n", $output));
     }
+    // The compile moved .sharp/current to a new generation, which PHP's realpath cache would still resolve to the old one.
+    clearstatcache(true);
 }
 
 function remove_project(string $root): void
@@ -58,7 +60,7 @@ function remove_project(string $root): void
     }
     $entries = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
     foreach ($entries as $entry) {
-        $entry->isDir() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());
+        $entry->isDir() && !$entry->isLink() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());
     }
     rmdir($root);
 }

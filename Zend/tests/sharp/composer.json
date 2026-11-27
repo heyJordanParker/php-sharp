@@ -124,6 +124,7 @@
                 "NamesImports/"
             ],
             "Indexers\\": "Indexers/",
+            "InheritedFields\\": "InheritedFields/",
             "IntBounds\\": "IntBounds/",
             "InterfaceInit\\": "InterfaceInit/",
             "InterfaceMembers\\": "InterfaceMembers/",
@@ -174,6 +175,7 @@
             "ReflectedConstants\\": "ReflectedConstants/",
             "ReflectedMembers\\": "ReflectedMembers/",
             "ReflectedTypes\\": "ReflectedTypes/",
+            "ReflectionReads\\": "ReflectionReads/",
             "RootBound\\": "RootBound/",
             "Rush\\": "RushOrders/",
             "SelfMembers\\": "SelfMembers/",

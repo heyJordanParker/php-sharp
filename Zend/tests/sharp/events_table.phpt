@@ -21,7 +21,7 @@ $root = container_project('events-table', [
 
         SHARP,
 ]);
-$table = "$root/.sharp/listeners.php";
+$table = "$root/.sharp/current/listeners.php";
 $compiled = file_get_contents($table);
 $rows = substr($compiled, strpos($compiled, "'listeners' => ["));
 $inputs = substr($compiled, 0, strpos($compiled, "'listeners' => ["));

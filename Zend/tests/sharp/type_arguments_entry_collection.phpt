@@ -7,11 +7,13 @@ require __DIR__ . '/type_arguments_entry.inc';
 use Checks\Tally;
 use Lib\Pager;
 
-attempt(fn () => Tally::sizes([1, 2], ['vip' => 1.5, 5 => 2.0], ['a' => 'a']));
+attempt(fn () => Tally::sizes([1, 2], ['vip' => 1.5, 5 => 2.0], ['a']));
 attempt(fn () => Tally::sizes([1, 'a'], [], []));
 attempt(fn () => Tally::sizes(['first' => 1], [], []));
 attempt(fn () => Tally::sizes([], ['vip' => 'cheap'], []));
-attempt(fn () => Tally::sizes([], [], ['a' => 7]));
+attempt(fn () => Tally::sizes([], [], [7]));
+// A Set is the list of its elements, so an array with a string key is no Set.
+attempt(fn () => Tally::sizes([], [], ['a' => 'a']));
 attempt(fn () => Tally::rows([[1], [2, 'x']]));
 // A Sharp\Map or Sharp\Set is checked entry by entry, a Set's element at its position.
 $order = new App\Order(1);
@@ -34,7 +36,8 @@ sized
 Checks\Tally::sizes(): Argument #1 ($sizes) must be of type List<int>, array given: [1] expected int, got string 'a', called in %s on line %d
 Checks\Tally::sizes(): Argument #1 ($sizes) must be of type List<int>, array given, called in %s on line %d
 Checks\Tally::sizes(): Argument #2 ($prices) must be of type Map<string, float>, array given: ["vip"] expected float, got string 'cheap', called in %s on line %d
-Checks\Tally::sizes(): Argument #3 ($tags) must be of type Set<string>, array given: ["a"] expected string, got int 7, called in %s on line %d
+Checks\Tally::sizes(): Argument #3 ($tags) must be of type Set<string>, array given: [0] expected string, got int 7, called in %s on line %d
+Checks\Tally::sizes(): Argument #3 ($tags) must be of type Set<string>, array given, called in %s on line %d
 Checks\Tally::rows(): Argument #1 ($rows) must be of type List<List<int>>, array given: [1][1] expected int, got string 'x', called in %s on line %d
 ["a"]
 Checks\Tally::ordered(): Argument #1 ($orders) must be of type Map<string, App.Order>, Sharp.Map given: ["b"] expected App.Order, got string 'late', called in %s on line %d
