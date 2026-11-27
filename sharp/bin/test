@@ -143,6 +143,7 @@ part_heading=''
 part_started=0
 part_cpu=0
 part_failed=0
+reported_units=0
 part_clock() {
   local time
   now="${EPOCHREALTIME/[^0-9]/}"
@@ -162,6 +163,8 @@ part() {
     printf '%s took %d.%d s and %d.%d CPU-seconds.\n' "$part_heading" $((wall / 10)) $((wall % 10)) $((used / 10)) $((used % 10))
     if [[ -n $part_times ]]; then
       printf '%s\t%s\t%s\n' "$part_started" "$now" "$((cpu - part_cpu))" > "$part_times"
+    else
+      report_part "$((cpu - part_cpu))"
     fi
     "$root/sharp/bin/record" "$part_heading" --measured "${part_started:0:${#part_started}-6}.${part_started: -6}" \
       "$((used / 10)).$((used % 10))" '' "$((${#failed[@]} > part_failed))"
@@ -391,8 +394,9 @@ run_pool() {
 # CPU-seconds, and one testcase for each test, with its own time, from run-tests.php's JUnit file for a .phpt test and
 # from libtest's --report-time for a Rust test. A unit whose runner gives no time for each test it runs, as libtest-mimic's
 # harness gives none, and a unit that runs one check are one testcase each, with the unit's time. A unit's files move
-# under the run's count of units, since each pool numbers its units from 0.
-reported_units=0
+# under the run's count of units, since each pool numbers its units from 0. A part the main shell runs outside the pool,
+# as a composer install or the compile of the fixtures, is a unit of one check too, so the report's suites cover the
+# whole run (#905).
 report_unit() {
   local u=$1 kept="$TMPDIR/report-$reported_units"
   shift
@@ -409,6 +413,19 @@ report_unit() {
   fi
   printf '%s\t%s\t%s\t%s\n' "$reported_units" "${unit_part[u]%%$'\t'*}" "${unit_part[u]#*$'\t'}" "${unit_heading[u]}" \
     >> "$TMPDIR/report"
+  reported_units=$((reported_units + 1))
+}
+# Reports the part part() ends outside the pool, with its CPU milliseconds: the times a unit's part_times holds, its
+# failed steps, and the run's own command, the one that runs it.
+report_part() {
+  local kept="$TMPDIR/report-$reported_units"
+  printf '%s\t%s\t%s\n' "$part_started" "$now" "$1" > "$kept.time"
+  : > "$kept.out"
+  if ((${#failed[@]} > part_failed)); then
+    printf '%s\n' "${failed[@]:part_failed}" > "$kept.failed"
+  fi
+  printf '%s\t%s\t%s\t%s\n' "$reported_units" "$part_heading" \
+    "sharp/bin/test${args[*]:+$(printf ' %q' "${args[@]}")}" "$part_heading" >> "$TMPDIR/report"
   reported_units=$((reported_units + 1))
 }
 # Writes the report with the PATH's php, which every run has, since Composer runs on it, and its DOM: the build's engine
