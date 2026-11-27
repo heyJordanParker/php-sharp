@@ -22,6 +22,11 @@ public class Gateway
         return Result.Ok(receipt.total * 2);
     }
 
+    // Spec section 31: ok() gives the Ok value or null, and unwrap() gives the Ok value or throws.
+    public int? doubledOrNull(int total) => this.doubled(total).ok();
+
+    public int doubledOrThrow(int total) => this.doubled(total).unwrap();
+
     public Result<int, ChargeError> total(int total) => Result.Ok((try this.charge(total)).total);
 
     public Result<int, ChargeError> later(int total)

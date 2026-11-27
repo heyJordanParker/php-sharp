@@ -11977,19 +11977,22 @@ static sharp_scope *sharp_scope_start(void)
 	return scope;
 }
 
+/* Spec section 2: Sharp\Disposable, the interface of a value its owner disposes. */
+static zend_class_entry *sharp_ce_disposable;
+
 /* The service, or each one a binding of a list holds, that is Disposable disposes, spec section 2. Each runs as a
  * finally block does: what a dispose() throws takes the throw already pending as its previous, and the next service
  * still disposes. */
-static void sharp_dispose_service(zval *service, zend_class_entry *disposable)
+static void sharp_dispose_service(zval *service)
 {
 	if (Z_TYPE_P(service) == IS_ARRAY) {
 		zval *element;
 		ZEND_HASH_REVERSE_FOREACH_VAL(Z_ARRVAL_P(service), element) {
-			sharp_dispose_service(element, disposable);
+			sharp_dispose_service(element);
 		} ZEND_HASH_FOREACH_END();
 		return;
 	}
-	if (Z_TYPE_P(service) != IS_OBJECT || !instanceof_function(Z_OBJCE_P(service), disposable)) {
+	if (Z_TYPE_P(service) != IS_OBJECT || !instanceof_function(Z_OBJCE_P(service), sharp_ce_disposable)) {
 		return;
 	}
 
@@ -12001,20 +12004,12 @@ static void sharp_dispose_service(zval *service, zend_class_entry *disposable)
 }
 
 /* Spec section 32: the services kept in services that are Disposable dispose, newest first, as nested using locals
- * do: a service is kept once the services it needs are, so each disposes before what it needs. A service is
- * Disposable only once its class, and with it the interface, is loaded. */
+ * do: a service is kept once the services it needs are, so each disposes before what it needs. */
 static void sharp_dispose_services(HashTable *services)
 {
-	zend_string *name = zend_string_init_interned("Sharp\\Disposable", sizeof("Sharp\\Disposable") - 1, false);
-	zend_class_entry *disposable = zend_lookup_class_ex(name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
-	zend_string_release(name);
-	if (!disposable) {
-		return;
-	}
-
 	zval *service;
 	ZEND_HASH_REVERSE_FOREACH_VAL(services, service) {
-		sharp_dispose_service(service, disposable);
+		sharp_dispose_service(service);
 	} ZEND_HASH_FOREACH_END();
 }
 
@@ -12940,6 +12935,67 @@ ZEND_FUNCTION(Sharp_Internal_startTest)
 	sharp_container_forget();
 	zval *module = zend_hash_find(&SHARP_G(container_tests), class);
 	SHARP_G(container_test) = module ? Z_ARRVAL_P(module) : NULL;
+}
+
+/* Spec section 32: fills the services of object, a test object or a PHPUnit extension, which PHPUnit creates with
+ * new and no services. The compiler moves the main constructor of their class into __sharpServices, which this calls
+ * with each parameter filled from the modules of its class's namespace, as sharp_container_build fills a
+ * constructor's, the module of the running test first. A class without a main constructor has none, so nothing is
+ * filled. False after an exception. */
+static bool sharp_container_fill(zend_object *object)
+{
+	/* PHP# keys a method of a .sharp file by its exact name, spec section 24. */
+	zend_function *services = zend_hash_str_find_ptr(&object->ce->function_table, ZEND_STRL("__sharpServices"));
+	if (!services) {
+		return true;
+	}
+	zend_class_entry *scope = services->common.scope;
+	zend_string *namespace = sharp_container_namespace(scope->name);
+	if (scope->type == ZEND_USER_CLASS) {
+		sharp_container_read_modules(scope->info.user.filename, namespace);
+	}
+	zval arguments;
+	bool filled = sharp_container_arguments(services, namespace, scope, &arguments);
+	zend_string_release(namespace);
+	if (!filled) {
+		return false;
+	}
+	zend_call_known_instance_method(services, object, NULL,
+		zend_hash_num_elements(Z_ARRVAL(arguments)), Z_ARRVAL(arguments)->arPacked);
+	zval_ptr_dtor(&arguments);
+
+	return !EG(exception);
+}
+
+/* Spec section 32: the test that starts fills the services of its test object, after startTest switched the container
+ * to the test file's module and forgot every service, so each test's services are its own. The method the compiler
+ * gives each test class, which PHPUnit runs before each of its tests, calls this. */
+ZEND_FUNCTION(Sharp_Internal_fillTest)
+{
+	zend_object *test;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJ(test)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_container_fill(test)) {
+		RETURN_THROWS();
+	}
+}
+
+/* Spec section 32: a PHPUnit extension's services, filled once from the modules of its namespace when PHPUnit creates
+ * it with no arguments, before the first test. Its PHP constructor, which the compiler writes, calls this. */
+ZEND_FUNCTION(Sharp_Internal_fillExtension)
+{
+	zend_object *extension;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJ(extension)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_container_fill(extension)) {
+		RETURN_THROWS();
+	}
 }
 
 /* Spec section 32: the test that runs ends, so the container forgets its module and the services it built. */
@@ -16136,6 +16192,15 @@ ZEND_METHOD(Sharp_Listening, __construct)
 	ZEND_PARSE_PARAMETERS_NONE();
 }
 
+/* Spec section 15: the handle is Disposable, so its owner stops its listener, as a using local does at its block's
+ * end. Dropping the handle still stops it, and a second stop does nothing. */
+ZEND_METHOD(Sharp_Listening, dispose)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	sharp_listening_stop(sharp_listening_from(Z_OBJ_P(ZEND_THIS)));
+}
+
 /* Spec section 15: Events.on starts a listener of the type named type, which hears every event of that type until the
  * handle it returns is destroyed. */
 ZEND_FUNCTION(Sharp_Internal_listen)
@@ -18032,7 +18097,8 @@ static PHP_MINIT_FUNCTION(sharp)
 	sharp_delegate_call = zend_hash_str_find_ptr(&sharp_ce_delegate->function_table, "call", sizeof("call") - 1);
 	sharp_delegate_call->common.fn_flags |= ZEND_ACC_STRICT_TYPES;
 
-	sharp_ce_listening = register_class_Sharp_Listening();
+	sharp_ce_disposable = register_class_Sharp_Disposable();
+	sharp_ce_listening = register_class_Sharp_Listening(sharp_ce_disposable);
 	sharp_ce_listening->create_object = sharp_listening_create;
 	memcpy(&sharp_listening_handlers, &std_object_handlers, sizeof(zend_object_handlers));
 	sharp_listening_handlers.offset = XtOffsetOf(sharp_listening, std);

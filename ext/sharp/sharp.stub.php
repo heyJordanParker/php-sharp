@@ -35,13 +35,20 @@ final class ContainerError extends \Error
 {
 }
 
+interface Disposable
+{
+    public function dispose(): void;
+}
+
 /**
  * @strict-properties
  * @not-serializable
  */
-final class Listening
+final class Listening implements Disposable
 {
     private function __construct() {}
+
+    public function dispose(): void {}
 }
 
 namespace Sharp\Internal;
@@ -206,6 +213,10 @@ function readModule(string $path): void {}
 function testModule(string $class, array $bindings): void {}
 
 function startTest(string $class): void {}
+
+function fillTest(object $test): void {}
+
+function fillExtension(object $extension): void {}
 
 function endTest(): void {}
 

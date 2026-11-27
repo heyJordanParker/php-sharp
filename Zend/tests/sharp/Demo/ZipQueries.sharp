@@ -11,16 +11,12 @@ public static class ZipQueries
     {
         Function<ZipArchive(string) uses Files> open = ZipArchive.open;
         const path = `${folder}/notes.zip`;
-        const created = ZipArchive.create(path);
-        created.write("readme.txt", "Read me");
-        created.addFile(`${folder}/report.csv`, "data/report.csv");
-        created.close();
+        ZipQueries.pack(path, `${folder}/report.csv`);
 
-        const opened = open(path);
+        using opened = open(path);
         List<string?> seen = [...opened.list(), opened.read("readme.txt"), opened.read("missing.txt")];
         opened.write("later.txt", "Later");
         opened.extractTo(`${folder}/out`);
-        opened.close();
 
         return seen;
     }
@@ -29,37 +25,55 @@ public static class ZipQueries
     // bytes, as text, and a missing entry as bytes.
     public static List<Any?> bytesRoundTrip(string path, Bytes data)
     {
-        const created = ZipArchive.create(path);
-        created.writeBytes("data.bin", data);
-        created.close();
+        ZipQueries.packBytes(path, data);
 
-        const opened = ZipArchive.open(path);
+        using opened = ZipArchive.open(path);
 
         return [opened.readBytes("data.bin")?.toList(), opened.read("data.bin"), opened.readBytes("missing.bin")];
     }
 
-    // How many entries an archive created and closed with none holds once reopened.
+    // How many entries an archive created and disposed with none holds once reopened.
     public static int emptyCount(string path)
     {
-        ZipArchive.create(path).close();
+        ZipQueries.packNothing(path);
 
-        return ZipArchive.open(path).list().count();
+        using opened = ZipArchive.open(path);
+
+        return opened.list().count();
     }
 
     public static void openArchive(string path)
     {
-        ZipArchive.open(path);
+        using archive = ZipArchive.open(path);
     }
 
-    public static void closeUnwritable(string path)
+    public static void disposeUnwritable(string path)
     {
-        const archive = ZipArchive.create(path);
+        using archive = ZipArchive.create(path);
         archive.write("readme.txt", "Read me");
-        archive.close();
     }
 
     public static void addMissing(string path, string file)
     {
-        ZipArchive.create(path).addFile(file, "missing.txt");
+        using archive = ZipArchive.create(path);
+        archive.addFile(file, "missing.txt");
+    }
+
+    private static void pack(string path, string report)
+    {
+        using created = ZipArchive.create(path);
+        created.write("readme.txt", "Read me");
+        created.addFile(report, "data/report.csv");
+    }
+
+    private static void packBytes(string path, Bytes data)
+    {
+        using created = ZipArchive.create(path);
+        created.writeBytes("data.bin", data);
+    }
+
+    private static void packNothing(string path)
+    {
+        using created = ZipArchive.create(path);
     }
 }

@@ -4,4 +4,5 @@ import App.Mail.Mailer;
 
 public class FakeMailer : Mailer
 {
+    public List<string> sent { get; private set; } = [];
 }

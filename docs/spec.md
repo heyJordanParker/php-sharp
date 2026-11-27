@@ -3520,7 +3520,7 @@ public class Tracker<T : DatabaseEntity>
 }
 ```
 
-**Listening for a while:** `Events.on<RowImported>(e => …)` starts a listener and returns a handle. The listener stops when the handle goes out of scope:
+**Listening for a while:** `Events.on<RowImported>(e => …)` starts a listener and returns a handle, a `Listening`, which is `Disposable` (section 2). Its owner stops the listener by disposing it, as a `using` local does when its block ends:
 
 <!-- example scoped-listener: members
 public class ProgressBar { public void advance() { } }
@@ -3535,7 +3535,7 @@ public class ImportScreen
 
     public void import(string path)
     {
-        const listening = Events.on<RowImported>(e => this.progress.advance());   // listens until import returns
+        using listening = Events.on<RowImported>(e => this.progress.advance());   // stops when the method returns
         this.importer.run(path);
     }
 }
@@ -8258,7 +8258,7 @@ public ExampleRun(private Echo echo) { }
 this.echo.back("one line");   // "one line"
 -->
 
-**`ZipArchive`, in `Sharp.IO`, reads and writes a ZIP archive.** `ZipArchive.open(path)` opens one to read and to add to, and `ZipArchive.create(path)` makes a new one in place of any file at `path`. `list()` gives each entry's name in the archive's order, and `read(name)` gives an entry's text, or null when the archive has none. `write(name, text)` adds an entry from text and `addFile(file, name)` one from a file, each in place of an entry of that name, and `extractTo(directory)` writes every entry into a folder. The changes reach the file when `close()` runs, and an archive with no entries is written too. Each member reads or writes files, so code that calls one has the effect `Files`. A failure throws `RuntimeException` with the path and libzip's reason, as `ZipArchive.open: "report.csv" cannot be opened: Not a zip archive`:
+**`ZipArchive`, in `Sharp.IO`, reads and writes a ZIP archive.** `ZipArchive.open(path)` opens one to read and to add to, and `ZipArchive.create(path)` makes a new one in place of any file at `path`. `list()` gives each entry's name in the archive's order, and `read(name)` gives an entry's text, or null when the archive has none. `write(name, text)` adds an entry from text and `addFile(file, name)` one from a file, each in place of an entry of that name, and `extractTo(directory)` writes every entry into a folder. A `ZipArchive` is `Disposable` (section 2), and the changes reach the file when its owner disposes it, as a `using` local does when its block ends. An archive with no entries is written too. Each member reads or writes files, so code that calls one has the effect `Files`. A failure throws `RuntimeException` with the path and libzip's reason, as `ZipArchive.open: "report.csv" cannot be opened: Not a zip archive`:
 
 <!-- example zip-archive -->
 ```csharp
@@ -8271,13 +8271,16 @@ public class Export
 {
     public void pack(string path, string report)
     {
-        const archive = ZipArchive.create(path);
+        using archive = ZipArchive.create(path);
         archive.write("readme.txt", "Totals by month");
-        archive.addFile(report, "data/report.csv");
-        archive.close();                                                  // compiles: Export has the effect Files
+        archive.addFile(report, "data/report.csv");                       // compiles: Export has the effect Files
     }
 
-    public string? readme(string path) => ZipArchive.open(path).read("readme.txt");
+    public string? readme(string path)
+    {
+        using archive = ZipArchive.open(path);
+        return archive.read("readme.txt");
+    }
 }
 ```
 
@@ -8759,6 +8762,28 @@ public Result<int, PaymentError> total(Cart cart) => Result.Ok((try this.gateway
 public Result<int, PaymentError> cartTotal => Result.Ok((try this.gateway.charge(this.cart)).total);   // the getter returns the failure
 ```
 
+**`ok()` and `unwrap()` read the `Ok` value without a `match`,** as Rust's `Result::ok` and `Result::unwrap` do. `ok()` gives the `Ok` value, or null for an `Err`. `unwrap()` gives the `Ok` value, and an `Err` throws `LogicException` with the error's `message`, since code that unwraps states that the failure can't happen.
+
+<!-- example result-ok-unwrap: statements -->
+```csharp
+Result<int, PaymentError>.Ok(8080).ok();                       // 8080
+Result<int, PaymentError>.Err(PaymentError.Expired).ok();      // null
+Result<int, PaymentError>.Ok(8080).unwrap();                   // 8080
+Result<int, PaymentError>.Err(PaymentError.Expired).unwrap();  // throws: "card expired"
+```
+
+**A statement that discards a `Result` is a compile error,** as Rust's `#[must_use]` on `Result` warns, since the failure it holds would be lost. A `Result` kept in a variable, passed up with `try` or matched is never refused.
+
+<!-- example discarded-result: members
+private CheckoutGateway gateway = new CheckoutGateway();
+-->
+```csharp
+public void pay(Cart cart)
+{
+    this.gateway.charge(cart);                        // compile error: `this.gateway.charge` returns a Result: handle it with try, match, ok() or unwrap()
+}
+```
+
 `try`/`catch` blocks remain for exceptions, which are now mostly limited to the edges, such as wrapping a plain PHP exception.
 
 Methods declare no thrown exceptions, and the checker never reports an undeclared one.
@@ -9015,7 +9040,8 @@ module
 **A nested namespace's module overrides its parent's services.** A test or environment module overrides with `module : App.Shop { … }`, and the compiler checks every environment's set of services: the base modules under all of that environment's modules at once.
 
 - **An environment module is `Module.<Environment>.sharp`** beside the `Module.sharp` it overrides, such as `Module.Production.sharp`. `SHARP_ENV` picks it.
-- **A test module is declared in the test file that uses it,** with the same header. While a test of that file runs, its services are the test module's over the base modules, with no environment module, which is the set the compiler checks.
+- **A test module is declared in the test file that uses it,** with the same header. While a test of that file runs, its services are the test module's over the base modules, with no environment module, which is the set the compiler checks. A test class takes its services in its main constructor, and each test gets a new test object whose services come from the test module over the base modules.
+- **A PHPUnit extension takes its services in its main constructor too.** PHPUnit creates it once, before the first test, and its services come from the base modules of its namespace.
 
 <!-- example environment-module -->
 ```csharp
@@ -9037,18 +9063,49 @@ module : App.Shop
 namespace App.Shop;
 
 import App.Mail.Mailer;
+import PHPUnit.Framework.Attributes.Test;
 import PHPUnit.Framework.TestCase;
 import Tests.Fakes.FakeMailer;
 
 module : App.Shop
 {
-    singleton Mailer = FakeMailer;                                             // the tests in this file get a FakeMailer
+    singleton FakeMailer = FakeMailer;
+    singleton Mailer(FakeMailer fake) = fake;                                  // the tests in this file get a FakeMailer
 }
 
-public class CheckoutTest : TestCase { … }
+public class CheckoutTest : TestCase
+{
+    public CheckoutTest(private Checkout checkout, private FakeMailer mailer) { }
+
+    [Test]
+    public void sendsTheReceipt()
+    {
+        this.checkout.pay("ada@example.com");
+        this.assertSame(["ada@example.com"], this.mailer.sent);
+    }
+}
 ```
 
-**A missing or mistyped service is a compile error.** PHP# creates the classes a module binds and the classes that declare an `on` method (section 15), each through its main constructor (section 9.1). Every parameter of their constructors, and every binding parameter, needs a binding in the module of its namespace or of a namespace above it. The compiler checks every such class, whether or not another class takes it. A class no module binds is ordinary code, created with `new`, such as `Money`.
+<!-- example phpunit-extension -->
+```csharp
+// tests/Support/ProgressReporter.sharp
+namespace Tests.Support;
+
+import PHPUnit.Runner.Extension.Extension;
+import PHPUnit.Runner.Extension.Facade;
+import PHPUnit.Runner.Extension.ParameterCollection;
+import PHPUnit.TextUI.Configuration.Configuration;
+import Sharp.IO.Console;
+
+public class ProgressReporter : Extension
+{
+    public ProgressReporter(private Console console) { }                       // built once, before the first test, from the base modules
+
+    public void bootstrap(Configuration configuration, Facade facade, ParameterCollection parameters) { … }
+}
+```
+
+**A missing or mistyped service is a compile error.** PHP# creates the classes a module binds, the classes that declare an `on` method (section 15), and the test classes and PHPUnit extensions of a test folder, each through its main constructor (section 9.1). Every parameter of their constructors, and every binding parameter, needs a binding in the module of its namespace or of a namespace above it. The compiler checks every such class, whether or not another class takes it. A class no module binds is ordinary code, created with `new`, such as `Money`.
 
 <!-- example missing-service -->
 ```csharp

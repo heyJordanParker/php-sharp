@@ -3,7 +3,10 @@ namespace App.Stubs;
 import PHPUnit.Framework.Assert;
 import PHPUnit.Framework.Attributes.Before;
 import PHPUnit.Framework.Attributes.Test;
-import Tests.Probe;
+import PHPUnit.Runner.Extension.Extension;
+import PHPUnit.Runner.Extension.Facade;
+import PHPUnit.Runner.Extension.ParameterCollection;
+import PHPUnit.TextUI.Configuration.Configuration;
 
 [DynamicallyAccessed]
 extern Before uses none;
@@ -12,4 +15,7 @@ extern Before uses none;
 extern Test uses none;
 
 extern Assert uses none;
-extern Probe uses any;
+extern Extension uses any;
+extern Facade uses any;
+extern ParameterCollection uses any;
+extern Configuration uses any;
