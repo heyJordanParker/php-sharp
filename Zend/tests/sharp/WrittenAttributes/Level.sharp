@@ -1,0 +1,7 @@
+namespace WrittenAttributes;
+
+public enum Level
+{
+    case Edit;
+    case View;
+}

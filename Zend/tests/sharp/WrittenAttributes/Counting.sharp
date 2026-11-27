@@ -1,0 +1,7 @@
+namespace WrittenAttributes;
+
+// A pure interface method, which only code with no effects implements.
+public interface Counting
+{
+    int count();
+}
