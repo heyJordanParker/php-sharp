@@ -1,0 +1,14 @@
+namespace Sharp;
+
+// An attribute as written on a declaration, as each member's `attributeData<T>()` gives it, spec section 25: its class,
+// its positional arguments in order, and its named arguments by parameter name, each the value as written, an enum case
+// as the case and `typeof(System)` as the class value. Nothing builds the attribute, so code can save it and build it
+// later with `type.createInstance(arguments)`. The engine creates it.
+public final class AttributeData
+{
+    internal AttributeData(
+        public Class<Object> type { get; },
+        public List<Any?> arguments { get; },
+        public Map<string, Any?> namedArguments { get; }
+    ) { }
+}

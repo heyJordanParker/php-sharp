@@ -177,6 +177,8 @@ function enumCases(string $type, string $case): array {}
 
 function attributes(string $type, string $kind, string $name, int $position, string $attribute): array {}
 
+function attributeData(string $type, string $kind, string $name, int $position, string $attribute, string $data): array {}
+
 function constants(string $type): array {}
 
 function constant(string $class, string $name): mixed {}
