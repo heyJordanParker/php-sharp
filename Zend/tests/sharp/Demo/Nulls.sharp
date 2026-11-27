@@ -21,8 +21,8 @@ public class Nulls
     {
         let filled = value;
         filled ??= this.either(7, null);
-        value ??= 8;
-        return filled + value;
+        let given = value ?? 8;
+        return filled + given;
     }
 
     public int? through(Nulls? other, int? value)

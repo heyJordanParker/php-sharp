@@ -7,7 +7,7 @@ public static class Owners
     {
         Map<string, Set<string>> owners = [:];
         for (const key of keys) {
-            const owning = owners.get(key) ?? [];
+            let owning = owners.get(key) ?? [];
             owning.add(key);
             owners[key] = owning;
         }
@@ -16,10 +16,10 @@ public static class Owners
 
     public static List<int> branches(Set<string> tags, bool flag, int extra)
     {
-        const chosen = flag ? tags : [];
+        let chosen = flag ? tags : [];
         chosen.add("a");
         chosen.add("a");
-        const matched = match (extra) {
+        let matched = match (extra) {
             0 => [],
             default => tags,
         };

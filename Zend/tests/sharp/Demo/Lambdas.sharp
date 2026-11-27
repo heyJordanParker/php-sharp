@@ -30,14 +30,15 @@ public class Lambdas
     public static string passes(int times)
     {
         List<Function<int()>> marks = [() => 0];
-        while (times > 0) {
-            let seen = times;
+        let left = times;
+        while (left > 0) {
+            let seen = left;
             const mark = () => {
                 seen += 100;
             };
             mark();
             marks.add(() => seen);
-            times -= 1;
+            left -= 1;
         }
         return Probe.join(",", marks.map(read => read()));
     }

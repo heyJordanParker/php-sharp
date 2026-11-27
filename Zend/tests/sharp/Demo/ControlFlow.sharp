@@ -16,8 +16,9 @@ public class ControlFlow
     public static int countdown(int start)
     {
         let steps = 0;
-        while (start > 0) {
-            start -= 1;
+        let left = start;
+        while (left > 0) {
+            left -= 1;
             steps++;
         }
         do {
@@ -65,6 +66,7 @@ public class ControlFlow
         for (let [slot, price] of slots) {
             total += slot;
             price = 0;
+            total += price;
         }
         return total;
     }
