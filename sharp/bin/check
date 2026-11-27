@@ -438,8 +438,11 @@ gate_mago_checks() {
   # run here too, from the vendor folder its composer.json keeps in sharp/build.
   step composer install --no-interaction --no-progress --quiet --working-dir="$root/sharp/composer"
   step "$root/sharp/build/php-sharp-composer/vendor/bin/phpunit" --configuration "$root/sharp/composer/phpunit.xml"
-  step rustup run "$rust" cargo check --workspace --locked
-  # Workspace builds merge features, so only a build of the bridge alone shows what php links.
+  # No cargo check of the workspace runs, because clippy below checks every target with every feature, and the
+  # test-run build compiles the default features of each crate mago depends on, the code only a build without
+  # mago-word's sso or mago's dhat-heap holds (#957). mago-documentation, the one member mago doesn't depend on, has no
+  # features. Workspace builds merge features, so only a build of the bridge alone shows what php links, and its
+  # --locked fails when Cargo.lock no longer matches any member's manifest.
   step rustup run "$rust" cargo check -p mago-sharp-bridge --locked
   # The fuzz crate is a workspace of its own, which fuzz.yml builds only in its nightly run.
   step rustup run "$rust" cargo metadata --locked --format-version 1 --manifest-path crates/syntax/fuzz/Cargo.toml > /dev/null
