@@ -1,5 +1,5 @@
 --TEST--
-PHP# IpAddress is an IPv4 or IPv6 address, as .NET's IPAddress: parse and tryParse read either family, toString writes RFC 5952's form, == compares the address whatever text wrote it, and isLoopback and isPrivate read 127.0.0.0/8 and ::1, and RFC 1918's ranges and fc00::/7
+PHP# IpAddress is an IPv4 or IPv6 address, as .NET's IPAddress: parse reads either family into a Result, toString writes RFC 5952's form, == compares the address whatever text wrote it, and isLoopback and isPrivate read 127.0.0.0/8 and ::1, and RFC 1918's ranges and fc00::/7
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';

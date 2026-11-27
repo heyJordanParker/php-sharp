@@ -35,13 +35,20 @@ final class ContainerError extends \Error
 {
 }
 
+interface Disposable
+{
+    public function dispose(): void;
+}
+
 /**
  * @strict-properties
  * @not-serializable
  */
-final class Listening
+final class Listening implements Disposable
 {
     private function __construct() {}
+
+    public function dispose(): void {}
 }
 
 namespace Sharp\Internal;

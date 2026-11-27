@@ -1,5 +1,5 @@
 --TEST--
-Sharp\Bool::tryParse gives true or false for what filter_var reads as a boolean, and null for anything else
+Sharp\Bool::parse gives an Ok of true or false for what filter_var reads as a boolean, whose ok() is null for anything else
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';

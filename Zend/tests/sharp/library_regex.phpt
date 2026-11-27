@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class parses a Sharp.Text.Regex and calls each of its methods, a named group gives both its number and its name, tryParse gives null for a pattern that doesn't compile, parse throws ValueError naming it with no warning, and a failure while matching still throws ValueError
+A PHP# class parses a Sharp.Text.Regex and calls each of its methods, a named group gives both its number and its name, parse gives an Err naming a pattern that doesn't compile, with no warning, and a failure while matching still throws ValueError
 --INI--
 pcre.jit=0
 pcre.backtrack_limit=1000

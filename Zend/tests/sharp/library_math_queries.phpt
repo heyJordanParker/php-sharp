@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls the math members of Kotlin, Rust and .NET that PHP# lacked: Math.log10, Math.exp, the trigonometric functions, Math.PI and Math.E, isNaN, checked and saturating int arithmetic at both ends of the range, and Int.parse and Int.tryParse in another base, with each edge case
+A PHP# class calls the math members of Kotlin, Rust and .NET that PHP# lacked: Math.log10, Math.exp, the trigonometric functions, Math.PI and Math.E, isNaN, checked and saturating int arithmetic at both ends of the range, and Int.parse in another base, with its ok() and each edge case
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';

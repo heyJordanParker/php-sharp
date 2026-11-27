@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls Sharp.Encoding.Json: parse gives objects as maps and throws JsonException on invalid JSON, decode<T> reads a struct and a nested struct through T's parse and throws its InvalidFields for a bad field and for JSON that holds no object, and encode writes a Map as an object and a List as an array, a struct key through its toString(), floats with their fraction and NaN and infinity as null, and slashes and Unicode as they are, and the checker's mark on encode's parameter never reaches the code that runs
+A PHP# class calls Sharp.Encoding.Json: parse<JsonValue> gives objects as maps and an Err for invalid JSON, parse<T> reads a struct and a nested struct through T's parse and gives an Err of ParseError for a bad field and for JSON that holds no object, and encode writes a Map as an object and a List as an array, a struct key through its toString(), floats with their fraction and NaN and infinity as null, and slashes and Unicode as they are, and the checker's mark on encode's parameter never reaches the code that runs
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';

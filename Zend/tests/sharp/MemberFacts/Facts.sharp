@@ -24,7 +24,7 @@ public static class Facts
             lines.add(`field ${stored.declaringClass.name()}.${stored.name} ${stored.visibility.name}`);
         }
         for (const method of type.methods()) {
-            if (method.name == "parse" || method.name == "tryParse") {
+            if (method.name == "parse") {
                 continue;
             }
             const parameters = method.parameters().map(parameter => Facts.parameter(parameter));

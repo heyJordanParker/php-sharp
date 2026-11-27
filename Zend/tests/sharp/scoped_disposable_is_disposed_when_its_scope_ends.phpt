@@ -4,9 +4,7 @@ The container disposes each scoped service that is Disposable when its scope end
 <?php
 require __DIR__ . '/Container.inc';
 
-$library = 'vendor/heyjordanparker/php-sharp-composer/library/Sharp';
 container_project('scoped-disposable', [
-    "$library/Disposable.sharp" => file_get_contents(dirname(__DIR__, 3) . '/sharp/composer/library/Sharp/Disposable.sharp'),
     'app/Ledger/Module.sharp' => <<<'SHARP'
 namespace App.Ledger;
 
