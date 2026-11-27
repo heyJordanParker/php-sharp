@@ -23,8 +23,7 @@ swap(toneClass: Class<ReflectedTypes.Tone>, mixed: ReflectedTypes.Box<ReflectedT
 join(joined: ReflectedTypes.Labeled & ReflectedTypes.Mark): void
 item: (TItem : ReflectedTypes.Mark)?
 first(items: List<TItem : ReflectedTypes.Mark>): (TItem : ReflectedTypes.Mark)?
-parse(value: Map<string, (Any)?>|Object): ReflectedTypes.Crate<TItem : ReflectedTypes.Mark>
-tryParse(value: Map<string, (Any)?>|Object): (ReflectedTypes.Crate<TItem : ReflectedTypes.Mark>)?
+parse(value: Map<string, (Any)?>|Object): Sharp.Result<ReflectedTypes.Crate<TItem : ReflectedTypes.Mark>, Sharp.ParseError>
 array(25) {
   [0]=>
   bool(true)

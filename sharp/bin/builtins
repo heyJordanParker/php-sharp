@@ -569,11 +569,12 @@ $exceptions = exceptionClasses($map, $stubs, $checkerClasses);
 $shortNames = array_count_values(array_map(static fn (string $class): string => basename(str_replace('\\', '/', $class)), $exceptions));
 [$imports, $externs] = [[], []];
 foreach ($exceptions as $class) {
-    // A bare `Error` names the standard library's `Sharp.Error` (spec section 31), so PHP's takes an alias, which only
-    // the standard library may import.
-    if ($class === 'Error') {
-        $imports[] = 'import Error as PhpError;';
-        $externs[] = 'extern PhpError uses none;';
+    // A bare `Error` names the standard library's `Sharp.Error` (spec section 31), and a bare `ParseError` its
+    // `Sharp.ParseError` (spec section 10), so PHP's class of each name takes an alias, which only the standard library
+    // may import.
+    if ($class === 'Error' || $class === 'ParseError') {
+        $imports[] = "import $class as Php$class;";
+        $externs[] = "extern Php$class uses none;";
         continue;
     }
     $short = basename(str_replace('\\', '/', $class));

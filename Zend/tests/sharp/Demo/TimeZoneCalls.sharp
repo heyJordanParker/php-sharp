@@ -11,5 +11,5 @@ public class TimeZoneCalls
 
     public static string? named(string name) => TimeZone.tryOf(name)?.toString();
 
-    public static int offsetMinutes(string name, string instant) => new TimeZone(name).offsetAt(Instant.parse(instant)).minutes;
+    public static int offsetMinutes(string name, string instant) => new TimeZone(name).offsetAt(Instant.parse(instant).unwrap()).minutes;
 }

@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls every member of Sharp.Net.Url: parse splits an absolute URL into its parts and keeps their percent-encoding, toString writes them back, tryParse gives null and parse throws ValueError for text that is not an absolute URL, and the encoding, query and validity statics never throw
+A PHP# class calls every member of Sharp.Net.Url: parse splits an absolute URL into its parts and keeps their percent-encoding, toString writes them back, parse gives an Err for text that is not an absolute URL, and the encoding, query and validity statics never throw
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -19,7 +19,7 @@ var_dump(UrlCalls::built());
 
 try {
     UrlCalls::parts('not a url');
-} catch (ValueError $error) {
+} catch (ValueError|LogicException $error) {
     echo get_class($error), ': ', $error->getMessage(), "\n";
 }
 ?>
@@ -57,4 +57,4 @@ array(2) {
 array(0) {
 }
 string(32) "https://example.com/search?q=a+b"
-ValueError: `Url.parse` reads an absolute URL, such as "https://example.com/path", and "not a url" is not one.
+LogicException: `Url.parse` reads an absolute URL, such as "https://example.com/path", and "not a url" is not one.

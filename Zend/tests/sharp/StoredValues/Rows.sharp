@@ -7,13 +7,13 @@ public static class Rows
     public static Map<string, Any?> row()
         => ["title": "Home", "status": "published", "author": ["name": "Ada"], "attachment": ["type": "link", "url": "https://a.test"]];
 
-    public static Page decoded() => typeof(Page).decode(Rows.row());
+    public static Page decoded() => typeof(Page).parse(Rows.row()).unwrap();
 
-    public static Page fromJson() => Json.decode<Page>(Json.encode(Rows.row()));
+    public static Page fromJson() => Json.parse<Page>(Json.encode(Rows.row())).unwrap();
 
     public static string encoded(Page page) => Json.encode(page);
 
-    public static Page misfit() => typeof(Page).decode(["title": 5]);
+    public static Page misfit() => typeof(Page).parse(["title": 5]).unwrap();
 
-    public static Page misfitFromJson() => Json.decode<Page>("{\"title\":5}");
+    public static Page misfitFromJson() => Json.parse<Page>("{\"title\":5}").unwrap();
 }

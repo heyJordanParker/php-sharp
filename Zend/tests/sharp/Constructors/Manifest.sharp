@@ -4,5 +4,6 @@ public class Manifest
 {
     public Manifest(public string name { get; }) { }
 
-    public static Manifest parse(string json) => new Manifest(json.trim());
+    public static Result<Manifest, ParseError> parse(Any? value)
+        => value is string json ? Result.Ok(new Manifest(json.trim())) : Result.Err(new ParseError(["": "expected string"]));
 }

@@ -32,7 +32,7 @@ echo Demo\Structs::made(), "\n";
 var_dump(Demo\Structs::samePairs($pair, Demo\Structs::pair(1, 'a')), Demo\Structs::keys($pair, Demo\Structs::pair(1, 'a')));
 try {
     Demo\Structs::parsed(['first' => 'x', 'second' => 'c']);
-} catch (Sharp\InvalidFields $error) {
+} catch (LogicException $error) {
     echo $error->getMessage(), "\n";
 }
 ?>

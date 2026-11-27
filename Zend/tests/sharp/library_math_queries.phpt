@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls the math members of Kotlin, Rust and .NET that PHP# lacked: Math.log10, Math.exp, the trigonometric functions, Math.PI and Math.E, isNaN, checked and saturating int arithmetic at both ends of the range, and Int.parse and Int.tryParse in another base, with each edge case
+A PHP# class calls the math members of Kotlin, Rust and .NET that PHP# lacked: Math.log10, Math.exp, the trigonometric functions, Math.PI and Math.E, isNaN, checked and saturating int arithmetic at both ends of the range, and Int.parse in another base, with its ok() and each edge case
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -15,7 +15,7 @@ function refused(Closure $call): void
 {
     try {
         $call();
-    } catch (ValueError|ArithmeticError $error) {
+    } catch (ValueError|ArithmeticError|LogicException $error) {
         echo get_class($error), ': ', $error->getMessage(), "\n";
     }
 }
@@ -30,14 +30,14 @@ foreach ([[3, 4], [PHP_INT_MAX, 1], [PHP_INT_MIN, 1], [PHP_INT_MIN, -1], [$power
     echo $a, ' ', $b, ': ', json_encode(MathQueries::checked($a, $b)), ' ', json_encode(MathQueries::saturating($a, $b)), "\n";
 }
 
-echo MathQueries::parse('ff', 16), ' ', MathQueries::parse('-FF', 16), ' ', MathQueries::parse('+0101', 2), ' ', MathQueries::parse('z', 36), ' ';
-echo MathQueries::parse('-8000000000000000', 16), ' ', MathQueries::parse('9223372036854775807', 10), ' ', MathQueries::parse('-0', 8), "\n";
+echo MathQueries::parsed('ff', 16), ' ', MathQueries::parsed('-FF', 16), ' ', MathQueries::parsed('+0101', 2), ' ', MathQueries::parsed('z', 36), ' ';
+echo MathQueries::parsed('-8000000000000000', 16), ' ', MathQueries::parsed('9223372036854775807', 10), ' ', MathQueries::parsed('-0', 8), "\n";
 var_dump(MathQueries::tryParse('7fffffffffffffff', 16), MathQueries::tryParse('8000000000000000', 16), MathQueries::tryParse('g', 16), MathQueries::tryParse('', 16));
-refused(fn () => MathQueries::parse('8000000000000000', 16));
-refused(fn () => MathQueries::parse('19', 8));
-refused(fn () => MathQueries::parse(' ff', 16));
-refused(fn () => MathQueries::parse('9223372036854775808', 10));
-refused(fn () => MathQueries::parse('12', 1));
+refused(fn () => MathQueries::parsed('8000000000000000', 16));
+refused(fn () => MathQueries::parsed('19', 8));
+refused(fn () => MathQueries::parsed(' ff', 16));
+refused(fn () => MathQueries::parsed('9223372036854775808', 10));
+refused(fn () => MathQueries::parsed('12', 1));
 refused(fn () => MathQueries::tryParse('12', 37));
 ?>
 --EXPECT--
@@ -61,9 +61,9 @@ int(9223372036854775807)
 NULL
 NULL
 NULL
-ArithmeticError: Int.parse: "8000000000000000" is out of range for an int
-ValueError: Int.parse: "19" is not an int in base 8
-ValueError: Int.parse: " ff" is not an int in base 16: remove its spaces with trim() first
-ArithmeticError: Int.parse: "9223372036854775808" is out of range for an int
+LogicException: Int.parse: "8000000000000000" is out of range for an int
+LogicException: Int.parse: "19" is not an int in base 8
+LogicException: Int.parse: " ff" is not an int in base 16: remove its spaces with trim() first
+LogicException: Int.parse: "9223372036854775808" is out of range for an int
 ValueError: Int.parse takes a base from 2 to 36, and 1 is not one.
-ValueError: Int.tryParse takes a base from 2 to 36, and 37 is not one.
+ValueError: Int.parse takes a base from 2 to 36, and 37 is not one.

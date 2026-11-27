@@ -1,5 +1,5 @@
 --TEST--
-PHP# reads an all-digit JSON object key into a Map<string, TValue> as the string of its digits, in Json.decode<T>, a struct's generated parse and typeof(T).decode, though PHP's array holds it as an int
+PHP# reads an all-digit JSON object key into a Map<string, TValue> as the string of its digits, in Json.parse<T>, a struct's generated parse and typeof(T).parse, though PHP's array holds it as an int
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';

@@ -5,15 +5,15 @@ import Sharp.Encoding.Query;
 
 public static class Accounts
 {
-    public static Account decoded(string json) => Json.decode<Account>(json);
+    public static Account decoded(string json) => Json.parse<Account>(json).unwrap();
 
     public static string encoded(Account account) => Json.encode(account);
 
-    public static AccountStatus statusOf(string json) => Json.decode<Account>(json).status;
+    public static AccountStatus statusOf(string json) => Json.parse<Account>(json).unwrap().status;
 
-    public static Account parsed(Map<string, Any?> input) => Account.parse(input);
+    public static Account parsed(Map<string, Any?> input) => Account.parse(input).unwrap();
 
-    public static Account queried(string query) => Query.decode<Account>(query);
+    public static Account queried(string query) => Query.parse<Account>(query).unwrap();
 
-    public static string statement(string json) => Json.encode(Json.decode<Statement>(json));
+    public static string statement(string json) => Json.encode(Json.parse<Statement>(json).unwrap());
 }

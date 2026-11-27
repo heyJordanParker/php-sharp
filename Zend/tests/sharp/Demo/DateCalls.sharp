@@ -14,77 +14,77 @@ public class DateCalls
 {
     public static string day(int year, int month, int day) => new Date(year, month, day).toString();
 
-    public static string dayAfter(string text, int days) => Date.parse(text).plusDays(days).toString();
+    public static string dayAfter(string text, int days) => Date.parse(text).unwrap().plusDays(days).toString();
 
-    public static string monthAfter(string text, int months) => Date.parse(text).plusMonths(months).toString();
+    public static string monthAfter(string text, int months) => Date.parse(text).unwrap().plusMonths(months).toString();
 
-    public static int daysBetween(string start, string end) => Date.parse(start).daysUntil(Date.parse(end));
+    public static int daysBetween(string start, string end) => Date.parse(start).unwrap().daysUntil(Date.parse(end).unwrap());
 
-    public static int epochDay(string text) => Date.parse(text).epochDay;
+    public static int epochDay(string text) => Date.parse(text).unwrap().epochDay;
 
     public static string ofEpochDay(int days) => Date.ofEpochDay(days).toString();
 
-    public static bool before(string first, string second) => Date.parse(first) < Date.parse(second);
+    public static bool before(string first, string second) => Date.parse(first).unwrap() < Date.parse(second).unwrap();
 
-    public static string? tryDay(string text) => Date.tryParse(text)?.toString();
+    public static string? tryDay(string text) => Date.parse(text).ok()?.toString();
 
-    public static string startOfDay(string text, string zone) => Date.parse(text).atStartOfDay(new TimeZone(zone)).toString();
+    public static string startOfDay(string text, string zone) => Date.parse(text).unwrap().atStartOfDay(new TimeZone(zone)).toString();
 
     public static string instant(int seconds, int nanosecond) => new Instant(seconds, nanosecond).toString();
 
     public static string ofMilliseconds(int milliseconds) => Instant.ofEpochMilliseconds(milliseconds).toString();
 
-    public static int milliseconds(string text) => Instant.parse(text).epochMilliseconds;
+    public static int milliseconds(string text) => Instant.parse(text).unwrap().epochMilliseconds;
 
-    public static string? tryInstant(string text) => Instant.tryParse(text)?.toString();
+    public static string? tryInstant(string text) => Instant.parse(text).ok()?.toString();
 
-    public static string later(string text, string duration) => Instant.parse(text).plus(Duration.parse(duration)).toString();
+    public static string later(string text, string duration) => Instant.parse(text).unwrap().plus(Duration.parse(duration).unwrap()).toString();
 
-    public static string earlier(string text, string duration) => Instant.parse(text).minus(Duration.parse(duration)).toString();
+    public static string earlier(string text, string duration) => Instant.parse(text).unwrap().minus(Duration.parse(duration).unwrap()).toString();
 
-    public static string between(string start, string end) => Instant.parse(start).until(Instant.parse(end)).toString();
+    public static string between(string start, string end) => Instant.parse(start).unwrap().until(Instant.parse(end).unwrap()).toString();
 
-    public static bool after(string first, string second) => Instant.parse(first) > Instant.parse(second);
+    public static bool after(string first, string second) => Instant.parse(first).unwrap() > Instant.parse(second).unwrap();
 
-    public static string inZone(string text, string zone) => Instant.parse(text).inZone(new TimeZone(zone)).toString();
+    public static string inZone(string text, string zone) => Instant.parse(text).unwrap().inZone(new TimeZone(zone)).toString();
 
     public static List<int> parts(string text, string zone)
     {
-        const shown = Instant.parse(text).inZone(new TimeZone(zone));
+        const shown = Instant.parse(text).unwrap().inZone(new TimeZone(zone));
 
         return [shown.date.year, shown.date.month, shown.date.day, shown.hour, shown.minute, shown.second, shown.offset.minutes];
     }
 
-    public static string zoned(string text) => DateTime.parse(text).instant.toString();
+    public static string zoned(string text) => DateTime.parse(text).unwrap().instant.toString();
 
-    public static string? tryZoned(string text) => DateTime.tryParse(text)?.toString();
+    public static string? tryZoned(string text) => DateTime.parse(text).ok()?.toString();
 
-    public static string zonedLater(string text, string duration) => DateTime.parse(text).plus(Duration.parse(duration)).toString();
+    public static string zonedLater(string text, string duration) => DateTime.parse(text).unwrap().plus(Duration.parse(duration).unwrap()).toString();
 
-    public static string duration(string text) => Duration.parse(text).toString();
+    public static string duration(string text) => Duration.parse(text).unwrap().toString();
 
-    public static string? tryDuration(string text) => Duration.tryParse(text)?.toString();
+    public static string? tryDuration(string text) => Duration.parse(text).ok()?.toString();
 
     public static List<int> units(string text)
     {
-        const length = Duration.parse(text);
+        const length = Duration.parse(text).unwrap();
 
         return [length.days, length.hours, length.minutes, length.seconds, length.milliseconds, length.nanoseconds];
     }
 
-    public static string sum(string first, string second) => Duration.parse(first).plus(Duration.parse(second)).minus(Duration.zero).toString();
+    public static string sum(string first, string second) => Duration.parse(first).unwrap().plus(Duration.parse(second).unwrap()).minus(Duration.zero).toString();
 
-    public static string scaled(string text, int factor) => Duration.parse(text).times(factor).toString();
+    public static string scaled(string text, int factor) => Duration.parse(text).unwrap().times(factor).toString();
 
     public static string built() => Duration.ofDays(1).plus(Duration.ofHours(2)).plus(Duration.ofMinutes(3)).plus(Duration.ofSeconds(4)).plus(Duration.ofMilliseconds(5)).toString();
 
-    public static int dayOrder(string first, string second) => Date.parse(first) <=> Date.parse(second);
+    public static int dayOrder(string first, string second) => Date.parse(first).unwrap() <=> Date.parse(second).unwrap();
 
-    public static int instantOrder(string first, string second) => Instant.parse(first) <=> Instant.parse(second);
+    public static int instantOrder(string first, string second) => Instant.parse(first).unwrap() <=> Instant.parse(second).unwrap();
 
-    public static bool zonedSame(string first, string second) => DateTime.parse(first) == DateTime.parse(second);
+    public static bool zonedSame(string first, string second) => DateTime.parse(first).unwrap() == DateTime.parse(second).unwrap();
 
-    public static int zonedOrder(string first, string second) => DateTime.parse(first) <=> DateTime.parse(second);
+    public static int zonedOrder(string first, string second) => DateTime.parse(first).unwrap() <=> DateTime.parse(second).unwrap();
 
     public static bool zoneSame(string first, string second) => new TimeZone(first) == new TimeZone(second);
 
@@ -110,13 +110,13 @@ public class DateCalls
     {
         Function<string(DateTime)> crossing = (DateTime value) => value.toPhpDateTime().toDateTime().toString();
 
-        return crossing(DateTime.parse(text));
+        return crossing(DateTime.parse(text).unwrap());
     }
 
     public static string instantCrossedBack(string text)
     {
         Function<string(Instant)> crossing = (Instant value) => value.toPhpDateTime().toInstant().toString();
 
-        return crossing(Instant.parse(text));
+        return crossing(Instant.parse(text).unwrap());
     }
 }

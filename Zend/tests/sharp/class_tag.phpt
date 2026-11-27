@@ -17,7 +17,7 @@ var_dump(Tags::variantsRoundTrip());
 var_dump(Tags::voucherCode());
 try {
     Tags::unknown();
-} catch (Sharp\InvalidFields $error) {
+} catch (LogicException $error) {
     echo get_class($error), ': ', $error->getMessage(), "\n";
 }
 ?>
@@ -31,4 +31,4 @@ string(1) "1"
 bool(true)
 bool(true)
 string(3) "V-7"
-Sharp\InvalidFields: type: expected 1, bank or card, got string 'cash'
+LogicException: type: expected 1, bank or card, got string 'cash'

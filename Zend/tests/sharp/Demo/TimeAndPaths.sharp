@@ -13,13 +13,13 @@ public class TimeAndPaths
     public static string shortTime(int hour, int minute) => new TimeOfDay(hour, minute).toString();
 
     public static List<int> ordered(string earlier, string later)
-        => [TimeOfDay.parse(earlier) <=> TimeOfDay.parse(later), TimeOfDay.parse(later) <=> TimeOfDay.parse(earlier), TimeOfDay.parse(earlier) <=> TimeOfDay.parse(earlier)];
+        => [TimeOfDay.parse(earlier).unwrap() <=> TimeOfDay.parse(later).unwrap(), TimeOfDay.parse(later).unwrap() <=> TimeOfDay.parse(earlier).unwrap(), TimeOfDay.parse(earlier).unwrap() <=> TimeOfDay.parse(earlier).unwrap()];
 
-    public static bool same(string text, string other) => TimeOfDay.parse(text) == TimeOfDay.parse(other);
+    public static bool same(string text, string other) => TimeOfDay.parse(text).unwrap() == TimeOfDay.parse(other).unwrap();
 
-    public static string? read(string text) => TimeOfDay.tryParse(text)?.toString();
+    public static string? read(string text) => TimeOfDay.parse(text).ok()?.toString();
 
-    public static string onClock(string instant, string zone) => Instant.parse(instant).inZone(new TimeZone(zone)).timeOfDay.toString();
+    public static string onClock(string instant, string zone) => Instant.parse(instant).unwrap().inZone(new TimeZone(zone)).timeOfDay.toString();
 
     public static string joined(string first, List<string> rest) => Path.join(first, ...rest);
 

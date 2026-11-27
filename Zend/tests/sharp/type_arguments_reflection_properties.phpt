@@ -141,16 +141,16 @@ Property Calls\Counter::$\0<sharp>\0statics does not exist
 Access to undeclared static property Calls\Counter::$count
 Access to undeclared static property Calls\Counter::$
 The methods the compile makes
-ReflectedClasses\Point: __construct, op_Equality, parse, tryParse
-__construct, op_Equality, parse, tryParse
+ReflectedClasses\Point: __construct, op_Equality, parse
+__construct, op_Equality, parse
 #fields | false | false | false | false | Method ReflectedClasses\Point::#fields() does not exist | Method ReflectedClasses\Point::#fields() does not exist | Method ReflectedClasses\Point::#fields() does not exist
 #json | false | false | false | false | Method ReflectedClasses\Point::#json() does not exist | Method ReflectedClasses\Point::#json() does not exist | Method ReflectedClasses\Point::#json() does not exist
-ReflectedMembers\Counter: next, __construct, parse, tryParse
-next, __construct, parse, tryParse
+ReflectedMembers\Counter: next, __construct, parse
+next, __construct, parse
 hidden#get | false | false | false | false | Method ReflectedMembers\Counter::hidden#get() does not exist | Method ReflectedMembers\Counter::hidden#get() does not exist | Method ReflectedMembers\Counter::hidden#get() does not exist
 #statics | false | false | false | false | Method ReflectedMembers\Counter::#statics() does not exist | Method ReflectedMembers\Counter::#statics() does not exist | Method ReflectedMembers\Counter::#statics() does not exist
-Indexers\Cart: offsetGet, offsetSet, offsetExists, offsetUnset, run, first, parse, tryParse
-offsetGet, offsetSet, offsetExists, offsetUnset, run, first, parse, tryParse
+Indexers\Cart: offsetGet, offsetSet, offsetExists, offsetUnset, run, first, parse
+offsetGet, offsetSet, offsetExists, offsetUnset, run, first, parse
 #get | false | false | false | false | Method Indexers\Cart::#get() does not exist | Method Indexers\Cart::#get() does not exist | Method Indexers\Cart::#get() does not exist
 #set | false | false | false | false | Method Indexers\Cart::#set() does not exist | Method Indexers\Cart::#set() does not exist | Method Indexers\Cart::#set() does not exist
 {"x":2} jam

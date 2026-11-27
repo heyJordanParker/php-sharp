@@ -8,9 +8,15 @@ public struct Money : string
 
     public string value => this.amount.value;
 
-    public static Money zero() => new Money(Decimal.parse("0.00"));
+    public static Money zero() => new Money(Decimal.parse("0.00").unwrap());
 
-    public static Money parse(string text) => new Money(Decimal.parse(text));
+    public static Result<Money, ParseError> parse(Any? value)
+    {
+        if (value is not string text) {
+            return Result.Err(new ParseError(["": "expected string"]));
+        }
+        return Result.Ok(new Money(try Decimal.parse(text)));
+    }
 
     public string toString() => this.amount.toString();
 }

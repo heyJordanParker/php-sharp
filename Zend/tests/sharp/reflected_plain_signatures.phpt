@@ -13,8 +13,7 @@ foreach ([ReflectedTypes\Row::class, Lib\Signatures::class] as $class) {
 var_dump(ReflectedTypes\Report::callables());
 ?>
 --EXPECT--
-parse(value: Map<string, (Any)?>|Object): ReflectedTypes.Row
-tryParse(value: Map<string, (Any)?>|Object): (ReflectedTypes.Row)?
+parse(value: Map<string, (Any)?>|Object): Sharp.Result<ReflectedTypes.Row, Sharp.ParseError>
 tap(callback: callable): ReflectedTypes.Row
 done: (Closure)?
 call(callback: callable): (callable)?

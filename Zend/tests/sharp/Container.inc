@@ -31,13 +31,22 @@ function container_load(string $root): void
 {
     $library = "$root/vendor/heyjordanparker/php-sharp-composer/library";
     Sharp\Internal\readModule("$library/Sharp/Module.sharp");
-    spl_autoload_register(function (string $class) use ($root, $library): void {
+    $find = function (string $class) use ($root, $library): string {
         $file = str_replace('\\', '/', $class) . '.sharp';
-        $path = match (true) {
+
+        return match (true) {
             str_starts_with($class, 'Sharp\\') => "$library/$file",
             str_starts_with($class, 'PHPUnit\\') => "$root/phpunit/" . substr($file, strlen('PHPUnit/')),
             default => "$root/" . lcfirst($file),
         };
+    };
+    spl_autoload_register(function (string $class) use ($find): void {
+        // A case of an enum that carries data, as Sharp\Result\Ok, is a class its enum's file declares.
+        $enum = substr($class, 0, (int) strrpos($class, '\\'));
+        $path = $find($class);
+        if (!is_file($path) && $enum !== '' && !class_exists($enum, false)) {
+            $path = $find($enum);
+        }
         if (is_file($path)) {
             require $path;
         }

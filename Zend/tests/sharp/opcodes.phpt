@@ -29,7 +29,6 @@ Box.sharp
   $_main: -
   Opcodes\Box::#fields: -
   Opcodes\Box::parse: SHARP_RECV_TYPE_ARGS, SHARP_TYPE_ARGS, SHARP_TYPE_OF
-  Opcodes\Box::tryParse: SHARP_RECV_TYPE_ARGS, SHARP_TYPE_ARGS
   Opcodes\Box::#json: -
 Sites.sharp
   $_main: -
@@ -54,7 +53,6 @@ Sites.sharp
   Opcodes\Sites::callsOwnMethod: -
   Opcodes\Sites::#fields: -
   Opcodes\Sites::parse: -
-  Opcodes\Sites::tryParse: -
   Opcodes\Sites::#json: -
 Source.sharp
   $_main: -

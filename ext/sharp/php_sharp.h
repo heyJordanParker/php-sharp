@@ -468,8 +468,8 @@ zend_function *sharp_backed_value_method(const zend_class_entry *ce, bool keyed)
 /* Builds in `built` an object of `ce`, whose class sharp_owns_storage holds for, from `stored`, the array its stored
  * form reads back as, as its `parse` builds one: through its constructor. `type_arguments` is the text serialize kept
  * for an object of a generic class, or UNDEF, and each class it names resolves through `resolve`. Fails with the error
- * the constructor or the `parse` threw, or one Sharp\InvalidFields for every bad field, and with no exception for
- * type arguments that don't resolve. */
+ * the constructor threw, or one ValueError that lists every bad field and the problem of a backed struct's `parse`, and
+ * with no exception for type arguments that don't resolve. */
 zend_result sharp_read_stored_form(zend_class_entry *ce, zval *stored, const zval *type_arguments,
 	sharp_type_class_resolver resolve, void *context, zval *built);
 

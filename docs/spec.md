@@ -1289,7 +1289,7 @@ string json = "{}";
 -->
 ```csharp
 public Artifact(public Manifest manifest { get; }) { }
-public Artifact.fromJson(string json) : this(Manifest.parse(json)) { }
+public Artifact.fromJson(string json) : this(Manifest.read(json)) { }
 
 let artifact = new Artifact.fromJson(json);
 ```
@@ -1340,8 +1340,8 @@ public class CreditNote : Document
 <!-- example constructor-call-this: members in Artifact -->
 ```csharp
 public Artifact(public Manifest manifest { get; }) { }
-public Artifact.fromJson(string json) : this(Manifest.parse(json)) { }   // compiles
-public Artifact.copy() : this(this.manifest) { }                         // compile error: `this` is not available before the constructor runs: pass a parameter instead.
+public Artifact.fromJson(string json) : this(Manifest.read(json)) { }   // compiles
+public Artifact.copy() : this(this.manifest) { }                        // compile error: `this` is not available before the constructor runs: pass a parameter instead.
 ```
 
 **A get-only property is set once.** A named constructor runs on the new object after the main constructor, so it can't set a get-only property again. A property that a named constructor sets again is declared `{ get; init; }` (section 6.1):
@@ -1468,12 +1468,12 @@ public struct Email : string
 // app/UserId.sharp
 namespace App;
 
-public struct UserId : int { }    // compiles: its constructor takes the int value, and UserId.parse(7) runs it
+public struct UserId : int { }    // compiles: its constructor takes the int value, and UserId.parse(7).unwrap() runs it
 ```
 
 **A struct keys a `Map` when every field has `==`, by its whole value with nothing declared, or when it declares `==` with `hash()`, by that pair.** It is the general rule for keys (section 12): a struct whose every field has `==` has `==` and `hash()`, and a struct with a field that has none, such as a function, declares both (section 19). Two structs are one key when they are `==`. A struct gets JSON key text only from its value, when it is backed by `int` or `string`, so `Json.encode` of a `Map` keyed by any other struct is a compile error, because a JSON object key is text.
 
-**Every struct has a static `parse`,** which takes a `Map<string, Any?>|Object`, reads the `Map`'s keys or the object's public properties and throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Every class gets both the same way, and `methods()` (section 25) gives each with that parameter type.
+**Every struct has a static `parse`,** which takes a `Map<string, Any?>|Object`, reads the `Map`'s keys or the object's public properties and gives a `Result<RenewRequest, ParseError>` (section 31): the struct, or one `ParseError` that lists every bad field. A bad field is an expected failure, so `parse` returns it as a value. The name follows `Int.parse` (section 24). Every class gets one the same way, and `methods()` (section 25) gives it with that parameter type. A type that declares its own `parse` declares `static Result<Self, ParseError> parse(Any? value)`, and any other static `parse` it declares is a compile error, so a method of another job takes another name.
 
 <!-- example struct-parse: statements
 Map<string, Any?> payload = ["customerId": "abc"];
@@ -1488,8 +1488,8 @@ public struct RenewRequest
     ) { }
 }
 
-RenewRequest request = RenewRequest.parse(payload);     // throws: "customerId: expected int, got string 'abc'; plan_code: missing"
-RenewRequest? maybe = RenewRequest.tryParse(payload);   // null on any bad field
+RenewRequest request = RenewRequest.parse(payload).unwrap();   // throws: "customerId: expected int, got string 'abc'; plan_code: missing"
+RenewRequest? maybe = RenewRequest.parse(payload).ok();        // null on any bad field
 ```
 
 - The keys are the parameter names of the main constructor (section 9.1), then every other stored property, whatever its setter's visibility, so a `private set` property and a machine's (section 20.2) are read and written too. A computed property stores nothing.
@@ -1512,21 +1512,21 @@ public struct OrderRow
     public OrderRow(public int id { get; }, public string number { get; }) { }
 }
 
-OrderRow order = OrderRow.parse(row);   // row is a plain PHP object from a database query; throws: "id: expected int, got string 'abc'"
+OrderRow order = OrderRow.parse(row).unwrap();   // row is a plain PHP object from a database query; throws: "id: expected int, got string 'abc'"
 
 public class OrderRecord
 {
     public OrderRecord(public int id { get; }, public string number { get; }) { }
 }
 
-OrderRecord record = OrderRecord.parse(row);   // a class parses the same way, by its main constructor's parameters, then every other stored property; throws: "id: expected int, got string 'abc'"
+OrderRecord record = OrderRecord.parse(row).unwrap();   // a class parses the same way, by its main constructor's parameters, then every other stored property; throws: "id: expected int, got string 'abc'"
 ```
 
 **`Json.encode` writes a struct or a class by the fields its `parse` reads,** so one declaration governs reading and writing. Each field is written under its key, a backed struct as its value, and a field marked `[Key(omitNull: true)]` is left out when it is null. A missing key of such a field reads as null. A main constructor parameter that holds no property can't be written, so `Json.encode` of a type whose `parse` reads one is a compile error that names the parameter: "`Json.encode` writes `Price` from the properties its `parse` reads, and the main constructor parameter `cents` holds no property."
 
-**`serialize` writes a struct or a class as its stored form, the fields `Json.encode` writes, and `unserialize` builds it again through its `parse`,** so the constructor runs on every copy, as a queued job or a cached value is read back. A copy reads back `==` to the original, and data its type no longer reads, as a cached value written before its type changed, throws the error `parse` throws or the constructor's own. `serialize` of a type with no stored form throws an `Error` that names the class and says why: a main constructor parameter that holds no property, as a service a class takes, a field that holds a function, or a `Map` keyed by a type that has no text. A class whose plain PHP parent serializes its objects itself, through `__serialize` and `__unserialize`, as an ORM's model does, keeps the parent's. PHP# code declares none of `__serialize`, `__unserialize`, `__sleep` and `__wakeup`.
+**`serialize` writes a struct or a class as its stored form, the fields `Json.encode` writes, and `unserialize` builds it again through its `parse`,** so the constructor runs on every copy, as a queued job or a cached value is read back. A copy reads back `==` to the original, and data its type no longer reads, as a cached value written before its type changed, throws a `ValueError` that lists every bad field, or the constructor's own error. `serialize` of a type with no stored form throws an `Error` that names the class and says why: a main constructor parameter that holds no property, as a service a class takes, a field that holds a function, or a `Map` keyed by a type that has no text. A class whose plain PHP parent serializes its objects itself, through `__serialize` and `__unserialize`, as an ORM's model does, keeps the parent's. PHP# code declares none of `__serialize`, `__unserialize`, `__sleep` and `__wakeup`.
 
-**`typeof(T).encode(value)` gives the stored form as a value, the inverse of `typeof(T).decode(value)` (section 25),** each JSON object `Json.encode` would write a `Map` and each JSON array a `List`, with every field `parse` reads at any visibility, so a storage layer in another namespace keeps a class's `internal` fields, and `typeof(T).decode(typeof(T).encode(x)) == x`.
+**`typeof(T).encode(value)` gives the stored form as a value, the inverse of `typeof(T).parse(value)` (section 25),** each JSON object `Json.encode` would write a `Map` and each JSON array a `List`, with every field `parse` reads at any visibility, so a storage layer in another namespace keeps a class's `internal` fields, and `typeof(T).parse(typeof(T).encode(x)).unwrap() == x`.
 
 **A family is a sealed interface, an abstract class or an enum whose cases carry data, marked `[Tag("type")]`.** Each variant below it, a class, a struct or an enum case, names itself with `[Key("card")]`. The family's `parse` reads the variant whose name the input holds under the tag's key, and `Json.encode` writes a variant with its name under that key, so renaming a class never changes stored data. An interface holds no static method body, so an interface family's `parse` is called from PHP# code. `typeof(Self).withTag(name)` gives the variant's class (section 25).
 
@@ -1578,7 +1578,7 @@ import App.Payments.Card;
 import App.Payments.Payment;
 import Sharp.Decimal;
 import Sharp.Encoding.Json;
-Json.encode(new Payment("https://shop.test/done", Decimal.parse("1.50"), null, new Card("4242")));   // "{\"return_url\":\"https://shop.test/done\",\"amount\":\"1.50\",\"method\":{\"type\":\"card\",\"last4\":\"4242\"}}"
+Json.encode(new Payment("https://shop.test/done", Decimal.parse("1.50").unwrap(), null, new Card("4242")));   // "{\"return_url\":\"https://shop.test/done\",\"amount\":\"1.50\",\"method\":{\"type\":\"card\",\"last4\":\"4242\"}}"
 -->
 
 - A variant without `[Key]` is a compile error: "`Cash` is a variant of `PaymentMethod` and gives no name for it." A backed machine's case is named by its value instead (section 20.2).
@@ -1700,7 +1700,7 @@ inbox.holds(orders, message);   // compiles: TItem is inferred as Order, and val
 
 A collection's elements are still checked where it enters from plain PHP (section 12).
 
-**`serialize` keeps a collection,** so a queued job or a cached value may hold one. `unserialize` gives a `Map` back as a `Map` and a `Set` as a `Set`, with the same entries in the same order, alone or inside a `List`, a struct or a class, in the same process or a fresh one, and whatever classes it allows, as it gives back an array. A collection's type arguments are the types of its elements, so the copy is a `Map<string, int>` exactly when the original is, and a field whose read-back collection holds a wrong entry throws the `Sharp.InvalidFields` its struct's or class's `parse` throws (section 10).
+**`serialize` keeps a collection,** so a queued job or a cached value may hold one. `unserialize` gives a `Map` back as a `Map` and a `Set` as a `Set`, with the same entries in the same order, alone or inside a `List`, a struct or a class, in the same process or a fresh one, and whatever classes it allows, as it gives back an array. A collection's type arguments are the types of its elements, so the copy is a `Map<string, int>` exactly when the original is, and a field whose read-back collection holds a wrong entry throws a `ValueError` that lists the problems its struct's or class's `parse` gives (section 10).
 
 **Declaring type parameters:**
 
@@ -1798,7 +1798,7 @@ public class Record
     public Record() { }
     public required Record.fromJson(Map<string, string> json) : this() { this.id = json["id"] ?? ""; }
     public Record.blank() : this() { }
-    public static Self parse(Map<string, string> json) => new Self.fromJson(json);   // compiles: the fromJson of the class parse was called on
+    public static Self read(Map<string, string> json) => new Self.fromJson(json);   // compiles: the fromJson of the class read was called on
 }
 ```
 
@@ -1879,7 +1879,7 @@ import App.Records.Repository;
 new Repository<Invoice>().load(["id": "7"]).id;   // "invoice 7"
 new Repository<Record>().load(["id": "8"]).id;    // "8"
 new Documents<Receipt>().load(["id": "9"]).id;    // "receipt 9"
-Invoice.parse(["id": "6"]).id;                    // "invoice 6"
+Invoice.read(["id": "6"]).id;                     // "invoice 6"
 -->
 
 <!-- example required-named-constructors -->
@@ -4562,15 +4562,15 @@ public struct Line
 }
 ```
 
-- **Only entry points, moves, `parse` and `Json.decode` build a case.** A case with no fields is one object.
+- **Only entry points, moves, `parse` and `Json.parse<T>` build a case.** A case with no fields is one object.
 - **A move belongs to the case it moves from.** A move in a case's block is a member of that case's type alone, and a move in the machine's body is a member of every case that isn't `final`. A call of a move through the machine's type, or through a union that holds a case without the move, is a compile error that names the test to write first: "`pay` moves from `OrderStatus.Draft`, and `this.status` may be `Paid`, `Shipped` or `Cancelled`: test it first, as in `if (this.status is OrderStatus.Draft draft)`." So no program calls a move from a case that lacks it.
 - **A property of a machine type has a `private set`,** starts at an entry point, and changes only by a move of the value it holds: `this.status = draft.pay(cents)`, where a type pattern bound `draft` from `this.status`, in an `is`, in an `is not` that leaves, or in a `match` arm. A promoted constructor parameter of a machine type is a compile error, since a caller could pass any case.
 - **A `late` property of a machine type** takes no initial value. Its write of an entry point is accepted in any method of its class, and every other write is a move. A read before the first write throws, as for every `late` property.
 - **A struct's property of a machine type is `{ get; init; }`,** starts at an entry point by its initial value or its constructor, and a `with` that sets it takes a move of the original's value: `line with { status: draft.pay(5) }`, where `draft` was bound from `line.status`.
 - **The checker checks the graph.** Every case is reachable from an entry point. A case with no move out is `final`, and a `final` case has no move out. When a machine has `final` cases, every case reaches one. Each is a compile error that names the case: "The case `OrderStatus.Paid` has no move out, so it is `final`."
 - **A law whose one parameter is a case of the machine is an invariant** (section 28): the checker proves it after every entry point and every move.
-- **A backed machine whose cases hold no data, and that is not marked `[Tag]`, stores as its case's value,** as a backed enum does (section 10), so `Json.encode(account);   // {"id":7,"balance":"12.50","status":"active"}` writes the `status` machine as `"active"`, and `parse`, `Json.decode` and `Query.decode` read the case back from its value. A machine with a case that holds data stores as a family, marked `[Tag]`.
-- **A machine marked `[Tag]` stores as a family does** (section 10): `Json.encode` writes a case under its value under the tag's key and its fields, and `parse` and `Json.decode` read it back, refusing a name the machine has no case of and a field of the wrong type. A backed machine's values name its cases, so `[Key]` on a case of one is a compile error that names the value: "`OrderStatus.Paid` is named `paid` by its value, so it takes no `[Key]`." A machine with no backing names each case with `[Key]`, as a family names each variant. Each invariant of the case it reads runs as code, and one that fails throws a `ValueError` that names it: "OrderStatus.Paid breaks paidIsPositive."
+- **A backed machine whose cases hold no data, and that is not marked `[Tag]`, stores as its case's value,** as a backed enum does (section 10), so `Json.encode(account);   // {"id":7,"balance":"12.50","status":"active"}` writes the `status` machine as `"active"`, and `parse`, `Json.parse<T>` and `Query.parse<T>` read the case back from its value. A machine with a case that holds data stores as a family, marked `[Tag]`.
+- **A machine marked `[Tag]` stores as a family does** (section 10): `Json.encode` writes a case under its value under the tag's key and its fields, and `parse` and `Json.parse<T>` read it back, refusing a name the machine has no case of and a field of the wrong type. A backed machine's values name its cases, so `[Key]` on a case of one is a compile error that names the value: "`OrderStatus.Paid` is named `paid` by its value, so it takes no `[Key]`." A machine with no backing names each case with `[Key]`, as a family names each variant. Each invariant of the case it reads runs as code, and one that fails throws a `ValueError` that names it: "OrderStatus.Paid breaks paidIsPositive."
 - **A `match` over a machine lists every case and takes no `default`** (section 21).
 - **Independent states are two machines on the holder,** and nested states are one machine of the flattened cases.
 
@@ -6208,8 +6208,8 @@ Any? user = new User();
 -->
 ```csharp
 string text = request.input("qty") as string ?? ""; // an Any? is checked as a string first
-const qty = Int.parse(text);                         // int, throws on "abc" and on "12abc"
-const maybe = Int.tryParse(text);                    // int?, null on "abc"
+const qty = Int.parse(text).unwrap();                // int, throws on "abc" and on "12abc"
+const maybe = Int.parse(text).ok();                  // int?, null on "abc"
 const cents = (int)(price * 100);                    // truncates toward zero
 const admin = user as Admin;                         // Admin?, null if user is not one
 const flag = request.input("flag") == "1";           // replaces (bool)
@@ -6217,9 +6217,8 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 
 - `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number to a `string`.
 - `(int)` truncates a `float` toward zero. A `float` too large for an `int`, or NaN, throws `ArithmeticError`.
-- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. Spaces around the number count too: `Int.parse(" 12 ")` throws, and its error says to call `trim()` first. An `Any?` is checked with `as string` first.
-- `Int.tryParse(s)` and `Float.tryParse(s)` take a `string` too, and give null where `parse` throws.
-- `Int.parse(s, radix)` and `Int.tryParse(s, radix)` read a number in a base from 2 to 36, with the letters `a` to `z` in either case past 9: `Int.parse("ff", 16)` is 255. A base outside 2 to 36 throws `ValueError` from both.
+- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string` and give a `Result` (section 31): the number, or an `Err` for a string that holds anything but a number, such as `"abc"` or `"12abc"`. Spaces around the number count too: `Int.parse(" 12 ")` is an `Err` whose message says to call `trim()` first. `ok()` gives the number or null, and `unwrap()` gives the number or throws. An `Any?` is checked with `as string` first.
+- `Int.parse(s, radix)` reads a number in a base from 2 to 36, with the letters `a` to `z` in either case past 9: `Int.parse("ff", 16).unwrap()` is 255. A base outside 2 to 36 throws `ValueError`, since the base is the caller's, not the text's.
 - An `int` and a `float` have number methods, from the standard library's extensions: `abs()`, `clamp(min, max)` and `format()`, which groups the digits in thousands. An `int` has `toHex()`, and `floorDiv(divisor)` and `mod(divisor)`, which round down where `/` and `%` round toward zero, so `(-7).floorDiv(2)` is -4 and `(-7).mod(2)` is 1. A `float` has `round(decimals)`, `floor()`, `ceil()`, `isFinite()` and `isNaN()`, as in `price.round(2)` and `total.format()`. `abs()` of the smallest `int` throws `ArithmeticError`, and a `clamp` whose minimum is above its maximum throws `ValueError`.
 - `+`, `-` and `*` throw `ArithmeticError` past `Int.MAX` and `Int.MIN`. An `int`'s `checkedAdd`, `checkedSubtract` and `checkedMultiply` give null there instead, and `saturatingAdd`, `saturatingSubtract` and `saturatingMultiply` give `Int.MAX` or `Int.MIN`: `Int.MAX.checkedAdd(1)` is null, and `Int.MAX.saturatingAdd(1)` is `Int.MAX`.
 - `Math` has `sqrt`, `pow`, `log`, `log10`, `exp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan` and `atan2`, which take radians, and the constants `Math.PI` and `Math.E`. Outside its domain a function gives NaN, as `Math.asin(2.0)` does.
@@ -6245,24 +6244,24 @@ Int.fromBytes("short".toBytes());                   // throws ValueError
 
 **`Decimal` is an exact decimal number, and `BigInteger` an integer of any size.** Both are structs in `Sharp`, so they need no import, and run on PHP's bcmath, which every engine builds:
 
-- `Decimal.parse(text)` and `Decimal.tryParse(text)` read digits with an optional sign and point, as `"-12.50"`, and `Decimal.of(n)` takes an `int`. The digits after the point are its `scale`, so `"1.50"` has a scale of 2 and writes itself back as `"1.50"`.
+- `Decimal.parse(text)` reads digits with an optional sign and point, as `"-12.50"`, into a `Result`, and `Decimal.of(n)` takes an `int`. The digits after the point are its `scale`, so `"1.50"` has a scale of 2 and writes itself back as `"1.50"`.
 - `+`, `-` and `*` give the exact result: a sum's scale is the larger of both, and a product's their sum. There is no `/`, because an exact quotient can have no end. `divide(divisor, scale, mode)` gives the quotient with `scale` digits after the point, and `round(scale, mode)` rounds the number to `scale` digits, both by a `RoundingMode`, `HalfEven` by default, as banks round. The modes are `HalfEven`, `HalfUp`, `HalfDown`, `Up` and `Down`, away from 0 and toward it, and `Ceiling` and `Floor`. A divisor of 0 throws `DivisionByZeroError`.
 - `==` and `<=>` compare the number, so `1.5 == 1.50` is true, and each keeps its scale.
-- `BigInteger.parse(text)`, `BigInteger.tryParse(text)` and `BigInteger.of(n)` make one, `+`, `-` and `*` never overflow, and `/` and `%` round toward 0, as an `int`'s do. `pow(n)` raises it, and a negative exponent throws `ArithmeticError`, as `**` on an `int` does. `toString(radix)` writes it in a base from 2 to 36, and `toIntOrNull()` gives it as an `int`, or null past `Int.MAX` and `Int.MIN`.
+- `BigInteger.parse(text)`, which gives a `Result`, and `BigInteger.of(n)` make one, `+`, `-` and `*` never overflow, and `/` and `%` round toward 0, as an `int`'s do. `pow(n)` raises it, and a negative exponent throws `ArithmeticError`, as `**` on an `int` does. `toString(radix)` writes it in a base from 2 to 36, and `toIntOrNull()` gives it as an `int`, or null past `Int.MAX` and `Int.MIN`.
 
 <!-- example exact-numbers: statements -->
 ```csharp
-Decimal.parse("0.1") + Decimal.parse("0.2") == Decimal.parse("0.3");   // true
-Decimal.parse("10").divide(Decimal.parse("3"), 2).toString();          // "3.33"
-Decimal.parse("2.5").round(0).toString();                              // "2": HalfEven rounds to the even neighbor
-Decimal.parse("2.5").round(0, RoundingMode.HalfUp).toString();         // "3"
-(Decimal.parse("1.50") * Decimal.of(3)).toString();                    // "4.50"
-const past = BigInteger.parse("9223372036854775807") + BigInteger.of(1);
+Decimal.parse("0.1").unwrap() + Decimal.parse("0.2").unwrap() == Decimal.parse("0.3").unwrap();   // true
+Decimal.parse("10").unwrap().divide(Decimal.parse("3").unwrap(), 2).toString();                   // "3.33"
+Decimal.parse("2.5").unwrap().round(0).toString();                                                // "2": HalfEven rounds to the even neighbor
+Decimal.parse("2.5").unwrap().round(0, RoundingMode.HalfUp).toString();                           // "3"
+(Decimal.parse("1.50").unwrap() * Decimal.of(3)).toString();                                      // "4.50"
+const past = BigInteger.parse("9223372036854775807").unwrap() + BigInteger.of(1);
 past.toString();                                                       // "9223372036854775808"
 past.toIntOrNull();                                                    // null
 BigInteger.of(255).toString(16);                                       // "ff"
 (BigInteger.of(-7) / BigInteger.of(2)).toString();                     // "-3"
-Decimal.parse("1") / Decimal.parse("3");                               // compile error: Decimal has no /, so call divide with a scale
+Decimal.parse("1").unwrap() / Decimal.parse("3").unwrap();             // compile error: Decimal has no /, so call divide with a scale
 ```
 
 **Time is values,** never an `int` of seconds or a format of PHP's letters. `Sharp.Time` holds them:
@@ -6274,7 +6273,7 @@ Decimal.parse("1") / Decimal.parse("3");                               // compil
 - A `TimeZone` is a zone of the IANA time zone database, such as `Europe/Sofia`, or a fixed offset from UTC, such as `+03:00`.
 - A `DateTime` is an `Instant` as the clocks of a `TimeZone` show it.
 
-Each one's `toString()` writes ISO-8601, and its `parse` reads it back and throws `ValueError` on any other text, while `tryParse` gives null instead. A `DateTime` writes its zone after the offset, as RFC 9557 does. A day or a zone that does not exist throws `ValueError`:
+Each one's `toString()` writes ISO-8601, and its `parse` reads it back into a `Result`, whose `Err` names any other text. A `DateTime` writes its zone after the offset, as RFC 9557 does. A day or a zone that does not exist throws `ValueError`:
 
 <!-- example time-values: statements
 import Sharp.Time.Date;
@@ -6283,14 +6282,14 @@ import Sharp.Time.Instant;
 import Sharp.Time.TimeZone;
 -->
 ```csharp
-const paid = Instant.parse("2026-10-22T18:30:00Z");
-paid.plus(Duration.ofHours(2)).toString();                // "2026-10-22T20:30:00Z"
-paid.inZone(new TimeZone("Europe/Sofia")).toString();     // "2026-10-22T21:30:00+03:00[Europe/Sofia]"
-paid.inZone(TimeZone.utc).date.plusMonths(4).toString();  // "2027-02-22"
-Date.parse("2026-01-31").plusMonths(1).toString();        // "2026-02-28"
-Date.parse("2026-10-01").daysUntil(Date.parse("2026-10-22")); // 21
-Duration.parse("PT1H30M").minutes;                        // 90
-Instant.tryParse("yesterday");                            // null
+const paid = Instant.parse("2026-10-22T18:30:00Z").unwrap();
+paid.plus(Duration.ofHours(2)).toString();                    // "2026-10-22T20:30:00Z"
+paid.inZone(new TimeZone("Europe/Sofia")).toString();         // "2026-10-22T21:30:00+03:00[Europe/Sofia]"
+paid.inZone(TimeZone.utc).date.plusMonths(4).toString();      // "2027-02-22"
+Date.parse("2026-01-31").unwrap().plusMonths(1).toString();   // "2026-02-28"
+Date.parse("2026-10-01").unwrap().daysUntil(Date.parse("2026-10-22").unwrap()); // 21
+Duration.parse("PT1H30M").unwrap().minutes;               // 90
+Instant.parse("yesterday").ok();                          // null
 new Date(2026, 2, 29);                                    // throws ValueError
 ```
 
@@ -6330,13 +6329,13 @@ import Sharp.Time.TimeZone;
 import Sharp.Time.Weekday;
 -->
 ```csharp
-const sofia = Instant.parse("2026-10-22T18:30:00Z").inZone(new TimeZone("Europe/Sofia"));
+const sofia = Instant.parse("2026-10-22T18:30:00Z").unwrap().inZone(new TimeZone("Europe/Sofia"));
 sofia.toOffsetString();                                   // "2026-10-22T21:30:00+03:00"
 sofia.toSqlString();                                      // "2026-10-22 21:30:00"
 sofia.instant.toHttpDate();                               // "Thu, 22 Oct 2026 18:30:00 GMT"
 sofia.weekday == Weekday.Thursday;                        // true
 sofia.monthOfYear.toString();                             // "October"
-DateTime.parseLocal("2026-10-22 21:30:00", TimeZone.utc).toString(); // "2026-10-22T21:30:00+00:00[UTC]"
+DateTime.parseLocal("2026-10-22 21:30:00", TimeZone.utc).unwrap().toString(); // "2026-10-22T21:30:00+00:00[UTC]"
 ```
 
 **Replacing `(array)` and `(object)`:**
@@ -6347,7 +6346,7 @@ Object row = Rows.withId(1);
 string email = "ada@example.com";
 -->
 ```csharp
-OrderRow order = OrderRow.parse(row);             // replaces (array)row: a struct reads an object's public properties (section 10)
+OrderRow order = OrderRow.parse(row).unwrap();             // replaces (array)row: a struct reads an object's public properties (section 10)
 Map<string, Any> payload = ["id": 1, "email": email];
 string json = Json.encode(payload);               // {"id":1,"email":"…"}: replaces json_encode((object)[…])
 const data = (array)row;                          // parse error
@@ -6356,7 +6355,7 @@ const point = (object)["x": 1];                   // parse error
 
 - **A JSON object** is a `Map` literal for a one-off payload, and a declared struct for a shape that repeats.
 - **`Json.encode` encodes by the value's PHP# type,** so a `Map` is a JSON object and a `List` is a JSON array wherever it is, below an `Any` too, even when empty, and even when a `Map`'s keys run from 0 to n. A `Map` is an object the engine tells apart from a `List` (section 12).
-- **A struct or a class is written by the fields its `parse` reads,** each under its key, a backed struct such as `Decimal` as its value, `"1.50"`, and a family's variant with its name under the tag's key (section 10), so `Json.decode` reads back what `Json.encode` wrote.
+- **A struct or a class is written by the fields its `parse` reads,** each under its key, a backed struct such as `Decimal` as its value, `"1.50"`, and a family's variant with its name under the tag's key (section 10), so `Json.parse<T>` reads back what `Json.encode` wrote.
 
 <!-- example json-encoding: statements
 import Sharp.Encoding.Json;
@@ -6376,10 +6375,11 @@ Json.encode(listed);                              // {"counts":[]}: an empty Lis
 
 <!-- example any-checks: statements
 import Sharp.Encoding.Json;
+import Sharp.Encoding.JsonValue;
 string body = "{}";
 -->
 ```csharp
-Any? payload = Json.parse(body).value;
+Any? payload = Json.parse<JsonValue>(body).unwrap().value;
 payload.order;                              // compile error: check what payload is first
 if (payload is WebhookPayload) {
     payload.order.total;                    // narrowed to WebhookPayload
@@ -6407,15 +6407,16 @@ bool d = raw == other;             // compile error: other is an unchecked Any? 
 string a = `plan: ${raw}`;         // compile error: check raw with is, as or match first
 ```
 
-PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path: it reads any type a field `parse` reads can hold, as `List<Payment>`, the way a struct's `parse` reads that field (section 10), so a bad part throws the one error that lists every bad part, and a type `parse` can't read is a compile error. A number or a bool must be one in the JSON, so `"2"` is no `int`. `Query.decode<Search>("q=shoes&page=2")` reads a query string the same way, and since a query holds only text, it reads a number or a bool from its text, so `page` is `2` and `page=x` is the one problem "page: expected int, got string 'x'". `Json.parse(body)` gives any JSON value as a `JsonValue`, whose `value` is the `Any?` it holds, and two `JsonValue`s are `==` when their values are, at every depth:
+PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Parsing straight into a type, such as `Json.parse<WebhookPayload>(body)`, is the normal path: it reads any type a field `parse` reads can hold, as `List<Payment>`, the way a struct's `parse` reads that field (section 10), so it gives a `Result` whose one `ParseError` lists every bad part, and a type `parse` can't read is a compile error. A number or a bool must be one in the JSON, so `"2"` is no `int`. `Query.parse<Search>("q=shoes&page=2")` reads a query string the same way, and since a query holds only text, it reads a number or a bool from its text, so `page` is `2` and `page=x` is the one problem "page: expected int, got string 'x'". `Json.parse<JsonValue>(body)` gives any JSON value as a `JsonValue`, whose `value` is the `Any?` it holds, and two `JsonValue`s are `==` when their values are, at every depth:
 
 <!-- example json-values: statements
 import Sharp.Encoding.Json;
+import Sharp.Encoding.JsonValue;
 -->
 ```csharp
-Json.parse("{\"a\":[1,2]}") == Json.parse("{ \"a\": [1, 2] }");   // true
-Json.parse("{\"a\":[1,2]}") != Json.parse("{\"a\":[2,1]}");       // true
-Json.parse("{\"a\":1,\"b\":2}") == Json.parse("{\"b\":2,\"a\":1}"); // true: an object's keys in any order
+Json.parse<JsonValue>("{\"a\":[1,2]}").unwrap() == Json.parse<JsonValue>("{ \"a\": [1, 2] }").unwrap();       // true
+Json.parse<JsonValue>("{\"a\":[1,2]}").unwrap() != Json.parse<JsonValue>("{\"a\":[2,1]}").unwrap();           // true
+Json.parse<JsonValue>("{\"a\":1,\"b\":2}").unwrap() == Json.parse<JsonValue>("{\"b\":2,\"a\":1}").unwrap();   // true: an object's keys in any order
 ```
 
 **`Json.encode` takes `escapeSlashes`, `escapeUnicode`, `keepZeroFraction`, `indent` and `escapeHtml`,** which default to `false`, `false`, `true`, `0` and `true`, its output without them. `escapeSlashes` writes `/` as `\/`, `escapeUnicode` writes each character outside ASCII as `\u` and its code, and `keepZeroFraction: false` writes `1.0` as `1`, so a payload can match the bytes another system signs. `escapeHtml` writes `<`, `>`, `&`, `'` and `"` inside a string as `\u003C`, `\u003E`, `\u0026`, `\u0027` and `\u0022`, so JSON put inside a `<script>` can't close it, and `escapeHtml: false` writes them as themselves, `"` as `\"`. `indent` writes each nested value on its own line, `indent` spaces deeper than its parent, with `": "` after a key and `[]` and `{}` for an empty value, so `indent: 4` writes the bytes of PHP's `JSON_PRETTY_PRINT`. A NaN or infinite `float` is written as `null`, since JSON has no number for it. A negative `indent` throws a `ValueError`:
@@ -6457,13 +6458,13 @@ public class SmtpAccount
     }
 }
 
-const account = Json.decode<SmtpAccount>("{\"host\":\"smtp.example.com\",\"password\":\"hunter2\"}");
-account.password.value;                                  // "hunter2"
-`password: ${account.password}`;                         // "password: **********"
-const stored = Json.encode(account);                     // {"host":"smtp.example.com","password":{"encrypted":"…"}}
-Json.decode<SmtpAccount>(stored).password.value;         // "hunter2"
+const account = Json.parse<SmtpAccount>("{\"host\":\"smtp.example.com\",\"password\":\"hunter2\"}").unwrap();
+account.password.value;                                                              // "hunter2"
+`password: ${account.password}`;                                                     // "password: **********"
+const stored = Json.encode(account);                                                 // {"host":"smtp.example.com","password":{"encrypted":"…"}}
+Json.parse<SmtpAccount>(stored).unwrap().password.value;                             // "hunter2"
 new SmtpAccount("smtp.example.com", new Secret<string>("hunter2")).password.value;   // "hunter2"
-new SmtpAccount("smtp.example.com", "hunter2");          // compile error: password takes a Secret<string>, so write new Secret<string>("hunter2")
+new SmtpAccount("smtp.example.com", "hunter2");                                      // compile error: password takes a Secret<string>, so write new Secret<string>("hunter2")
 ```
 
 <!-- example hashed-values: statements
@@ -6485,15 +6486,15 @@ public class User
     }
 }
 
-const user = Json.decode<User>("{\"email\":\"ada@example.com\",\"password\":\"hunter2\"}");
-user.password.verify("hunter2");          // true
-user.password.value;                      // compile error: a Hashed<string> gives no value back; check one with verify(value)
-a.password == b.password;                 // compile error: two Hashed<string> never compare, since each has its own salt; check one with verify(value)
-`password: ${user.password}`;             // "password: **********"
-const stored = Json.encode(user);         // {"email":"ada@example.com","password":{"hashed":"$argon2id$v=19$m=65536…"}}
-Json.decode<User>(stored).password.verify("hunter2");   // true
+const user = Json.parse<User>("{\"email\":\"ada@example.com\",\"password\":\"hunter2\"}").unwrap();
+user.password.verify("hunter2");                                                         // true
+user.password.value;                                                                     // compile error: a Hashed<string> gives no value back; check one with verify(value)
+a.password == b.password;                                                                // compile error: two Hashed<string> never compare, since each has its own salt; check one with verify(value)
+`password: ${user.password}`;                                                            // "password: **********"
+const stored = Json.encode(user);                                                        // {"email":"ada@example.com","password":{"hashed":"$argon2id$v=19$m=65536…"}}
+Json.parse<User>(stored).unwrap().password.verify("hunter2");                            // true
 new User("ada@example.com", new Hashed<string>("hunter2")).password.verify("hunter2");   // true
-new Hashed<int>(4821).verify(4821);       // true
+new Hashed<int>(4821).verify(4821);                                                      // true
 ```
 
 **A string-backed enum case's `value` is a `literal-string`,** wherever the case comes from, a parameter, a variable or a collection's element included, since every case's backing value is a literal. So the columns or tables a query may name are an enum, and the one chosen while the code runs reaches a plain PHP `literal-string` parameter, as Laravel's `orderByRaw` declares one, as one of the application's own names. Values still go through a query's bindings:
@@ -6923,7 +6924,7 @@ typeof(Card).tag();                                 // "card", from [Key("card")
 typeof(JourneyStatus).tag();                        // null: the machine is no variant
 ```
 
-**`decode(value)` builds a `T` from a stored value, as `T`'s `parse` reads it (section 10),** lists, maps and scalars already read, and throws one `InvalidFields` that lists every bad part. It has the effects of the reader it runs where the checker knows which one that is (section 29): `T`'s own `parse` for a `final` class, a struct or a class whose constructor is `required`, below which no constructor adds an effect, and each declared variant's for a family. A type that is no class runs only the readers of the classes it holds, so `typeof(int).decode(5)` is pure and `typeof(List<Saved>).decode(rows)` has `Saved`'s reader's effects. `decode` of any other class may build a subclass whose constructor differs, so it may have every effect, as `createInstance` may:
+**`parse(value)` builds a `T` from a stored value, as `T`'s `parse` reads it (section 10),** lists, maps and scalars already read, and gives a `Result<T, ParseError>` whose one `ParseError` lists every bad part. It has the effects of the reader it runs where the checker knows which one that is (section 29): `T`'s own `parse` for a `final` class, a struct or a class whose constructor is `required`, below which no constructor adds an effect, and each declared variant's for a family. A type that is no class runs only the readers of the classes it holds, so `typeof(int).parse(5)` is pure and `typeof(List<Saved>).parse(rows)` has `Saved`'s reader's effects. `parse` of any other class may build a subclass whose constructor differs, so it may have every effect, as `createInstance` may:
 
 <!-- example class-decode: statements
 public machine LinkStatus : string
@@ -6940,8 +6941,8 @@ public class Page
 -->
 ```csharp
 const row = ["status": "draft", "title": "Home"];
-typeof(Page).decode(row);                       // a Page whose status is LinkStatus.Draft, read by its tag
-typeof(Page).decode(["title": 5]);              // throws InvalidFields: title: expected string, got int 5
+typeof(Page).parse(row).unwrap();                       // a Page whose status is LinkStatus.Draft, read by its tag
+typeof(Page).parse(["title": 5]).unwrap();              // throws LogicException: title: expected string, got int 5
 ```
 
 <!-- example decode-effects
@@ -6962,32 +6963,32 @@ public interface Storing { Any? read(Any? row) uses Database; }
 
 public class SavedReader : Reader
 {
-    public Any? read(Any? row) => typeof(Saved).decode(row);            // compile error: reaches Saved.Saved, which calls Disk.save with the effect Database
+    public Any? read(Any? row) => typeof(Saved).parse(row).unwrap();            // compile error: reaches Saved.Saved, which calls Disk.save with the effect Database
 }
 
 public class StoredReader : Storing
 {
-    public Any? read(Any? row) => typeof(Saved).decode(row);            // compiles
+    public Any? read(Any? row) => typeof(Saved).parse(row).unwrap();            // compiles
 }
 
 public class NoteReader : Reader
 {
-    public Any? read(Any? row) => typeof(Note).decode(row);             // compiles: Note's reader has no effects
+    public Any? read(Any? row) => typeof(Note).parse(row).unwrap();             // compiles: Note's reader has no effects
 }
 
 public class LedgerReader : Reader
 {
-    public Any? read(Any? row) => typeof(Ledger).decode(row);           // compile error: decode of Ledger may have every effect, since a subclass's constructor may differ
+    public Any? read(Any? row) => typeof(Ledger).parse(row).unwrap();           // compile error: parse of Ledger may have every effect, since a subclass's constructor may differ
 }
 
 public class TallyReader : Reader
 {
-    public Any? read(Any? row) => typeof(Tally).decode(row);            // compiles: no class extends Tally
+    public Any? read(Any? row) => typeof(Tally).parse(row).unwrap();            // compiles: no class extends Tally
 }
 
 public class NotesReader : Reader
 {
-    public Any? read(Any? row) => typeof(List<Note>).decode(row);       // compiles: a list runs its elements' readers
+    public Any? read(Any? row) => typeof(List<Note>).parse(row).unwrap();       // compiles: a list runs its elements' readers
 }
 ```
 
@@ -8117,7 +8118,7 @@ extern now uses Clock;               // compile error: a bare name names a class
 - **One line for a class covers its members, and a method's own line overrides its class's line.** After `extern CarbonImmutable uses none;` and `extern CarbonImmutable.now uses Clock;`, `CarbonImmutable.now()` has the effect `Clock` and `date.addDays(1)` is pure.
 - **A call has the effects of the line of the class, trait or interface that declares the method it calls,** and nothing passes from the class a call goes through or from the call that returned the object. A facade's docblock `@method` declares the method on the facade, so `DB.table(…)` takes `DB`'s line. `new` takes the line of the class it creates, as `new ValueError("empty")` takes `ValueError`'s, or of the nearest plain PHP class a PHP# class extends, and a read of a property takes the line of the class that declares it. `StripeClient.charges().create(…)` has the effects of `StripeClient`'s line for `charges()`, and of the line of the class `charges()` returns for `create(…)`, which a project declares on its own, so `Order.all().sum("total")` has only `Database` from `all()` after `extern Collection uses none;`.
 - **A plain PHP trait's member is one body, so its `extern` line covers every class that takes the member from the trait.** After `extern Dispatchable.dispatch uses Database;`, `ReceiveEvent.dispatch(…)` has the effect `Database` where `ReceiveEvent` lists `Dispatchable` in its header. A class that writes `dispatch` itself runs its own body, which the line does not cover.
-- **Reflection has the effects of the code it runs** (section 25). `Property.get` and `Property.set` run an accessor no `uses` can name, so each may have every effect, and so may `createInstance`, which takes a list of arguments built while the code runs and may build any subclass. `new (type)(…)` has the effects of the `required` constructor of the class `type`'s `Class<T>` names, as `new T(…)` has them. `decode` has the effects of the reader it runs, a class's `parse` (section 10), where the checker knows which one that is: a `final` class's, a struct's, a family's declared variants' or a class's whose constructor is `required`. A type that is no class runs only the readers of the classes it holds, so `typeof(int).decode(…)` is pure, and `decode` of any other class may have every effect, as `createInstance` may. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` and `Method.createInvoker` are pure, and a call of the value each gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`. `attributeData<T>()` builds no attribute, so it is pure.
+- **Reflection has the effects of the code it runs** (section 25). `Property.get` and `Property.set` run an accessor no `uses` can name, so each may have every effect, and so may `createInstance`, which takes a list of arguments built while the code runs and may build any subclass. `new (type)(…)` has the effects of the `required` constructor of the class `type`'s `Class<T>` names, as `new T(…)` has them. `Class<T>.parse` has the effects of the reader it runs, a class's own `parse` (section 10), where the checker knows which one that is: a `final` class's, a struct's, a family's declared variants' or a class's whose constructor is `required`. A type that is no class runs only the readers of the classes it holds, so `typeof(int).parse(…)` is pure, and `parse` of any other class may have every effect, as `createInstance` may. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` and `Method.createInvoker` are pure, and a call of the value each gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`. `attributeData<T>()` builds no attribute, so it is pure.
 - **A constructor below a `required` one adds no effect to it,** as an implementation adds none to its interface method, since `new (type)(…)` of a `Class<Saved>` may build any subclass of `Saved` with the effects of `Saved`'s constructor alone (section 25). A subclass constructor that also sends mail is a compile error that names the effect it adds.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way. `mago convert` writes `extern X uses any;` there for each plain PHP class a converted file reaches that has no line, so the converted file compiles, and the project narrows each `uses any` to the effects it knows.
 - **An `extern` line takes any attribute, which the class, method or function it declares carries as its own,** as every declaration takes one (section 1). The checker reads it as the declaration's, so a `[DynamicallyAccessed]` written on a class's line marks a library's attribute class or base class whose source carries no mark, as `[DynamicallyAccessed] extern Model uses Database;` marks Eloquent's `Model` (section 5). At run time PHP#'s `typeof(X).attributes<T>()` and `Method.attributes<T>()`, and plain PHP's `ReflectionClass`, `ReflectionMethod` and `ReflectionFunction` `getAttributes()`, give the declaration's own attributes and then the line's, though no code loads the file that holds the line. A method takes them on the line of the class that declares it, so an attributed line of a method the class only inherits is a compile error that names that class. An `extern namespace` line (section 23) declares nothing, so an attribute on it is a compile error. `import` and `extern` stay separate lines.
@@ -8235,18 +8236,18 @@ this.target.isPublic("nothing.invalid");    // throws RuntimeException
 this.target.isPublic("not a host");         // throws ValueError
 -->
 
-**`IpAddress`, in `Sharp.Net`, is an IPv4 or IPv6 address.** `IpAddress.parse(text)` and `IpAddress.tryParse(text)` read either family, and `family` gives `IpFamily.V4` or `IpFamily.V6`. `isLoopback()` is true for `127.0.0.0/8` and `::1`, and `isPrivate()` for RFC 1918's `10.0.0.0/8`, `172.16.0.0/12` and `192.168.0.0/16` and IPv6's unique local `fc00::/7`. `toString()` writes RFC 5952's form, and two addresses are `==` when they are one address, however each was written:
+**`IpAddress`, in `Sharp.Net`, is an IPv4 or IPv6 address.** `IpAddress.parse(text)` reads either family into a `Result`, and `family` gives `IpFamily.V4` or `IpFamily.V6`. `isLoopback()` is true for `127.0.0.0/8` and `::1`, and `isPrivate()` for RFC 1918's `10.0.0.0/8`, `172.16.0.0/12` and `192.168.0.0/16` and IPv6's unique local `fc00::/7`. `toString()` writes RFC 5952's form, and two addresses are `==` when they are one address, however each was written:
 
 <!-- example ip-address: statements
 import Sharp.Net.IpAddress;
 import Sharp.Net.IpFamily;
 -->
 ```csharp
-IpAddress.parse("0:0:0:0:0:0:0:1") == IpAddress.parse("::1");   // true
-IpAddress.parse("2001:DB8::1").toString();                     // "2001:db8::1"
-IpAddress.parse("10.0.0.7").isPrivate();                       // true
-IpAddress.parse("127.0.0.1").family == IpFamily.V4;            // true
-IpAddress.tryParse("example.com");                             // null
+IpAddress.parse("0:0:0:0:0:0:0:1").unwrap() == IpAddress.parse("::1").unwrap();   // true
+IpAddress.parse("2001:DB8::1").unwrap().toString();                               // "2001:db8::1"
+IpAddress.parse("10.0.0.7").unwrap().isPrivate();                                 // true
+IpAddress.parse("127.0.0.1").unwrap().family == IpFamily.V4;                      // true
+IpAddress.parse("example.com").ok();                                              // null
 ```
 
 **`Process.start(program, arguments)` starts a program and returns while it runs,** where `Process.run` waits for it. The `ChildProcess` it gives writes the program's input with `writeInput(text)` and closes it with `closeInput()`. `readOutput()` and `readError()` give everything the program writes to its output and to its error output, once it ends. `wait()` closes the input, waits for the program to end and gives its exit code, and `kill()` ends the program at once. The output goes to temporary files, so a program that writes a lot never waits for a reader. A `ChildProcess` runs through the `Process` that started it, so code that holds one has the effect `Process`:
@@ -8812,6 +8813,35 @@ public void pay(Cart cart)
 {
     this.gateway.charge(cart);                        // compile error: `this.gateway.charge` returns a Result: handle it with try, match, ok() or unwrap()
 }
+```
+
+**Every `parse` returns `Result<T, ParseError>`,** as Rust's `str::parse` does, since bad input is an expected failure. It holds for the standard library's, as `Int.parse` and `DateTime.parseLocal`, for `Json.parse<T>`, `Query.parse<T>` and `typeof(T).parse`, and for the `parse` of every struct, class and family (section 10). `ParseError : Error` holds `fields`, a `Map<string, string>` from each bad part's path to its problem, `""` for a whole value, and its `message` joins them: `"customerId: expected int, got string 'abc'; plan_code: missing"`. No `parse` has a `tryParse` beside it, so `ok()` gives the value or null. `JsonValue.parse` and `Url.parseQuery` read any input, so each gives its value.
+
+<!-- example parse-result: members
+private Renewals orders = new Renewals(new Order());
+-->
+```csharp
+public string? amountError(string input) => match (Decimal.parse(input)) {
+    Result.Ok(Decimal amount) => null,
+    Result.Err(ParseError error) => error.message,
+};
+
+public Result<Order, ParseError> order(Map<string, Any?> payload)
+{
+    const request = try RenewRequest.parse(payload);
+    return Result.Ok(this.orders.renew(request));
+}
+```
+
+<!-- example parse-result-reads: statements
+string text = "x";
+string input = "12";
+-->
+```csharp
+const port = Int.parse("8080").unwrap();     // 8080
+const maybe = Int.parse(text).ok();          // null
+Int.parse(input);                            // compile error: `Int.parse` returns a Result: handle it with try, match, ok() or unwrap()
+Int.tryParse(input);                         // compile error: Method `Int.tryParse` does not exist, and `Int.parse(…).ok()` gives `int?`
 ```
 
 `try`/`catch` blocks remain for exceptions, which are now mostly limited to the edges, such as wrapping a plain PHP exception.

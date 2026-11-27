@@ -30,8 +30,8 @@ mkdir($folder);
 touch($file);
 $files = new SystemFiles();
 
-outcome(fn () => Regex::tryParse('(['));
-outcome(fn () => Regex::parse('(['));
+outcome(fn () => Regex::parse('([')->ok());
+outcome(fn () => Regex::parse('([')->unwrap());
 outcome(fn () => Compression::uncompress('nope'));
 outcome(fn () => Hex::decode('abc'));
 outcome(fn () => Serialized::decode('not serialized'));
@@ -48,7 +48,7 @@ rmdir($folder);
 ?>
 --EXPECTF--
 NULL
-ValueError: Regex.parse: "([" does not compile: No ending matching delimiter ')' found
+LogicException: Regex.parse: "([" does not compile: No ending matching delimiter ')' found
 ValueError: Compression.uncompress: the data is not zlib-compressed
 ValueError: Hex.decode: the text is not hexadecimal with an even length
 NULL

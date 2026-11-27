@@ -18,14 +18,14 @@ public class UrlCalls
 
     public static List<string> parts(string text)
     {
-        const url = Url.parse(text);
+        const url = Url.parse(text).unwrap();
 
         return [url.scheme, url.host, `${url.port ?? 0}`, url.path, url.query ?? "-", url.fragment ?? "-", url.user ?? "-", url.password ?? "-"];
     }
 
-    public static string? written(string text) => Url.tryParse(text)?.toString();
+    public static string? written(string text) => Url.parse(text).ok()?.toString();
 
-    public static Map<int|string, Any?> queryValues(string text) => Url.parse(text).queryValues();
+    public static Map<int|string, Any?> queryValues(string text) => Url.parse(text).unwrap().queryValues();
 
     public static string built() => new Url("https", "example.com", path: "/search", query: Url.buildQuery(["q": "a b"])).toString();
 }

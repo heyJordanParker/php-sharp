@@ -5,18 +5,18 @@ import Sharp.Net.IpFamily;
 
 public class NetworkQueries
 {
-    public static string? normalized(string text) => IpAddress.tryParse(text)?.toString();
+    public static string? normalized(string text) => IpAddress.parse(text).ok()?.toString();
 
-    public static string parsed(string text) => IpAddress.parse(text).toString();
+    public static string parsed(string text) => IpAddress.parse(text).unwrap().toString();
 
-    public static IpFamily family(string text) => IpAddress.parse(text).family;
+    public static IpFamily family(string text) => IpAddress.parse(text).unwrap().family;
 
     public static List<bool> facts(string text)
     {
-        const address = IpAddress.parse(text);
+        const address = IpAddress.parse(text).unwrap();
 
         return [address.isLoopback(), address.isPrivate()];
     }
 
-    public static bool same(string a, string b) => IpAddress.parse(a) == IpAddress.parse(b);
+    public static bool same(string a, string b) => IpAddress.parse(a).unwrap() == IpAddress.parse(b).unwrap();
 }

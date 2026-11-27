@@ -1,17 +1,17 @@
 --TEST--
-A PHP# class calls Sharp.Encoding.Json: parse gives objects as maps and throws JsonException on invalid JSON, decode<T> reads a struct and a nested struct through T's parse and throws its InvalidFields for a bad field and for JSON that holds no object, and encode writes a Map as an object and a List as an array, a struct key through its toString(), floats with their fraction and NaN and infinity as null, and slashes and Unicode as they are, and the checker's mark on encode's parameter never reaches the code that runs
+A PHP# class calls Sharp.Encoding.Json: parse<JsonValue> gives objects as maps and an Err for invalid JSON, parse<T> reads a struct and a nested struct through T's parse and gives an Err of ParseError for a bad field and for JSON that holds no object, and encode writes a Map as an object and a List as an array, a struct key through its toString(), floats with their fraction and NaN and infinity as null, and slashes and Unicode as they are, and the checker's mark on encode's parameter never reaches the code that runs
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
 
 use Demo\JsonCalls;
 
-var_dump(JsonCalls::parse('{"a":1,"b":[true,null],"c":"x"}'));
-var_dump(JsonCalls::parse('null'), JsonCalls::parse('2.5'));
+var_dump(JsonCalls::parsed('{"a":1,"b":[true,null],"c":"x"}'));
+var_dump(JsonCalls::parsed('null'), JsonCalls::parsed('2.5'));
 
 try {
-    JsonCalls::parse('{');
-} catch (JsonException $error) {
+    JsonCalls::parsed('{');
+} catch (LogicException $error) {
     echo get_class($error), ': ', $error->getMessage(), "\n";
 }
 
@@ -61,16 +61,16 @@ array(3) {
 }
 NULL
 float(2.5)
-JsonException: Syntax error
+LogicException: Syntax error
 object(Demo\JsonPoint)#%d (1) {
   ["x"]=>
   int(3)
 }
 Demo\JsonOrder 7 new,vip Demo\JsonPoint 2
-Sharp\InvalidFields: x: expected int, got string 'four'
-Sharp\InvalidFields: x: missing
-Sharp\InvalidFields: expected Demo.JsonPoint, got int 3
-JsonException: Syntax error
+LogicException: x: expected int, got string 'four'
+LogicException: x: missing
+LogicException: expected Demo.JsonPoint, got int 3
+LogicException: Syntax error
 {}
 []
 {"counts":{},"lines":[]}
