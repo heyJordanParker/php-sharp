@@ -1,0 +1,31 @@
+namespace ConstantDefaults;
+
+import Sharp.Time.Clock;
+
+public static class Probe
+{
+    static Method method(string name) => typeof(Make).methods().first(method => method.name == name);
+
+    static Parameter last(string name) => Probe.method(name).parameters().last();
+
+    public static bool hasConstantDefault(string name) => Probe.last(name).hasConstantDefault;
+
+    public static string defaultValue(string name)
+    {
+        const value = Probe.last(name).defaultValue();
+        if (value is Map<string, int> sizes) {
+            return `Map<string, int> of ${sizes.count()}: ${sizes.keys().join(",")}`;
+        }
+        if (value is Map<Level, int> levels) {
+            return `Map<Level, int> of ${levels.count()}: Low=${levels.get(Level.Low) ?? 0}`;
+        }
+        if (value is Set<string> marks) {
+            return `Set<string> of ${marks.count()}`;
+        }
+
+        return "another value";
+    }
+
+    public static Any? invoke(string name, List<Any?> arguments)
+        =>Probe.method(name).createInvoker<Function<Any?(List<Any?>) uses Clock>>()(arguments);
+}
