@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <phpunit bootstrap="vendor/heyjordanparker/php-sharp-composer/require-engine.php" colors="false" cacheResult="false" failOnRisky="true" failOnWarning="true">
+    <extensions>
+        <bootstrap class="Tests\Support\ProgressReporter"/>
+    </extensions>
     <testsuites>
         <testsuite name="fixture">
             <directory suffix="Test.sharp">tests</directory>
