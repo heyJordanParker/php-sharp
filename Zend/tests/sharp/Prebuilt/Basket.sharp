@@ -1,0 +1,24 @@
+namespace Prebuilt;
+
+import Sharp.Encoding.Json;
+
+// A basket keeps what it sells in a Map, logs each sale its listeners hear in a List, and writes its counts as JSON,
+// so its code runs the standard library's List, Map, Json and Events from the files PHP# compiled at its release.
+public class Basket
+{
+    public static List<string> log { get; set; } = [];
+
+    private Map<string, int> counts = [:];
+
+    public void sell(string sku, int count)
+    {
+        this.counts[sku] = count;
+        emit new Placed(sku, count);
+    }
+
+    public string counted() => Json.encode(this.counts);
+
+    public void heard(Placed e) on Placed { Basket.log.add(`heard ${e.sku}`); }
+
+    public static Listening watch() => Events.on<Placed>(e => Basket.log.add(`watched ${e.count}`));
+}

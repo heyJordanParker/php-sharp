@@ -749,22 +749,31 @@ static zend_string *sharp_compiled_folder(const char *path, size_t length, size_
 		: zend_strpprintf(0, "%.*s/" SHARP_COMPILED_FOLDER "/" SHARP_CURRENT_GENERATION, (int) root_length, path);
 }
 
+/* The root of the source's project: the nearest folder above it that holds a .sharp folder. For a worker of an extension
+ * host, a source in the host's project is rooted at SHARP_ROOT, whose files the host's folder holds, unless a folder
+ * between them holds its own .sharp folder, as the standard library's package holds the files PHP# compiled at its
+ * release. */
 static bool sharp_find_root(const zend_string *source, size_t *root_length)
 {
 	const char *path = ZSTR_VAL(source);
 	size_t folder = ZSTR_LEN(source);
-	zend_string *host = sharp_host_compiled(path, folder, root_length);
+	size_t host_root_length = 0;
+	zend_string *host = sharp_host_compiled(path, folder, &host_root_length);
+	bool hosted = host != NULL;
 	zval root;
 
 	if (host) {
 		zend_string_release(host);
-		return true;
 	}
 
 	do {
 		zval *known;
 
 		folder = sharp_parent(path, folder);
+		if (hosted && folder <= host_root_length) {
+			*root_length = host_root_length;
+			break;
+		}
 		known = zend_hash_str_find(&SHARP_G(folder_roots), path, folder);
 		if (known) {
 			*root_length = Z_LVAL_P(known);
@@ -11968,10 +11977,54 @@ static sharp_scope *sharp_scope_start(void)
 	return scope;
 }
 
-/* The scope drops its services, and builds none from then on. */
-static void sharp_scope_end(sharp_scope *scope)
+/* The service, or each one a binding of a list holds, that is Disposable disposes, spec section 2. Each runs as a
+ * finally block does: what a dispose() throws takes the throw already pending as its previous, and the next service
+ * still disposes. */
+static void sharp_dispose_service(zval *service, zend_class_entry *disposable)
+{
+	if (Z_TYPE_P(service) == IS_ARRAY) {
+		zval *element;
+		ZEND_HASH_REVERSE_FOREACH_VAL(Z_ARRVAL_P(service), element) {
+			sharp_dispose_service(element, disposable);
+		} ZEND_HASH_FOREACH_END();
+		return;
+	}
+	if (Z_TYPE_P(service) != IS_OBJECT || !instanceof_function(Z_OBJCE_P(service), disposable)) {
+		return;
+	}
+
+	zval result;
+	zend_exception_save();
+	zend_call_method_with_0_params(Z_OBJ_P(service), Z_OBJCE_P(service), NULL, "dispose", &result);
+	zval_ptr_dtor(&result);
+	zend_exception_restore();
+}
+
+/* Spec section 32: the services kept in services that are Disposable dispose, newest first, as nested using locals
+ * do: a service is kept once the services it needs are, so each disposes before what it needs. A service is
+ * Disposable only once its class, and with it the interface, is loaded. */
+static void sharp_dispose_services(HashTable *services)
+{
+	zend_string *name = zend_string_init_interned("Sharp\\Disposable", sizeof("Sharp\\Disposable") - 1, false);
+	zend_class_entry *disposable = zend_lookup_class_ex(name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+	zend_string_release(name);
+	if (!disposable) {
+		return;
+	}
+
+	zval *service;
+	ZEND_HASH_REVERSE_FOREACH_VAL(services, service) {
+		sharp_dispose_service(service, disposable);
+	} ZEND_HASH_FOREACH_END();
+}
+
+/* The scope builds no service from then on, disposes the services it kept when dispose is set, and drops them. */
+static void sharp_scope_end(sharp_scope *scope, bool dispose)
 {
 	scope->ended = true;
+	if (dispose) {
+		sharp_dispose_services(&scope->services);
+	}
 	zend_hash_clean(&scope->services);
 }
 
@@ -12760,7 +12813,7 @@ ZEND_METHOD(Sharp_Container, has)
 }
 
 /* Spec section 32: Scope.run runs body in a new scope of the running fiber, and ends the scope when body returns or
- * throws. A fatal error leaves it to the request's end. */
+ * throws, disposing each Disposable service it built, newest first. A fatal error leaves it to the request's end. */
 ZEND_FUNCTION(Sharp_Internal_runScoped)
 {
 	zend_fcall_info fci;
@@ -12784,7 +12837,7 @@ ZEND_FUNCTION(Sharp_Internal_runScoped)
 	} zend_end_try();
 
 	running->current = outer;
-	sharp_scope_end(scope);
+	sharp_scope_end(scope, true);
 	sharp_scope_release(scope);
 }
 
@@ -14714,6 +14767,35 @@ static void sharp_read_collection(zend_class_entry *ce, zval *value)
 	}
 }
 
+static sharp_table_object *sharp_table_object_create(zend_class_entry *ce, uint32_t size);
+
+/* The Map a read of `Map<string, TValue>` makes of the PHP array `value`, spec section 12: each key is a `string`, the
+ * int key PHP's array makes of an all-digit key such as "4156" the string of its digits, as a JSON object's keys are
+ * strings. A Map read back keeps its own keys, so its int key is still checked as an int. */
+static void sharp_read_string_keyed_map(zval *value)
+{
+	sharp_table_object *map = sharp_table_object_create(sharp_ce_map, zend_hash_num_elements(Z_ARRVAL_P(value)));
+	zend_ulong index;
+	zend_string *name;
+	zval *element;
+	ZEND_HASH_FOREACH_KEY_VAL(Z_ARRVAL_P(value), index, name, element) {
+		zval key;
+		if (name) {
+			ZVAL_STR_COPY(&key, name);
+		} else {
+			ZVAL_STR(&key, zend_long_to_str((zend_long) index));
+		}
+		bool put = sharp_table_put(&map->table, &key, element);
+		zval_ptr_dtor(&key);
+		if (!put) {
+			OBJ_RELEASE(&map->std);
+			return;
+		}
+	} ZEND_HASH_FOREACH_END();
+	zval_ptr_dtor(value);
+	ZVAL_OBJ(value, &map->std);
+}
+
 /* The place of the union member `member`, at `index` in the union's own order, in `order`, the classes and scalar
  * types a field's declaration writes in its order, `App.Card, App.Bank` or `string, int`. A member `order` doesn't
  * name comes after every one it names, in the union's own order. */
@@ -15114,7 +15196,9 @@ static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *re
 			}
 			return;
 		case SHARP_BUILT_IN_SET:
-		case SHARP_BUILT_IN_MAP:
+		case SHARP_BUILT_IN_MAP: {
+			/* A PHP array's int key may be PHP's form of an all-digit string, while a Map's int key is an int. */
+			bool php_array = Z_TYPE_P(value) == IS_ARRAY;
 			if (type->built_in == SHARP_BUILT_IN_MAP && Z_TYPE_P(value) == IS_OBJECT && Z_OBJCE_P(value) == sharp_ce_map) {
 				sharp_read_map_entries(value);
 				if (EG(exception)) {
@@ -15124,11 +15208,17 @@ static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *re
 			if (Z_TYPE_P(value) == IS_ARRAY) {
 				bool keyed = type->built_in == SHARP_BUILT_IN_MAP;
 				sharp_read_elements(type->members[keyed ? 1 : 0], value, read, keyed);
-				if (!EG(exception)) {
-					sharp_read_collection(type->built_in == SHARP_BUILT_IN_MAP ? sharp_ce_map : sharp_ce_set, value);
+				if (EG(exception)) {
+					return;
+				}
+				if (php_array && keyed && type->members[0]->built_in == SHARP_BUILT_IN_STRING) {
+					sharp_read_string_keyed_map(value);
+				} else {
+					sharp_read_collection(keyed ? sharp_ce_map : sharp_ce_set, value);
 				}
 			}
 			return;
+		}
 		case SHARP_BUILT_IN_NONE:
 			break;
 		default:
@@ -18066,8 +18156,18 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 		sharp_write_effect_report();
 		zend_hash_destroy(&SHARP_G(effect_runs));
 	}
-	/* A fiber that is still to be freed keeps the request's scope, ended, until it is. */
-	sharp_scope_end(SHARP_G(container_main_scopes).started_in);
+	/* Spec section 32: the request's scope ends, disposing each Disposable service it built, and then each Disposable
+	 * singleton disposes, newest first, as ext/session runs a user save handler here. No PHP code runs below them, so
+	 * a throw is an uncaught exception's fatal error, as PHP reports one, and the request's end goes on. After a fatal
+	 * error no PHP# code runs. A fiber that is still to be freed keeps the request's scope, ended, until it is. */
+	bool clean = !CG(unclean_shutdown);
+	zend_try {
+		sharp_scope_end(SHARP_G(container_main_scopes).started_in, clean);
+		if (clean) {
+			sharp_dispose_services(&SHARP_G(container_singletons));
+		}
+	} zend_end_try();
+	sharp_scope_end(SHARP_G(container_main_scopes).started_in, false);
 	sharp_fiber_scopes_end(&SHARP_G(container_main_scopes));
 	zend_hash_destroy(&SHARP_G(container_singletons));
 	zend_hash_destroy(&SHARP_G(container_bindings));

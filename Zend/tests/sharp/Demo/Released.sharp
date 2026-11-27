@@ -1,0 +1,19 @@
+namespace Demo;
+
+public class Released : Disposable
+{
+    private string name;
+    private Trail trail;
+
+    public Released(string name, Trail trail)
+    {
+        this.name = name;
+        this.trail = trail;
+        this.trail.note(`open ${name}`);
+    }
+
+    public void dispose()
+    {
+        this.trail.note(`dispose ${this.name}`);
+    }
+}

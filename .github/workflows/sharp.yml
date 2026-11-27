@@ -159,15 +159,16 @@ jobs:
       - name: Build mago and its test binaries
         run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64/install sharp/bin/build-mago --quiet
       # What the suites run: the CLI, phpdbg, which run-tests.php finds beside it for the tests that need it, the install
-      # sharp/bin/hosts builds FrankenPHP against, and mago. The libphp.a mago linked stays out, since no suite links it.
-      # An artifact keeps no file's mode, so the files travel in a tar, compressed here, since Actions would compress
-      # them on one thread.
+      # sharp/bin/hosts builds FrankenPHP against, mago, and the standard library that mago compiled into
+      # sharp/composer/.sharp, which every project's compile reads. The libphp.a mago linked stays out, since no suite
+      # links it. An artifact keeps no file's mode, so the files travel in a tar, compressed here, since Actions would
+      # compress them on one thread.
       - name: Pack the engine and mago for the suites
         run: |
           build="sharp/build/linux-$(uname -m)"
           tar --zstd -cf "$RUNNER_TEMP/build.tar.zst" --exclude="$build/install/lib/libphp.a" \
             "$build/sapi/cli/php" "$build/sapi/phpdbg/phpdbg" "$build/install" \
-            "$build/mago/debug/mago"
+            "$build/mago/debug/mago" sharp/composer/.sharp
       - name: Upload the engine and mago for the suites
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -176,13 +177,15 @@ jobs:
           compression-level: 0
           retention-days: 1
           if-no-files-found: error
-      # What MAGO's slices run: the test binaries build.json names, mago, which the tests run, and build.json.
+      # What MAGO's slices run: the test binaries build.json names, mago, which the tests run, build.json, and the
+      # standard library mago compiled, which the tests install in their projects.
       - name: Pack Mago's test binaries
         run: |
           build="sharp/build/linux-$(uname -m)/mago"
           jq -r 'select(.reason == "compiler-artifact" and .profile.test and .executable) | .executable | ltrimstr("/src/")' \
             "$build/build.json" | sort -u > "$RUNNER_TEMP/test-binaries"
-          tar --zstd -cf "$RUNNER_TEMP/tests.tar.zst" "$build/build.json" "$build/debug/mago" --files-from "$RUNNER_TEMP/test-binaries"
+          tar --zstd -cf "$RUNNER_TEMP/tests.tar.zst" "$build/build.json" "$build/debug/mago" sharp/composer/.sharp \
+            --files-from "$RUNNER_TEMP/test-binaries"
       - name: Upload Mago's test binaries
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -309,14 +312,14 @@ jobs:
       - name: Download the engine mago links
         id: download-engine
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-engine-linux
           path: ${{ runner.temp }}
       - name: Download the engine mago links, the second try
         if: steps.download-engine.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-engine-linux
@@ -369,18 +372,18 @@ jobs:
           toolchain: ${{ needs.CHANGES.outputs.rust }}
       # Into the target folder sharp/bin/check plain-php reads the test-run mago from. A download that stalls holds its
       # job until the job's timeout, as one held run 44989865954 for 28 minutes, where a download takes 1 to 38 s. So it
-      # stops after 5 minutes, and one that failed or stopped runs once more.
+      # stops after 1 minute, as BUILD_LINUX's engine and mago does, and one that failed or stopped runs once more.
       - name: Download the test-run mago MAGO_CHECKS built
         id: download
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-${{ runner.os }}
           path: ${{ runner.temp }}/target/test-run
       - name: Download the test-run mago MAGO_CHECKS built, the second try
         if: steps.download.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-${{ runner.os }}
@@ -432,14 +435,14 @@ jobs:
       - name: Download the test-run mago MAGO_CHECKS built
         id: download
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-${{ runner.os }}
           path: sharp/build/speed/test-run
       - name: Download the test-run mago MAGO_CHECKS built, the second try
         if: steps.download.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-${{ runner.os }}
@@ -505,13 +508,16 @@ jobs:
           TOKEN: ${{ github.token }}
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
       # A download that stalls holds its job until the job's timeout: MAGO (2/5) of run 44989865954 waited 28 minutes on
-      # one, where a download takes 1 to 38 s. So each download stops after 5 minutes, and one that failed or stopped
-      # runs once more. UPSTREAM, SPEC and HOSTS repeat these two steps by their anchors.
+      # one, where a download takes 1 to 38 s. So each download stops at a limit, and one that failed or stopped runs
+      # once more. download-artifact's own retries start only once blob storage answers, so a request it never answers
+      # waits for the limit: SPEC (1/4) of run 46019058360 waited 5 minutes on each try. Of the day's 628 first tries of
+      # this 124 MB artifact, the slowest that finished took 17 s, so each try stops after 1 minute. UPSTREAM, SPEC and
+      # HOSTS repeat these two steps by their anchors.
       - &download-build-linux
         name: Download BUILD_LINUX's engine and mago
         id: download
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build-linux
@@ -519,7 +525,7 @@ jobs:
       - &download-build-linux-again
         name: Download BUILD_LINUX's engine and mago, the second try
         if: steps.download.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build-linux
@@ -573,18 +579,19 @@ jobs:
         env:
           TOKEN: ${{ github.token }}
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      # Each download stops after 5 minutes and runs once more, as LINUX's explain.
+      # Each download stops at a limit and runs once more, as LINUX's explain. Of the day's 365 first tries of these test
+      # binaries, 13 took over 60 s and the slowest 87 s, so each try stops after 2 minutes.
       - name: Download BUILD_LINUX's test binaries
         id: download
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 2
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: tests-linux
           path: ${{ runner.temp }}
       - name: Download BUILD_LINUX's test binaries, the second try
         if: steps.download.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 2
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: tests-linux
@@ -1107,10 +1114,42 @@ jobs:
           ssh-key: ${{ secrets.PHP_SHARP_COMPOSER_DEPLOY_KEY }}
           path: sharp/build/php-sharp-composer
           fetch-depth: 0
+      # A release's heyjordanparker/mago-sharp version is the split plus a commit that adds the release's SHA-256s as
+      # composer/sha256sums.txt, and its version as composer/bin/version, which composer/bin/mago downloads the binary
+      # of, so `composer require --dev heyjordanparker/mago-sharp` alone gives a mago that runs, where 0.8.4's refused
+      # every run with "mago's binary is not installed" (#862). php-sharp-composer's plugin refuses an archive whose
+      # SHA-256 differs, as the launcher does, so the package
+      # version pins the exact binary, as esbuild's and Biome's npm packages do. The tag pins them for good, so they are
+      # the release's sums file, which install.sh checks a download against, and every asset a user downloads from the
+      # release must match them, as the release PUBLISH made public holds them. The library's compile runs the Linux one.
+      - name: The release's assets match its SHA-256s
+        if: env.VERSION
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          published="$RUNNER_TEMP/published"
+          gh release download "v$VERSION" --dir "$published"
+          if ! (cd "$published" && sha256sum --check --strict "mago-$VERSION-sha256sums.txt"); then
+            echo "::error::An asset of release v$VERSION has a SHA-256 other than its sums file names, so no Composer tag is pushed."
+            exit 1
+          fi
+      # PHP# compiles the standard library once, at its release, for every platform: the release's own Linux mago
+      # compiles sharp/composer at the release's tag into its .sharp folder with the library's codex, the command
+      # sharp/bin/build-mago runs for a source build. Every project's compile reads the library from that folder in
+      # place of its sources.
+      - name: Compile the release's standard library with the release's mago
+        if: env.VERSION
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/release" "v$VERSION"
+          tar -xzf "$RUNNER_TEMP/published/mago-$VERSION-x86_64-unknown-linux-gnu.tar.gz" -C "$RUNNER_TEMP"
+          (cd "$RUNNER_TEMP/release/sharp/composer" \
+            && "$RUNNER_TEMP/mago-$VERSION-x86_64-unknown-linux-gnu/mago" --no-version-check compile)
       # A release's tag here becomes the plugin release of the same version: the split plus a commit that adds the
       # release's docs/spec.md as spec.md, so a project reads the spec its version follows at
-      # vendor/heyjordanparker/php-sharp-composer/spec.md. A rerun finds the tag an earlier attempt pushed, and leaves it.
-      - name: Push the split, and a release's tag with its spec
+      # vendor/heyjordanparker/php-sharp-composer/spec.md, and the library's compiled files and codex as .sharp, from
+      # the step above. A rerun finds the tag an earlier attempt pushed, and leaves it.
+      - name: Push the split, and a release's tag with its spec and compiled library
         working-directory: sharp/build/php-sharp-composer
         run: |
           git fetch "$GITHUB_WORKSPACE" refs/heads/composer
@@ -1125,9 +1164,13 @@ jobs:
           git fetch "$GITHUB_WORKSPACE" refs/heads/composer-release
           git switch --detach FETCH_HEAD
           git -C "$GITHUB_WORKSPACE" show "v$VERSION:docs/spec.md" > spec.md
+          mkdir .sharp
+          (cd "$RUNNER_TEMP/release/sharp/composer/.sharp" && find . -type f \( -name '*.sharpc' -o -name library.codex \) \
+            -exec cp --parents {} "$OLDPWD/.sharp/" \;)
           git add spec.md
+          git add --force .sharp
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit --message "The spec PHP# $VERSION follows"
+            commit --message "The spec PHP# $VERSION follows, and the standard library it compiled"
           git push origin "HEAD:refs/tags/v$VERSION"
       - name: Split sharp/mago
         run: splitsh-lite --prefix=sharp/mago --target=refs/heads/mago
@@ -1152,29 +1195,9 @@ jobs:
             exit 0
           fi
           git push origin "FETCH_HEAD:$GITHUB_REF"
-      # A release's heyjordanparker/mago-sharp version is the split plus a commit that adds the release's SHA-256s as
-      # composer/sha256sums.txt, and its version as composer/bin/version, which composer/bin/mago downloads the binary
-      # of, so `composer require --dev heyjordanparker/mago-sharp` alone gives a mago that runs, where 0.8.4's refused
-      # every run with "mago's binary is not installed" (#862). php-sharp-composer's plugin refuses an archive whose
-      # SHA-256 differs, as the launcher does, so the package
-      # version pins the exact binary, as esbuild's and Biome's npm packages do. The tag pins them for good, so they are
-      # the release's sums file, which install.sh checks a download against, and every asset a user downloads from the
-      # release must match them, as the release PUBLISH made public holds them.
-      - name: The release's assets match its SHA-256s
-        if: env.VERSION
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          published="$RUNNER_TEMP/published"
-          gh release download "v$VERSION" --dir "$published"
-          if ! (cd "$published" && sha256sum --check --strict "mago-$VERSION-sha256sums.txt"); then
-            echo "::error::An asset of release v$VERSION has a SHA-256 other than its sums file names, so no heyjordanparker/mago-sharp tag is pushed."
-            exit 1
-          fi
       # A rerun finds the tag an earlier attempt pushed, and leaves it. The tag also carries schema.json, the editor
-      # schema of the release's configuration, from the release's own Linux binary run outside any project, so no start
-      # and no install of the package writes it.
+      # schema of the release's configuration, from the release's own Linux binary run outside any project, which the
+      # library's compile extracted, so no start and no install of the package writes it.
       - name: Push the release's tag, with the SHA-256 of every release asset, its version and its configuration's schema
         if: env.VERSION
         working-directory: sharp/build/mago-sharp
@@ -1187,7 +1210,6 @@ jobs:
           git switch --detach FETCH_HEAD
           cp "$RUNNER_TEMP/published/mago-$VERSION-sha256sums.txt" composer/sha256sums.txt
           echo "$VERSION" > composer/bin/version
-          tar -xzf "$RUNNER_TEMP/published/mago-$VERSION-x86_64-unknown-linux-gnu.tar.gz" -C "$RUNNER_TEMP"
           (cd "$RUNNER_TEMP" && "./mago-$VERSION-x86_64-unknown-linux-gnu/mago" config --schema) > schema.json
           git add composer/sha256sums.txt composer/bin/version schema.json
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
@@ -1240,7 +1262,7 @@ jobs:
         id: digests
         if: contains(env.MISSING, 'images')
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-frankenphp-*
@@ -1248,7 +1270,7 @@ jobs:
           merge-multiple: true
       - name: Download the platforms' digests, the second try
         if: steps.digests.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-frankenphp-*
@@ -1258,7 +1280,7 @@ jobs:
         id: dev-digests
         if: contains(env.MISSING, 'images')
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-dev-*
@@ -1266,7 +1288,7 @@ jobs:
           merge-multiple: true
       - name: Download the platforms' -dev digests, the second try
         if: steps.dev-digests.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-dev-*
@@ -1624,12 +1646,12 @@ jobs:
         run: |
           echo "tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)" >> "$GITHUB_OUTPUT"
           echo "Release $VERSION is commit $GITHUB_SHA, and publishes:${MISSING:+ $MISSING}."
-      # Each download stops after 5 minutes and runs once more, as LINUX's explain.
+      # Each download stops after 1 minute and runs once more, as LINUX's explain.
       - name: Download the assets
         id: assets
         if: contains(env.MISSING, 'assets')
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: mago-${{ env.VERSION }}-*
@@ -1637,7 +1659,7 @@ jobs:
           merge-multiple: true
       - name: Download the assets, the second try
         if: steps.assets.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: mago-${{ env.VERSION }}-*
@@ -1647,14 +1669,14 @@ jobs:
         id: sha256sums
         if: contains(env.MISSING, 'assets')
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: sha256sums
           path: assets
       - name: Download the SHA-256s, the second try
         if: steps.sha256sums.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: sha256sums
@@ -1663,14 +1685,14 @@ jobs:
         id: notes
         if: contains(env.MISSING, 'assets')
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-notes
           path: ${{ runner.temp }}
       - name: Download the release notes, the second try
         if: steps.notes.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-notes
