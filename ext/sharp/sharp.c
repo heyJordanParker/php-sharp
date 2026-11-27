@@ -12714,6 +12714,67 @@ ZEND_FUNCTION(Sharp_Internal_startTest)
 	SHARP_G(container_test) = module ? Z_ARRVAL_P(module) : NULL;
 }
 
+/* Spec section 32: fills the services of object, a test object or a PHPUnit extension, which PHPUnit creates with
+ * new and no services. The compiler moves the main constructor of their class into __sharpServices, which this calls
+ * with each parameter filled from the modules of its class's namespace, as sharp_container_build fills a
+ * constructor's, the module of the running test first. A class without a main constructor has none, so nothing is
+ * filled. False after an exception. */
+static bool sharp_container_fill(zend_object *object)
+{
+	/* PHP# keys a method of a .sharp file by its exact name, spec section 24. */
+	zend_function *services = zend_hash_str_find_ptr(&object->ce->function_table, ZEND_STRL("__sharpServices"));
+	if (!services) {
+		return true;
+	}
+	zend_class_entry *scope = services->common.scope;
+	zend_string *namespace = sharp_container_namespace(scope->name);
+	if (scope->type == ZEND_USER_CLASS) {
+		sharp_container_read_modules(scope->info.user.filename, namespace);
+	}
+	zval arguments;
+	bool filled = sharp_container_arguments(services, namespace, scope, &arguments);
+	zend_string_release(namespace);
+	if (!filled) {
+		return false;
+	}
+	zend_call_known_instance_method(services, object, NULL,
+		zend_hash_num_elements(Z_ARRVAL(arguments)), Z_ARRVAL(arguments)->arPacked);
+	zval_ptr_dtor(&arguments);
+
+	return !EG(exception);
+}
+
+/* Spec section 32: the test that starts fills the services of its test object, after startTest switched the container
+ * to the test file's module and forgot every service, so each test's services are its own. The method the compiler
+ * gives each test class, which PHPUnit runs before each of its tests, calls this. */
+ZEND_FUNCTION(Sharp_Internal_fillTest)
+{
+	zend_object *test;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJ(test)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_container_fill(test)) {
+		RETURN_THROWS();
+	}
+}
+
+/* Spec section 32: a PHPUnit extension's services, filled once from the modules of its namespace when PHPUnit creates
+ * it with no arguments, before the first test. Its PHP constructor, which the compiler writes, calls this. */
+ZEND_FUNCTION(Sharp_Internal_fillExtension)
+{
+	zend_object *extension;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJ(extension)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_container_fill(extension)) {
+		RETURN_THROWS();
+	}
+}
+
 /* Spec section 32: the test that runs ends, so the container forgets its module and the services it built. */
 ZEND_FUNCTION(Sharp_Internal_endTest)
 {
