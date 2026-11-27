@@ -8,8 +8,8 @@ set -euo pipefail
 # BUILD_LINUX the generated files, WORKFLOWS the workflows, and MAGO_CHECKS and PLAIN_PHP theirs.
 #
 # With --release, it prints what CI's CHANGES jobs write to $GITHUB_OUTPUT about the release the checked-out commit
-# publishes: the version; tagged, the commit when tag v<version> already names it, empty until PUBLISH creates it;
-# pulls, the pull requests whose head the commit holds since the newest tag, whose ## Changelog sections are the
+# publishes: the version; tagged, the commit when tag v<version> already names it, empty until LAND pushes it;
+# pulls, the pull requests whose head the commit holds since the version before it, whose ## Changelog sections are the
 # release's notes; missing, each part of the release not published yet; and bump, whether any is. A pull request title
 # after --release counts as one more pull request, which is a dry run of the version.
 #
@@ -35,19 +35,18 @@ export CARGO_BUILD_JOBS
 # composer, tag v<version> of heyJordanParker/php-sharp-composer and heyJordanParker/mago-sharp. A rerun of the push run
 # whose commit the tag names publishes what an earlier attempt left missing, since only that run built its assets and
 # images. Run 45033462105 published a GitHub release and failed before its images and its Composer tags, which a check
-# of the tag alone then counted as released. So RELEASE fills an untagged draft, PUBLISH makes it public, which creates
-# the tag, and then tags the images, and COMPOSER pushes the mirrors' tags last, and assets is missing until the
-# release is public. The image and the mirrors are public, so their checks need no login. git
+# of the tag alone then counted as released. So RELEASE fills a draft, PUBLISH makes it public on the tag LAND pushed,
+# and then tags the images, and COMPOSER pushes the mirrors' tags last, and assets is missing until the release is
+# public. The image and the mirrors are public, so their checks need no login. git
 # ls-remote --exit-code exits 2 when a remote has no such ref, and with another code when it can't ask.
 #
 # A version lives in its tag alone. A commit a tag already names publishes that tag's version, so a rerun finishes the
 # release it started. Any other commit publishes the newest tag's version plus one patch, or one minor when the title of
-# a pull request the commit holds since that tag has `!` before its colon, as range_pulls finds them. PUBLISH creates
-# the tag as it makes the release public, and staging's runs run one at a time, so a run that fails before that leaves
-# at most an untagged draft, the next run takes the same version, and two runs never take one version (#854). A
-# release's notes are every pull request it holds since the newest published release, so a release
-# after a tag whose release never published carries that tag's pull requests too, as run 45434990708 tagged a release
-# that stayed a draft.
+# a pull request the commit holds since that tag has `!` before its colon, as range_pulls finds them. LAND pushes the
+# tag as it moves master, and queue.yml starts the next batch's run only once a run landed, so the next run takes the
+# next version, and two runs never take one version (#854, #1023). A run that fails before LAND leaves no tag, and the
+# next run takes the same version. A release's notes are every pull request it holds since the tag of the version
+# before it, which its own release's notes list.
 # Prints each pull request into master whose head commit the commits from $1 to $2 hold: its number, a tab, and its
 # title. GitHub's compare endpoint lists those commits, so a checkout of one commit, as CI's is, reads the range a full
 # one does: a fetch of the history with --shallow-exclude made a release's first merge a shallow boundary, whose pull
@@ -69,8 +68,8 @@ range_pulls() {
     | awk -F '\t' 'NR == FNR { held[$1] = 1; next } $1 in held { print $2 "\t" $3 }' <(echo "$commits") -
 }
 release() {
-  local title=${1:-} head refs newest commit major minor patch version='' tagged='' pulls=() titles=() held
-  local release since missing=() published token tag code mirror status
+  local title=${1:-} head refs versions previous commit major minor patch version='' tagged='' pulls=() titles=() held
+  local missing=() published token tag code mirror status
   head="$(git -C "$root" rev-parse HEAD)"
   if ! refs="$(git -C "$root" ls-remote --tags origin 'refs/tags/v*')"; then
     echo "git ls-remote couldn't list origin's tags." >&2
@@ -79,36 +78,32 @@ release() {
   # An annotated tag lists its commit on a second line, the tag's name with ^{}, which sorts after the tag's own.
   version="$(awk -v head="$head" '$1 == head {sub(/^refs\/tags\/v/, "", $2); sub(/\^\{\}$/, "", $2); print $2; exit}' \
     <<< "$refs")"
-  if ! release="$(cd "$root" && gh api 'repos/{owner}/{repo}/releases/latest' --jq .tag_name)"; then
-    echo "gh couldn't read origin's newest published release." >&2
-    exit 1
-  fi
-  since="$(awk -v tag="refs/tags/$release" '$2 == tag || $2 == tag "^{}" {commit = $1} END {print commit}' <<< "$refs")"
-  # The list is read in this shell, so a failed request stops the release rather than leave its notes empty.
-  if [[ $since != "$head" ]]; then
-    held="$(range_pulls "$since" "$head")"
-    if [[ -n $held ]]; then
-      mapfile -t pulls < <(cut -f 1 <<< "$held")
-    fi
-  fi
+  versions="$(sed -n 's#.*refs/tags/v\([0-9]*\.[0-9]*\.[0-9]*\)$#\1#p' <<< "$refs" | sort -t . -k 1,1n -k 2,2n -k 3,3n)"
+  # The version before this one: the tag below the head's own, or the newest tag.
   if [[ -n $version ]]; then
     tagged=$head
+    previous="$(awk -v version="$version" '$0 == version { print last; exit } { last = $0 }' <<< "$versions")"
   else
-    newest="$(sed -n 's#.*refs/tags/v\([0-9]*\.[0-9]*\.[0-9]*\)$#\1#p' <<< "$refs" \
-      | sort -t . -k 1,1n -k 2,2n -k 3,3n | tail -n 1)"
-    if [[ -z $newest ]]; then
+    previous="$(tail -n 1 <<< "$versions")"
+    if [[ -z $previous ]]; then
       echo "origin has no tag v<major>.<minor>.<patch>, so there is no version to add one to." >&2
       exit 1
     fi
-    commit="$(awk -v tag="refs/tags/v$newest" '$2 == tag || $2 == tag "^{}" {commit = $1} END {print commit}' <<< "$refs")"
+  fi
+  # The list is read in this shell, so a failed request stops the release rather than leave its notes empty.
+  if [[ -n $previous ]]; then
+    commit="$(awk -v tag="refs/tags/v$previous" '$2 == tag || $2 == tag "^{}" {commit = $1} END {print commit}' <<< "$refs")"
     held="$(range_pulls "$commit" "$head")"
     if [[ -n $held ]]; then
+      mapfile -t pulls < <(cut -f 1 <<< "$held")
       mapfile -t titles < <(cut -f 2 <<< "$held")
     fi
+  fi
+  if [[ -z $tagged ]]; then
     if [[ -n $title ]]; then
       titles+=("$title")
     fi
-    IFS=. read -r major minor patch <<< "$newest"
+    IFS=. read -r major minor patch <<< "$previous"
     version="$major.$minor.$((patch + 1))"
     for title in "${titles[@]}"; do
       if [[ $title == *:* && ${title%%:*} == *'!'* ]]; then

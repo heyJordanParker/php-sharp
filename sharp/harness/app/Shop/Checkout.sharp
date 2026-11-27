@@ -1,0 +1,11 @@
+namespace App.Shop;
+
+import App.Mail.Mailer;
+
+// The class section 32's test takes in its constructor, which the container builds.
+public class Checkout
+{
+    public Checkout(private Mailer mailer) { }
+
+    public void pay(string email) { }
+}

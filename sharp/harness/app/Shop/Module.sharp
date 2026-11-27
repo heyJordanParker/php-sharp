@@ -1,0 +1,11 @@
+namespace App.Shop;
+
+import App.Mail.Mailer;
+import App.Mail.SmtpMailer;
+
+// App.Shop's base module, which a test module overrides. An example's own app/Shop/Module.sharp replaces it.
+module
+{
+    singleton Mailer = SmtpMailer;
+    transient Checkout = Checkout;
+}
