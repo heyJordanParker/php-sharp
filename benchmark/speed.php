@@ -19,15 +19,18 @@ declare(strict_types=1);
  * the baseline proved it, when the corpus counts more than 1.05 times its heartbeats, or, when the baseline counted
  * its instructions on this platform, when the edit retires more than 1.05 times them, and names each.
  *
- * With --project, it measures that folder in place of c2ks and the law corpus, so a real project's before and after
- * is counted as the SPEED job counts, and never waits for a quiet machine (#773). It copies the folder and gives mago an
- * empty cache, both deleted at the end, and runs each mago on one thread, so no interleaving decides which check
- * elaborates a theorem first and the heartbeats are exact: a cold `compile` gives each law's heartbeats and their sum,
- * a no-change `compile` and an `analyze` after a newline is appended to the first .sharp file under app/, by sorted
- * path, give the instructions they retire. The edit's run also gives its user plus system CPU-seconds and its peak
- * memory, from the same `/usr/bin/time -l` on macOS, which --write writes as cpu_s and peak_mib, and the edit targets
- * of the speed loop read. --baseline compares with what the same project wrote, by the thresholds above, the no-change
- * compile's instructions as the edit's. Each run's wall time prints beside the counts, and nothing compares it.
+ * With --project, it measures that folder in place of c2ks and the law corpus, so a real project's before and after is
+ * counted as the SPEED job counts, and never waits for a quiet machine (#773). It clones the folder, as `cp -cR` on
+ * APFS and `cp --reflink=auto` on Linux do, so the copy takes no new space where the file system shares blocks, deletes
+ * the clone's .sharp folder, since a clone keeps each file's modification time and so the stamps an earlier compile
+ * recorded, and gives mago an empty cache, both deleted at the end, and runs each mago on one thread, so no
+ * interleaving decides which check elaborates a theorem first and the heartbeats are exact: a cold `compile` gives each
+ * law's heartbeats and their sum, a no-change `compile` and an `analyze` after a newline is appended to the first
+ * .sharp file under app/, by sorted path, give the instructions they retire. The edit's run also gives its user plus
+ * system CPU-seconds and its peak memory, from the same `/usr/bin/time -l` on macOS, which --write writes as cpu_s and
+ * peak_mib, and the edit targets of the speed loop read. --baseline compares with what the same project wrote, by the
+ * thresholds above, the no-change compile's instructions as the edit's. Each run's wall time prints beside the counts,
+ * and nothing compares it.
  */
 
 const LAW_GROWTH = 1.2;
@@ -52,17 +55,7 @@ if ($mago === null || !is_executable($mago) || (isset($options['--project']) && 
 $mago = realpath($mago);
 
 $root = sys_get_temp_dir() . '/mago-speed-' . getmypid();
-register_shutdown_function(static function () use ($root): void {
-    if (!is_dir($root)) {
-        return;
-    }
-    $entries = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST);
-    foreach ($entries as $entry) {
-        $entry->isDir() && !$entry->isLink() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());
-    }
-    rmdir($root);
-});
+register_shutdown_function(static fn () => remove_tree($root));
 $measured = isset($options['--project'])
     ? measure_project($mago, $options['--project'], $root)
     : measure_generated($mago, $root);
@@ -161,7 +154,9 @@ function measure_project(string $mago, string $folder, string $root): array
 {
     $project = "{$root}/project";
     mkdir($root);
-    run(['cp', '-R', $folder, $project], getcwd());
+    $clone = PHP_OS_FAMILY === 'Darwin' ? ['cp', '-cR'] : ['cp', '-R', '--reflink=auto'];
+    run([...$clone, $folder, $project], getcwd());
+    remove_tree("{$project}/.sharp");
     $environment = ['XDG_CACHE_HOME' => "{$root}/cache"];
 
     $started = microtime(true);
@@ -199,6 +194,20 @@ function measure_project(string $mago, string $folder, string $root): array
         'cpu_s' => $edit['cpu_s'],
         'peak_mib' => $edit['peak_mib'],
     ];
+}
+
+/** Deletes the folder `$path` and everything under it, when it exists. */
+function remove_tree(string $path): void
+{
+    if (!is_dir($path)) {
+        return;
+    }
+    $entries = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST);
+    foreach ($entries as $entry) {
+        $entry->isDir() && !$entry->isLink() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());
+    }
+    rmdir($path);
 }
 
 /** The first .sharp file under `$folder` by sorted path, which --project's edit appends a newline to. */
