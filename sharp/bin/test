@@ -143,6 +143,7 @@ part_heading=''
 part_started=0
 part_cpu=0
 part_failed=0
+reported_units=0
 part_clock() {
   local time
   now="${EPOCHREALTIME/[^0-9]/}"
@@ -162,6 +163,8 @@ part() {
     printf '%s took %d.%d s and %d.%d CPU-seconds.\n' "$part_heading" $((wall / 10)) $((wall % 10)) $((used / 10)) $((used % 10))
     if [[ -n $part_times ]]; then
       printf '%s\t%s\t%s\n' "$part_started" "$now" "$((cpu - part_cpu))" > "$part_times"
+    else
+      report_part "$((cpu - part_cpu))"
     fi
     "$root/sharp/bin/record" "$part_heading" --measured "${part_started:0:${#part_started}-6}.${part_started: -6}" \
       "$((used / 10)).$((used % 10))" '' "$((${#failed[@]} > part_failed))"
@@ -290,6 +293,9 @@ start_unit() {
   (
     # shellcheck disable=SC2030 # The unit's own failed steps, which run_pool reads from its file.
     failed=()
+    # Every git a test starts reads no system or global git config, as Git's own test suite runs it, so a developer's
+    # config, such as signed commits, changes no test, and each test that commits names its own author (#1067).
+    export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
     part_times="$output.time"
     part "${unit_heading[u]}"
     if [[ -n $step ]]; then
@@ -391,8 +397,9 @@ run_pool() {
 # CPU-seconds, and one testcase for each test, with its own time, from run-tests.php's JUnit file for a .phpt test and
 # from libtest's --report-time for a Rust test. A unit whose runner gives no time for each test it runs, as libtest-mimic's
 # harness gives none, and a unit that runs one check are one testcase each, with the unit's time. A unit's files move
-# under the run's count of units, since each pool numbers its units from 0.
-reported_units=0
+# under the run's count of units, since each pool numbers its units from 0. A part the main shell runs outside the pool,
+# as a composer install or the compile of the fixtures, is a unit of one check too, so the report's suites cover the
+# whole run (#905).
 report_unit() {
   local u=$1 kept="$TMPDIR/report-$reported_units"
   shift
@@ -409,6 +416,19 @@ report_unit() {
   fi
   printf '%s\t%s\t%s\t%s\n' "$reported_units" "${unit_part[u]%%$'\t'*}" "${unit_part[u]#*$'\t'}" "${unit_heading[u]}" \
     >> "$TMPDIR/report"
+  reported_units=$((reported_units + 1))
+}
+# Reports the part part() ends outside the pool, with its CPU milliseconds: the times a unit's part_times holds, its
+# failed steps, and the run's own command, the one that runs it.
+report_part() {
+  local kept="$TMPDIR/report-$reported_units"
+  printf '%s\t%s\t%s\n' "$part_started" "$now" "$1" > "$kept.time"
+  : > "$kept.out"
+  if ((${#failed[@]} > part_failed)); then
+    printf '%s\n' "${failed[@]:part_failed}" > "$kept.failed"
+  fi
+  printf '%s\t%s\t%s\t%s\n' "$reported_units" "$part_heading" \
+    "sharp/bin/test${args[*]:+$(printf ' %q' "${args[@]}")}" "$part_heading" >> "$TMPDIR/report"
   reported_units=$((reported_units + 1))
 }
 # Writes the report with the PATH's php, which every run has, since Composer runs on it, and its DOM: the build's engine
@@ -1140,10 +1160,11 @@ fi
 # autoloader and the PHP# package's, from the packages its composer.lock pins, and mago compile checks the project with
 # its vendor folder. The PHP# package is a copy of sharp/composer, as an application installs it, since a compile
 # refuses a link outside the project. Composer keeps the copy an earlier run installed while the lock is unchanged, so
-# a copy that differs from sharp/composer in a file git tracks there is reinstalled first, and the install then dumps
-# the autoloader, which runs the package's plugin: composer reinstall runs no plugin. Build output in either folder,
-# such as the .sharp folder a compile writes, never counts: a local check that left sharp/composer/.sharp made every
-# later run in every lane reinstall the copy with it, and the tests then refused their fixtures.
+# a copy that differs from sharp/composer in a file git tracks there, or in a compiled file or the codex of the
+# library's .sharp folder, which sharp/bin/build-mago compiles the library into and the project's compile reads the
+# library from, is reinstalled first, and the install then dumps the autoloader, which runs the package's plugin:
+# composer reinstall runs no plugin. The rest of that folder, the record and locks of the library's compile, never
+# counts.
 part "composer install in Zend/tests/sharp"
 package="$root/Zend/tests/sharp/vendor/heyjordanparker/php-sharp-composer"
 differs_from_library() {
@@ -1152,6 +1173,11 @@ differs_from_library() {
     echo "git couldn't list the files it tracks in sharp/composer." >&2
     exit 1
   fi
+  if [[ ! -d $root/sharp/composer/.sharp ]]; then
+    echo "sharp/composer/.sharp is missing: sharp/bin/build-mago compiles the standard library into it." >&2
+    exit 1
+  fi
+  files+=$'\n'"$(cd "$root/sharp/composer" && find .sharp -type f \( -name '*.sharpc' -o -name library.codex \))"
   while IFS= read -r file; do
     if ! cmp -s "$root/sharp/composer/$file" "$package/$file"; then
       return 0

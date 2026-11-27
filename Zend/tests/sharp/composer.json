@@ -130,6 +130,8 @@
             "IntBounds\\": "IntBounds/",
             "InterfaceInit\\": "InterfaceInit/",
             "InterfaceMembers\\": "InterfaceMembers/",
+            "InterfaceReach\\": "InterfaceReach/",
+            "InterfaceReachOutside\\": "InterfaceReachOutside/",
             "InternalAttributes\\": "InternalAttributes/",
             "InteropMatrix\\": "InteropMatrix/",
             "Intersections\\": "Intersections/",
@@ -167,6 +169,7 @@
             "Payloads\\": "Payloads/",
             "PlainWrites\\": "PlainWrites/",
             "Polymorphic\\": "Polymorphic/",
+            "Prebuilt\\": "Prebuilt/",
             "PreloadedLambdas\\": "PreloadedLambdas/",
             "Preloaded\\": "Preloaded/",
             "Promoted\\": "Promoted/",
@@ -210,6 +213,7 @@
             "Unions\\": "Unions/",
             "VariantTags\\": "VariantTags/",
             "Writes\\": "Writes/",
+            "WrittenAttributes\\": "WrittenAttributes/",
             "XmlDocuments\\": "XmlDocuments/"
         }
     },

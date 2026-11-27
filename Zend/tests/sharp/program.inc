@@ -38,10 +38,7 @@ function program_project(string $name, string $vendor, array $files = []): strin
 {
     $package = dirname(__DIR__, 3) . '/sharp/composer';
     $library = "$vendor/heyjordanparker/php-sharp-composer";
-    $installed = [];
-    foreach (LIBRARY_MODULE as $member) {
-        $installed["$library/library/Sharp/$member.sharp"] = file_get_contents("$package/library/Sharp/$member.sharp");
-    }
+    $installed = standard_library($library);
     $config = $vendor === 'vendor' ? '' : ', "config": {"vendor-dir": "' . $vendor . '"}';
 
     return compile_project($name, array_replace($installed + [

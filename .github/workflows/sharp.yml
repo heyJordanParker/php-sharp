@@ -19,16 +19,16 @@ permissions:
 # push to the pull request cancels its run in progress, so no push to one pull request cancels another's run: one group
 # for every lane cancelled the pending runs of PRs #792 and #864, which then had no CI_PASSED, and queue.yml never took
 # them (#872). A pull request's run uses no Mac, since MAC_TESTS and MACOS run only in a staging run, so runs at once cost only
-# hosted runners. staging runs one push at a time, and queue.yml pushes it only while no staging run is in progress. A
-# failed job cancels a staging or push run, which can no longer land or publish, so queue.yml's next batch and the Mac
+# hosted runners. Each staging push's run is in a group of its own too, and queue.yml pushes staging once every staging
+# run has landed, so the next batch's run starts while the last one's release builds, and the one Mac runs the next
+# MAC_TESTS once that release's Mac entry ends (#1023). A failed job cancels a staging or push run, which can no longer land or publish, so queue.yml's next batch and the Mac
 # take its place, as .github/actions/cancel-failed-run explains. A pull request's run runs every job to its end, so one
 # run reports every failure: each of PR #972's runs reported one failed test, as its cancel stopped the jobs that
 # would have printed the rest, and a newer push still cancels it through this group (#983). Each schedule and dispatch
 # runs in a group of its own.
 concurrency:
   group: >-
-    ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.url
-      || (github.event_name == 'push' && github.ref) || github.run_id }}
+    ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.url || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   # CI_PASSED is this workflow's one required check. Every pull request's push runs every Linux suite, whatever it
@@ -119,8 +119,9 @@ jobs:
   # with --no-build. Each of the 8 suite jobs built them itself for 2 to 5 minutes on release pull request #363's run,
   # where the bump rebuilt every Mago crate in each, so a run built the same code 8 times. The suites wait for it, so its
   # minutes are on every suite's path. sharp/bin/build-mago --engine --debug builds the one engine in the sharp/docker
-  # image that the suites run on and mago links, as the Mac job builds it, with the libphp.so HOSTS builds FrankenPHP
-  # against, so it waits for no other build: it waited 4.8 minutes for BUILD_MAGO_ENGINE's on run 45834816959 (#955).
+  # image that the suites run on and mago links, as the Mac job builds it, with the libphp.so UPSTREAM_AND_HOSTS builds
+  # FrankenPHP against, so it waits for no other build: it waited 4.8 minutes for BUILD_MAGO_ENGINE's on run
+  # 45834816959 (#955).
   # sharp/bin/build-mago then builds mago with every test binary, which MAGO's slices run, so Linux
   # builds Mago's dev target once per run, where Mago's own workflow's build job built it a second time for 122 seconds
   # on dfa6e7e2941's run. It also runs the checks of generated files, since one of them reads the header
@@ -159,15 +160,16 @@ jobs:
       - name: Build mago and its test binaries
         run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64/install sharp/bin/build-mago --quiet
       # What the suites run: the CLI, phpdbg, which run-tests.php finds beside it for the tests that need it, the install
-      # sharp/bin/hosts builds FrankenPHP against, and mago. The libphp.a mago linked stays out, since no suite links it.
-      # An artifact keeps no file's mode, so the files travel in a tar, compressed here, since Actions would compress
-      # them on one thread.
+      # sharp/bin/hosts builds FrankenPHP against, mago, and the standard library that mago compiled into
+      # sharp/composer/.sharp, which every project's compile reads. The libphp.a mago linked stays out, since no suite
+      # links it. An artifact keeps no file's mode, so the files travel in a tar, compressed here, since Actions would
+      # compress them on one thread.
       - name: Pack the engine and mago for the suites
         run: |
           build="sharp/build/linux-$(uname -m)"
           tar --zstd -cf "$RUNNER_TEMP/build.tar.zst" --exclude="$build/install/lib/libphp.a" \
             "$build/sapi/cli/php" "$build/sapi/phpdbg/phpdbg" "$build/install" \
-            "$build/mago/debug/mago"
+            "$build/mago/debug/mago" sharp/composer/.sharp
       - name: Upload the engine and mago for the suites
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -176,13 +178,15 @@ jobs:
           compression-level: 0
           retention-days: 1
           if-no-files-found: error
-      # What MAGO's slices run: the test binaries build.json names, mago, which the tests run, and build.json.
+      # What MAGO's slices run: the test binaries build.json names, mago, which the tests run, build.json, and the
+      # standard library mago compiled, which the tests install in their projects.
       - name: Pack Mago's test binaries
         run: |
           build="sharp/build/linux-$(uname -m)/mago"
           jq -r 'select(.reason == "compiler-artifact" and .profile.test and .executable) | .executable | ltrimstr("/src/")' \
             "$build/build.json" | sort -u > "$RUNNER_TEMP/test-binaries"
-          tar --zstd -cf "$RUNNER_TEMP/tests.tar.zst" "$build/build.json" "$build/debug/mago" --files-from "$RUNNER_TEMP/test-binaries"
+          tar --zstd -cf "$RUNNER_TEMP/tests.tar.zst" "$build/build.json" "$build/debug/mago" sharp/composer/.sharp \
+            --files-from "$RUNNER_TEMP/test-binaries"
       - name: Upload Mago's test binaries
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -204,8 +208,9 @@ jobs:
       - name: Test the doc tests and the property tests
         run: sharp/docker/run env MAGO_ENGINE=/src/sharp/build/linux-x86_64/install sharp/bin/test --mago --cargo-built
       # sharp/bin/test's report of each suite's and each test's time, which the timeline shows as one step (#855). Its
-      # run writes it to sharp/build/test-report.xml, in the checkout the sharp/docker image mounts. UPSTREAM and ASAN
-      # repeat this step by its anchor, and LINUX's and MAGO's slices name theirs by their shard.
+      # run writes it to sharp/build/test-report.xml, in the checkout the sharp/docker image mounts.
+      # UPSTREAM_AND_HOSTS and ASAN repeat this step by its anchor, and LINUX's and MAGO's slices name theirs by their
+      # shard.
       - &upload-test-report
         name: Upload the test report
         if: ${{ !cancelled() }}
@@ -309,14 +314,14 @@ jobs:
       - name: Download the engine mago links
         id: download-engine
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-engine-linux
           path: ${{ runner.temp }}
       - name: Download the engine mago links, the second try
         if: steps.download-engine.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-engine-linux
@@ -369,18 +374,18 @@ jobs:
           toolchain: ${{ needs.CHANGES.outputs.rust }}
       # Into the target folder sharp/bin/check plain-php reads the test-run mago from. A download that stalls holds its
       # job until the job's timeout, as one held run 44989865954 for 28 minutes, where a download takes 1 to 38 s. So it
-      # stops after 5 minutes, and one that failed or stopped runs once more.
+      # stops after 1 minute, as BUILD_LINUX's engine and mago does, and one that failed or stopped runs once more.
       - name: Download the test-run mago MAGO_CHECKS built
         id: download
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-${{ runner.os }}
           path: ${{ runner.temp }}/target/test-run
       - name: Download the test-run mago MAGO_CHECKS built, the second try
         if: steps.download.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-${{ runner.os }}
@@ -432,14 +437,14 @@ jobs:
       - name: Download the test-run mago MAGO_CHECKS built
         id: download
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-${{ runner.os }}
           path: sharp/build/speed/test-run
       - name: Download the test-run mago MAGO_CHECKS built, the second try
         if: steps.download.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-${{ runner.os }}
@@ -472,14 +477,88 @@ jobs:
         with:
           end: true
 
-  # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in three slices, each without opcache, in shared
+  # LINUX runs the PHP# suite on the thread-safe engine FrankenPHP runs, in two slices, each without opcache, in shared
   # memory twice per process, and under the tracing JIT production runs with the opcache. The slices balance by the
   # seconds sharp/baseline/seconds lists, and the one that weighs least runs mago convert's whole-project proof, as
   # sharp/bin/test explains. The last slice also runs the census, the differential and PHPUnit. A hosted runner can be
-  # 1.9 times slower than another on the same slice, so a slice's share sets how long a slow draw holds the run: with
-  # two slices, LINUX (2/2) on an AMD EPYC 7763 ran its 246 s of modes in 474 s on run 45038360121.
+  # 1.9 times slower than another on the same slice: LINUX (2/2) on an AMD EPYC 7763 ran its 246 s of modes in 474 s on
+  # run 45038360121. The test jobs after BUILD_LINUX run in 8 slots, where 14 asked for a slot at once and waited up to
+  # 13 minutes for one on staging run 46050402034, and the MAGO_CHECKS chain or the Mac ends after them (#957).
   LINUX:
-    name: LINUX (${{ matrix.shard }}/3)
+    name: LINUX (${{ matrix.shard }}/2)
+    needs: [CHANGES, BUILD_LINUX]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+      # sharp/docker/run pulls the image base-images.yml builds from ghcr.io.
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ github.token }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      # A download that stalls holds its job until the job's timeout: MAGO (2/5) of run 44989865954 waited 28 minutes on
+      # one, where a download takes 1 to 38 s. So each download stops at a limit, and one that failed or stopped runs
+      # once more. download-artifact's own retries start only once blob storage answers, so a request it never answers
+      # waits for the limit: SPEC (1/4) of run 46019058360 waited 5 minutes on each try. Of the day's 628 first tries of
+      # this 124 MB artifact, the slowest that finished took 17 s, so each try stops after 1 minute. SPEC and
+      # UPSTREAM_AND_HOSTS repeat these two steps by their anchors.
+      - &download-build-linux
+        name: Download BUILD_LINUX's engine and mago
+        id: download
+        continue-on-error: true
+        timeout-minutes: 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-linux
+          path: ${{ runner.temp }}
+      - &download-build-linux-again
+        name: Download BUILD_LINUX's engine and mago, the second try
+        if: steps.download.outcome == 'failure'
+        timeout-minutes: 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-linux
+          path: ${{ runner.temp }}
+      - name: Unpack BUILD_LINUX's engine and mago
+        run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
+      - name: Test PHP#
+        run: >-
+          sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/2
+          ${{ matrix.shard == 2 && '--census --differential --phpunit' || '' }}
+      - &upload-shard-test-report
+        name: Upload the test report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-report-${{ github.job }}-${{ matrix.shard }}
+          path: sharp/build/test-report.xml
+          if-no-files-found: warn
+      - *cancel-failed-run
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+  # sharp/mago's workspace tests on Linux, a third of the tests each, which sharp/bin/test --mago --shard balances by
+  # the seconds sharp/baseline/seconds lists, by exact name, on BUILD_LINUX's test binaries. BUILD_LINUX runs the doc
+  # tests and the property tests, which need its target. When BUILD_LINUX ran a slice itself, the suites started 376 s
+  # after its last upload, on run 45016081891. Three slices, as LINUX's two explain (#957).
+  MAGO:
+    name: MAGO (${{ matrix.shard }}/3)
     needs: [CHANGES, BUILD_LINUX]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -499,100 +578,31 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-      # sharp/docker/run pulls the image base-images.yml builds from ghcr.io.
       - name: Log in to ghcr.io
         env:
           TOKEN: ${{ github.token }}
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      # A download that stalls holds its job until the job's timeout: MAGO (2/5) of run 44989865954 waited 28 minutes on
-      # one, where a download takes 1 to 38 s. So each download stops after 5 minutes, and one that failed or stopped
-      # runs once more. UPSTREAM, SPEC and HOSTS repeat these two steps by their anchors.
-      - &download-build-linux
-        name: Download BUILD_LINUX's engine and mago
-        id: download
-        continue-on-error: true
-        timeout-minutes: 5
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: build-linux
-          path: ${{ runner.temp }}
-      - &download-build-linux-again
-        name: Download BUILD_LINUX's engine and mago, the second try
-        if: steps.download.outcome == 'failure'
-        timeout-minutes: 5
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: build-linux
-          path: ${{ runner.temp }}
-      - name: Unpack BUILD_LINUX's engine and mago
-        run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
-      - name: Test PHP#
-        run: >-
-          sharp/bin/test --linux --no-build --shard ${{ matrix.shard }}/3
-          ${{ matrix.shard == 3 && '--census --differential --phpunit' || '' }}
-      - &upload-shard-test-report
-        name: Upload the test report
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: test-report-${{ github.job }}-${{ matrix.shard }}
-          path: sharp/build/test-report.xml
-          if-no-files-found: warn
-      - *cancel-failed-run
-      - name: Write the job's CPU-seconds and peak memory
-        if: always()
-        uses: ./.github/actions/usage
-        with:
-          end: true
-  # sharp/mago's workspace tests on Linux, a fifth of the tests each, which sharp/bin/test --mago --shard balances by
-  # the seconds sharp/baseline/seconds lists, by exact name, on BUILD_LINUX's test binaries. BUILD_LINUX runs the doc
-  # tests and the property tests, which need its target. When BUILD_LINUX ran the fifth slice itself, the suites
-  # started 376 s after its last upload, on run 45016081891.
-  MAGO:
-    name: MAGO (${{ matrix.shard }}/5)
-    needs: [CHANGES, BUILD_LINUX]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      actions: write
-      contents: read
-      packages: read
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4, 5]
-    env:
-      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
-      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-    steps:
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Measure the job's CPU-seconds and peak memory
-        uses: ./.github/actions/usage
-      - name: Log in to ghcr.io
-        env:
-          TOKEN: ${{ github.token }}
-        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      # Each download stops after 5 minutes and runs once more, as LINUX's explain.
+      # Each download stops at a limit and runs once more, as LINUX's explain. Of the day's 365 first tries of these test
+      # binaries, 13 took over 60 s and the slowest 87 s, so each try stops after 2 minutes.
       - name: Download BUILD_LINUX's test binaries
         id: download
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 2
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: tests-linux
           path: ${{ runner.temp }}
       - name: Download BUILD_LINUX's test binaries, the second try
         if: steps.download.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 2
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: tests-linux
           path: ${{ runner.temp }}
       - name: Unpack BUILD_LINUX's test binaries
         run: tar --zstd -xf "$RUNNER_TEMP/tests.tar.zst"
-      - name: Test a fifth of the workspace's tests
-        run: sharp/bin/test --linux --mago --no-build --shard ${{ matrix.shard }}/5
+      - name: Test a third of the workspace's tests
+        run: sharp/bin/test --linux --mago --no-build --shard ${{ matrix.shard }}/3
       - *upload-shard-test-report
       - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
@@ -600,103 +610,15 @@ jobs:
         uses: ./.github/actions/usage
         with:
           end: true
-  # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before, and
-  # sharp/bin/spec's self-test. The upstream tests leave out Zend/tests/sharp, which the LINUX slices run in every mode:
-  # with it, its fixtures' compile and the tests took 281 s of this job's 361 on run 45051337556, the slowest Linux job.
-  UPSTREAM:
-    needs: [CHANGES, BUILD_LINUX]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      actions: write
-      contents: read
-      packages: read
-    env:
-      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
-      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-    steps:
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Measure the job's CPU-seconds and peak memory
-        uses: ./.github/actions/usage
-      - name: Log in to ghcr.io
-        env:
-          TOKEN: ${{ github.token }}
-        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      - *download-build-linux
-      - *download-build-linux-again
-      - name: Unpack BUILD_LINUX's engine and mago
-        run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
-      - name: Test upstream
-        run: sharp/bin/test --linux --no-build --upstream
-      - *upload-test-report
-      # sharp/bin/test --spec runs the self-test with every example, which SPEC checks in slices, so this runs the
-      # self-test alone, with BUILD_LINUX's mago, as sharp/bin/test passes it.
-      - name: Check sharp/bin/spec's rules on sharp/spec-self-test.md
-        run: |
-          build="sharp/build/linux-$(uname -m)"
-          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --self-test
-      - *cancel-failed-run
-      - name: Write the job's CPU-seconds and peak memory
-        if: always()
-        uses: ./.github/actions/usage
-        with:
-          end: true
-  # Every code example in docs/spec.md and README.md, compared with sharp/baseline/spec, in four slices of the examples.
-  # Each slice runs sharp/bin/spec on BUILD_LINUX's engine and mago, as sharp/bin/test --spec does. Five slices checked
-  # their examples in 123 to 161 seconds on release pull request #343's run.
-  SPEC:
-    name: SPEC (${{ matrix.shard }}/4)
-    needs: [CHANGES, BUILD_LINUX]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      actions: write
-      contents: read
-      packages: read
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    env:
-      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
-      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-    steps:
-      - name: git checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Measure the job's CPU-seconds and peak memory
-        uses: ./.github/actions/usage
-      - name: Log in to ghcr.io
-        env:
-          TOKEN: ${{ github.token }}
-        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      - *download-build-linux
-      - *download-build-linux-again
-      - name: Unpack BUILD_LINUX's engine and mago
-        run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
-      - name: Check the examples of docs/spec.md and README.md
-        run: |
-          build="sharp/build/linux-$(uname -m)"
-          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/4
-      # mago downloads Lean into lean/lean-<version>-<platform> of its cache folder only when it finds no pinned Lean,
-      # beside the law checker's builds, which lean/ holds under their hashes. The sharp/docker image carries the pinned
-      # Lean, as sharp/docker/Dockerfile explains.
-      - name: mago downloaded no Lean
-        run: |
-          if compgen -G 'sharp/build/cache/mago/lean/lean-*' > /dev/null; then
-            echo "::error::mago downloaded Lean into sharp/build/cache/mago/lean, so the sharp/docker image's Lean was missing."
-            exit 1
-          fi
-          echo "mago ran the examples' laws on the sharp/docker image's Lean, $(cat sharp/mago/crates/sharp-lean/lean/lean-toolchain), and downloaded none."
-      - *cancel-failed-run
-      - name: Write the job's CPU-seconds and peak memory
-        if: always()
-        uses: ./.github/actions/usage
-        with:
-          end: true
-  # The fixture in sharp/hosts, served from FrankenPHP's worker mode, with FrankenPHP built with Go against
-  # BUILD_LINUX's installed engine, and BUILD_LINUX's mago.
-  HOSTS:
+  # The upstream tests without opcache, compared with sharp/baseline/linux, so plain PHP still behaves as before,
+  # sharp/bin/spec's self-test, and the fixture in sharp/hosts, served from FrankenPHP's worker mode, with FrankenPHP
+  # built with Go against BUILD_LINUX's installed engine, and BUILD_LINUX's mago. The upstream tests leave out
+  # Zend/tests/sharp, which the LINUX slices run in every mode: with it, its fixtures' compile and the tests took 281 s
+  # of UPSTREAM's 361 on run 45051337556, the slowest Linux job. UPSTREAM and HOSTS were two jobs of about 2.7 minutes
+  # each, and one job asks for one slot of the 8 the test jobs after BUILD_LINUX take, as LINUX's explain. In a pull
+  # request's run the fixture is served whether the upstream steps passed or failed, so one run reports the failures of
+  # both, and a staging run's failed upstream step cancels the run at once, as it did when HOSTS was its own job (#957).
+  UPSTREAM_AND_HOSTS:
     needs: [CHANGES, BUILD_LINUX]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -719,9 +641,73 @@ jobs:
       - *download-build-linux
       - *download-build-linux-again
       - name: Unpack BUILD_LINUX's engine and mago
+        id: unpack
         run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
+      - name: Test upstream
+        run: sharp/bin/test --linux --no-build --upstream
+      - *upload-test-report
+      # sharp/bin/test --spec runs the self-test with every example, which SPEC checks in slices, so this runs the
+      # self-test alone, with BUILD_LINUX's mago, as sharp/bin/test passes it.
+      - name: Check sharp/bin/spec's rules on sharp/spec-self-test.md
+        run: |
+          build="sharp/build/linux-$(uname -m)"
+          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --self-test
       - name: Serve the fixture from FrankenPHP
+        if: ${{ !cancelled() && steps.unpack.outcome == 'success' && (success() || github.event_name == 'pull_request') }}
         run: sharp/bin/hosts --linux --no-build
+      - *cancel-failed-run
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+  # Every code example in docs/spec.md and README.md, compared with sharp/baseline/spec, in two slices of the examples.
+  # Each slice runs sharp/bin/spec on BUILD_LINUX's engine and mago, as sharp/bin/test --spec does. Four slices checked
+  # their examples in 159 s each on average over pull request runs 46054131856 to 46056690187, and two slices, as
+  # LINUX's explain (#957).
+  SPEC:
+    name: SPEC (${{ matrix.shard }}/2)
+    needs: [CHANGES, BUILD_LINUX]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ github.token }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - *download-build-linux
+      - *download-build-linux-again
+      - name: Unpack BUILD_LINUX's engine and mago
+        run: tar --zstd -xf "$RUNNER_TEMP/build.tar.zst"
+      - name: Check the examples of docs/spec.md and README.md
+        run: |
+          build="sharp/build/linux-$(uname -m)"
+          sharp/docker/run env TEST_MAGO_EXECUTABLE="/src/$build/mago/debug/mago" "$build/sapi/cli/php" sharp/bin/spec --shard ${{ matrix.shard }}/2
+      # mago downloads Lean into lean/lean-<version>-<platform> of its cache folder only when it finds no pinned Lean,
+      # beside the law checker's builds, which lean/ holds under their hashes. The sharp/docker image carries the pinned
+      # Lean, as sharp/docker/Dockerfile explains.
+      - name: mago downloaded no Lean
+        run: |
+          if compgen -G 'sharp/build/cache/mago/lean/lean-*' > /dev/null; then
+            echo "::error::mago downloaded Lean into sharp/build/cache/mago/lean, so the sharp/docker image's Lean was missing."
+            exit 1
+          fi
+          echo "mago ran the examples' laws on the sharp/docker image's Lean, $(cat sharp/mago/crates/sharp-lean/lean/lean-toolchain), and downloaded none."
       - *cancel-failed-run
       - name: Write the job's CPU-seconds and peak memory
         if: always()
@@ -945,9 +931,8 @@ jobs:
       - SPEED
       - LINUX
       - MAGO
-      - UPSTREAM
+      - UPSTREAM_AND_HOSTS
       - SPEC
-      - HOSTS
       - WORKFLOWS
       - MAC_TESTS
       - IMAGE
@@ -1041,16 +1026,20 @@ jobs:
   # a tree one run tested whole, and that run publishes it (#843). The push is a fast-forward with the deploy key, which master merge gate lets past its pull request rule and its QUEUE check, a check no run
   # reports, so no pull request reaches master another way. git refuses a push that isn't a fast-forward, and master
   # history refuses one with no bypass, so a master that moved fails LAND, and queue.yml merges the batch again onto it.
-  # GitHub marks each pull request whose head master now holds merged.
+  # GitHub marks each pull request whose head master now holds merged. A release's tag v<version> goes on the commit in
+  # the same atomic push, so the next batch's run, which queue.yml starts once this one landed, takes the next version
+  # while this run's release still builds (#1023). LAND then starts queue.yml, since no event of its own does.
   LAND:
     needs: [CHANGES, CI_PASSED]
     if: ${{ !failure() && !cancelled() && needs.CI_PASSED.result == 'success' && github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     permissions:
+      actions: write
       contents: read
       issues: write
     env:
       GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.CHANGES.outputs.bump == 'true' && needs.CHANGES.outputs.version || '' }}
     steps:
       - name: git checkout, with the deploy key that pushes master
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1060,11 +1049,13 @@ jobs:
       # The checkout holds this commit alone, and git refuses to push over a ref whose commit it doesn't hold, with
       # "fetch first": run 45690564801's LAND failed so on #873's green batch. So the fetch reaches master's tip, as
       # queue.yml's reach the merge base, and git sees the push is a fast-forward.
-      - name: Move master to this run's commit
+      - name: Move master to this run's commit, and tag a release's version on it
         run: |
           ahead=$(gh api "repos/$GITHUB_REPOSITORY/compare/master...$GITHUB_SHA" --jq .ahead_by)
           git fetch --quiet --no-tags --depth=$((ahead + 1)) origin "$GITHUB_SHA"
-          git push origin "$GITHUB_SHA:refs/heads/master"
+          git push --atomic origin "$GITHUB_SHA:refs/heads/master" ${VERSION:+"$GITHUB_SHA:refs/tags/v$VERSION"}
+      - name: Start queue.yml, as staging is free for the next batch
+        run: gh workflow run queue.yml --ref master
       - *red-master-issue
   # Splits sharp/composer and sharp/mago and pushes them to master of heyJordanParker/php-sharp-composer and
   # heyJordanParker/mago-sharp, whose webhooks tell Packagist, once every check of the staging run passed and LAND moved
@@ -1107,10 +1098,42 @@ jobs:
           ssh-key: ${{ secrets.PHP_SHARP_COMPOSER_DEPLOY_KEY }}
           path: sharp/build/php-sharp-composer
           fetch-depth: 0
+      # A release's heyjordanparker/mago-sharp version is the split plus a commit that adds the release's SHA-256s as
+      # composer/sha256sums.txt, and its version as composer/bin/version, which composer/bin/mago downloads the binary
+      # of, so `composer require --dev heyjordanparker/mago-sharp` alone gives a mago that runs, where 0.8.4's refused
+      # every run with "mago's binary is not installed" (#862). php-sharp-composer's plugin refuses an archive whose
+      # SHA-256 differs, as the launcher does, so the package
+      # version pins the exact binary, as esbuild's and Biome's npm packages do. The tag pins them for good, so they are
+      # the release's sums file, which install.sh checks a download against, and every asset a user downloads from the
+      # release must match them, as the release PUBLISH made public holds them. The library's compile runs the Linux one.
+      - name: The release's assets match its SHA-256s
+        if: env.VERSION
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          published="$RUNNER_TEMP/published"
+          gh release download "v$VERSION" --dir "$published"
+          if ! (cd "$published" && sha256sum --check --strict "mago-$VERSION-sha256sums.txt"); then
+            echo "::error::An asset of release v$VERSION has a SHA-256 other than its sums file names, so no Composer tag is pushed."
+            exit 1
+          fi
+      # PHP# compiles the standard library once, at its release, for every platform: the release's own Linux mago
+      # compiles sharp/composer at the release's tag into its .sharp folder with the library's codex, the command
+      # sharp/bin/build-mago runs for a source build. Every project's compile reads the library from that folder in
+      # place of its sources.
+      - name: Compile the release's standard library with the release's mago
+        if: env.VERSION
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/release" "v$VERSION"
+          tar -xzf "$RUNNER_TEMP/published/mago-$VERSION-x86_64-unknown-linux-gnu.tar.gz" -C "$RUNNER_TEMP"
+          (cd "$RUNNER_TEMP/release/sharp/composer" \
+            && "$RUNNER_TEMP/mago-$VERSION-x86_64-unknown-linux-gnu/mago" --no-version-check compile)
       # A release's tag here becomes the plugin release of the same version: the split plus a commit that adds the
       # release's docs/spec.md as spec.md, so a project reads the spec its version follows at
-      # vendor/heyjordanparker/php-sharp-composer/spec.md. A rerun finds the tag an earlier attempt pushed, and leaves it.
-      - name: Push the split, and a release's tag with its spec
+      # vendor/heyjordanparker/php-sharp-composer/spec.md, and the library's compiled files and codex as .sharp, from
+      # the step above. A rerun finds the tag an earlier attempt pushed, and leaves it.
+      - name: Push the split, and a release's tag with its spec and compiled library
         working-directory: sharp/build/php-sharp-composer
         run: |
           git fetch "$GITHUB_WORKSPACE" refs/heads/composer
@@ -1125,9 +1148,13 @@ jobs:
           git fetch "$GITHUB_WORKSPACE" refs/heads/composer-release
           git switch --detach FETCH_HEAD
           git -C "$GITHUB_WORKSPACE" show "v$VERSION:docs/spec.md" > spec.md
+          mkdir .sharp
+          (cd "$RUNNER_TEMP/release/sharp/composer/.sharp" && find . -type f \( -name '*.sharpc' -o -name library.codex \) \
+            -exec cp --parents {} "$OLDPWD/.sharp/" \;)
           git add spec.md
+          git add --force .sharp
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit --message "The spec PHP# $VERSION follows"
+            commit --message "The spec PHP# $VERSION follows, and the standard library it compiled"
           git push origin "HEAD:refs/tags/v$VERSION"
       - name: Split sharp/mago
         run: splitsh-lite --prefix=sharp/mago --target=refs/heads/mago
@@ -1152,29 +1179,9 @@ jobs:
             exit 0
           fi
           git push origin "FETCH_HEAD:$GITHUB_REF"
-      # A release's heyjordanparker/mago-sharp version is the split plus a commit that adds the release's SHA-256s as
-      # composer/sha256sums.txt, and its version as composer/bin/version, which composer/bin/mago downloads the binary
-      # of, so `composer require --dev heyjordanparker/mago-sharp` alone gives a mago that runs, where 0.8.4's refused
-      # every run with "mago's binary is not installed" (#862). php-sharp-composer's plugin refuses an archive whose
-      # SHA-256 differs, as the launcher does, so the package
-      # version pins the exact binary, as esbuild's and Biome's npm packages do. The tag pins them for good, so they are
-      # the release's sums file, which install.sh checks a download against, and every asset a user downloads from the
-      # release must match them, as the release PUBLISH made public holds them.
-      - name: The release's assets match its SHA-256s
-        if: env.VERSION
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          published="$RUNNER_TEMP/published"
-          gh release download "v$VERSION" --dir "$published"
-          if ! (cd "$published" && sha256sum --check --strict "mago-$VERSION-sha256sums.txt"); then
-            echo "::error::An asset of release v$VERSION has a SHA-256 other than its sums file names, so no heyjordanparker/mago-sharp tag is pushed."
-            exit 1
-          fi
       # A rerun finds the tag an earlier attempt pushed, and leaves it. The tag also carries schema.json, the editor
-      # schema of the release's configuration, from the release's own Linux binary run outside any project, so no start
-      # and no install of the package writes it.
+      # schema of the release's configuration, from the release's own Linux binary run outside any project, which the
+      # library's compile extracted, so no start and no install of the package writes it.
       - name: Push the release's tag, with the SHA-256 of every release asset, its version and its configuration's schema
         if: env.VERSION
         working-directory: sharp/build/mago-sharp
@@ -1187,7 +1194,6 @@ jobs:
           git switch --detach FETCH_HEAD
           cp "$RUNNER_TEMP/published/mago-$VERSION-sha256sums.txt" composer/sha256sums.txt
           echo "$VERSION" > composer/bin/version
-          tar -xzf "$RUNNER_TEMP/published/mago-$VERSION-x86_64-unknown-linux-gnu.tar.gz" -C "$RUNNER_TEMP"
           (cd "$RUNNER_TEMP" && "./mago-$VERSION-x86_64-unknown-linux-gnu/mago" config --schema) > schema.json
           git add composer/sha256sums.txt composer/bin/version schema.json
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
@@ -1240,7 +1246,7 @@ jobs:
         id: digests
         if: contains(env.MISSING, 'images')
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-frankenphp-*
@@ -1248,7 +1254,7 @@ jobs:
           merge-multiple: true
       - name: Download the platforms' digests, the second try
         if: steps.digests.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-frankenphp-*
@@ -1258,7 +1264,7 @@ jobs:
         id: dev-digests
         if: contains(env.MISSING, 'images')
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-dev-*
@@ -1266,7 +1272,7 @@ jobs:
           merge-multiple: true
       - name: Download the platforms' -dev digests, the second try
         if: steps.dev-digests.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-dev-*
@@ -1304,8 +1310,8 @@ jobs:
             fi
             echo "$kind=${sources[*]}" >> "$GITHUB_OUTPUT"
           done
-      # GitHub creates the tag on the draft's target, this run's commit, as it publishes the draft.
-      - name: Publish the release, which creates tag v<version> on this run's commit
+      # The draft takes tag v<version>, which LAND pushed on this run's commit, as GitHub publishes it.
+      - name: Publish the release on tag v<version> of this run's commit
         if: contains(env.MISSING, 'assets')
         run: |
           gh release edit "v$VERSION" --draft=false
@@ -1583,15 +1589,16 @@ jobs:
         with:
           end: true
   # Fills the draft GitHub release of the version CHANGES found with the files MACOS's call of release.yml built, once
-  # every job before it passed and LAND moved master to this run's commit. The draft has no tag: it targets the commit,
-  # and PUBLISH creates tag v<version> when it makes the draft public, then tags the images, and COMPOSER pushes the
-  # Composer packages' tags after it. So no part of a release is public, its tag included, before every part is in, and
-  # a run that fails leaves an untagged draft, so the next run takes the same version: v0.7.0 and v0.8.3 were tagged
-  # while RELEASE tagged, never published, and skipped for good (#854). Each part publishes once, as sharp/bin/check
-  # --release explains, and a rerun leaves what an earlier attempt published. It opens the red-master issue when it
+  # every job before it passed and LAND moved master to this run's commit and tagged v<version> on it. The draft
+  # targets the commit, PUBLISH makes it public on that tag, then tags the images, and COMPOSER pushes the Composer
+  # packages' tags after it. So no part of a release is public before every part is in. The tag reserves the version, so
+  # the next batch's run takes the next one, and a run that fails after LAND leaves a tagged draft, which a rerun of that
+  # run publishes: v0.7.0 and v0.8.3 were tagged while RELEASE tagged, never published, and skipped for good, since
+  # each next run took the version after them (#854). Each part publishes once, as sharp/bin/check --release explains,
+  # and a rerun leaves what an earlier attempt published. It opens the red-master issue when it
   # fails, since CI_PASSED doesn't need it.
   RELEASE:
-    needs: [CHANGES, BUILD_MAGO_ENGINE, BUILD_LINUX, MAGO_CHECKS, PLAIN_PHP, SPEED, LINUX, MAGO, UPSTREAM, SPEC, HOSTS, WORKFLOWS, MAC_TESTS, MACOS, IMAGE, LAND]
+    needs: [CHANGES, BUILD_MAGO_ENGINE, BUILD_LINUX, MAGO_CHECKS, PLAIN_PHP, SPEED, LINUX, MAGO, UPSTREAM_AND_HOSTS, SPEC, WORKFLOWS, MAC_TESTS, MACOS, IMAGE, LAND]
     # failure() and cancelled() count no needed job that ended cancelled: cancelled() is true only when the run is
     # cancelled, and a job past its timeout-minutes ends cancelled. Run 45455237056's IMAGE (linux/arm64) did, and
     # RELEASE then made its release public with no image and no Composer tag. So it also reads each needed job's result.
@@ -1624,12 +1631,12 @@ jobs:
         run: |
           echo "tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)" >> "$GITHUB_OUTPUT"
           echo "Release $VERSION is commit $GITHUB_SHA, and publishes:${MISSING:+ $MISSING}."
-      # Each download stops after 5 minutes and runs once more, as LINUX's explain.
+      # Each download stops after 1 minute and runs once more, as LINUX's explain.
       - name: Download the assets
         id: assets
         if: contains(env.MISSING, 'assets')
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: mago-${{ env.VERSION }}-*
@@ -1637,7 +1644,7 @@ jobs:
           merge-multiple: true
       - name: Download the assets, the second try
         if: steps.assets.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: mago-${{ env.VERSION }}-*
@@ -1647,14 +1654,14 @@ jobs:
         id: sha256sums
         if: contains(env.MISSING, 'assets')
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: sha256sums
           path: assets
       - name: Download the SHA-256s, the second try
         if: steps.sha256sums.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: sha256sums
@@ -1663,14 +1670,14 @@ jobs:
         id: notes
         if: contains(env.MISSING, 'assets')
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-notes
           path: ${{ runner.temp }}
       - name: Download the release notes, the second try
         if: steps.notes.outcome == 'failure'
-        timeout-minutes: 5
+        timeout-minutes: 1
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-notes
@@ -1708,12 +1715,13 @@ jobs:
             done
           done
           echo "Every asset matches its SHA-256 and its attestation, and was built from tree $TREE."
-      # The release stays an untagged draft that targets this run's commit until PUBLISH, so a failure anywhere leaves
-      # nothing public. A draft of the version that targets another commit is a failed run's, whose assets are another
+      # The release stays a draft that targets this run's commit until PUBLISH, so a failure anywhere leaves nothing
+      # public. A draft of the version that targets another commit is a failed run's, whose assets are another
       # tree's, so it is deleted and made again: only a token that may write sees a draft. GitHub refused this job's
       # token a release on a commit whose workflows differ from master's, with HTTP 403 on runs 45025602373 and
-      # 45027728255, as master moved during each run: LAND moved master to this commit, and queue.yml pushes staging
-      # only once this run ended, so master is this commit while the run runs. Each asset the draft lacks uploads
+      # 45027728255, as master moved during each run: LAND moved master to this commit, and the next batch's run can
+      # land only after its MAC_TESTS, which the one Mac starts once this run's Mac entry of MACOS ends, so master is
+      # this commit while RELEASE and PUBLISH run. Each asset the draft lacks uploads
       # alone, and one it holds at another size, or whose upload never finished, uploads again, so a later run
       # finishes an upload GitHub broke off: gh release upload --clobber stopped at its first failed asset on 0.8.3's
       # run 45637122432, with "HTTP 422: ReleaseAsset.name already exists" after a GitHub 500, and left the draft

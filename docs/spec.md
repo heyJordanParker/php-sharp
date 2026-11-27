@@ -172,6 +172,68 @@ const plan = this.plan();   // type inferred, cannot be reassigned
 const Plan plan = …;        // type written, cannot be reassigned
 ```
 
+**A `using` local releases what its value holds when its block ends.** `using name = value;` declares a local that cannot be reassigned, whose value is a `Disposable`: the standard library's interface with one member, `void dispose();`. When the block ends, by a `return`, by reaching its end or by a throw, the block calls `dispose()` on the value. Several `using` locals in one block are disposed newest first. A `dispose()` may have any effect, and the method that declares a `using` local has the effects of its value's `dispose()` (section 29).
+
+<!-- example using-locals -->
+```csharp
+public class Lease : Disposable
+{
+    public void dispose() { }
+}
+
+public class Report
+{
+    public int count()
+    {
+        using first = new Lease();
+        using second = new Lease();
+        return 2;                       // disposes `second`, then `first`
+    }
+
+    public int total()
+    {
+        using total = 3;                // compile error: A `using` local holds a `Disposable`, and the type of `3` is `int`.
+        return total;
+    }
+
+    public void renew()
+    {
+        using lease = new Lease();
+        lease = new Lease();            // compile error: Cannot assign to `lease`: it is declared with `using`, and its block disposes the value it holds.
+    }
+}
+```
+
+**A `Disposable` value has one owner,** which disposes it. A `new` of a `Disposable` class, or a call whose value is a `Disposable`, makes one, and one of four owners takes it there: a `using` local, the caller a `return` hands it to, a field of `this` in a class that is itself `Disposable`, or the container, through a module binding (section 32). Anywhere else it's a compile error, since nothing would dispose it. A local, field or parameter that holds one only borrows it, so reading it never moves the value.
+
+<!-- example disposable-owners -->
+```csharp
+public class Lease : Disposable
+{
+    public void dispose() { }
+
+    public static Lease take() => new Lease();                // compiles: its caller owns the lease
+}
+
+public class Renter : Disposable
+{
+    private Lease? lease = null;
+
+    public void move() { this.lease = Lease.take(); }       // compiles: Renter is Disposable
+    public void dispose() { this.lease?.dispose(); }
+}
+
+public class Agent
+{
+    public void show()
+    {
+        using lease = Lease.take();                           // compiles
+        const held = lease;                                   // compiles: borrows it
+        const lost = Lease.take();                            // compile error: `Lease.take()` makes a `Disposable`, and only its owner may hold it: a `using` local, a `return`, a field of a `Disposable` class, or a module binding.
+    }
+}
+```
+
 **A parameter never changes,** as a `const` local never does. A method that should change its caller's collection is a `ref` extension (section 26), and one that computes a new value returns it.
 
 <!-- example parameters-never-change: members -->
@@ -3491,7 +3553,7 @@ public class Tracker<T : DatabaseEntity>
 }
 ```
 
-**Listening for a while:** `Events.on<RowImported>(e => …)` starts a listener and returns a handle. The listener stops when the handle goes out of scope:
+**Listening for a while:** `Events.on<RowImported>(e => …)` starts a listener and returns a handle, a `Listening`, which is `Disposable` (section 2). Its owner stops the listener by disposing it, as a `using` local does when its block ends:
 
 <!-- example scoped-listener: members
 public class ProgressBar { public void advance() { } }
@@ -3506,7 +3568,7 @@ public class ImportScreen
 
     public void import(string path)
     {
-        const listening = Events.on<RowImported>(e => this.progress.advance());   // listens until import returns
+        using listening = Events.on<RowImported>(e => this.progress.advance());   // stops when the method returns
         this.importer.run(path);
     }
 }
@@ -6864,6 +6926,8 @@ typeof(Card).tag();                                 // "card", from [Key("card")
 typeof(JourneyStatus).tag();                        // null: the machine is no variant
 ```
 
+**`decode(value)` builds a `T` from a stored value, as `T`'s `parse` reads it (section 10),** lists, maps and scalars already read, and throws one `InvalidFields` that lists every bad part. It has the effects of the reader it runs where the checker knows which one that is (section 29): `T`'s own `parse` for a `final` class, a struct or a class whose constructor is `required`, below which no constructor adds an effect, and each declared variant's for a family. A type that is no class runs only the readers of the classes it holds, so `typeof(int).decode(5)` is pure and `typeof(List<Saved>).decode(rows)` has `Saved`'s reader's effects. `decode` of any other class may build a subclass whose constructor differs, so it may have every effect, as `createInstance` may:
+
 <!-- example class-decode: statements
 public machine LinkStatus : string
 {
@@ -6881,6 +6945,53 @@ public class Page
 const row = ["status": "draft", "title": "Home"];
 typeof(Page).decode(row);                       // a Page whose status is LinkStatus.Draft, read by its tag
 typeof(Page).decode(["title": 5]);              // throws InvalidFields: title: expected string, got int 5
+```
+
+<!-- example decode-effects
+extern Disk uses Database;
+-->
+```csharp
+namespace App.Shop;
+
+import Vendor.Storage.Disk;
+
+public class Saved { public required Saved() { Disk.save(); } }          // effect: Database
+public final class Note { public Note(public string text { get; }) { } }
+public class Ledger { public Ledger(public int total { get; }) { } }     // open, constructor not required
+public final class Tally { public Tally(public int total { get; }) { } }
+
+public interface Reader { Any? read(Any? row); }                         // pure
+public interface Storing { Any? read(Any? row) uses Database; }
+
+public class SavedReader : Reader
+{
+    public Any? read(Any? row) => typeof(Saved).decode(row);            // compile error: reaches Saved.Saved, which calls Disk.save with the effect Database
+}
+
+public class StoredReader : Storing
+{
+    public Any? read(Any? row) => typeof(Saved).decode(row);            // compiles
+}
+
+public class NoteReader : Reader
+{
+    public Any? read(Any? row) => typeof(Note).decode(row);             // compiles: Note's reader has no effects
+}
+
+public class LedgerReader : Reader
+{
+    public Any? read(Any? row) => typeof(Ledger).decode(row);           // compile error: decode of Ledger may have every effect, since a subclass's constructor may differ
+}
+
+public class TallyReader : Reader
+{
+    public Any? read(Any? row) => typeof(Tally).decode(row);            // compiles: no class extends Tally
+}
+
+public class NotesReader : Reader
+{
+    public Any? read(Any? row) => typeof(List<Note>).decode(row);       // compiles: a list runs its elements' readers
+}
 ```
 
 **Each reflection value keys a `Map` and joins a `Set` as the member it reflects,** however often reflection read it. Two `Method`s, two `Property`s, two `Field`s, two `Constant`s and two `Constructor`s are equal when one class declares them under one name, two `Parameter`s when they are one position of one method, two `EnumCase`s when they are one case of one enum, and two `TupleElement`s when they have one name, or none, and one type. Equal values share their `hash()`, so `Map<Method, List<Relation>>` compiles:
@@ -7157,6 +7268,45 @@ public class Archived : Saved
 {
     public required Archived() : super() { Mail.send(); }               // compile error: Archived's constructor adds the effect Mailer, which Saved's doesn't have
 }
+```
+
+**`attributeData<TAttribute : Object>()` reads each attribute as written, and builds none.** Each member that has `attributes<TAttribute : Object>()`, `Class<T>`, `Method`, `Property`, `Field`, `Parameter`, `Constant`, `Constructor` and `EnumCase`, has it beside, and it selects the same attributes in declaration order. Each is an `AttributeData`: its `type`, the attribute's class, and its `arguments`, the call of its constructor, one value for each parameter in parameter order, with a named argument at its parameter's place and a left-out parameter's default filled in, so `[Access(level: Level.Edit)]` reads as `[Access(Level.Edit)]` does. Each value is the argument as written, an enum case as the case and `typeof(System)` as the class value. No attribute's constructor runs, so it is pure (section 29), and a build step saves an attribute as data that a later run rebuilds with `createInstance`, which may have every effect:
+
+<!-- example attributes-as-written -->
+```csharp
+// app/Access.sharp
+namespace App;
+
+[Attribute(Attribute.TARGET_ALL | Attribute.IS_REPEATABLE)]
+public class Access
+{
+    public Access(public Any? level { get; }) { }
+}
+```
+
+<!-- example attributes-as-written: statements
+public enum Level { case Edit; case View; }
+public class System { }
+public class Actions
+{
+    [Access(Level.Edit)]
+    [Access(typeof(System))]
+    public void publish() { }
+
+    [Access(level: Level.Edit)]
+    public void review() { }
+}
+-->
+```csharp
+const method = typeof(Actions).methods().first((Method declared) => declared.name == "publish");
+method.attributes<Access>().count();                                 // 2: built objects, arguments gone
+const written = method.attributeData<Access>();
+written[0].type == typeof(Access);                                   // true
+written[0].arguments == [Level.Edit];                                // true
+written[1].arguments == [typeof(System)];                            // true
+const access = written[0].type.createInstance(written[0].arguments); // the same Access(Level.Edit), which may have every effect
+const review = typeof(Actions).methods().first((Method declared) => declared.name == "review");
+review.attributeData<Access>()[0].arguments == [Level.Edit];         // true, the same as for [Access(Level.Edit)]
 ```
 
 **A class value of a generic class can carry its type arguments or leave them out.** `typeof(PaginatedList<Order>)` is a `Class<PaginatedList<Order>>`, and `new (pages)()` creates a `PaginatedList<Order>`. A `Class<PaginatedList>` leaves them out, so `new` names them, `new (any)<Order>()`, or takes them from its arguments or the declared type its object goes into, as any `new` does (section 11). `new (any)()` that nothing fixes them for is a compile error.
@@ -8051,7 +8201,7 @@ extern now uses Clock;               // compile error: a bare name names a class
 - **One line for a class covers its members, and a method's own line overrides its class's line.** After `extern CarbonImmutable uses none;` and `extern CarbonImmutable.now uses Clock;`, `CarbonImmutable.now()` has the effect `Clock` and `date.addDays(1)` is pure.
 - **A call has the effects of the line of the class, trait or interface that declares the method it calls,** and nothing passes from the class a call goes through or from the call that returned the object. A facade's docblock `@method` declares the method on the facade, so `DB.table(…)` takes `DB`'s line. `new` takes the line of the class it creates, as `new ValueError("empty")` takes `ValueError`'s, or of the nearest plain PHP class a PHP# class extends, and a read of a property takes the line of the class that declares it. `StripeClient.charges().create(…)` has the effects of `StripeClient`'s line for `charges()`, and of the line of the class `charges()` returns for `create(…)`, which a project declares on its own, so `Order.all().sum("total")` has only `Database` from `all()` after `extern Collection uses none;`.
 - **A plain PHP trait's member is one body, so its `extern` line covers every class that takes the member from the trait.** After `extern Dispatchable.dispatch uses Database;`, `ReceiveEvent.dispatch(…)` has the effect `Database` where `ReceiveEvent` lists `Dispatchable` in its header. A class that writes `dispatch` itself runs its own body, which the line does not cover.
-- **Reflection has the effects of the code it runs** (section 25). `Property.get` and `Property.set` run an accessor no `uses` can name, so each may have every effect, and so may `createInstance`, which takes a list of arguments built while the code runs and may build any subclass. `new (type)(…)` has the effects of the `required` constructor of the class `type`'s `Class<T>` names, as `new T(…)` has them. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` and `Method.createInvoker` are pure, and a call of the value each gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`.
+- **Reflection has the effects of the code it runs** (section 25). `Property.get` and `Property.set` run an accessor no `uses` can name, so each may have every effect, and so may `createInstance`, which takes a list of arguments built while the code runs and may build any subclass. `new (type)(…)` has the effects of the `required` constructor of the class `type`'s `Class<T>` names, as `new T(…)` has them. `decode` has the effects of the reader it runs, a class's `parse` (section 10), where the checker knows which one that is: a `final` class's, a struct's, a family's declared variants' or a class's whose constructor is `required`. A type that is no class runs only the readers of the classes it holds, so `typeof(int).decode(…)` is pure, and `decode` of any other class may have every effect, as `createInstance` may. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` and `Method.createInvoker` are pure, and a call of the value each gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`. `attributeData<T>()` builds no attribute, so it is pure.
 - **A constructor below a `required` one adds no effect to it,** as an implementation adds none to its interface method, since `new (type)(…)` of a `Class<Saved>` may build any subclass of `Saved` with the effects of `Saved`'s constructor alone (section 25). A subclass constructor that also sends mail is a compile error that names the effect it adds.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way. `mago convert` writes `extern X uses any;` there for each plain PHP class a converted file reaches that has no line, so the converted file compiles, and the project narrows each `uses any` to the effects it knows.
 - **An `extern` line takes any attribute, which the class, method or function it declares carries as its own,** as every declaration takes one (section 1). The checker reads it as the declaration's, so a `[DynamicallyAccessed]` written on a class's line marks a library's attribute class or base class whose source carries no mark, as `[DynamicallyAccessed] extern Model uses Database;` marks Eloquent's `Model` (section 5). At run time PHP#'s `typeof(X).attributes<T>()` and `Method.attributes<T>()`, and plain PHP's `ReflectionClass`, `ReflectionMethod` and `ReflectionFunction` `getAttributes()`, give the declaration's own attributes and then the line's, though no code loads the file that holds the line. A method takes them on the line of the class that declares it, so an attributed line of a method the class only inherits is a compile error that names that class. An `extern namespace` line (section 23) declares nothing, so an attribute on it is a compile error. `import` and `extern` stay separate lines.
@@ -8222,7 +8372,7 @@ public ExampleRun(private Echo echo) { }
 this.echo.back("one line");   // "one line"
 -->
 
-**`ZipArchive`, in `Sharp.IO`, reads and writes a ZIP archive.** `ZipArchive.open(path)` opens one to read and to add to, and `ZipArchive.create(path)` makes a new one in place of any file at `path`. `list()` gives each entry's name in the archive's order, and `read(name)` gives an entry's text, or null when the archive has none. `write(name, text)` adds an entry from text and `addFile(file, name)` one from a file, each in place of an entry of that name, and `extractTo(directory)` writes every entry into a folder. The changes reach the file when `close()` runs, and an archive with no entries is written too. Each member reads or writes files, so code that calls one has the effect `Files`. A failure throws `RuntimeException` with the path and libzip's reason, as `ZipArchive.open: "report.csv" cannot be opened: Not a zip archive`:
+**`ZipArchive`, in `Sharp.IO`, reads and writes a ZIP archive.** `ZipArchive.open(path)` opens one to read and to add to, and `ZipArchive.create(path)` makes a new one in place of any file at `path`. `list()` gives each entry's name in the archive's order, and `read(name)` gives an entry's text, or null when the archive has none. `write(name, text)` adds an entry from text and `addFile(file, name)` one from a file, each in place of an entry of that name, and `extractTo(directory)` writes every entry into a folder. A `ZipArchive` is `Disposable` (section 2), and the changes reach the file when its owner disposes it, as a `using` local does when its block ends. An archive with no entries is written too. Each member reads or writes files, so code that calls one has the effect `Files`. A failure throws `RuntimeException` with the path and libzip's reason, as `ZipArchive.open: "report.csv" cannot be opened: Not a zip archive`:
 
 <!-- example zip-archive -->
 ```csharp
@@ -8235,13 +8385,16 @@ public class Export
 {
     public void pack(string path, string report)
     {
-        const archive = ZipArchive.create(path);
+        using archive = ZipArchive.create(path);
         archive.write("readme.txt", "Totals by month");
-        archive.addFile(report, "data/report.csv");
-        archive.close();                                                  // compiles: Export has the effect Files
+        archive.addFile(report, "data/report.csv");                       // compiles: Export has the effect Files
     }
 
-    public string? readme(string path) => ZipArchive.open(path).read("readme.txt");
+    public string? readme(string path)
+    {
+        using archive = ZipArchive.open(path);
+        return archive.read("readme.txt");
+    }
 }
 ```
 
@@ -8440,6 +8593,7 @@ public class Stamp
 ```
 
 - **A class's effects** are the effects it holds, directly or through its fields, or that its methods take, the effects of the plain PHP its methods call, and the events its methods emit. A method that calls an effect object it takes has that effect, as when it calls one it holds, and a caller that uses one a method returns has the effect at that call. The checker works them out from field, constructor and parameter types and from method bodies. Nothing is written down.
+- **A `using` local carries its value's `dispose()`** (section 2). `Disposable.dispose()` lists no effects and an implementation may have any, so the method that declares `using transaction = new Transaction(connection);` has the effects of `Transaction`'s `dispose()`, as a written call of `dispose()` would, and a `using` of a pure `Disposable` adds none.
 - **An effect object**, an object of an `effect class`, is created in a module binding (section 32), as often as its binding's lifetime decides, and passed on through constructors, method parameters and return values. Creating one anywhere else in PHP# code, or storing one in a static, is a compile error. Plain PHP creates one as it creates any object. A fake is created anywhere.
 
 **Pure code** reaches no effect object, emits no event, and calls no plain PHP but what an `extern` line declares `uses none`. Pure limits only what code reaches outside the program, so a pure method may change its own object and its arguments. `readonly` after the parameters is what promises a method changes nothing, as in `T peek() readonly;`, and it holds every implementation to that (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code that changes nothing it was given, so a law that reaches a change is a compile error naming the method, and a law cannot see inside effect classes or plain PHP.
@@ -8722,6 +8876,28 @@ public Result<int, PaymentError> total(Cart cart) => Result.Ok((try this.gateway
 public Result<int, PaymentError> cartTotal => Result.Ok((try this.gateway.charge(this.cart)).total);   // the getter returns the failure
 ```
 
+**`ok()` and `unwrap()` read the `Ok` value without a `match`,** as Rust's `Result::ok` and `Result::unwrap` do. `ok()` gives the `Ok` value, or null for an `Err`. `unwrap()` gives the `Ok` value, and an `Err` throws `LogicException` with the error's `message`, since code that unwraps states that the failure can't happen.
+
+<!-- example result-ok-unwrap: statements -->
+```csharp
+Result<int, PaymentError>.Ok(8080).ok();                       // 8080
+Result<int, PaymentError>.Err(PaymentError.Expired).ok();      // null
+Result<int, PaymentError>.Ok(8080).unwrap();                   // 8080
+Result<int, PaymentError>.Err(PaymentError.Expired).unwrap();  // throws: "card expired"
+```
+
+**A statement that discards a `Result` is a compile error,** as Rust's `#[must_use]` on `Result` warns, since the failure it holds would be lost. A `Result` kept in a variable, passed up with `try` or matched is never refused.
+
+<!-- example discarded-result: members
+private CheckoutGateway gateway = new CheckoutGateway();
+-->
+```csharp
+public void pay(Cart cart)
+{
+    this.gateway.charge(cart);                        // compile error: `this.gateway.charge` returns a Result: handle it with try, match, ok() or unwrap()
+}
+```
+
 `try`/`catch` blocks remain for exceptions, which are now mostly limited to the edges, such as wrapping a plain PHP exception.
 
 Methods declare no thrown exceptions, and the checker never reports an undeclared one.
@@ -8835,7 +9011,7 @@ module
 
 **The host defines each lifetime.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.
 
-**A host starts and ends each scope with `Scope.run(body)`.** While `body` runs, each `scoped` service it builds lives until `body` returns or throws, and is then dropped. `Scope.run` returns what `body` returns, and has `body`'s effects (section 29). PHP's own request is the default scope, so the CLI and FrankenPHP outside worker mode need no call. A long-running host wraps each unit of work in it, such as an Octane request, a FrankenPHP worker request or a queued job. Plain PHP calls it as `\Sharp\Scope::run(fn () => …)`.
+**A host starts and ends each scope with `Scope.run(body)`.** While `body` runs, each `scoped` service it builds lives until `body` returns or throws, and is then disposed if it is `Disposable`, newest first. `Scope.run` returns what `body` returns, and has `body`'s effects (section 29). PHP's own request is the default scope, so the CLI and FrankenPHP outside worker mode need no call. A long-running host wraps each unit of work in it, such as an Octane request, a FrankenPHP worker request or a queued job. Plain PHP calls it as `\Sharp\Scope::run(fn () => …)`.
 
 <!-- example host-scope -->
 ```csharp
@@ -8855,6 +9031,57 @@ public class Worker
             Scope.run(() => job.handle());   // each job gets its own scoped services
         }
     }
+}
+```
+
+**The container disposes the services it keeps.** When a scope ends, each `scoped` service it built that is `Disposable` (section 2) is disposed, newest first, so a service is disposed before the services it needs, as nested `using` locals are. A throw in `body` still disposes them, and what a `dispose()` throws takes the pending throw as its previous, as in a `finally` block. PHP's request is the default scope: it ends when the request does, and each `Disposable` singleton is disposed after it, newest first. A `transient` service is the class's that takes it, so a class that takes a `transient` `Disposable` owns it, and must be `Disposable` itself to dispose it: anything else is a compile error at the binding.
+
+<!-- example scoped-disposable -->
+```csharp
+public class Connection
+{
+    public void begin() { }
+
+    public void rollBackUnlessCommitted() { }
+}
+
+public class Transaction : Disposable
+{
+    private Connection connection;
+
+    public Transaction(Connection connection)
+    {
+        this.connection = connection;
+        this.connection.begin();
+    }
+
+    public void dispose() { this.connection.rollBackUnlessCommitted(); }
+}
+```
+
+<!-- example scoped-disposable-module
+public class Connection
+{
+    public void begin() { }
+
+    public void rollBackUnlessCommitted() { }
+}
+
+public class Transaction : Disposable
+{
+    public Transaction(private Connection connection) { connection.begin(); }
+
+    public void dispose() { this.connection.rollBackUnlessCommitted(); }
+}
+-->
+```csharp
+// app/Module.sharp
+namespace App;
+
+module
+{
+    scoped Connection = Connection;
+    scoped Transaction = Transaction;   // disposed when its scope ends, newest first
 }
 ```
 
@@ -8929,7 +9156,8 @@ module
 **A nested namespace's module overrides its parent's services.** A test or environment module overrides with `module : App.Shop { … }`, and the compiler checks every environment's set of services: the base modules under all of that environment's modules at once.
 
 - **An environment module is `Module.<Environment>.sharp`** beside the `Module.sharp` it overrides, such as `Module.Production.sharp`. `SHARP_ENV` picks it.
-- **A test module is declared in the test file that uses it,** with the same header. While a test of that file runs, its services are the test module's over the base modules, with no environment module, which is the set the compiler checks.
+- **A test module is declared in the test file that uses it,** with the same header. While a test of that file runs, its services are the test module's over the base modules, with no environment module, which is the set the compiler checks. A test class takes its services in its main constructor, and each test gets a new test object whose services come from the test module over the base modules.
+- **A PHPUnit extension takes its services in its main constructor too.** PHPUnit creates it once, before the first test, and its services come from the base modules of its namespace.
 
 <!-- example environment-module -->
 ```csharp
@@ -8951,18 +9179,49 @@ module : App.Shop
 namespace App.Shop;
 
 import App.Mail.Mailer;
+import PHPUnit.Framework.Attributes.Test;
 import PHPUnit.Framework.TestCase;
 import Tests.Fakes.FakeMailer;
 
 module : App.Shop
 {
-    singleton Mailer = FakeMailer;                                             // the tests in this file get a FakeMailer
+    singleton FakeMailer = FakeMailer;
+    singleton Mailer(FakeMailer fake) = fake;                                  // the tests in this file get a FakeMailer
 }
 
-public class CheckoutTest : TestCase { … }
+public class CheckoutTest : TestCase
+{
+    public CheckoutTest(private Checkout checkout, private FakeMailer mailer) { }
+
+    [Test]
+    public void sendsTheReceipt()
+    {
+        this.checkout.pay("ada@example.com");
+        this.assertSame(["ada@example.com"], this.mailer.sent);
+    }
+}
 ```
 
-**A missing or mistyped service is a compile error.** PHP# creates the classes a module binds and the classes that declare an `on` method (section 15), each through its main constructor (section 9.1). Every parameter of their constructors, and every binding parameter, needs a binding in the module of its namespace or of a namespace above it. The compiler checks every such class, whether or not another class takes it. A class no module binds is ordinary code, created with `new`, such as `Money`.
+<!-- example phpunit-extension -->
+```csharp
+// tests/Support/ProgressReporter.sharp
+namespace Tests.Support;
+
+import PHPUnit.Runner.Extension.Extension;
+import PHPUnit.Runner.Extension.Facade;
+import PHPUnit.Runner.Extension.ParameterCollection;
+import PHPUnit.TextUI.Configuration.Configuration;
+import Sharp.IO.Console;
+
+public class ProgressReporter : Extension
+{
+    public ProgressReporter(private Console console) { }                       // built once, before the first test, from the base modules
+
+    public void bootstrap(Configuration configuration, Facade facade, ParameterCollection parameters) { … }
+}
+```
+
+**A missing or mistyped service is a compile error.** PHP# creates the classes a module binds, the classes that declare an `on` method (section 15), and the test classes and PHPUnit extensions of a test folder, each through its main constructor (section 9.1). Every parameter of their constructors, and every binding parameter, needs a binding in the module of its namespace or of a namespace above it. The compiler checks every such class, whether or not another class takes it. A class no module binds is ordinary code, created with `new`, such as `Money`.
 
 <!-- example missing-service -->
 ```csharp

@@ -1,0 +1,10 @@
+namespace InterfaceReach;
+
+// Default bodies written in `InterfaceReach`, so they reach its `internal` members, spec section 5, whichever class
+// runs them.
+public interface Opener
+{
+    void openBox(Box box) { box.open(); }
+
+    int sealOf(Box box) => box.seal;
+}
