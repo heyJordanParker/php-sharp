@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 51d4d52d80093f9922e3d244c948615e6f5afc7a */
+ * Stub hash: 8339ee34fc6934a0bc399c434e71925ae343fdf5 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
@@ -171,6 +171,11 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_makeGenericType, 0, 2, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, arguments, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_isAssignable, 0, 2, _IS_BOOL, 0)
+	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, other, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_enumCases, 0, 2, IS_ARRAY, 0)
@@ -572,6 +577,7 @@ ZEND_FUNCTION(Sharp_Internal_interfaces);
 ZEND_FUNCTION(Sharp_Internal_classFacts);
 ZEND_FUNCTION(Sharp_Internal_enumBackingType);
 ZEND_FUNCTION(Sharp_Internal_makeGenericType);
+ZEND_FUNCTION(Sharp_Internal_isAssignable);
 ZEND_FUNCTION(Sharp_Internal_enumCases);
 ZEND_FUNCTION(Sharp_Internal_attributes);
 ZEND_FUNCTION(Sharp_Internal_attributeData);
@@ -697,6 +703,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "classFacts"), zif_Sharp_Internal_classFacts, arginfo_Sharp_Internal_classFacts, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "enumBackingType"), zif_Sharp_Internal_enumBackingType, arginfo_Sharp_Internal_enumBackingType, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "makeGenericType"), zif_Sharp_Internal_makeGenericType, arginfo_Sharp_Internal_makeGenericType, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "isAssignable"), zif_Sharp_Internal_isAssignable, arginfo_Sharp_Internal_isAssignable, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "enumCases"), zif_Sharp_Internal_enumCases, arginfo_Sharp_Internal_enumCases, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "attributes"), zif_Sharp_Internal_attributes, arginfo_Sharp_Internal_attributes, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "attributeData"), zif_Sharp_Internal_attributeData, arginfo_Sharp_Internal_attributeData, 0, NULL, NULL)

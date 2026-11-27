@@ -1,0 +1,6 @@
+namespace ConstantDefaults;
+
+public class Draft
+{
+    public string title => "draft";
+}
