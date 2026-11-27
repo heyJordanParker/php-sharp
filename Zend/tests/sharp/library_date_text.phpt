@@ -20,7 +20,7 @@ foreach (['2026-10-22 21:30:00', '2026-10-22T21:30', '2026-10-22 21:30:00.25', '
 }
 try {
     DateTextCalls::strictLocal('yesterday', 'UTC');
-} catch (ValueError $error) {
+} catch (ValueError|LogicException $error) {
     echo get_class($error), ': ', $error->getMessage(), "\n";
 }
 ?>
@@ -41,4 +41,4 @@ bool(false)
 2026-10-22 24:00:00 => null
 2026-02-30 10:00:00 => null
 2026-10-22 => null
-ValueError: `DateTime.parseLocal` reads a date and a time of day, such as "2026-10-22 21:30:00", and "yesterday" is not.
+LogicException: `DateTime.parseLocal` reads a date and a time of day, such as "2026-10-22 21:30:00", and "yesterday" is not.

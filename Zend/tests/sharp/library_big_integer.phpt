@@ -10,7 +10,7 @@ function refused(Closure $call): void
 {
     try {
         $call();
-    } catch (ValueError|ArithmeticError $error) {
+    } catch (ValueError|ArithmeticError|LogicException $error) {
         echo get_class($error), ': ', $error->getMessage(), "\n";
     }
 }
@@ -41,5 +41,5 @@ NULL
 ["7","0","12",null,null,null]
 ArithmeticError: BigInteger.pow: -1 is a negative exponent, and an integer raised to it is no integer
 ValueError: BigInteger.toString takes a base from 2 to 36, and 37 is not one.
-ValueError: BigInteger.parse: "x" is not an integer, such as "-12"
+LogicException: BigInteger.parse: "x" is not an integer, such as "-12"
 DivisionByZeroError: Division by zero

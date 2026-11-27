@@ -6,12 +6,12 @@ require __DIR__ . '/vendor/autoload.php';
 
 use Demo\JsonCalls;
 
-var_dump(JsonCalls::parse('{"a":1,"b":[true,null],"c":"x"}'));
-var_dump(JsonCalls::parse('null'), JsonCalls::parse('2.5'));
+var_dump(JsonCalls::parsed('{"a":1,"b":[true,null],"c":"x"}'));
+var_dump(JsonCalls::parsed('null'), JsonCalls::parsed('2.5'));
 
 try {
-    JsonCalls::parse('{');
-} catch (JsonException $error) {
+    JsonCalls::parsed('{');
+} catch (LogicException $error) {
     echo get_class($error), ': ', $error->getMessage(), "\n";
 }
 
@@ -61,16 +61,16 @@ array(3) {
 }
 NULL
 float(2.5)
-JsonException: Syntax error
+LogicException: Syntax error
 object(Demo\JsonPoint)#%d (1) {
   ["x"]=>
   int(3)
 }
 Demo\JsonOrder 7 new,vip Demo\JsonPoint 2
-Sharp\InvalidFields: x: expected int, got string 'four'
-Sharp\InvalidFields: x: missing
-Sharp\InvalidFields: expected Demo.JsonPoint, got int 3
-JsonException: Syntax error
+LogicException: x: expected int, got string 'four'
+LogicException: x: missing
+LogicException: expected Demo.JsonPoint, got int 3
+LogicException: Syntax error
 {}
 []
 {"counts":{},"lines":[]}

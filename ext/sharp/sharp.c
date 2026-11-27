@@ -9776,7 +9776,7 @@ static bool sharp_stored_value(zval *value, zval *stored)
 	}
 }
 
-/* Spec section 10: `Class<T>.encode(value)`, the stored form of `value` that `Class<T>.decode` reads back, as
+/* Spec section 10: `Class<T>.encode(value)`, the stored form of `value` that `Class<T>.parse` reads back, as
  * sharp_stored_value gives it. */
 ZEND_FUNCTION(Sharp_Internal_storedValue)
 {
@@ -9867,7 +9867,7 @@ static int sharp_json_object_end(php_json_parser *parser, zval *object)
 	return SUCCESS;
 }
 
-/* Spec section 22: what `Json.parse` and `Json.decode` read, the value the JSON text `json` holds in `value`, as
+/* Spec section 22: what `Json.parse` reads, the value the JSON text `json` holds in `value`, as
  * json_decode reads it with JSON_OBJECT_AS_ARRAY, each object a PHP array, but an empty object an empty Sharp\Map.
  * Throws JsonException on text that is no JSON, as JSON_THROW_ON_ERROR does. */
 static bool sharp_json_decode(const zend_string *json, zval *value)
@@ -14181,10 +14181,10 @@ static zval *sharp_input_field(zval *value, zend_string *key, zval *read)
 }
 
 /* Spec section 10: one read of a value into a type, the one place a value is read into a type, for a struct's or a
- * class's `parse`, a family's, `Json.decode` and `Query.decode`. It holds the problems it found, each under its path,
+ * class's `parse`, a family's, `Json.parse<T>` and `Query.parse<T>`. It holds the problems it found, each under its path,
  * the paths of the structs that reported their own problems, where the walk's problem goes, and the problems a backed
  * struct's own `parse` gave, which take the walk's place at their path. With `text`, a number or a bool is read from
- * its text, as Query.decode reads it, at every depth. `order` names the classes and scalar types the declaration of
+ * its text, as Query.parse<T> reads it, at every depth. `order` names the classes and scalar types the declaration of
  * the field being read writes, in its order, `App.Card, App.Bank`, which a union tries in that order, or is NULL.
  * `holder` and `field` name the field of a class whose value is being read, which a Secret's encryption is bound to,
  * or are NULL. */
@@ -14695,6 +14695,7 @@ static void sharp_read_failed(sharp_read *read)
 		return;
 	}
 	zval held, message;
+	ZVAL_UNDEF(&held);
 	zval *thrown_message = zend_read_property_ex(zend_get_exception_base(thrown), thrown, ZSTR_KNOWN(ZEND_STR_MESSAGE), true, &held);
 	ZVAL_STR(&message, zval_get_string(thrown_message));
 	sharp_read_note(&read->texts, read, &message);
@@ -14716,19 +14717,21 @@ static bool sharp_is_result_case(const zval *result, bool ok)
  * other value, as JsonValue's `parse` gives, stays. */
 static void sharp_read_parsed(sharp_read *read, zval *built)
 {
-	zval held;
+	zval held, fields_held;
+	ZVAL_UNDEF(&held);
+	ZVAL_UNDEF(&fields_held);
 	if (sharp_is_result_case(built, true)) {
-		zval *value = zend_read_property(Z_OBJCE_P(built), Z_OBJ_P(built), "value", sizeof("value") - 1, true, &held);
-		ZVAL_COPY(&held, value);
+		zval value;
+		ZVAL_COPY(&value, zend_read_property(Z_OBJCE_P(built), Z_OBJ_P(built), "value", sizeof("value") - 1, true, &held));
+		zval_ptr_dtor(&held);
 		zval_ptr_dtor(built);
-		ZVAL_COPY_VALUE(built, &held);
+		ZVAL_COPY_VALUE(built, &value);
 		return;
 	}
 	if (!sharp_is_result_case(built, false)) {
 		return;
 	}
 	zval *error = zend_read_property(Z_OBJCE_P(built), Z_OBJ_P(built), "error", sizeof("error") - 1, true, &held);
-	zval fields_held;
 	zval *fields = Z_TYPE_P(error) == IS_OBJECT
 		? zend_read_property(Z_OBJCE_P(error), Z_OBJ_P(error), "fields", sizeof("fields") - 1, true, &fields_held)
 		: NULL;
@@ -14755,6 +14758,8 @@ static void sharp_read_parsed(sharp_read *read, zval *built)
 	if (failed) {
 		sharp_read_fail(read);
 	}
+	zval_ptr_dtor(&fields_held);
+	zval_ptr_dtor(&held);
 	zval_ptr_dtor(built);
 	ZVAL_UNDEF(built);
 }
@@ -15196,7 +15201,7 @@ static void sharp_read_sealed(zend_class_entry *ce, const sharp_type *arguments,
 
 /* Spec section 10: builds, in `value`, each struct, class, family's variant, backed struct and enum case `type` holds,
  * as a field `parse` reads builds them, each problem under its path in the read. With the read's `text`, a number or
- * a bool is read from its text, as `Query.decode` reads it. sharp_read_whole checks the whole value after. */
+ * a bool is read from its text, as `Query.parse<T>` reads it. sharp_read_whole checks the whole value after. */
 static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *read)
 {
 	ZVAL_DEREF(value);
@@ -15851,6 +15856,7 @@ ZEND_FUNCTION(Sharp_Internal_parseHeld)
 		RETURN_THROWS();
 	}
 	zval held, problems, message;
+	ZVAL_UNDEF(&held);
 	zval *thrown_message = zend_read_property_ex(zend_get_exception_base(thrown), thrown, ZSTR_KNOWN(ZEND_STR_MESSAGE), true, &held);
 	ZVAL_STR(&message, zval_get_string(thrown_message));
 	zval_ptr_dtor(&held);

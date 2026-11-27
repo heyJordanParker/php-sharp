@@ -1,5 +1,5 @@
 --TEST--
-Data in and out, spec section 10: Json.encode writes a struct by its keys, a value as text by its toString() and a family's variant with its name under the tag's key, leaving out a null field marked omitNull, and Json.decode<T> and Query.decode<T> read it back through the one reader: a list of structs, a tagged data enum, a tagged abstract class and a sealed interface by their names, a union of two structs and a union of scalars in the order the field writes them, a scalar from JSON as it is and from a query's text, and a query's number from its text, each bad field one InvalidFields problem under its path, a long text cut at 40 bytes. typeof(Self).withTag builds a family's variant by its name, or gives null
+Data in and out, spec section 10: Json.encode writes a struct by its keys, a value as text by its toString() and a family's variant with its name under the tag's key, leaving out a null field marked omitNull, and Json.parse<T> and Query.parse<T> read it back through the one reader: a list of structs, a tagged data enum, a tagged abstract class and a sealed interface by their names, a union of two structs and a union of scalars in the order the field writes them, a scalar from JSON as it is and from a query's text, and a query's number from its text, each bad field one ParseError problem under its path, a long text cut at 40 bytes. typeof(Self).withTag builds a family's variant by its name, or gives null
 --FILE--
 <?php
 require __DIR__ . '/attempt.inc';
@@ -66,14 +66,14 @@ Payment
 bool(true)
 bool(true)
 NULL
-Sharp\InvalidFields: amount: Decimal.parse: "one" is not a decimal number, such as "-12.50"; method.type: expected bank or card, got string 'cash' in Json.sharp on line %d
+LogicException: amount: Decimal.parse: "one" is not a decimal number, such as "-12.50"; method.type: expected bank or card, got string 'cash' in Result.sharp on line %d
 List
 int(2)
-Sharp\InvalidFields: [1].return_url: missing; [1].paidAt: missing; [1].method: missing in Json.sharp on line %d
+LogicException: [1].return_url: missing; [1].paidAt: missing; [1].method: missing in Result.sharp on line %d
 Families
 string(14) "DataInOut\Bank"
-Sharp\InvalidFields: type: expected bank or card, got string 'cash' in Json.sharp on line %d
-Sharp\InvalidFields: type: missing in Json.sharp on line %d
+LogicException: type: expected bank or card, got string 'cash' in Result.sharp on line %d
+LogicException: type: missing in Result.sharp on line %d
 string(14) "DataInOut\Card"
 NULL
 {"status":"paid","transactionId":"tx_1"}
@@ -81,7 +81,7 @@ object(DataInOut\PaymentResult\Paid)#%d (1) {
   ["transactionId"]=>
   string(4) "tx_1"
 }
-Sharp\InvalidFields: status: expected declined or paid, got string 'refunded' in Json.sharp on line %d
+LogicException: status: expected declined or paid, got string 'refunded' in Result.sharp on line %d
 {"kind":"letter","label":"to Ann"}
 string(16) "DataInOut\Letter"
 string(6) "to Ann"
@@ -100,8 +100,8 @@ object(DataInOut\Search)#%d (2) {
   int(2)
 }
 int(1)
-Sharp\InvalidFields: page: expected int, got string 'x' in Query.sharp on line %d
-Sharp\InvalidFields: page: expected int, got string '9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x…' in Query.sharp on line %d
+LogicException: page: expected int, got string 'x' in Result.sharp on line %d
+LogicException: page: expected int, got string '9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x9x…' in Result.sharp on line %d
 Union
 string(17) "DataInOut\Voucher"
 string(16) "DataInOut\Coupon"
@@ -111,7 +111,7 @@ int(3)
 float(1.5)
 bool(true)
 NULL
-Sharp\InvalidFields: default: expected (bool|float|int|string)?, got List in ComponentProperty.sharp on line %d
+LogicException: default: expected (bool|float|int|string)?, got List in Result.sharp on line %d
 object(DataInOut\ComponentProperty)#%d (2) {
   ["default"]=>
   int(3)

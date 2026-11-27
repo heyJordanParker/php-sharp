@@ -13,7 +13,7 @@ public class Record
     public virtual string kind() => "record";
 
     // `new Self.fromJson(…)` calls the one of the class the code is called on.
-    public static Self parse(Map<string, string> json) => new Self.fromJson(json);
+    public static Self read(Map<string, string> json) => new Self.fromJson(json);
 
     public Self copy() => new Self.fromJson(["id": "copy"]);
 }

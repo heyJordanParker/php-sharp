@@ -27,7 +27,7 @@ $invalid = [
 foreach ($invalid as $call) {
     try {
         $call();
-    } catch (ValueError $error) {
+    } catch (ValueError|LogicException $error) {
         echo get_class($error), ': ', $error->getMessage(), "\n";
     }
 }
@@ -96,5 +96,5 @@ array(2) {
 string(9) "a\.b\/c\*"
 NULL
 bool(true)
-ValueError: Regex.parse: "/[/" does not compile: Compilation failed: missing terminating ] for character class at offset 1
+LogicException: Regex.parse: "/[/" does not compile: Compilation failed: missing terminating ] for character class at offset 1
 ValueError: Regex.matches: the pattern failed: Backtrack limit exhausted

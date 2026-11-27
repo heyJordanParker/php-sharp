@@ -4,7 +4,7 @@ Sharp\Bool::tryParse gives true or false for what filter_var reads as a boolean,
 <?php
 require __DIR__ . '/vendor/autoload.php';
 
-var_dump(Sharp\Bool::tryParse('yes'), Sharp\Bool::tryParse('off'), Sharp\Bool::tryParse('maybe'), Sharp\Bool::tryParse(true));
+var_dump(Sharp\Bool::parse('yes')->ok(), Sharp\Bool::parse('off')->ok(), Sharp\Bool::parse('maybe')->ok(), Sharp\Bool::parse(true)->ok());
 ?>
 --EXPECT--
 bool(true)

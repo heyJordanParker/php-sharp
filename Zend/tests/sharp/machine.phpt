@@ -1,5 +1,5 @@
 --TEST--
-A machine's case holds its moves and no other, a case with no fields is one object, a holder moves its machine only from a case it tested, Json.encode and Json.decode write and read a case as a [Tag] family's variant named by its value, and Json.decode evaluates each invariant of the case it reads
+A machine's case holds its moves and no other, a case with no fields is one object, a holder moves its machine only from a case it tested, Json.encode and Json.parse<T> write and read a case as a [Tag] family's variant named by its value, and Json.decode evaluates each invariant of the case it reads
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -41,6 +41,6 @@ Json.encode of Paid: {"status":"paid","cents":7}
 Json.encode of Shipped: {"status":"shipped"}
 Shipped reads back as the one Shipped: true
 Paid reads back: Machines\OrderStatus\Paid 7
-{"status":"refunded"}: Sharp\InvalidFields: status: expected cancelled, draft, paid or shipped, got string 'refunded'
-{"status":"paid","cents":"seven"}: Sharp\InvalidFields: cents: expected int, got string 'seven'
+{"status":"refunded"}: LogicException: status: expected cancelled, draft, paid or shipped, got string 'refunded'
+{"status":"paid","cents":"seven"}: LogicException: cents: expected int, got string 'seven'
 {"status":"paid","cents":0}: ValueError: OrderStatus.Paid breaks paidIsPositive.

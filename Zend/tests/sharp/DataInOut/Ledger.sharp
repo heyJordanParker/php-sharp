@@ -8,37 +8,37 @@ import Sharp.Time.Instant;
 public static class Ledger
 {
     public static Payment payment(string? coupon)
-        => new Payment("https://shop.test/done", Decimal.parse("1.50"), Instant.parse("2026-10-22T18:30:00Z"), coupon, new Card("4242"));
+        => new Payment("https://shop.test/done", Decimal.parse("1.50").unwrap(), Instant.parse("2026-10-22T18:30:00Z").unwrap(), coupon, new Card("4242"));
 
     public static string encoded(string? coupon) => Json.encode(Ledger.payment(coupon));
 
-    public static bool roundTrips(string? coupon) => Json.encode(Json.decode<Payment>(Ledger.encoded(coupon))) == Ledger.encoded(coupon);
+    public static bool roundTrips(string? coupon) => Json.encode(Json.parse<Payment>(Ledger.encoded(coupon)).unwrap()) == Ledger.encoded(coupon);
 
-    public static string? couponOf(string json) => Json.decode<Payment>(json).coupon;
+    public static string? couponOf(string json) => Json.parse<Payment>(json).unwrap().coupon;
 
-    public static int payments(string json) => Json.decode<List<Payment>>(json).count();
+    public static int payments(string json) => Json.parse<List<Payment>>(json).unwrap().count();
 
-    public static PaymentMethod method(string json) => Json.decode<PaymentMethod>(json);
+    public static PaymentMethod method(string json) => Json.parse<PaymentMethod>(json).unwrap();
 
-    public static PaymentMethod? methodOf(Map<string, Any?> input) => PaymentMethod.tryParse(input);
+    public static PaymentMethod? methodOf(Map<string, Any?> input) => PaymentMethod.parse(input).ok();
 
     public static string paid() => Json.encode(PaymentResult.Paid("tx_1"));
 
-    public static PaymentResult result(string json) => Json.decode<PaymentResult>(json);
+    public static PaymentResult result(string json) => Json.parse<PaymentResult>(json).unwrap();
 
     public static string shipment(Shipment shipment) => Json.encode(shipment);
 
-    public static Shipment shipmentOf(string json) => Json.decode<Shipment>(json);
+    public static Shipment shipmentOf(string json) => Json.parse<Shipment>(json).unwrap();
 
-    public static Search search(string query) => Query.decode<Search>(query);
+    public static Search search(string query) => Query.parse<Search>(query).unwrap();
 
-    public static Prize prize(string json) => Json.decode<Prize>(json);
+    public static Prize prize(string json) => Json.parse<Prize>(json).unwrap();
 
-    public static ComponentProperty property(Map<string, Any?> input) => ComponentProperty.parse(input);
+    public static ComponentProperty property(Map<string, Any?> input) => ComponentProperty.parse(input).unwrap();
 
-    public static ComponentProperty propertyOf(string json) => Json.decode<ComponentProperty>(json);
+    public static ComponentProperty propertyOf(string json) => Json.parse<ComponentProperty>(json).unwrap();
 
-    public static ComponentProperty propertyFrom(string query) => Query.decode<ComponentProperty>(query);
+    public static ComponentProperty propertyFrom(string query) => Query.parse<ComponentProperty>(query).unwrap();
 
     public static string encodedProperty(ComponentProperty property) => Json.encode(property);
 }

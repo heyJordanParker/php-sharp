@@ -19,7 +19,7 @@ var_dump(UrlCalls::built());
 
 try {
     UrlCalls::parts('not a url');
-} catch (ValueError $error) {
+} catch (ValueError|LogicException $error) {
     echo get_class($error), ': ', $error->getMessage(), "\n";
 }
 ?>
@@ -57,4 +57,4 @@ array(2) {
 array(0) {
 }
 string(32) "https://example.com/search?q=a+b"
-ValueError: `Url.parse` reads an absolute URL, such as "https://example.com/path", and "not a url" is not one.
+LogicException: `Url.parse` reads an absolute URL, such as "https://example.com/path", and "not a url" is not one.

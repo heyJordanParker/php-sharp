@@ -1,6 +1,7 @@
 namespace EmptyArrays;
 
 import Sharp.Encoding.Json;
+import Sharp.Encoding.JsonValue;
 
 // What `as` and `is` give a plain PHP array. An empty one is a list, as PHP's `array_is_list([])` is, so it holds no `Map` of string keys.
 public static class Reads
@@ -22,11 +23,11 @@ public static class Reads
     // An empty JSON object and an empty JSON array, read back as what `encode` writes them from.
     public static List<bool> parsed()
         => [
-            Json.parse("{}").value is Map<string, Any?>,
-            Json.parse("{}").value is List<Any?>,
-            Json.parse("[]").value is List<Any?>,
-            Json.parse("[]").value is Map<string, Any?>,
-            Json.encode(Json.parse("{}").value) == "{}",
-            Json.encode(Json.parse("[]").value) == "[]",
+            Json.parse<JsonValue>("{}").unwrap().value is Map<string, Any?>,
+            Json.parse<JsonValue>("{}").unwrap().value is List<Any?>,
+            Json.parse<JsonValue>("[]").unwrap().value is List<Any?>,
+            Json.parse<JsonValue>("[]").unwrap().value is Map<string, Any?>,
+            Json.encode(Json.parse<JsonValue>("{}").unwrap().value) == "{}",
+            Json.encode(Json.parse<JsonValue>("[]").unwrap().value) == "[]",
         ];
 }

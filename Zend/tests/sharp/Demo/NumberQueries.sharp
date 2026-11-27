@@ -2,67 +2,67 @@ namespace Demo;
 
 public class NumberQueries
 {
-    public static bool tenthsAddUp() => Decimal.parse("0.1") + Decimal.parse("0.2") == Decimal.parse("0.3");
+    public static bool tenthsAddUp() => Decimal.parse("0.1").unwrap() + Decimal.parse("0.2").unwrap() == Decimal.parse("0.3").unwrap();
 
-    public static string third() => Decimal.parse("10").divide(Decimal.parse("3"), 2).toString();
+    public static string third() => Decimal.parse("10").unwrap().divide(Decimal.parse("3").unwrap(), 2).toString();
 
     public static List<string> arithmetic(string a, string b)
     {
-        const x = Decimal.parse(a);
-        const y = Decimal.parse(b);
+        const x = Decimal.parse(a).unwrap();
+        const y = Decimal.parse(b).unwrap();
 
         return [(x + y).toString(), (x - y).toString(), (x * y).toString()];
     }
 
     public static List<int> compared(string a, string b)
     {
-        const x = Decimal.parse(a);
-        const y = Decimal.parse(b);
+        const x = Decimal.parse(a).unwrap();
+        const y = Decimal.parse(b).unwrap();
 
         return [x <=> y, x < y ? 1 : 0, x == y ? 1 : 0, x.hash() == y.hash() ? 1 : 0];
     }
 
-    public static int scale(string text) => Decimal.parse(text).scale;
+    public static int scale(string text) => Decimal.parse(text).unwrap().scale;
 
-    public static string? tryParse(string text) => Decimal.tryParse(text)?.toString();
+    public static string? tryParse(string text) => Decimal.parse(text).ok()?.toString();
 
-    public static string parse(string text) => Decimal.parse(text).toString();
+    public static string parsed(string text) => Decimal.parse(text).unwrap().toString();
 
     public static string of(int value) => Decimal.of(value).toString();
 
-    public static string divide(string a, string b, int scale, RoundingMode mode) => Decimal.parse(a).divide(Decimal.parse(b), scale, mode).toString();
+    public static string divide(string a, string b, int scale, RoundingMode mode) => Decimal.parse(a).unwrap().divide(Decimal.parse(b).unwrap(), scale, mode).toString();
 
-    public static string round(string text, int scale, RoundingMode mode) => Decimal.parse(text).round(scale, mode).toString();
+    public static string round(string text, int scale, RoundingMode mode) => Decimal.parse(text).unwrap().round(scale, mode).toString();
 
-    public static string roundHalfEven(string text, int scale) => Decimal.parse(text).round(scale).toString();
+    public static string roundHalfEven(string text, int scale) => Decimal.parse(text).unwrap().round(scale).toString();
 
-    public static string pastLargest() => (BigInteger.parse("9223372036854775807") + BigInteger.of(1)).toString();
+    public static string pastLargest() => (BigInteger.parse("9223372036854775807").unwrap() + BigInteger.of(1)).toString();
 
-    public static int? pastLargestAsInt() => (BigInteger.parse("9223372036854775807") + BigInteger.of(1)).toIntOrNull();
+    public static int? pastLargestAsInt() => (BigInteger.parse("9223372036854775807").unwrap() + BigInteger.of(1)).toIntOrNull();
 
     public static List<string> integers(string a, string b)
     {
-        const x = BigInteger.parse(a);
-        const y = BigInteger.parse(b);
+        const x = BigInteger.parse(a).unwrap();
+        const y = BigInteger.parse(b).unwrap();
 
         return [(x + y).toString(), (x - y).toString(), (x * y).toString(), (x / y).toString(), (x % y).toString()];
     }
 
     public static List<int> integersCompared(string a, string b)
     {
-        const x = BigInteger.parse(a);
-        const y = BigInteger.parse(b);
+        const x = BigInteger.parse(a).unwrap();
+        const y = BigInteger.parse(b).unwrap();
 
         return [x <=> y, x > y ? 1 : 0, x == y ? 1 : 0];
     }
 
-    public static string power(string text, int exponent) => BigInteger.parse(text).pow(exponent).toString();
+    public static string power(string text, int exponent) => BigInteger.parse(text).unwrap().pow(exponent).toString();
 
-    public static string inRadix(string text, int radix) => BigInteger.parse(text).toString(radix);
+    public static string inRadix(string text, int radix) => BigInteger.parse(text).unwrap().toString(radix);
 
-    public static int? asInt(string text) => BigInteger.parse(text).toIntOrNull();
+    public static int? asInt(string text) => BigInteger.parse(text).unwrap().toIntOrNull();
 
-    public static string? tryInteger(string text) => BigInteger.tryParse(text)?.toString();
+    public static string? tryInteger(string text) => BigInteger.parse(text).ok()?.toString();
 
-    public static string integer(string text) => BigInteger.parse(text).toString();
+    public static string integer(string text) => BigInteger.parse(text).unwrap().toString();
 }

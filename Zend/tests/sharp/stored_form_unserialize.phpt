@@ -36,8 +36,8 @@ echo Subscriber::builtCount(), ' ', $first->email->address, ' ', var_export($fir
 O:12:"Queued\Email":1:{s:7:"address";s:15:"ada@example.com";}
 bool(true)
 a tampered address: ValueError: "ada.example.com" is no email address
-a missing field: Sharp\InvalidFields: address: missing
-a field of another type: Sharp\InvalidFields: address: expected string, got int 7
+a missing field: ValueError: address: missing
+a field of another type: ValueError: address: expected string, got int 7
 
 Warning: unserialize(): Error at offset 44 of 45 bytes in %s on line %d
 data that names the object inside its own stored form: read back false
