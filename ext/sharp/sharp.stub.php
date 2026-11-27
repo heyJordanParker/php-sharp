@@ -207,6 +207,10 @@ function testModule(string $class, array $bindings): void {}
 
 function startTest(string $class): void {}
 
+function fillTest(object $test): void {}
+
+function fillExtension(object $extension): void {}
+
 function endTest(): void {}
 
 function startProgram(): void {}

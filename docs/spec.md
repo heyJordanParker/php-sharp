@@ -9015,7 +9015,8 @@ module
 **A nested namespace's module overrides its parent's services.** A test or environment module overrides with `module : App.Shop { … }`, and the compiler checks every environment's set of services: the base modules under all of that environment's modules at once.
 
 - **An environment module is `Module.<Environment>.sharp`** beside the `Module.sharp` it overrides, such as `Module.Production.sharp`. `SHARP_ENV` picks it.
-- **A test module is declared in the test file that uses it,** with the same header. While a test of that file runs, its services are the test module's over the base modules, with no environment module, which is the set the compiler checks.
+- **A test module is declared in the test file that uses it,** with the same header. While a test of that file runs, its services are the test module's over the base modules, with no environment module, which is the set the compiler checks. A test class takes its services in its main constructor, and each test gets a new test object whose services come from the test module over the base modules.
+- **A PHPUnit extension takes its services in its main constructor too.** PHPUnit creates it once, before the first test, and its services come from the base modules of its namespace.
 
 <!-- example environment-module -->
 ```csharp
@@ -9037,18 +9038,49 @@ module : App.Shop
 namespace App.Shop;
 
 import App.Mail.Mailer;
+import PHPUnit.Framework.Attributes.Test;
 import PHPUnit.Framework.TestCase;
 import Tests.Fakes.FakeMailer;
 
 module : App.Shop
 {
-    singleton Mailer = FakeMailer;                                             // the tests in this file get a FakeMailer
+    singleton FakeMailer = FakeMailer;
+    singleton Mailer(FakeMailer fake) = fake;                                  // the tests in this file get a FakeMailer
 }
 
-public class CheckoutTest : TestCase { … }
+public class CheckoutTest : TestCase
+{
+    public CheckoutTest(private Checkout checkout, private FakeMailer mailer) { }
+
+    [Test]
+    public void sendsTheReceipt()
+    {
+        this.checkout.pay("ada@example.com");
+        this.assertSame(["ada@example.com"], this.mailer.sent);
+    }
+}
 ```
 
-**A missing or mistyped service is a compile error.** PHP# creates the classes a module binds and the classes that declare an `on` method (section 15), each through its main constructor (section 9.1). Every parameter of their constructors, and every binding parameter, needs a binding in the module of its namespace or of a namespace above it. The compiler checks every such class, whether or not another class takes it. A class no module binds is ordinary code, created with `new`, such as `Money`.
+<!-- example phpunit-extension -->
+```csharp
+// tests/Support/ProgressReporter.sharp
+namespace Tests.Support;
+
+import PHPUnit.Runner.Extension.Extension;
+import PHPUnit.Runner.Extension.Facade;
+import PHPUnit.Runner.Extension.ParameterCollection;
+import PHPUnit.TextUI.Configuration.Configuration;
+import Sharp.IO.Console;
+
+public class ProgressReporter : Extension
+{
+    public ProgressReporter(private Console console) { }                       // built once, before the first test, from the base modules
+
+    public void bootstrap(Configuration configuration, Facade facade, ParameterCollection parameters) { … }
+}
+```
+
+**A missing or mistyped service is a compile error.** PHP# creates the classes a module binds, the classes that declare an `on` method (section 15), and the test classes and PHPUnit extensions of a test folder, each through its main constructor (section 9.1). Every parameter of their constructors, and every binding parameter, needs a binding in the module of its namespace or of a namespace above it. The compiler checks every such class, whether or not another class takes it. A class no module binds is ordinary code, created with `new`, such as `Money`.
 
 <!-- example missing-service -->
 ```csharp
