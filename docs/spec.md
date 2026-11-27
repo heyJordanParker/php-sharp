@@ -393,6 +393,37 @@ Checkout.maximum;
 - **A public member of an application names its types.** In a project, the types of a `public` member's property, parameters and result hold no `Any`, `Any?` or `Object` at any depth, so an app's API states every type it takes and gives: `public Map<string, Any> checkoutPayload()` is a compile error, "`Store.checkoutPayload` is public, and a public member of an application names its types: `Any` in `Map<string, Any>`." A type parameter is a named type, so `public T first<T>(List<T> items)` compiles. An interface's members count. An `internal` or private member, an `internal` class's members and a library's are exempt, and an override keeps its parent's types, so an override of a plain PHP method that takes `mixed` takes `Any?`. A value of an unknown shape is named by a struct that parses it (section 10).
 - **There is no named reach,** such as `internal(App\Tenant)`. A helper shared by sibling namespaces moves to their parent namespace.
 
+Code a framework calls needs no other declaration. PHPUnit calls a test method marked `[Test]`, and Eloquent creates each model and calls its relations and accessors once `Model` carries the mark (section 29):
+
+<!-- example framework-test-method -->
+```csharp
+// tests/Feature/OrderTest.sharp
+namespace Tests.Feature;
+
+import PHPUnit.Framework.Attributes.Test;
+import PHPUnit.Framework.TestCase;
+
+public final class OrderTest : TestCase {
+    [Test]
+    public void testItLists() { }   // compiles: its test runner calls it, so it is not too wide
+}
+```
+
+<!-- example framework-model -->
+```csharp
+// app/Tenant/Store/Entities/CartOffer.sharp
+namespace App.Tenant.Store.Entities;
+
+import Illuminate.Database.Eloquent.Casts.Attribute;
+import Illuminate.Database.Eloquent.Model;
+import Illuminate.Database.Eloquent.Relations.BelongsTo;
+
+public final class CartOffer : Model {
+    public BelongsTo<Offer, CartOffer> offer() => this.belongsTo(typeof(Offer));   // compiles: Model's framework calls it
+    protected Attribute<string> label() => Attribute.make(get: (string value) => value.trim());   // compiles: so does this
+}
+```
+
 **A test file, in a folder `composer.json` lists under `autoload-dev`, may declare the namespace it tests and reaches its `internal` members.**
 
 <!-- example test-file-internal-access -->
@@ -7816,6 +7847,18 @@ import Symfony.Component.EventDispatcher.Attribute.AsEventListener;
 [DynamicallyAccessed]
 extern AsEventListener uses none;   // compiles: AsEventListener carries [DynamicallyAccessed], so a method marked
                                     // [AsEventListener] is never too wide
+```
+
+<!-- example extern-attributes -->
+```csharp
+// app/Stubs/Model.sharp
+namespace App.Stubs;
+
+import Illuminate.Database.Eloquent.Model;
+
+[DynamicallyAccessed]
+extern Model uses Database;   // compiles: Model is no attribute class, so the mark covers each class that extends
+                              // it, whose public and protected methods are never too wide
 ```
 - **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package declares the effect of each built-in function the standard library calls, so `Files` has the effect `Files`. Each built-in exception class is declared `uses none`, so pure code may `throw new ValueError("empty")`.
 

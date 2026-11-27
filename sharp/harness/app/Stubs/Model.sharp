@@ -1,0 +1,5 @@
+namespace App.Stubs;
+
+import Illuminate.Database.Eloquent.Model;
+
+extern Model uses any;

@@ -1,0 +1,7 @@
+namespace App.Tenant.Store.Entities;
+
+import Illuminate.Database.Eloquent.Model;
+
+public class Offer : Model
+{
+}
