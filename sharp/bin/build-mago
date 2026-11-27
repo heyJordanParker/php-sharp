@@ -143,13 +143,18 @@ build_engine() {
     clear_engine
     touch "$deps/$name-$version.built"
   }
-  # From https://curl.se/download/curl-8.11.1.tar.xz.
+  # From https://curl.se/download/curl-8.11.1.tar.xz. Only libcurl builds, as static-php-cli builds it: curl's CMake
+  # build skips the curl tool with BUILD_CURL_EXE=OFF, where its autotools build compiled the tool's 44 C files and
+  # linked it beside libcurl's 170, though the engine links libcurl alone (#999).
   static_library curl 8.11.1 curl-8.11.1.tar.xz \
     c7ca7db48b0909743eaef34250da02c19bc61d4f1dcedd6603f109409536ab56 \
-    sh -c "./configure --prefix='$deps/install' --disable-shared --enable-static --with-pic --with-openssl \
-      --without-libpsl --without-brotli --without-zstd --without-nghttp2 --without-nghttp3 --without-ngtcp2 \
-      --without-libidn2 --without-libssh --without-libssh2 --without-librtmp --without-libgsasl --without-gssapi \
-      --disable-ldap --disable-ldaps --disable-docs --disable-manual && make -j$("$root/sharp/bin/jobs") && make install"
+    sh -c "cmake -S . -B build -DCMAKE_INSTALL_PREFIX='$deps/install' -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_SHARED_LIBS=OFF \
+      -DBUILD_STATIC_LIBS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_CURL_EXE=OFF -DBUILD_LIBCURL_DOCS=OFF \
+      -DBUILD_MISC_DOCS=OFF -DENABLE_CURL_MANUAL=OFF -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DCURL_USE_OPENSSL=ON \
+      -DCURL_USE_LIBPSL=OFF -DCURL_BROTLI=OFF -DCURL_ZSTD=OFF -DUSE_NGHTTP2=OFF -DUSE_NGTCP2=OFF -DUSE_OPENSSL_QUIC=OFF \
+      -DUSE_LIBIDN2=OFF -DCURL_USE_LIBSSH=OFF -DCURL_USE_LIBSSH2=OFF -DUSE_LIBRTMP=OFF -DCURL_USE_GSASL=OFF \
+      -DCURL_USE_GSSAPI=OFF -DCURL_DISABLE_LDAP=ON -DCURL_DISABLE_LDAPS=ON \
+      && cmake --build build -j$("$root/sharp/bin/jobs") && cmake --install build"
   # From https://libzip.org/download/libzip-1.11.2.tar.xz.
   static_library libzip 1.11.2 libzip-1.11.2.tar.xz \
     5d471308cef4c4752bbcf973d9cd37ba4cb53739116c30349d4764ba1410dfc1 \
