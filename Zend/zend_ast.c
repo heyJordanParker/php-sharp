@@ -26,6 +26,7 @@
 #include "zend_closures.h"
 #include "zend_constants.h"
 #include "zend_enum.h"
+#include "ext/sharp/php_sharp.h"
 
 ZEND_API zend_ast_process_t zend_ast_process = NULL;
 
@@ -599,6 +600,7 @@ ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate_inner(
 	zval op1, op2;
 	zend_result ret = SUCCESS;
 	bool short_circuited;
+	const sharp_type *type_arguments = NULL;
 	*short_circuited_ptr = false;
 
 	switch (ast->kind) {
@@ -971,15 +973,26 @@ ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate_inner(
 			zval_ptr_dtor_nogc(&op2);
 			break;
 		}
+		case ZEND_AST_SHARP_TYPE_ARGS:
+			type_arguments = sharp_type_list(Z_STRVAL_P(zend_ast_get_zval(ast->child[1])), Z_STRLEN_P(zend_ast_get_zval(ast->child[1])));
+			ZEND_ASSERT(type_arguments != NULL);
+			ast = ast->child[0];
+			ZEND_FALLTHROUGH;
 		case ZEND_AST_NEW:
 		{
 			zend_class_entry *ce = zend_ast_fetch_class(ast->child[0], scope);
 			if (!ce) {
 				return FAILURE;
 			}
+			if (type_arguments && !sharp_class_takes(ce, type_arguments)) {
+				return FAILURE;
+			}
 
 			if (object_init_to_build(result, ce) != SUCCESS) {
 				return FAILURE;
+			}
+			if (type_arguments) {
+				sharp_type_arguments_store(Z_OBJ_P(result), type_arguments);
 			}
 
 			/* Even if there is no constructor, the object can have cause side-effects in various ways (__toString(), __get(), __isset(), etc). */
