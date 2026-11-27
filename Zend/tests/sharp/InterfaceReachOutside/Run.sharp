@@ -1,0 +1,16 @@
+namespace InterfaceReachOutside;
+
+import InterfaceReach.Box;
+
+// Runs the default bodies `Opener` gives `Outsider`, a class outside `InterfaceReach`.
+public static class Run
+{
+    public static int opened()
+    {
+        const box = new Box();
+        new Outsider().openBox(box);
+        return box.opened;
+    }
+
+    public static int seal() => new Outsider().sealOf(new Box());
+}

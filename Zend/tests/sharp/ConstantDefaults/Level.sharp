@@ -1,0 +1,7 @@
+namespace ConstantDefaults;
+
+public enum Level
+{
+    case Low;
+    case High;
+}

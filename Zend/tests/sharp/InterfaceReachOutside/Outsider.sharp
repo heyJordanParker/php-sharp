@@ -1,0 +1,5 @@
+namespace InterfaceReachOutside;
+
+import InterfaceReach.Opener;
+
+internal final class Outsider : Opener { }
