@@ -1,0 +1,7 @@
+namespace WrittenAttributes;
+
+// `attributeData` reads attributes as written and builds none, so it is pure, and the pure `Counting.count` accepts it.
+public class AccessCount : Counting
+{
+    public int count() => Reader.declared("publish").attributeData<Access>().count();
+}

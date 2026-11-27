@@ -1,0 +1,9 @@
+namespace WrittenAttributes;
+
+import Attribute;
+
+[Attribute(Attribute.TARGET_ALL | Attribute.IS_REPEATABLE)]
+public class Access
+{
+    public Access(public Any? level { get; }) { }
+}

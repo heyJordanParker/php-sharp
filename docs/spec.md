@@ -7188,6 +7188,45 @@ public class Archived : Saved
 }
 ```
 
+**`attributeData<TAttribute : Object>()` reads each attribute as written, and builds none.** Each member that has `attributes<TAttribute : Object>()`, `Class<T>`, `Method`, `Property`, `Field`, `Parameter`, `Constant`, `Constructor` and `EnumCase`, has it beside, and it selects the same attributes in declaration order. Each is an `AttributeData`: its `type`, the attribute's class, and its `arguments`, the call of its constructor, one value for each parameter in parameter order, with a named argument at its parameter's place and a left-out parameter's default filled in, so `[Access(level: Level.Edit)]` reads as `[Access(Level.Edit)]` does. Each value is the argument as written, an enum case as the case and `typeof(System)` as the class value. No attribute's constructor runs, so it is pure (section 29), and a build step saves an attribute as data that a later run rebuilds with `createInstance`, which may have every effect:
+
+<!-- example attributes-as-written -->
+```csharp
+// app/Access.sharp
+namespace App;
+
+[Attribute(Attribute.TARGET_ALL | Attribute.IS_REPEATABLE)]
+public class Access
+{
+    public Access(public Any? level { get; }) { }
+}
+```
+
+<!-- example attributes-as-written: statements
+public enum Level { case Edit; case View; }
+public class System { }
+public class Actions
+{
+    [Access(Level.Edit)]
+    [Access(typeof(System))]
+    public void publish() { }
+
+    [Access(level: Level.Edit)]
+    public void review() { }
+}
+-->
+```csharp
+const method = typeof(Actions).methods().first((Method declared) => declared.name == "publish");
+method.attributes<Access>().count();                                 // 2: built objects, arguments gone
+const written = method.attributeData<Access>();
+written[0].type == typeof(Access);                                   // true
+written[0].arguments == [Level.Edit];                                // true
+written[1].arguments == [typeof(System)];                            // true
+const access = written[0].type.createInstance(written[0].arguments); // the same Access(Level.Edit), which may have every effect
+const review = typeof(Actions).methods().first((Method declared) => declared.name == "review");
+review.attributeData<Access>()[0].arguments == [Level.Edit];         // true, the same as for [Access(Level.Edit)]
+```
+
 **A class value of a generic class can carry its type arguments or leave them out.** `typeof(PaginatedList<Order>)` is a `Class<PaginatedList<Order>>`, and `new (pages)()` creates a `PaginatedList<Order>`. A `Class<PaginatedList>` leaves them out, so `new` names them, `new (any)<Order>()`, or takes them from its arguments or the declared type its object goes into, as any `new` does (section 11). `new (any)()` that nothing fixes them for is a compile error.
 
 <!-- example generic-class-values -->
@@ -7999,7 +8038,7 @@ extern now uses Clock;               // compile error: a bare name names a class
 - **One line for a class covers its members, and a method's own line overrides its class's line.** After `extern CarbonImmutable uses none;` and `extern CarbonImmutable.now uses Clock;`, `CarbonImmutable.now()` has the effect `Clock` and `date.addDays(1)` is pure.
 - **A call has the effects of the line of the class, trait or interface that declares the method it calls,** and nothing passes from the class a call goes through or from the call that returned the object. A facade's docblock `@method` declares the method on the facade, so `DB.table(…)` takes `DB`'s line. `new` takes the line of the class it creates, as `new ValueError("empty")` takes `ValueError`'s, or of the nearest plain PHP class a PHP# class extends, and a read of a property takes the line of the class that declares it. `StripeClient.charges().create(…)` has the effects of `StripeClient`'s line for `charges()`, and of the line of the class `charges()` returns for `create(…)`, which a project declares on its own, so `Order.all().sum("total")` has only `Database` from `all()` after `extern Collection uses none;`.
 - **A plain PHP trait's member is one body, so its `extern` line covers every class that takes the member from the trait.** After `extern Dispatchable.dispatch uses Database;`, `ReceiveEvent.dispatch(…)` has the effect `Database` where `ReceiveEvent` lists `Dispatchable` in its header. A class that writes `dispatch` itself runs its own body, which the line does not cover.
-- **Reflection has the effects of the code it runs** (section 25). `Property.get` and `Property.set` run an accessor no `uses` can name, so each may have every effect, and so may `createInstance`, which takes a list of arguments built while the code runs and may build any subclass. `new (type)(…)` has the effects of the `required` constructor of the class `type`'s `Class<T>` names, as `new T(…)` has them. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` and `Method.createInvoker` are pure, and a call of the value each gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`.
+- **Reflection has the effects of the code it runs** (section 25). `Property.get` and `Property.set` run an accessor no `uses` can name, so each may have every effect, and so may `createInstance`, which takes a list of arguments built while the code runs and may build any subclass. `new (type)(…)` has the effects of the `required` constructor of the class `type`'s `Class<T>` names, as `new T(…)` has them. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` and `Method.createInvoker` are pure, and a call of the value each gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`. `attributeData<T>()` builds no attribute, so it is pure.
 - **A constructor below a `required` one adds no effect to it,** as an implementation adds none to its interface method, since `new (type)(…)` of a `Class<Saved>` may build any subclass of `Saved` with the effects of `Saved`'s constructor alone (section 25). A subclass constructor that also sends mail is a compile error that names the effect it adds.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way. `mago convert` writes `extern X uses any;` there for each plain PHP class a converted file reaches that has no line, so the converted file compiles, and the project narrows each `uses any` to the effects it knows.
 - **An `extern` line takes any attribute, which the class, method or function it declares carries as its own,** as every declaration takes one (section 1). The checker reads it as the declaration's, so a `[DynamicallyAccessed]` written on a class's line marks a library's attribute class or base class whose source carries no mark, as `[DynamicallyAccessed] extern Model uses Database;` marks Eloquent's `Model` (section 5). At run time PHP#'s `typeof(X).attributes<T>()` and `Method.attributes<T>()`, and plain PHP's `ReflectionClass`, `ReflectionMethod` and `ReflectionFunction` `getAttributes()`, give the declaration's own attributes and then the line's, though no code loads the file that holds the line. A method takes them on the line of the class that declares it, so an attributed line of a method the class only inherits is a compile error that names that class. An `extern namespace` line (section 23) declares nothing, so an attribute on it is a compile error. `import` and `extern` stay separate lines.

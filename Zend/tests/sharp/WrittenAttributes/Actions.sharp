@@ -1,0 +1,19 @@
+namespace WrittenAttributes;
+
+import Lib.Noisy;
+
+public class Actions
+{
+    [Access(Level.Edit)]
+    [Access(typeof(System))]
+    public void publish() { }
+
+    [Access(level: Level.Edit)]
+    public void review() { }
+
+    [Route("/offers", method: "GET")]
+    public void offers() { }
+
+    [Noisy]
+    public void shout() { }
+}

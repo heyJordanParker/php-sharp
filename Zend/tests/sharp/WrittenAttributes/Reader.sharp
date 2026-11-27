@@ -1,0 +1,18 @@
+namespace WrittenAttributes;
+
+// Spec section 25: each attribute of an `Actions` method read as written, and rebuilt from what was read.
+public static class Reader
+{
+    public static Method declared(string name) => typeof(Actions).methods().first((Method method) => method.name == name);
+
+    public static List<AttributeData> written(string name) => Reader.declared(name).attributeData<Object>();
+
+    public static List<Object> built(string name) => Reader.declared(name).attributes<Object>();
+
+    // Rebuilding runs the attribute's constructor through `createInstance`, which may have every effect, so a method
+    // with no `uses` to keep does it.
+    public static List<Object> rebuilt(string name)
+        => Reader.written(name).map((AttributeData data) => data.type.createInstance(data.arguments));
+
+    public static int counted() => new AccessCount().count();
+}
