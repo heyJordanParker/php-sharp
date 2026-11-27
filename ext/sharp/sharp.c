@@ -8455,9 +8455,12 @@ static bool sharp_type_collection_holds(
 	/* Spec section 12: a PHP array is a `List` only when it is a list, and a `Set` the list of its elements, which an
 	 * array keyed by int alone is too, renumbered. A list arrives as a `List`, so a non-empty one is a `Map` only of
 	 * keys that take an int. An array that isn't a list, as `['42' => true]`, whose numeric key PHP stores as an int, is
-	 * a `Map` of string keys. An empty array is every collection. */
+	 * a `Map` of string keys. `[]` is a list, as `array_is_list([])` says: a test, as `is`, reads it as the empty
+	 * `List`, a `Map` only of keys that take an int, while a typed boundary, a parameter, a property or a return,
+	 * takes plain PHP's `[]` as the empty collection it declares, a `Map` of any keys too. */
 	bool is_list = zend_array_is_list(Z_ARRVAL_P(value));
-	bool list_as_map = keys && is_list && zend_hash_num_elements(Z_ARRVAL_P(value)) > 0
+	bool list_as_map = keys && is_list
+		&& (zend_hash_num_elements(Z_ARRVAL_P(value)) > 0 || mode == SHARP_HOLDS_TEST)
 		&& !sharp_type_takes_int_keys(keys);
 	bool keyed_as_set = type->built_in == SHARP_BUILT_IN_SET && !is_list
 		&& !sharp_array_needs_renumbering(Z_ARRVAL_P(value));

@@ -19,7 +19,7 @@ public static class Narrowed
 
     public static bool onlyA(Any? value) => value is Map<string, int> && value.keys().join(",") == "a";
 
-    public static List<bool> both(Any? value) => [value is Map<string, int>, value is List<int>];
+    public static List<bool> both(Any? value) => [value is Map<int, int>, value is List<int>];
 
     public static bool missing(Any? value) => value is not Map<string, int> || value.count() == 0;
 
