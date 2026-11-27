@@ -8870,7 +8870,7 @@ module
 
 **The host defines each lifetime.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.
 
-**A host starts and ends each scope with `Scope.run(body)`.** While `body` runs, each `scoped` service it builds lives until `body` returns or throws, and is then dropped. `Scope.run` returns what `body` returns, and has `body`'s effects (section 29). PHP's own request is the default scope, so the CLI and FrankenPHP outside worker mode need no call. A long-running host wraps each unit of work in it, such as an Octane request, a FrankenPHP worker request or a queued job. Plain PHP calls it as `\Sharp\Scope::run(fn () => …)`.
+**A host starts and ends each scope with `Scope.run(body)`.** While `body` runs, each `scoped` service it builds lives until `body` returns or throws, and is then disposed if it is `Disposable`, newest first. `Scope.run` returns what `body` returns, and has `body`'s effects (section 29). PHP's own request is the default scope, so the CLI and FrankenPHP outside worker mode need no call. A long-running host wraps each unit of work in it, such as an Octane request, a FrankenPHP worker request or a queued job. Plain PHP calls it as `\Sharp\Scope::run(fn () => …)`.
 
 <!-- example host-scope -->
 ```csharp
@@ -8890,6 +8890,57 @@ public class Worker
             Scope.run(() => job.handle());   // each job gets its own scoped services
         }
     }
+}
+```
+
+**The container disposes the services it keeps.** When a scope ends, each `scoped` service it built that is `Disposable` (section 2) is disposed, newest first, so a service is disposed before the services it needs, as nested `using` locals are. A throw in `body` still disposes them, and what a `dispose()` throws takes the pending throw as its previous, as in a `finally` block. PHP's request is the default scope: it ends when the request does, and each `Disposable` singleton is disposed after it, newest first.
+
+<!-- example scoped-disposable -->
+```csharp
+public class Connection
+{
+    public void begin() { }
+
+    public void rollBackUnlessCommitted() { }
+}
+
+public class Transaction : Disposable
+{
+    private Connection connection;
+
+    public Transaction(Connection connection)
+    {
+        this.connection = connection;
+        this.connection.begin();
+    }
+
+    public void dispose() { this.connection.rollBackUnlessCommitted(); }
+}
+```
+
+<!-- example scoped-disposable-module
+public class Connection
+{
+    public void begin() { }
+
+    public void rollBackUnlessCommitted() { }
+}
+
+public class Transaction : Disposable
+{
+    public Transaction(private Connection connection) { connection.begin(); }
+
+    public void dispose() { this.connection.rollBackUnlessCommitted(); }
+}
+-->
+```csharp
+// app/Module.sharp
+namespace App;
+
+module
+{
+    scoped Connection = Connection;
+    scoped Transaction = Transaction;   // disposed when its scope ends, newest first
 }
 ```
 
