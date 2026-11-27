@@ -14065,23 +14065,11 @@ static ZEND_COLD void sharp_family_out_of_date(const zend_string *family)
 		ZSTR_VAL(family));
 }
 
-/* Throws one Sharp\InvalidFields of `problems`, each problem under its path, as a struct's parse throws it. Where the
- * class doesn't load, as in a request whose autoloader doesn't reach the standard library, it throws a ValueError with
- * the message InvalidFields gives: each problem after its path, the parts joined by "; ". */
-static ZEND_COLD void sharp_throw_invalid_fields(zval *problems)
+/* Throws a ValueError of `problems`, each problem after its path, the parts joined by "; ", as a stored value whose
+ * stored form no longer reads fails, spec section 10. */
+static ZEND_COLD void sharp_throw_problems(zval *problems)
 {
-	zend_string *name = zend_string_init_interned("Sharp\\InvalidFields", sizeof("Sharp\\InvalidFields") - 1, false);
-	zend_class_entry *ce = zend_lookup_class(name);
-	zval exception;
-
-	zend_string_release(name);
 	if (EG(exception)) {
-		return;
-	}
-	if (ce) {
-		if (object_init_with_constructor(&exception, ce, 1, problems, NULL) == SUCCESS) {
-			zend_throw_exception_object(&exception);
-		}
 		return;
 	}
 	smart_str message = {0};
@@ -14637,41 +14625,77 @@ static void sharp_path_element(smart_str *path, zend_ulong index, zend_string *k
 	smart_str_appends(path, keyed ? "\"]" : "]");
 }
 
-/* Records what the own `parse` of a class the read reached threw at the read's path, and clears the exception: the
- * problems of a Sharp\InvalidFields, each under that path, which then counts as failed, or the message of any other
- * ValueError, which takes the walk's place there. Leaves any other exception. */
+/* Records the message of the ValueError the own `parse` of a class the read reached threw, or a Secret's decryption
+ * raised, at the read's path, where it takes the walk's place, and clears the exception. Leaves any other exception. */
 static void sharp_read_failed(sharp_read *read)
 {
 	zend_object *thrown = EG(exception);
 	if (!thrown || !instanceof_function(thrown->ce, zend_ce_value_error)) {
 		return;
 	}
-	const zend_string *path = read->found.path.s ? read->found.path.s : ZSTR_EMPTY_ALLOC();
-	zval held, *fields = NULL;
-	ZVAL_UNDEF(&held);
-	if (zend_string_equals_literal(thrown->ce->name, "Sharp\\InvalidFields")) {
-		fields = zend_read_property(thrown->ce, thrown, "fields", sizeof("fields") - 1, true, &held);
+	zval held, message;
+	zval *thrown_message = zend_read_property_ex(zend_get_exception_base(thrown), thrown, ZSTR_KNOWN(ZEND_STR_MESSAGE), true, &held);
+	ZVAL_STR(&message, zval_get_string(thrown_message));
+	sharp_read_note(&read->texts, read, &message);
+	zval_ptr_dtor(&held);
+	zend_clear_exception();
+}
+
+/* The Sharp\Result case `result` is, `Ok` or `Err` as `ok` asks, or false for any other value. */
+static bool sharp_is_result_case(const zval *result, bool ok)
+{
+	return Z_TYPE_P(result) == IS_OBJECT && (ok
+		? zend_string_equals_literal(Z_OBJCE_P(result)->name, "Sharp\\Result\\Ok")
+		: zend_string_equals_literal(Z_OBJCE_P(result)->name, "Sharp\\Result\\Err"));
+}
+
+/* Spec section 10: reads in place the Result the own `parse` of a class the read reached gave, `built`. An `Ok` gives
+ * its value. An `Err`'s Sharp\ParseError gives its problems, each under the read's path: a whole value's, at "", takes
+ * the walk's place there, and the others make the read at that path count as failed. `built` is then undefined. Any
+ * other value, as JsonValue's `parse` gives, stays. */
+static void sharp_read_parsed(sharp_read *read, zval *built)
+{
+	zval held;
+	if (sharp_is_result_case(built, true)) {
+		zval *value = zend_read_property(Z_OBJCE_P(built), Z_OBJ_P(built), "value", sizeof("value") - 1, true, &held);
+		ZVAL_COPY(&held, value);
+		zval_ptr_dtor(built);
+		ZVAL_COPY_VALUE(built, &held);
+		return;
 	}
+	if (!sharp_is_result_case(built, false)) {
+		return;
+	}
+	zval *error = zend_read_property(Z_OBJCE_P(built), Z_OBJ_P(built), "error", sizeof("error") - 1, true, &held);
+	zval fields_held;
+	zval *fields = Z_TYPE_P(error) == IS_OBJECT
+		? zend_read_property(Z_OBJCE_P(error), Z_OBJ_P(error), "fields", sizeof("fields") - 1, true, &fields_held)
+		: NULL;
+	const zend_string *path = read->found.path.s ? read->found.path.s : ZSTR_EMPTY_ALLOC();
+	bool failed = false;
 	if (fields && Z_TYPE_P(fields) == IS_OBJECT && Z_OBJCE_P(fields) == sharp_ce_map) {
 		SHARP_TABLE_FOREACH(sharp_table_of(Z_OBJ_P(fields)), bucket) {
 			zend_string *inner = zval_get_string(&bucket->key);
-			zend_string *at = ZSTR_LEN(path)
-				? zend_string_concat3(ZSTR_VAL(path), ZSTR_LEN(path), ".", 1, ZSTR_VAL(inner), ZSTR_LEN(inner))
-				: zend_string_copy(inner);
-			Z_TRY_ADDREF(bucket->value);
-			zend_symtable_update(Z_ARRVAL_P(read->found.problems), at, &bucket->value);
-			zend_string_release(at);
+			if (ZSTR_LEN(inner) == 0) {
+				Z_TRY_ADDREF(bucket->value);
+				sharp_read_note(&read->texts, read, &bucket->value);
+			} else {
+				zend_string *at = ZSTR_LEN(path)
+					? zend_string_concat3(ZSTR_VAL(path), ZSTR_LEN(path), ".", 1, ZSTR_VAL(inner), ZSTR_LEN(inner))
+					: zend_string_copy(inner);
+				Z_TRY_ADDREF(bucket->value);
+				zend_symtable_update(Z_ARRVAL_P(read->found.problems), at, &bucket->value);
+				zend_string_release(at);
+				failed = true;
+			}
 			zend_string_release(inner);
 		} SHARP_TABLE_FOREACH_END();
-		sharp_read_fail(read);
-	} else {
-		zval message;
-		zval *thrown_message = zend_read_property_ex(zend_get_exception_base(thrown), thrown, ZSTR_KNOWN(ZEND_STR_MESSAGE), true, &held);
-		ZVAL_STR(&message, zval_get_string(thrown_message));
-		sharp_read_note(&read->texts, read, &message);
 	}
-	zval_ptr_dtor(&held);
-	zend_clear_exception();
+	if (failed) {
+		sharp_read_fail(read);
+	}
+	zval_ptr_dtor(built);
+	ZVAL_UNDEF(built);
 }
 
 /* `text`, a number or a bool as query text holds it, read as `built_in` reads it, in place: an int as Int.parse, a
@@ -15272,6 +15296,8 @@ static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *re
 				zval_ptr_dtor(&built);
 				ZVAL_UNDEF(&built);
 				sharp_read_failed(read);
+			} else {
+				sharp_read_parsed(read, &built);
 			}
 		}
 	}
@@ -15281,27 +15307,79 @@ static void sharp_read_value(const sharp_type *type, zval *value, sharp_read *re
 	}
 }
 
-/* Spec section 10: the value of `type` that `value` builds in `return_value`, as a field of that type a struct's
- * `parse` reads reads it, read from text with `text`, as `Query.decode` reads it. A union tries its members in `order`,
- * the classes and scalar types its type's text was written with, as a `#fields` row's does, or in its own order when
- * `order` is NULL. Throws one Sharp\InvalidFields that lists every bad part, under its path. */
+/* Spec sections 10 and 31: the `Result<T, ParseError>` of `type` in `return_value`, as a `Sharp\Result\Ok` that holds
+ * `held` or a `Sharp\Result\Err` that holds it, `T` being `type`. Takes `held`. */
+static void sharp_parse_result(const sharp_type *type, bool ok, zval *held, zval *return_value)
+{
+	zend_string *name = ok
+		? zend_string_init_interned("Sharp\\Result\\Ok", sizeof("Sharp\\Result\\Ok") - 1, false)
+		: zend_string_init_interned("Sharp\\Result\\Err", sizeof("Sharp\\Result\\Err") - 1, false);
+	zend_class_entry *ce = zend_lookup_class(name);
+	zend_string_release(name);
+	if (!ce || object_init_with_constructor(return_value, ce, 1, held, NULL) != SUCCESS) {
+		zval_ptr_dtor(held);
+		if (!EG(exception)) {
+			zend_throw_error(NULL, "Sharp\\Result does not load, so a parse has no Result to give");
+		}
+		ZVAL_NULL(return_value);
+		return;
+	}
+	zval_ptr_dtor(held);
+	zend_string *arguments = zend_string_concat2(ZSTR_VAL(type->text), ZSTR_LEN(type->text), ZEND_STRL(", Sharp.ParseError"));
+	const sharp_type *list = sharp_type_list(ZSTR_VAL(arguments), ZSTR_LEN(arguments));
+	zend_string_release(arguments);
+	if (list) {
+		sharp_type_arguments_store(Z_OBJ_P(return_value), list);
+	}
+}
+
+/* Spec sections 10 and 31: the `Err` of `type` in `return_value` that holds one Sharp\ParseError of `problems`, each
+ * problem under its path. Takes `problems`. */
+static void sharp_parse_failure(const sharp_type *type, zval *problems, zval *return_value)
+{
+	zend_string *name = zend_string_init_interned("Sharp\\ParseError", sizeof("Sharp\\ParseError") - 1, false);
+	zend_class_entry *ce = zend_lookup_class(name);
+	zend_string_release(name);
+	zval error;
+	if (!ce || object_init_with_constructor(&error, ce, 1, problems, NULL) != SUCCESS) {
+		zval_ptr_dtor(problems);
+		if (!EG(exception)) {
+			zend_throw_error(NULL, "Sharp\\ParseError does not load, so a parse has no failure to give");
+		}
+		ZVAL_NULL(return_value);
+		return;
+	}
+	zval_ptr_dtor(problems);
+	sharp_parse_result(type, false, &error, return_value);
+}
+
+/* Spec section 10: the value of `type` that `value` builds, as a field of that type a struct's `parse` reads reads
+ * it, read from text with `text`, as `Query.parse` reads it, as a `Result<T, ParseError>` in `return_value`. A union
+ * tries its members in `order`, the classes and scalar types its type's text was written with, as a `#fields` row's
+ * does, or in its own order when `order` is NULL. An `Err` holds one Sharp\ParseError that lists every bad part, under
+ * its path. */
 static void sharp_parse_as(const sharp_type *type, zval *value, bool text, const zend_string *order, zval *return_value)
 {
-	zval problems;
+	zval problems, built;
 	array_init(&problems);
 	sharp_read read;
 	sharp_read_start(&read, &problems, text, order);
-	ZVAL_COPY(return_value, value);
-	sharp_read_whole(type, return_value, &read);
+	ZVAL_COPY(&built, value);
+	sharp_read_whole(type, &built, &read);
 	sharp_read_end(&read);
-	if (!EG(exception) && zend_hash_num_elements(Z_ARRVAL(problems)) > 0) {
-		sharp_throw_invalid_fields(&problems);
-	}
-	zval_ptr_dtor(&problems);
 	if (EG(exception)) {
-		zval_ptr_dtor(return_value);
+		zval_ptr_dtor(&built);
+		zval_ptr_dtor(&problems);
 		ZVAL_NULL(return_value);
+		return;
 	}
+	if (zend_hash_num_elements(Z_ARRVAL(problems)) == 0) {
+		zval_ptr_dtor(&problems);
+		sharp_parse_result(type, true, &built, return_value);
+		return;
+	}
+	zval_ptr_dtor(&built);
+	sharp_parse_failure(type, &problems, return_value);
 }
 
 zend_function *sharp_backed_value_method(const zend_class_entry *ce, bool keyed)
@@ -15635,6 +15713,11 @@ zend_result sharp_read_stored_form(zend_class_entry *ce, zval *stored, const zva
 		zval *value = zend_hash_str_find(Z_ARRVAL_P(stored), "value", sizeof("value") - 1);
 		if (value) {
 			zend_call_known_function(parse, NULL, ce, built, 1, value, NULL);
+			if (!EG(exception)) {
+				/* An `Err`'s whole-value problem, which no walk here takes, is the stored form's. */
+				sharp_read_parsed(&read, built);
+				zend_hash_merge(Z_ARRVAL(problems), Z_ARRVAL(read.texts), zval_add_ref, true);
+			}
 		} else {
 			zval missing;
 			ZVAL_STRINGL(&missing, "missing", sizeof("missing") - 1);
@@ -15646,7 +15729,7 @@ zend_result sharp_read_stored_form(zend_class_entry *ce, zval *stored, const zva
 	}
 	sharp_read_end(&read);
 	if (!EG(exception) && zend_hash_num_elements(Z_ARRVAL(problems)) > 0) {
-		sharp_throw_invalid_fields(&problems);
+		sharp_throw_problems(&problems);
 	}
 	zval_ptr_dtor(&problems);
 	if (EG(exception) || Z_ISUNDEF_P(built)) {
@@ -15660,19 +15743,16 @@ zend_result sharp_read_stored_form(zend_class_entry *ce, zval *stored, const zva
 
 /* Spec section 10: a family's `parse`, `\Sharp\Internal\parseVariant($family, $value)`, which an abstract class's or an
  * enum's calls, and which a call of an interface's runs, since an interface holds no static method's body: the variant
- * `$value` names under the family's key, read as sharp_parse_as reads a value of the family. With `throws` false it is
- * `tryParse`, null wherever `parse` throws a ValueError. */
+ * `$value` names under the family's key, read as sharp_parse_as reads a value of the family, as a
+ * `Result<T, ParseError>`. */
 ZEND_FUNCTION(Sharp_Internal_parseVariant)
 {
 	zend_string *family;
 	zval *value;
-	bool throws = true;
 
-	ZEND_PARSE_PARAMETERS_START(2, 3)
+	ZEND_PARSE_PARAMETERS_START(2, 2)
 		Z_PARAM_STR(family)
 		Z_PARAM_ZVAL(value)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_BOOL(throws)
 	ZEND_PARSE_PARAMETERS_END();
 
 	const sharp_type *type = sharp_class_value_of(family);
@@ -15680,9 +15760,43 @@ ZEND_FUNCTION(Sharp_Internal_parseVariant)
 		RETURN_THROWS();
 	}
 	sharp_parse_as(type, value, false, NULL, return_value);
-	if (!throws && EG(exception) && instanceof_function(EG(exception)->ce, zend_ce_value_error)) {
-		zend_clear_exception();
+}
+
+/* Spec section 10: a backed struct's `parse`, `\Sharp\Internal\parseHeld($class, $value)`: a new `$class` that holds
+ * `$value`, built through its constructor, as a `Result<T, ParseError>`. The ValueError the constructor throws is the
+ * `Err`, its message the problem of the whole value, at "". */
+ZEND_FUNCTION(Sharp_Internal_parseHeld)
+{
+	zend_string *class;
+	zval *value;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_STR(class)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	const sharp_type *type = sharp_class_value_of(class);
+	zend_class_entry *ce = type ? zend_lookup_class(class) : NULL;
+	if (!ce) {
+		RETURN_THROWS();
 	}
+	zval built;
+	if (object_init_with_constructor(&built, ce, 1, value, NULL) == SUCCESS) {
+		sharp_parse_result(type, true, &built, return_value);
+		return;
+	}
+	zend_object *thrown = EG(exception);
+	if (!thrown || !instanceof_function(thrown->ce, zend_ce_value_error)) {
+		RETURN_THROWS();
+	}
+	zval held, problems, message;
+	zval *thrown_message = zend_read_property_ex(zend_get_exception_base(thrown), thrown, ZSTR_KNOWN(ZEND_STR_MESSAGE), true, &held);
+	ZVAL_STR(&message, zval_get_string(thrown_message));
+	zval_ptr_dtor(&held);
+	zend_clear_exception();
+	array_init(&problems);
+	zend_hash_str_update(Z_ARRVAL(problems), "", 0, &message);
+	sharp_parse_failure(type, &problems, return_value);
 }
 
 /* The ZEND_DO_*CALL in its caller that pushed `frame`, when it gave the method type arguments, as
@@ -15796,9 +15910,9 @@ static zend_string *sharp_frame_written_order(const zend_execute_data *frame, ui
 	return order.s ? smart_str_extract(&order) : NULL;
 }
 
-/* Spec sections 10 and 24: a struct's or a class's `parse`, `Json.decode<T>` and `Query.decode<T>`, the value of the
- * type the class value `type` holds that `value` builds, as sharp_parse_as reads it. A `[ParsesTypeArgument]` method,
- * as `Json.decode<T>`, reads its type argument in the order its call wrote it. */
+/* Spec sections 10 and 24: a struct's or a class's `parse`, `Json.parse<T>` and `Query.parse<T>`, the value of the
+ * type the class value `type` holds that `value` builds, as sharp_parse_as reads it, as a `Result<T, ParseError>`. A
+ * `[ParsesTypeArgument]` method, as `Json.parse<T>`, reads its type argument in the order its call wrote it. */
 ZEND_FUNCTION(Sharp_Internal_parseAs)
 {
 	zend_string *class_value;
