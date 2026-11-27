@@ -1,0 +1,14 @@
+namespace Demo;
+
+// Records what happens, in order, for a test to print.
+public class Trail
+{
+    private string text = "";
+
+    public void note(string line)
+    {
+        this.text = this.text == "" ? line : `${this.text}, ${line}`;
+    }
+
+    public string written() => this.text;
+}
