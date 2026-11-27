@@ -1,0 +1,62 @@
+#!/usr/bin/env php
+<?php
+// Prints `lost` when a failed run failed only because a runner stopped answering, and `failed` otherwise, for
+// .github/workflows/queue.yml, which sends a batch that lost its runner to staging once more instead of splitting it
+// (#915), as staging run 45722884762 failed when its Mac's runner lost communication. A run lost its runner when each
+// failed job other than CI_PASSED, which fails with any of them, has no failed step and an annotation that says the
+// runner lost communication with the server. The jobs file is the run's `gh api --paginate --slurp
+// .../actions/runs/<run>/jobs`, and the folder holds each failed job's `gh api --paginate --slurp
+// .../check-runs/<job>/annotations` as <job>.json. A job whose annotations are missing counts as failed. It runs on
+// PHP, which both the queue's runner and the sharp/docker image have, and sharp/bin/check workflows runs it on the
+// cases under sharp/bin/fixtures/queue-lost-runner.
+
+declare(strict_types=1);
+
+if ($argc !== 3) {
+    fwrite(STDERR, "usage: sharp/bin/queue-lost-runner <jobs.json> <annotations folder>\n");
+    exit(2);
+}
+
+$failed = [];
+foreach (json_decode((string) file_get_contents($argv[1]), true, flags: JSON_THROW_ON_ERROR) as $page) {
+    foreach ($page['jobs'] as $job) {
+        if ($job['conclusion'] === 'failure' && $job['name'] !== 'CI_PASSED') {
+            $failed[] = $job;
+        }
+    }
+}
+echo verdict($failed, $argv[2]), "\n";
+
+/** @param list<array{id: int, steps?: list<array{conclusion: ?string}>}> $failed */
+function verdict(array $failed, string $annotations): string
+{
+    if ($failed === []) {
+        return 'failed';
+    }
+    foreach ($failed as $job) {
+        foreach ($job['steps'] ?? [] as $step) {
+            if ($step['conclusion'] === 'failure') {
+                return 'failed';
+            }
+        }
+        $file = "$annotations/{$job['id']}.json";
+        if (!is_file($file) || !lost_communication($file)) {
+            return 'failed';
+        }
+    }
+
+    return 'lost';
+}
+
+function lost_communication(string $file): bool
+{
+    foreach (json_decode((string) file_get_contents($file), true, flags: JSON_THROW_ON_ERROR) as $page) {
+        foreach ($page as $annotation) {
+            if (str_contains($annotation['message'], 'lost communication with the server')) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}

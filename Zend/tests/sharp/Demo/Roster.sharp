@@ -11,15 +11,16 @@ public class Roster
         const tens = members.map(n => n * 10);
         const busy = members.filter(n => n > 1);
         const kept = members.filter(n => n >= (members.get(Standing.Active) ?? 0));
-        members.remove(Standing.Closed);
+        let remaining = members;
+        remaining.remove(Standing.Closed);
         return [
             Probe.join(",", ranked),
             Probe.join(",", tens),
             Probe.join(",", kept.map(n => n)),
             (string) (busy.get(Standing.Active) ?? 0),
             (string) (busy.get(Standing.Closed) ?? 0),
-            (string) (members.get(Standing.Active) ?? 0),
-            (string) (members.get(Standing.Closed) ?? 0),
+            (string) (remaining.get(Standing.Active) ?? 0),
+            (string) (remaining.get(Standing.Closed) ?? 0),
         ];
     }
 }

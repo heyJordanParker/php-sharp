@@ -1,0 +1,5 @@
+namespace InheritedFields;
+
+public final class Child : Base
+{
+}

@@ -9,14 +9,19 @@ set -euo pipefail
 # features without the tests' dev-dependencies, and compiled 129 of its 393 units apart from it (#847).
 # Every script that builds sharp/mago builds it here, with the jobs sharp/bin/jobs prints, so one place keeps the build
 # folder the size of one fresh build of each kind, as the prune below explains (#730). Every argument goes to cargo,
-# such as --quiet. It builds the PHP# engine mago links first. `--engine` builds the engine alone, which a CI job
-# runs first, and a cargo check or clippy never needs. `--engine --debug` builds it as the PHP# suite runs it, with
-# --enable-debug and zend_test, in sharp/build/<os>-<arch> beside the suite's php and phpdbg, so the Mac job builds one
-# engine, which mago links too and the suite runs on. `--test-run` builds the mago of the test-run profile, which
-# behaves as release's without its fat LTO, as sharp/mago/Cargo.toml explains, into test-run/mago, for sharp/bin/check.
-# `--cargo-tests` builds and runs the tests cargo builds only as it runs them: the doc tests, and mago-codex's property
-# tests, which build with a feature of their own. `--crate <package>` builds and runs one crate's tests, as `cargo test
-# -p` runs them, then its clippy, so a builder's loop on one crate is in the build record and keeps its units.
+# such as --quiet. Each crate's integration test takes the crate's name without mago-, so `--test syntax` builds
+# mago-syntax's test binary alone, from the units the workspace's build holds. Every build selects the whole workspace,
+# since a cargo run that selects fewer packages resolves their features apart from it and compiles the crates they
+# share again under new hashes (#908). It builds the PHP# engine mago links first. `--engine` builds the engine alone,
+# which a CI job runs first, and a cargo check or clippy never needs. `--engine --debug` builds it as the PHP# suite
+# runs it, with --enable-debug and zend_test, in sharp/build/<os>-<arch> beside the suite's php and phpdbg, so the Mac
+# job builds one engine, which mago links too and the suite runs on, and on Linux BUILD_LINUX does too, with the shared
+# libphp.so sharp/bin/hosts builds FrankenPHP against (#955). `--test-run` builds the mago of the test-run
+# profile, which behaves as release's without its fat LTO, as sharp/mago/Cargo.toml explains, into test-run/mago, for
+# sharp/bin/check. `--cargo-tests` builds and runs the tests cargo builds only as it runs them: the doc tests, and
+# mago-codex's property tests, which build with a feature of their own. `--crate <package>` builds and runs the
+# package's integration test, as `--test` names it, then the package's clippy, so a builder's loop on one crate is in
+# the build record and keeps its units.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 # Each run leaves its line in the build record, with each step's under it, see sharp/bin/record.
 [[ ${SHARP_RECORDED:-} == sharp/bin/build-mago ]] || exec "$root/sharp/bin/record" sharp/bin/build-mago -- "$0" "$@"
@@ -50,7 +55,9 @@ trap 'rm -f "$target"/*.json.part.$$ ${library:+"$library/system-libs.part.$$" "
 # The PHP# engine mago links, which runs the extension hosts inside mago, one interpreter per analysis thread. It builds
 # with the options sharp/docker/runtime/configure-options prints, the runtime image's, so a host runs inside mago with
 # the extensions an app runs with. Four options change: the embed SAPI builds as a static library, which mago links
-# into its own binary, each shared extension links in too, since a static engine loads no shared extension, readline
+# into its own binary, but for Linux's debug engine, whose libphp.so sharp/bin/hosts builds FrankenPHP against, and whose
+# shared build compiles the same objects, since the CLI and phpdbg keep libtool's static objects on, each shared
+# extension links in too, since a static engine loads no shared extension, readline
 # runs on libedit, since GNU readline is GPL, which mago can't link, and the Argon2 password hashes come from sodium,
 # whose archive holds Argon2's own functions under the names libargon2's archive gives them, so one link can't hold both.
 # MAGO_ENGINE names an engine built elsewhere, as a CI job builds one with --engine first, which mago links as it is.
@@ -61,10 +68,14 @@ build_engine() {
   else
     engine="$root/sharp/build/$platform-engine"
   fi
+  shared=false
+  if $debug && [[ "$(uname -s)" == Linux ]]; then
+    shared=true
+  fi
   options=(--prefix="$engine/install")
   while IFS= read -r option; do
     case "$option" in
-      --enable-embed) options+=(--enable-embed=static) ;;
+      --enable-embed) if $shared; then options+=("$option"); else options+=(--enable-embed=static); fi ;;
       --with-readline) options+=(--with-libedit) ;;
       --with-password-argon2) ;;
       *=shared) options+=("${option%=shared}") ;;
@@ -72,9 +83,13 @@ build_engine() {
     esac
   done < <("$root/sharp/docker/runtime/configure-options")
   # Only a debug engine runs ZEND_ASSERT and reports a leak, and the suite's observer and executor tests run on
-  # zend_test.
+  # zend_test, which builds as a shared extension the phpt runner loads for each test that names it: built in, its
+  # exported copy_file_range took glibc's place in every Linux binary that links the engine, where Rust's
+  # std::fs::copy reached it on a thread no engine started, and it faulted reading zend_test's globals (#967). It
+  # compiles at -O0 without autoconf's -g, since no job reads its debug info: configure.ac's debug build adds only -O0
+  # to the CFLAGS it finds, which in its options configure records with the rest (#955).
   if $debug; then
-    options+=(--enable-debug --enable-zend-test)
+    options+=(--enable-debug --enable-zend-test=shared CFLAGS=-O0)
   fi
   # Empties the engine's folder but the mago build that sharp/build/<os>-<arch> holds beside a debug engine.
   clear_engine() {
@@ -128,13 +143,18 @@ build_engine() {
     clear_engine
     touch "$deps/$name-$version.built"
   }
-  # From https://curl.se/download/curl-8.11.1.tar.xz.
+  # From https://curl.se/download/curl-8.11.1.tar.xz. Only libcurl builds, as static-php-cli builds it: curl's CMake
+  # build skips the curl tool with BUILD_CURL_EXE=OFF, where its autotools build compiled the tool's 44 C files and
+  # linked it beside libcurl's 170, though the engine links libcurl alone (#999).
   static_library curl 8.11.1 curl-8.11.1.tar.xz \
     c7ca7db48b0909743eaef34250da02c19bc61d4f1dcedd6603f109409536ab56 \
-    sh -c "./configure --prefix='$deps/install' --disable-shared --enable-static --with-pic --with-openssl \
-      --without-libpsl --without-brotli --without-zstd --without-nghttp2 --without-nghttp3 --without-ngtcp2 \
-      --without-libidn2 --without-libssh --without-libssh2 --without-librtmp --without-libgsasl --without-gssapi \
-      --disable-ldap --disable-ldaps --disable-docs --disable-manual && make -j$("$root/sharp/bin/jobs") && make install"
+    sh -c "cmake -S . -B build -DCMAKE_INSTALL_PREFIX='$deps/install' -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_SHARED_LIBS=OFF \
+      -DBUILD_STATIC_LIBS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_CURL_EXE=OFF -DBUILD_LIBCURL_DOCS=OFF \
+      -DBUILD_MISC_DOCS=OFF -DENABLE_CURL_MANUAL=OFF -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DCURL_USE_OPENSSL=ON \
+      -DCURL_USE_LIBPSL=OFF -DCURL_BROTLI=OFF -DCURL_ZSTD=OFF -DUSE_NGHTTP2=OFF -DUSE_NGTCP2=OFF -DUSE_OPENSSL_QUIC=OFF \
+      -DUSE_LIBIDN2=OFF -DCURL_USE_LIBSSH=OFF -DCURL_USE_LIBSSH2=OFF -DUSE_LIBRTMP=OFF -DCURL_USE_GSASL=OFF \
+      -DCURL_USE_GSSAPI=OFF -DCURL_DISABLE_LDAP=ON -DCURL_DISABLE_LDAPS=ON \
+      && cmake --build build -j$("$root/sharp/bin/jobs") && cmake --install build"
   # From https://libzip.org/download/libzip-1.11.2.tar.xz.
   static_library libzip 1.11.2 libzip-1.11.2.tar.xz \
     5d471308cef4c4752bbcf973d9cd37ba4cb53739116c30349d4764ba1410dfc1 \
@@ -191,14 +211,34 @@ build_engine() {
   # The cargo build of ext/sharp's Rust library, which make runs, reads CARGO_BUILD_JOBS as its jobs.
   # shellcheck disable=SC2016 # The variables are make's, which make expands.
   read -r -a linked <<< "$(make -s -C "$engine" -f Makefile -f - print-objects <<< 'print-objects: ; @echo $(PHP_GLOBAL_OBJS) $(PHP_SAPI_OBJS)')"
-  # A debug engine also makes the two binaries the PHP# suite runs, from the same objects.
+  # A debug engine also makes the two binaries the PHP# suite runs, from the same objects, and on Linux the libphp.so
+  # sharp/bin/hosts builds FrankenPHP against.
   programs=()
   if $debug; then
     programs=(sapi/cli/php sapi/phpdbg/phpdbg)
   fi
+  if $shared; then
+    programs+=(libphp.la)
+  fi
   CARGO_BUILD_JOBS="$("$root/sharp/bin/jobs")" "$record" make -- \
     make -C "$engine" -j"$("$root/sharp/bin/jobs")" "${linked[@]}" "${programs[@]}" >/dev/null
-  "$record" "make install" -- make -C "$engine" install-headers install-programs >/dev/null
+  # The install copies the headers, php-config and phpize, which change only with a configure or a header, never with
+  # an object, so it runs only when one of those is newer than the last install.
+  installed="$engine/install/installed"
+  if [[ ! -f $installed || $stamp -nt $installed ]] || [[ -n "$(find "$root/Zend" "$root/main" "$root/TSRM" "$root/ext" \
+    "$root/sapi/embed" "$engine/main" "$engine/Zend" -name '*.h' -newer "$installed" -print -quit)" ]]; then
+    "$record" "make install" -- make -C "$engine" install-headers install-programs >/dev/null
+    touch "$installed"
+  fi
+  # A debug engine's shared zend_test builds and installs into the extension folder its php reads, where the phpt
+  # runner finds it. The install copies one file, so it runs on each build.
+  if $debug; then
+    "$record" "make install-modules" -- make -C "$engine" -j"$("$root/sharp/bin/jobs")" install-modules >/dev/null
+  fi
+  # libphp.so changes with any object, so its install runs whenever the link made a newer one.
+  if $shared && [[ ! -f "$engine/install/lib/libphp.so" || "$engine/libs/libphp.so" -nt "$engine/install/lib/libphp.so" ]]; then
+    "$record" "make install-sapi" -- make -C "$engine" install-sapi >/dev/null
+  fi
 
   # So the archive mago links holds those objects, and the static archive of each library the link names, so the linker
   # finds every symbol in one archive whatever order they need each other in. libsharp.a stays out: it bundles a Rust
@@ -293,23 +333,11 @@ fi
 # Each kind of build keeps cargo's messages about it in a file of its own under $target, one JSON object per line, among
 # them every file it made or found fresh and the folder each build script wrote, while the diagnostics print as cargo
 # prints them: build.json, whose test binaries sharp/bin/test runs, as a CI job does on another job's build with
-# sharp/bin/test --no-build, build-<packages>.json for a build of the packages a -p or --package names, bin.json,
-# test-run.json, cargo-tests.json and crate-<package>.json. So no build overwrites another kind's file, and the prune
-# keeps every unit each one names. A failed build leaves no file, so no run takes a build that failed for one that
-# passed.
-packages=()
-if [[ $mode == tests ]]; then
-  previous=
-  for argument in "$@"; do
-    case $previous,$argument in
-      -p,* | --package,*) packages+=("$argument") ;;
-      *,--package=*) packages+=("${argument#--package=}") ;;
-    esac
-    previous=$argument
-  done
-fi
+# sharp/bin/test --no-build, bin.json, test-run.json, cargo-tests.json and crate-<package>.json. So no build overwrites
+# another kind's file, and the prune keeps every unit each one names. A failed build leaves no file, so no run takes a
+# build that failed for one that passed.
 case $mode in
-  tests) messages=$target/build${packages[*]+-$(IFS=-; echo "${packages[*]}")}.json ;;
+  tests) messages=$target/build.json ;;
   crate) messages=$target/crate-$package.json ;;
   *) messages=$target/$mode.json ;;
 esac
@@ -338,14 +366,7 @@ messages_to_file() {
 }
 case $mode in
   tests)
-    # A -p or --package among the arguments builds only the packages it names: cargo resolves their features apart from
-    # the workspace's, so the shared crates they use compile once more into the target, and later builds of the same
-    # list compile only what a change reaches.
-    scope=(--workspace)
-    if ((${#packages[@]})); then
-      scope=()
-    fi
-    cargo_in_target test "${scope[@]}" --no-run "$@" > "$messages.part.$$"
+    cargo_in_target test --workspace --no-run "$@" > "$messages.part.$$"
     ;;
   bin)
     cargo_in_target test --workspace --no-run --test suite "$@" > "$messages.part.$$"
@@ -368,8 +389,10 @@ case $mode in
     # The crate's tests, then its clippy, whose messages print nothing but JSON. Both run, and the build fails when
     # either did.
     failed=()
-    cargo_in_target test -p "$package" "$@" -- --test-threads "$jobs" | messages_to_file || failed+=("$package's tests")
-    cargo_in_target clippy -p "$package" --all-targets "$@" -- -D warnings >> "$messages.part.$$" \
+    cargo_in_target test --workspace --test "${package#mago-}" "$@" -- --test-threads "$jobs" | messages_to_file \
+      || failed+=("$package's tests")
+    # With cargo's build.warnings = "deny", as sharp/bin/check's clippy runs (#977).
+    CARGO_BUILD_WARNINGS=deny cargo_in_target clippy -p "$package" --all-targets --keep-going "$@" >> "$messages.part.$$" \
       || failed+=("$package's clippy")
     if ((${#failed[@]})); then
       printf 'Failed: %s\n' "${failed[@]}" >&2

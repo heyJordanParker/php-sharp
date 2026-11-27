@@ -1,0 +1,12 @@
+namespace InheritedFields;
+
+import Sharp.Encoding.Json;
+
+public static class Uploads
+{
+    private static UploadTarget target() => Json.decode<UploadTarget>("{\"url\":{\"value\":\"  https://a.test \"}}");
+
+    public static string decoded() => Uploads.target().url.value + "|";
+
+    public static string encoded() => Json.encode(Uploads.target());
+}

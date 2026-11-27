@@ -2492,9 +2492,14 @@ static inline zend_op *zend_delayed_emit_op(znode *result, uint8_t opcode, znode
 }
 /* }}} */
 
-static inline uint32_t zend_delayed_compile_begin(void) /* {{{ */
+static zend_always_inline uint32_t zend_delayed_oplines_stack_size(void)
 {
 	return zend_stack_count(&CG(delayed_oplines_stack));
+}
+
+static inline uint32_t zend_delayed_compile_begin(void) /* {{{ */
+{
+	return zend_delayed_oplines_stack_size();
 }
 /* }}} */
 
@@ -3185,6 +3190,7 @@ static zend_op *zend_delayed_compile_prop(znode *result, zend_ast *ast, uint32_t
 		zend_delayed_compile_dim(&obj_node, obj_ast, BP_VAR_R, 0)->result_type = IS_VAR;
 		obj_node.op_type = IS_VAR;
 	} else {
+		uint32_t offset = zend_delayed_oplines_stack_size();
 		zend_short_circuiting_mark_inner(obj_ast);
 		opline = zend_delayed_compile_var(&obj_node, obj_ast, type, 0);
 		if (opline && (opline->opcode == ZEND_FETCH_DIM_W
@@ -3200,10 +3206,11 @@ static zend_op *zend_delayed_compile_prop(znode *result, zend_ast *ast, uint32_t
 				/* Flush delayed oplines */
 				zend_op *opline = NULL, *oplines = zend_stack_base(&CG(delayed_oplines_stack));
 				uint32_t var = obj_node.u.op.var;
-				uint32_t count = zend_stack_count(&CG(delayed_oplines_stack));
+				uint32_t count = zend_delayed_oplines_stack_size();
 				uint32_t i = count;
 
-				while (i > 0 && oplines[i-1].result_type == IS_TMP_VAR && oplines[i-1].result.var == var) {
+				/* Only consider the oplines delayed while compiling obj_ast. */
+				while (i > offset && oplines[i-1].result_type == IS_TMP_VAR && oplines[i-1].result.var == var) {
 					i--;
 					if (oplines[i].op1_type == IS_TMP_VAR) {
 						var = oplines[i].op1.var;
@@ -4116,7 +4123,7 @@ ZEND_API uint8_t zend_get_call_op(const zend_op *init_op, zend_function *fbc, bo
 }
 /* }}} */
 
-static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast);
+static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast, zend_ast *order_ast);
 
 static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_function *fbc, uint32_t lineno) /* {{{ */
 {
@@ -4140,11 +4147,12 @@ static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_fun
 	}
 
 	/* A PHP# generic call ends its arguments with the type arguments it gives the method, a ZEND_AST_SHARP_TYPE_ARGS
-	 * without a `new`, which the call op takes. */
+	 * without a `new`, whose child 0 is NULL or their written order, which the call op takes. */
 	zend_ast_list *args = zend_ast_get_list(args_ast);
 	zend_ast *type_args_ast = NULL;
 	if (args->children && args->child[args->children - 1]->kind == ZEND_AST_SHARP_TYPE_ARGS
-		&& !args->child[args->children - 1]->child[0]) {
+		&& (!args->child[args->children - 1]->child[0]
+			|| args->child[args->children - 1]->child[0]->kind == ZEND_AST_ZVAL)) {
 		type_args_ast = args->child[--args->children];
 	}
 
@@ -4157,7 +4165,7 @@ static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_fun
 	 * Fiber that suspends inside an argument suspends before they exist, so no suspended frame holds them. */
 	znode type_args_node;
 	if (type_args_ast) {
-		zend_compile_sharp_type_args(&type_args_node, type_args_ast->child[1]);
+		zend_compile_sharp_type_args(&type_args_node, type_args_ast->child[1], type_args_ast->child[0]);
 		/* zend_ast_destroy frees the node with the list. */
 		args->children++;
 	}
@@ -5699,8 +5707,9 @@ static zend_ast *zend_sharp_declared_type(zend_ast *type_ast, zend_string **shar
 }
 
 /* Emits the ZEND_SHARP_TYPE_ARGS that resolves the type arguments `text_ast` spells into `result`, or this's when
- * `text_ast` is NULL, as `new Self` gives them. */
-static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast)
+ * `text_ast` is NULL, as `new Self` gives them. The literal after the text, and after the class name an open text
+ * names, is the written order `order_ast` holds, or empty, see ZEND_AST_SHARP_TYPE_ARGS. */
+static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast, zend_ast *order_ast)
 {
 	zend_op *opline = zend_emit_op_tmp(result, ZEND_SHARP_TYPE_ARGS, NULL, NULL);
 
@@ -5715,24 +5724,24 @@ static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast)
 	zend_string *text = zend_ast_get_str(text_ast);
 	uint32_t names = sharp_type_list_names(ZSTR_VAL(text), ZSTR_LEN(text));
 	opline->extended_value = zend_alloc_cache_slots(names ? 5 : 1);
-	if (!names) {
-		return;
+	if (names) {
+		/* Its `$i` count the type parameters of the class it is written in, which a lambda keeps when Closure::call() or
+		 * Closure::bind() gives it another scope. */
+		ZEND_ASSERT(CG(active_class_entry));
+		zend_add_class_name_literal(zend_string_copy(CG(active_class_entry)->name));
+		if (names & SHARP_TYPE_NAMES_METHOD) {
+			opline->op1_type = IS_CV;
+			opline->op1.var = lookup_cv(sharp_type_arguments_key);
+		} else {
+			opline->op1.num = ZEND_SHARP_TYPE_ARGS_OPEN;
+		}
+		if (names & SHARP_TYPE_NAMES_THIS) {
+			/* A text that names `$i` reads this's type arguments, so a closure around it keeps its this. */
+			CG(active_op_array)->fn_flags |= ZEND_ACC_USES_THIS;
+		}
 	}
-
-	/* Its `$i` count the type parameters of the class it is written in, which a lambda keeps when Closure::call() or
-	 * Closure::bind() gives it another scope. */
-	ZEND_ASSERT(CG(active_class_entry));
-	zend_add_class_name_literal(zend_string_copy(CG(active_class_entry)->name));
-	if (names & SHARP_TYPE_NAMES_METHOD) {
-		opline->op1_type = IS_CV;
-		opline->op1.var = lookup_cv(sharp_type_arguments_key);
-	} else {
-		opline->op1.num = ZEND_SHARP_TYPE_ARGS_OPEN;
-	}
-	if (names & SHARP_TYPE_NAMES_THIS) {
-		/* A text that names `$i` reads this's type arguments, so a closure around it keeps its this. */
-		CG(active_op_array)->fn_flags |= ZEND_ACC_USES_THIS;
-	}
+	zend_string *order = order_ast ? zend_string_copy(zend_ast_get_str(order_ast)) : ZSTR_EMPTY_ALLOC();
+	zend_add_literal_string(&order);
 }
 
 /* Emits the ZEND_SHARP_VERIFY_TYPE_ARGS that checks the value a ZEND_AST_VERIFY_TYPE_ARGS holds against its type
@@ -5776,7 +5785,7 @@ static void zend_compile_sharp_is_type(znode *result, zend_ast *ast)
 	} else {
 		zend_compile_expr(&value_node, value_ast);
 	}
-	zend_compile_sharp_type_args(&type_node, ast->child[1]);
+	zend_compile_sharp_type_args(&type_node, ast->child[1], NULL);
 	zend_emit_op_tmp(result, ZEND_SHARP_IS_TYPE, &value_node, &type_node)->extended_value =
 		binds ? ZEND_SHARP_IS_TYPE_BINDS : 0;
 }
@@ -5787,7 +5796,7 @@ static void zend_compile_sharp_type_of(znode *result, zend_ast *ast)
 {
 	znode type_node;
 
-	zend_compile_sharp_type_args(&type_node, ast->child[0]);
+	zend_compile_sharp_type_args(&type_node, ast->child[0], NULL);
 	zend_emit_op_tmp(result, ZEND_SHARP_TYPE_OF, &type_node, NULL)->extended_value = ast->attr;
 }
 
@@ -5831,7 +5840,7 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 			zend_compile_expr(&class_node, class_ast);
 		} else {
 			ZEND_ASSERT(type_args_ast && type_args_ast->child[1]);
-			zend_compile_sharp_type_args(&class_node, type_args_ast->child[1]);
+			zend_compile_sharp_type_args(&class_node, type_args_ast->child[1], NULL);
 		}
 		if (class_node.op_type == IS_CONST) {
 			opline = zend_emit_op(result, ZEND_NEW, NULL, NULL);
@@ -5873,7 +5882,7 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 			opline->extended_value = zend_alloc_cache_slot();
 		}
 
-		zend_compile_sharp_type_args(&type_args_node, type_args_ast->child[1]);
+		zend_compile_sharp_type_args(&type_args_node, type_args_ast->child[1], NULL);
 	}
 
 	opline = zend_emit_op(result, ZEND_NEW, NULL, NULL);
@@ -7170,10 +7179,9 @@ static void zend_compile_match(znode *result, zend_ast *ast)
 		if (opline->op1_type == IS_CONST) {
 			Z_TRY_ADDREF_P(CT_CONSTANT(opline->op1));
 		}
-		if (arms->children == 0) {
-			/* Mark this as an "expression throw" for opcache. */
-			opline->extended_value = ZEND_THROW_IS_EXPR;
-		}
+		/* Mark this as an "expression throw" for opcache.
+		 * Even if there are arms, they may become unreachable after optimization, which loses live ranges. */
+		opline->extended_value = ZEND_THROW_IS_EXPR;
 	}
 
 	for (uint32_t i = 0; i < arms->children; ++i) {

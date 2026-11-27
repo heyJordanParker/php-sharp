@@ -1,11 +1,10 @@
 namespace Sharp;
 
-import ReflectionAttribute;
 import Sharp.Internal.CreatesAttributes;
+import Sharp.Internal.NamesMember;
 
 extern Internal.createDelegate uses none;
 extern Internal.createInvoker uses none;
-
 // A method a class declares, as `Class<T>.methods()` gives it, spec section 25: the class that declares it, its name,
 // its modifiers, its visibility, its result type as declared, `void` for a `void` method, and its parameters. A method
 // is virtual when a subclass may replace it: a PHP# one that is `virtual`, `abstract` or an `override` not `final`, and
@@ -16,7 +15,7 @@ public class Method
     internal Method(
         private Class<Any?> readOn,
         public Class<Object> declaringClass { get; },
-        public string name { get; },
+        [NamesMember] public string name { get; },
         public bool isStatic { get; },
         public bool isVirtual { get; },
         public bool isAbstract { get; },
@@ -61,7 +60,5 @@ public class Method
     // `Class<T>.attributes()` gives a class's.
     [CreatesAttributes]
     public List<TAttribute> attributes<TAttribute : Object>()
-        => ClassMembers.reflectedMethod(this.declaringClass, this.name)
-            .getAttributes(ClassMembers.declared(typeof(TAttribute)), ReflectionAttribute.IS_INSTANCEOF)
-            .map(attribute => attribute.newInstance());
+        => Internal.attributes(this.declaringClass, "method", this.name, 0, typeof(TAttribute));
 }

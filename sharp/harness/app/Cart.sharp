@@ -8,7 +8,6 @@ public class Cart
 
     public static List<Line> withShipping(List<Line> lines, Line shipping)
     {
-        lines.add(shipping);
-        return lines;
+        return [...lines, shipping];
     }
 }

@@ -136,7 +136,9 @@ run_step() {
 # for used in it, as bash's times counts them, so a change to one part is judged by that part whatever else the machine
 # runs, and writes its line to the build record, as failed when a step of it failed. Then it starts the part its heading
 # names, if any, from after that write, so the recorder's own time counts in neither part. Each unit of the pool runs
-# in a shell of its own, whose times count only what that unit ran.
+# in a shell of its own, whose times count only what that unit ran. A unit names the file part_times, where the part
+# writes its start and end, in microseconds, and its CPU milliseconds, which the run's report reads.
+part_times=''
 part_heading=''
 part_started=0
 part_cpu=0
@@ -158,6 +160,9 @@ part() {
     wall=$(((now - part_started) / 100000))
     used=$(((cpu - part_cpu) / 100))
     printf '%s took %d.%d s and %d.%d CPU-seconds.\n' "$part_heading" $((wall / 10)) $((wall % 10)) $((used / 10)) $((used % 10))
+    if [[ -n $part_times ]]; then
+      printf '%s\t%s\t%s\n' "$part_started" "$now" "$((cpu - part_cpu))" > "$part_times"
+    fi
     "$root/sharp/bin/record" "$part_heading" --measured "${part_started:0:${#part_started}-6}.${part_started: -6}" \
       "$((used / 10)).$((used % 10))" '' "$((${#failed[@]} > part_failed))"
     part_clock
@@ -170,6 +175,17 @@ part() {
     echo "== $part_heading"
   fi
 }
+
+# On macOS a run builds one engine, the debug one CI's Mac job builds, runs every suite on and links mago with, in
+# sharp/build/<os>-<arch> beside its php and phpdbg, so no other engine build empties that folder (#851). The sharp/docker
+# image's run tests the engine sharp/bin/build built there.
+if [[ $os == darwin ]]; then
+  export MAGO_ENGINE="${MAGO_ENGINE:-$build_dir/install}"
+  if $build; then
+    part "sharp/bin/build-mago --engine --debug"
+    "$root/sharp/bin/build-mago" --engine --debug
+  fi
+fi
 
 # One pool of the run's jobs runs every test of the run, both lanes of the Mac's job among them, as cargo-nextest runs a
 # workspace: a slot runs one process on one thread with a list of tests, and the heaviest unit waiting starts the
@@ -190,6 +206,9 @@ unit_command=()
 unit_then=()
 unit_keys=()
 unit_part=()
+unit_junit=()
+unit_results=()
+unit_mode=()
 queued=()
 sorted=true
 # The part of the run the units added next belong to: its name, a tab, and the command that runs it alone.
@@ -221,6 +240,9 @@ add_unit() {
   unit_then[unit]=''
   unit_keys[unit]=''
   unit_part[unit]=$adding
+  unit_junit[unit]=''
+  unit_results[unit]=''
+  unit_mode[unit]=''
   unit_count=$((unit_count + 1))
 }
 # A failed step of the unit, with the part the unit belongs to and the command that runs that part alone.
@@ -268,6 +290,7 @@ start_unit() {
   (
     # shellcheck disable=SC2030 # The unit's own failed steps, which run_pool reads from its file.
     failed=()
+    part_times="$output.time"
     part "${unit_heading[u]}"
     if [[ -n $step ]]; then
       eval "run_step \"\$step\" \"\$folder\" ${unit_command[u]}"
@@ -325,6 +348,16 @@ run_pool() {
     if [[ -f $TMPDIR/unit-$u.failed ]]; then
       mapfile -t reported < "$TMPDIR/unit-$u.failed"
     fi
+    # A failed run-tests batch names each test that failed in it, from the results run-tests.php wrote, where its heading
+    # names only the batch's first file: run 45817904815 printed "55 tests from …plain_declared_class_closures.phpt" for
+    # a failed type_arguments_entry_collection.phpt (#943). A batch that failed with no test failing keeps its heading.
+    if ((status != 0 || ${#reported[@]})) && [[ -n ${unit_results[u]} && -f ${unit_results[u]} ]]; then
+      mapfile -t tests < <(awk -F '\t' -v mode="${unit_mode[u]}" \
+        '$1 == "FAILED" || $1 == "BORKED" || $1 == "LEAKED" { print mode ": " $2 }' "${unit_results[u]}")
+      if ((${#tests[@]})); then
+        reported=("${tests[@]}")
+      fi
+    fi
     if ((status != 0 && ${#reported[@]} == 0)); then
       reported=("${unit_heading[u]}")
     fi
@@ -332,6 +365,7 @@ run_pool() {
       # shellcheck disable=SC2031 # The run's own failed steps, which the unit's join.
       failed+=("$(in_part "$step" "$u")")
     done
+    report_unit "$u" "${reported[@]}"
     for next in ${unit_then[u]}; do
       ready_unit "$next"
     done
@@ -346,10 +380,187 @@ run_pool() {
   unit_then=()
   unit_keys=()
   unit_part=()
+  unit_junit=()
+  unit_results=()
+  unit_mode=()
+}
+
+# The run's report, sharp/build/test-report.xml in the JUnit XML format, which CI's test jobs upload, so each suite's and
+# each test's time can be read on its own where the timeline shows one step for all of them (#855): one testsuite for
+# each part of the run, with its wall time from its first unit's start to its last unit's end in the pool and its
+# CPU-seconds, and one testcase for each test, with its own time, from run-tests.php's JUnit file for a .phpt test and
+# from libtest's --report-time for a Rust test. A unit whose runner gives no time for each test it runs, as libtest-mimic's
+# harness gives none, and a unit that runs one check are one testcase each, with the unit's time. A unit's files move
+# under the run's count of units, since each pool numbers its units from 0.
+reported_units=0
+report_unit() {
+  local u=$1 kept="$TMPDIR/report-$reported_units"
+  shift
+  mv "$TMPDIR/unit-$u" "$kept.out"
+  rm -f "$TMPDIR/unit-$u.failed"
+  if [[ -f $TMPDIR/unit-$u.time ]]; then
+    mv "$TMPDIR/unit-$u.time" "$kept.time"
+  fi
+  if [[ -n ${unit_junit[u]} && -f ${unit_junit[u]} ]]; then
+    mv "${unit_junit[u]}" "$kept.junit"
+  fi
+  if (($#)); then
+    printf '%s\n' "$@" > "$kept.failed"
+  fi
+  printf '%s\t%s\t%s\t%s\n' "$reported_units" "${unit_part[u]%%$'\t'*}" "${unit_part[u]#*$'\t'}" "${unit_heading[u]}" \
+    >> "$TMPDIR/report"
+  reported_units=$((reported_units + 1))
+}
+# Writes the report with the PATH's php, which every run has, since Composer runs on it, and its DOM: the build's engine
+# is missing where a job runs only Mago's test binaries, as MAGO's slices do, and the sharp/docker image's Debian php-cli
+# loads DOM from php-xml's ini, so it runs with its ini.
+write_report() {
+  local report="$root/sharp/build/test-report.xml"
+  if [[ ! -s $TMPDIR/report ]]; then
+    return
+  fi
+  if ! php -d memory_limit=-1 -- "$TMPDIR" "$report" <<'PHP'
+<?php
+declare(strict_types=1);
+
+[, $folder, $report] = $argv;
+$xml = new DOMDocument('1.0', 'UTF-8');
+$xml->formatOutput = true;
+$root = $xml->appendChild($xml->createElement('testsuites'));
+
+// Each part's units, in the order their first unit ended.
+$parts = [];
+foreach (file("$folder/report", FILE_IGNORE_NEW_LINES) as $line) {
+    [$index, $part, $command, $heading] = explode("\t", $line, 4);
+    $kept = "$folder/report-$index";
+    $times = is_file("$kept.time") ? array_map('intval', explode("\t", trim(file_get_contents("$kept.time")))) : null;
+    $failed = is_file("$kept.failed") ? file("$kept.failed", FILE_IGNORE_NEW_LINES) : [];
+    $name = $part === '' ? $heading : $part;
+    $parts[$name] ??= ['command' => $command, 'began' => null, 'ended' => null, 'cpu' => 0, 'cases' => []];
+    if ($times !== null) {
+        [$began, $ended, $cpu] = $times;
+        $parts[$name]['began'] = min($parts[$name]['began'] ?? $began, $began);
+        $parts[$name]['ended'] = max($parts[$name]['ended'] ?? $ended, $ended);
+        $parts[$name]['cpu'] += $cpu;
+    }
+    $wall = $times === null ? 0.0 : ($times[1] - $times[0]) / 1e6;
+    $cases = unit_cases($kept, $heading, $name, $wall);
+    if ($failed !== [] && array_filter($cases, fn (array $case): bool => in_array($case['result'], ['failure', 'error'], true)) === []) {
+        // A unit that failed with no test it names failing, as one that stopped early, fails as itself.
+        if (count($cases) === 1) {
+            $cases[0]['result'] = 'failure';
+            $cases[0]['message'] = implode('; ', $failed);
+        } else {
+            $cases[] = ['name' => $heading, 'classname' => $name, 'time' => 0.0, 'result' => 'failure', 'message' => implode('; ', $failed), 'details' => ''];
+        }
+    }
+    array_push($parts[$name]['cases'], ...$cases);
+}
+
+/**
+ * The unit's tests: run-tests.php's JUnit file's, libtest's lines with --report-time's times, or else the unit as one
+ * test, with its own time. A .phpt test runs once in each mode, which its unit's heading names before its first colon,
+ * so its classname names the mode, as two runs of one test are two testcases.
+ *
+ * @return list<array{name: string, classname: string, time: float, result: string, message: string, details: string}>
+ */
+function unit_cases(string $kept, string $heading, string $part, float $wall): array
+{
+    $cases = [];
+    if (is_file("$kept.junit")) {
+        $junit = new DOMDocument();
+        if (!$junit->load("$kept.junit")) {
+            throw new RuntimeException("$kept.junit isn't JUnit XML that run-tests.php wrote.");
+        }
+        foreach ($junit->getElementsByTagName('testcase') as $case) {
+            $mode = str_contains($heading, ': ') ? strstr($heading, ': ', true) . ', ' : '';
+            $result = ['name' => $case->getAttribute('name'), 'classname' => $mode . ($case->parentNode->getAttribute('name') ?: $part),
+                'time' => (float) $case->getAttribute('time'), 'result' => 'pass', 'message' => '', 'details' => ''];
+            foreach ($case->childNodes as $child) {
+                if ($child instanceof DOMElement && in_array($child->tagName, ['failure', 'error', 'skipped'], true)) {
+                    $result['result'] = $child->tagName;
+                    $result['message'] = $child->tagName === 'skipped' ? $child->textContent : $child->getAttribute('message');
+                    $result['details'] = $child->tagName === 'skipped' ? '' : $child->textContent;
+                }
+            }
+            $cases[] = $result;
+        }
+
+        return $cases;
+    }
+
+    $binary = preg_match('/ of (\S+?),? from \S+$/', $heading, $match) === 1 ? $match[1] : $part;
+    preg_match_all('/^test (.+?) \.\.\. (ok|FAILED|ignored)(?:,[^<\n]*)?(?: <(\d+(?:\.\d+)?)s>)?$/m', file_get_contents("$kept.out"), $lines, PREG_SET_ORDER);
+    $timed = array_filter($lines, fn (array $line): bool => $line[2] === 'ignored' || isset($line[3]));
+    if ($lines !== [] && (count($timed) === count($lines) || count($lines) === 1)) {
+        foreach ($lines as $line) {
+            $cases[] = ['name' => $line[1], 'classname' => $binary, 'time' => isset($line[3]) ? (float) $line[3] : ($line[2] === 'ignored' ? 0.0 : $wall),
+                'result' => ['ok' => 'pass', 'FAILED' => 'failure', 'ignored' => 'skipped'][$line[2]], 'message' => $line[2] === 'FAILED' ? 'FAILED' : '', 'details' => ''];
+        }
+
+        return $cases;
+    }
+
+    $failing = array_filter($lines, fn (array $line): bool => $line[2] === 'FAILED');
+
+    return [['name' => $heading, 'classname' => $binary, 'time' => $wall, 'result' => $failing === [] ? 'pass' : 'failure',
+        'message' => implode('; ', array_map(fn (array $line): string => "{$line[1]} FAILED", $failing)), 'details' => '']];
+}
+
+$id = 0;
+foreach ($parts as $name => $part) {
+    $counts = array_count_values(array_column($part['cases'], 'result'));
+    $suite = $root->appendChild($xml->createElement('testsuite'));
+    $suite->setAttribute('package', 'sharp/bin/test');
+    $suite->setAttribute('id', (string) $id++);
+    $suite->setAttribute('name', $name);
+    $suite->setAttribute('timestamp', gmdate('Y-m-d\TH:i:s', intdiv($part['began'] ?? (int) (microtime(true) * 1e6), 1000000)));
+    $suite->setAttribute('hostname', gethostname() ?: 'localhost');
+    $suite->setAttribute('tests', (string) count($part['cases']));
+    $suite->setAttribute('failures', (string) ($counts['failure'] ?? 0));
+    $suite->setAttribute('errors', (string) ($counts['error'] ?? 0));
+    $suite->setAttribute('skipped', (string) ($counts['skipped'] ?? 0));
+    $suite->setAttribute('time', sprintf('%.3f', (($part['ended'] ?? 0) - ($part['began'] ?? 0)) / 1e6));
+    $properties = $suite->appendChild($xml->createElement('properties'));
+    foreach (['cpu' => sprintf('%.3f', $part['cpu'] / 1000), 'command' => $part['command']] as $key => $value) {
+        $property = $properties->appendChild($xml->createElement('property'));
+        $property->setAttribute('name', $key);
+        $property->setAttribute('value', $value);
+    }
+    foreach ($part['cases'] as $case) {
+        $test = $suite->appendChild($xml->createElement('testcase'));
+        $test->setAttribute('name', $case['name']);
+        $test->setAttribute('classname', $case['classname']);
+        $test->setAttribute('time', sprintf('%.3f', $case['time']));
+        if ($case['result'] !== 'pass') {
+            $result = $test->appendChild($xml->createElement($case['result']));
+            if ($case['result'] === 'skipped') {
+                $result->setAttribute('message', $case['message']);
+            } else {
+                $result->setAttribute('type', $case['result']);
+                $result->setAttribute('message', $case['message']);
+                $result->appendChild($xml->createTextNode($case['details']));
+            }
+        }
+    }
+    $suite->appendChild($xml->createElement('system-out'));
+    $suite->appendChild($xml->createElement('system-err'));
+}
+
+if ($xml->save("$report.part") === false || !rename("$report.part", $report)) {
+    throw new RuntimeException("$report couldn't be written.");
+}
+$tests = array_sum(array_map(fn (array $part): int => count($part['cases']), $parts));
+echo "The report, " . substr($report, strlen(dirname($report, 3)) + 1) . ", holds " . count($parts) . " suites and $tests tests.\n";
+PHP
+  then
+    failed+=("the report")
+  fi
 }
 
 finish() {
   part
+  write_report
   if [[ ${#failed[@]} -gt 0 ]]; then
     printf 'Failed: %s\n' "${failed[@]}" >&2
     exit 1
@@ -413,22 +624,25 @@ if $mago && ! $cargo_built; then
   # Each binary's tests, as its --list prints them, by the binary's index. A binary that can't list them fails the run:
   # its --list ran in a pipe whose failure nothing read, so its empty list read as a binary with no tests, and the run
   # ran none of them and passed. libtest prints each test's own wall time after its result with --report-time, which
-  # stable Rust's libtest takes only under RUSTC_BOOTSTRAP. libtest-mimic's harness has no such option, and its --help
-  # doesn't name it.
+  # stable Rust's libtest takes only under RUSTC_BOOTSTRAP. libtest-mimic's harness has no such option. One launch tells
+  # them apart: libtest's --list ends with a count, as "948 tests, 0 benchmarks", and libtest-mimic's prints only its
+  # tests. Its own part times the launches, which took about 50 s at no CPU on run 45830629343's Mac job (#953).
+  part "the list of each test binary's tests"
   declare -A listed=() libtests=()
   for ((b = 0; b < ${#binaries[@]}; b++)); do
     IFS=$'\t' read -r executable folder source <<< "${binaries[b]}"
-    if ! names="$(cd "$folder" && "$executable" --list --format terse)"; then
+    if ! names="$(cd "$folder" && "$executable" --list)"; then
       echo "${executable##*/}, from ${folder#"$root"/}, couldn't list its tests, so none of them runs." >&2
       failed+=("the list of ${executable##*/}'s tests")
       continue
     fi
     listed[$b]="$(sed -n 's/: test$//p' <<< "$names")"
     libtests[$b]=false
-    if [[ $("$executable" --help) == *--report-time* ]]; then
+    if [[ ${names##*$'\n'} =~ ^[0-9]+\ tests?,\ [0-9]+\ benchmarks?$ ]]; then
       libtests[$b]=true
     fi
   done
+  part
 
   # Each test weighs the seconds sharp/baseline/seconds lists under its binary's source file and its name, as
   # sharp/mago/tests/main.rs::compile::<name>, and a test the file doesn't list ran under 1.5 s, so it weighs 1. A
@@ -651,16 +865,16 @@ done | LC_ALL=C sort -u)
 
 php="$build_dir/sapi/cli/php"
 if [[ ! -x "$php" ]]; then
-  echo "$php is missing. Run sharp/bin/build first." >&2
+  echo "$php is missing. Run sharp/bin/build-mago --engine --debug first." >&2
   exit 1
 fi
 
-# A build folder an older sharp/bin/build configured can hold an engine without thread safety, which PHP# no longer
+# A build folder an older build configured can hold an engine without thread safety, which PHP# no longer
 # runs, at the tree's version, the root package's in sharp/mago/Cargo.toml.
 version="$(sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q;}' "$root/sharp/mago/Cargo.toml")"
 engine_version="$("$php" -n --ri sharp | sed -n 's/^Version => //p')"
 if [[ "$engine_version" != "$version" || "$("$php" -n -r 'echo PHP_ZTS;')" != 1 ]]; then
-  echo "The engine $php is $engine_version$("$php" -n -r 'echo PHP_ZTS ? "" : " without thread safety";'), but the tree is the thread-safe $version. Run sharp/bin/build." >&2
+  echo "The engine $php is $engine_version$("$php" -n -r 'echo PHP_ZTS ? "" : " without thread safety";'), but the tree is the thread-safe $version. Run sharp/bin/build-mago --engine --debug." >&2
   exit 1
 fi
 
@@ -735,7 +949,8 @@ conflict_keys() {
 # 100 that hold the same conflict keys, which the list's units hold, and a list runs in a mode once it ran in the mode
 # before: run-tests.php writes the .php file of each test in the test's own folder, and deletes it before and after the
 # test runs, so one test in two modes at once would delete its other run's. Each unit writes its results, one
-# `RESULT<TAB>path` line for each test it ran, to a file of its mode's.
+# `RESULT<TAB>path` line for each test it ran, to a file of its mode's, and its tests' times to a JUnit file of its own,
+# which the run's report reads.
 add_test_units() {
   local test keys slot m l previous heading lists=() weights=() list_keys=() group=() options=()
   local -A held_by=() grouped=() counted=()
@@ -781,7 +996,7 @@ add_test_units() {
     for ((m = 0; m < ${#modes[@]}; m++)); do
       read -r -a options <<< "${mode_options[m]}"
       add_unit "${weights[l]}" "${modes[m]}: $heading" "${modes[m]}: $heading" "$root" \
-        "$php" run-tests.php -P -q -W "$TMPDIR/results-$m-$l" \
+        env TEST_PHP_JUNIT="$TMPDIR/junit-$m-$l" "$php" run-tests.php -P -q -W "$TMPDIR/results-$m-$l" \
         -d opcache.jit=disable \
         -d opcache.protect_memory=1 \
         -j1 \
@@ -792,6 +1007,9 @@ add_test_units() {
         --show-slow 1000 \
         --set-timeout 120 \
         "${options[@]}" "${group[@]}"
+      unit_junit[unit]="$TMPDIR/junit-$m-$l"
+      unit_results[unit]="$TMPDIR/results-$m-$l"
+      unit_mode[unit]=${modes[m]}
       hold_keys "$unit" "${list_keys[l]}"
       if [[ -z $previous ]]; then
         ready_unit "$unit"
@@ -922,11 +1140,11 @@ fi
 # autoloader and the PHP# package's, from the packages its composer.lock pins, and mago compile checks the project with
 # its vendor folder. The PHP# package is a copy of sharp/composer, as an application installs it, since a compile
 # refuses a link outside the project. Composer keeps the copy an earlier run installed while the lock is unchanged, so
-# a copy that differs from sharp/composer in a file git tracks there, or in a compiled file or the codex of the
-# library's .sharp folder, which sharp/bin/build-mago compiles the library into and the project's compile reads the
-# library from, is reinstalled first, and the install then dumps the autoloader, which runs the package's plugin:
-# composer reinstall runs no plugin. The rest of that folder, the record and locks of the library's compile, never
-# counts.
+# a copy that differs from sharp/composer in a file git tracks there, or in a compiled file of the current generation
+# or the codex of the library's .sharp folder, which sharp/bin/build-mago compiles the library into and the project's
+# compile reads the library from, is reinstalled first, and the install then dumps the autoloader, which runs the
+# package's plugin: composer reinstall runs no plugin. The rest of that folder, the record and locks of the library's
+# compile, never counts.
 part "composer install in Zend/tests/sharp"
 package="$root/Zend/tests/sharp/vendor/heyjordanparker/php-sharp-composer"
 differs_from_library() {
@@ -939,7 +1157,7 @@ differs_from_library() {
     echo "sharp/composer/.sharp is missing: sharp/bin/build-mago compiles the standard library into it." >&2
     exit 1
   fi
-  files+=$'\n'"$(cd "$root/sharp/composer" && find .sharp -type f \( -name '*.sharpc' -o -name library.codex \))"
+  files+=$'\n'".sharp/library.codex"$'\n'"$(cd "$root/sharp/composer" && find -L .sharp/current -type f -name '*.sharpc')"
   while IFS= read -r file; do
     if ! cmp -s "$root/sharp/composer/$file" "$package/$file"; then
       return 0

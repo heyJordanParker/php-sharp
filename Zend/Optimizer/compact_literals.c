@@ -100,7 +100,19 @@ static zend_string *create_str_cache_key(zval *literal, uint8_t num_related)
 			Z_STRVAL_P(literal + 1), Z_STRLEN_P(literal + 1),
 			Z_STRVAL_P(literal + 2), Z_STRLEN_P(literal + 2));
 	} else {
-		ZEND_ASSERT(0 && "Currently not needed");
+		/* PHP#: an open ZEND_SHARP_TYPE_ARGS relates four, its text, the name of its class and its written order. */
+		size_t length = 0;
+		for (uint8_t i = 0; i < num_related; i++) {
+			ZEND_ASSERT(Z_TYPE_P(literal + i) == IS_STRING);
+			length += Z_STRLEN_P(literal + i);
+		}
+		key = zend_string_alloc(length, 0);
+		char *at = ZSTR_VAL(key);
+		for (uint8_t i = 0; i < num_related; i++) {
+			memcpy(at, Z_STRVAL_P(literal + i), Z_STRLEN_P(literal + i));
+			at += Z_STRLEN_P(literal + i);
+		}
+		*at = '\0';
 	}
 
 	bias_key(key, num_related - 1);
@@ -212,9 +224,10 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 					break;
 				case ZEND_SHARP_TYPE_ARGS:
 					if (opline->op2_type == IS_CONST) {
-						// an open type text is followed by the name of the class it is written in
+						// an open type text is followed by the name of the class it is written in, and every text by
+						// the written order of its type arguments
 						LITERAL_INFO(opline->op2.constant,
-							opline->op1_type == IS_CV || opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN ? 3 : 1);
+							opline->op1_type == IS_CV || opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN ? 4 : 2);
 					}
 					break;
 				case ZEND_SHARP_VERIFY_TYPE_ARGS:

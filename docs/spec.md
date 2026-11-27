@@ -150,7 +150,7 @@ Named arguments use `label: "Name"`, the same "name: value" form used everywhere
 
 ## 2. Variables
 
-Variables have no `$`. A local is declared with `let`, which can be reassigned, or `const`, which cannot.
+Variables have no `$`. A local is declared with `let`, which can change, or `const`, which never changes: it is never reassigned, and a collection it holds is never changed in place.
 
 <!-- example inferred-locals: statements
 private Account account = new Account();
@@ -170,6 +170,33 @@ let total = 0;              // type inferred, can be reassigned
 Money? total = null;        // type written, can be reassigned
 const plan = this.plan();   // type inferred, cannot be reassigned
 const Plan plan = …;        // type written, cannot be reassigned
+```
+
+**A parameter never changes,** as a `const` local never does. A method that should change its caller's collection is a `ref` extension (section 26), and one that computes a new value returns it.
+
+<!-- example parameters-never-change: members -->
+```csharp
+private static void add(Map<string, List<string>> index, string name)
+{
+    index[name] = [name];        // compile error: `index` is a parameter, so it never changes, and its caller never sees this write. Change the caller's map with a `ref` extension, or return a changed copy.
+}
+
+private static int next(int n)
+{
+    n = n + 1;                   // compile error: `n` is a parameter, so it never changes. Declare a local: `let changed = n + 1;`
+    return n;
+}
+```
+
+**A local changed and never read is a compile error,** because its change goes nowhere.
+
+<!-- example changed-never-read: statements -->
+```csharp
+const seen = [1];
+seen.add(2);                     // compile error: `seen` is `const`, so the list it holds never changes. Declare it with `let` to change it.
+
+let copy = seen;
+copy.add(3);                     // compile error: `copy` is changed here and never read, so the change is lost.
 ```
 
 **A PHP# keyword, such as `let`, `match` or `emit`, names a local only with `@` before it.** Every other word names one as it is, such as `empty`, `list` and `print`:
@@ -386,11 +413,43 @@ Checkout.maximum;
   - Too wide is a compile error in an application, for example a `public` member that nothing outside its namespace uses: "`Cart.recount` is public, and nothing outside `App.Shop` uses it." It runs in a project: a package whose `composer.json` does not say `"type": "library"`, a folder with no `composer.json` above it included, so no line left out turns the rule off. A library's members are used by the projects that install it, which the checker never sees, so it never runs there, nor on the standard library or a package installed in `vendor/`. A constructor is exempt: `new` calls it, so it reaches as far as its class.
   - A `public` member takes the narrowest access level that reaches every use, tried in the order `private`, `protected`, `internal`, and the error names it: "`Report.title` is public, and nothing outside `Report` and its subclasses uses it." with "Declare it `protected`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on its class." The help names both fixes, since a member a framework calls by name throws at run time once it is narrowed. A member must be visible to each class that overrides it, so an override counts as a use from the overriding class, a subclass in another namespace included, which `protected` reaches and `internal` does not. A subclass outside the namespace and other code of the namespace together need `public`. A `virtual` or `abstract` member is never `private`, since a private member is never replaced, so one only its class uses is `protected`.
   - A `public` type is as wide as its uses, as a member is, so one that nothing outside its namespace uses is too wide, a class, an interface, a struct, an enum and an event alike: `public event Quiet(int id);`, which only `App.Shop` creates, is "`Quiet` is public, and nothing outside `App.Shop` uses it." with "Declare it `internal`, or, when a framework reaches it by name or by reflection, put an attribute whose class is marked `[DynamicallyAccessed]` on it." A use of the type or of a member of it counts, an `extends` or an `implements` included, and so do plain PHP calling one of its `[Export]` methods and a framework reading a marked attribute of the type or of one of its members. A module and an enum's case are exempt, since no code names them as types.
-  - A use from plain PHP counts as one from PHP#, a callable array such as `[Carts::class, 'show']` included. **Each reach the checker can't see counts as a use from outside any namespace,** for "too wide" and "Nothing uses" alike: a class that carries an attribute whose class is marked `[DynamicallyAccessed]`, with every public member it has, the ones it inherits included; a member that carries such an attribute, an `[Export]` method and a program's `main`, with its class; and a class in a test folder, since its test runner creates it, as PHPUnit creates a test class. The framework that reads a marked attribute reaches the members it covers through reflection, as a router reaches a `[Route]` method, so `handle`, which `[Scheduled] public class Nightly : Sweep` inherits from `Sweep`, is not too wide. The mark says that reflection reaches the members it covers. It goes on an attribute class, in its declaration, as `#[\Sharp\DynamicallyAccessed]` in a plain PHP library's source, or on an `extern` line of one (section 29). On a member, or on a class, struct, enum or interface that is no attribute class, it would mark nothing, so it is a compile error that names the fix: "`[DynamicallyAccessed]` marks an attribute class, and `DomainRecord` is not one. Mark the attribute that `DomainRecord` carries." An `[Export]` method is exempt too, since plain PHP calls it through the global function it declares (section 23). Any other attribute, as PHP's `[Deprecated]`, `[Import]` or `[Key]`, says nothing about who uses the member, so the member is checked as one without it is. A public member only a view template uses is `internal`, since the checker never reads a template.
+  - A use from plain PHP counts as one from PHP#, a callable array such as `[Carts::class, 'show']` included. **Each reach the checker can't see counts as a use from outside any namespace,** for "too wide", "too narrow" and "Nothing uses" alike: a class that carries an attribute whose class is marked `[DynamicallyAccessed]`, with every public member it has, the ones it inherits included; a class that extends a class marked `[DynamicallyAccessed]` that is no attribute class, directly or not, with every public and protected method it declares, as Eloquent creates each model and calls its relations and accessors; a member that carries such an attribute, an `[Export]` method and a program's `main`, with its class; and, in a test folder, a class, since its test runner creates it, as PHPUnit creates a test class, each method marked PHPUnit's `[Test]`, which the runner calls, and each method a `[DataProvider(nameof(OrderTest.rows))]` of one names. The framework that reads a marked attribute reaches the members it covers through reflection, as a router reaches a `[Route]` method, so `handle`, which `[Scheduled] public class Nightly : Sweep` inherits from `Sweep`, is not too wide. The mark says that reflection reaches the members it covers. It goes on a class, in its declaration, as `#[\Sharp\DynamicallyAccessed]` in a plain PHP library's source, or on an `extern` line of one (section 29), as `[DynamicallyAccessed] extern Model uses Database;`. On an attribute class it covers the classes and members that carry the attribute, and on any other class it covers each class that extends it. A test class needs no mark: `[Test] public void testItLists()` in `public final class OrderTest : TestCase` compiles with no `extern` line for `Test`, and a public method of a test class that carries neither `[Test]` nor a `DataProvider`'s name is still too wide. An `[Export]` method is exempt too, since plain PHP calls it through the global function it declares (section 23). Any other attribute, as PHP's `[Deprecated]`, `[Import]` or `[Key]`, says nothing about who uses the member, so the member is checked as one without it is. A public member only a view template uses is `internal`, since the checker never reads a template.
+  - **`internal` on a class or a member a reach the checker can't see reaches is too narrow, a compile error at its declaration,** since that reach comes from outside any namespace, where the engine would throw when it runs. A class with no access modifier is `internal`, so a test class with no `public` is refused, and so is `[Route("/offers")] internal string list()`: "`CartOffer.offer` is internal, and the framework that `Model` declares reaches it from outside `App.Tenant.Store.Entities`, so it throws when it runs." with "Declare it public." The error names who reaches: "its test runner", "the framework that reads `Route`", "the framework that `Model` declares", "plain PHP's call of its `[Export]` function" or "the engine that runs the program". A member of an `internal` class reaches no further than its class, so the class is refused. A private method of a marked base class's subclass that no code uses is one the framework calls from the base class's code, as Eloquent calls an accessor, so it is refused with "Declare it protected." The engine's check at run time stays.
 - **The engine holds `internal` when the code runs.** Code reaches an `internal` member from the member's namespace and each namespace below it, as the class or function it runs in names that namespace, plain PHP and PHP# alike. A method's class names it, a function's own name does when it runs in no class, and a file's top-level code and a closure outside any class count as the global namespace, so a plain PHP script or a test's top-level code reaches only `public` members. A member is `internal` when it is written so, and so is a `public` member of an `internal` class, unless it replaces a member of a parent class or an interface that reaches further, since code reaches it through that member, as the checker allows. So a call, a property read or write, a constant, and a callable string or array that `call_user_func` or `Closure::fromCallable` resolves, made from anywhere else, throw `Error` that names the member and its namespace, as a private one's does: "Call to internal method App\Billing\Ledger::total() from App\Shop\Checkout, outside namespace App\Billing". So does `new` of an `internal` class: "Cannot instantiate internal class App\Billing\Ledger from App\Shop\Checkout, outside namespace App\Billing". The engine checks where it checks `private` and keeps the outcome where it keeps that one's, so a use it already allowed costs nothing more. An `internal set` holds each write to the namespace the same way, where PHP checks `protected(set)`: "Cannot modify internal(set) property App\Billing\Ledger::$views from App\Shop\Checkout, outside namespace App\Billing". `get_object_vars`, `var_export` and an array cast that plain PHP makes leave out an `internal` property its code doesn't reach, while `Json.encode` writes every one, by the standard library's own rules.
 - **A class of an application that nothing uses is a compile error,** as a plugin nothing wires in never runs: "Nothing uses `Ghost`, so it never runs." A class is used when code outside it creates it, binds it in a module, names it as a type, extends or implements it, or names it in `typeof` or an attribute, and a use from plain PHP counts. It runs in a project, as the too-wide error does, so a library's classes are exempt. A class each reach the checker can't see covers counts as used, as does a class with a listener, a method written with `on` (section 15), which runs when its event is emitted with nothing wired by hand. A class a framework finds by scanning folders does not: the application binds it or names it. A module and an enum's case are exempt.
 - **A public member of an application names its types.** In a project, the types of a `public` member's property, parameters and result hold no `Any`, `Any?` or `Object` at any depth, so an app's API states every type it takes and gives: `public Map<string, Any> checkoutPayload()` is a compile error, "`Store.checkoutPayload` is public, and a public member of an application names its types: `Any` in `Map<string, Any>`." A type parameter is a named type, so `public T first<T>(List<T> items)` compiles. An interface's members count. An `internal` or private member, an `internal` class's members and a library's are exempt, and an override keeps its parent's types, so an override of a plain PHP method that takes `mixed` takes `Any?`. A value of an unknown shape is named by a struct that parses it (section 10).
 - **There is no named reach,** such as `internal(App\Tenant)`. A helper shared by sibling namespaces moves to their parent namespace.
+
+Code a framework calls needs no other declaration. PHPUnit calls a test method marked `[Test]`, and Eloquent creates each model and calls its relations and accessors once `Model` carries the mark (section 29):
+
+<!-- example framework-test-method -->
+```csharp
+// tests/Feature/OrderTest.sharp
+namespace Tests.Feature;
+
+import PHPUnit.Framework.Attributes.Test;
+import PHPUnit.Framework.TestCase;
+
+public final class OrderTest : TestCase {
+    [Test]
+    public void testItLists() { }   // compiles: its test runner calls it, so it is not too wide
+}
+```
+
+<!-- example framework-model -->
+```csharp
+// app/Offers/CartOffer.sharp
+namespace App.Offers;
+
+import Illuminate.Database.Eloquent.Casts.Attribute;
+import Illuminate.Database.Eloquent.Model;
+import Illuminate.Database.Eloquent.Relations.BelongsTo;
+
+public final class CartOffer : Model {
+    public BelongsTo<Offer, CartOffer> offer() => this.belongsTo(typeof(Offer));   // compiles: Model's framework calls it
+    protected Attribute<string> label() => Attribute.make(get: (string value) => value.trim());   // compiles: so does this
+}
+```
 
 **A test file, in a folder `composer.json` lists under `autoload-dev`, may declare the namespace it tests and reaches its `internal` members.**
 
@@ -1903,7 +1962,7 @@ a.count();   // 1
 b.count();   // 2
 -->
 
-**A method that changes a collection it was given changes its own copy.** It returns the collection when the caller should see the change:
+**A method returns a new collection when its caller should see the change,** since a parameter never changes (section 2):
 
 <!-- example changed-copy-returned: statements in Cart
 List<Line> lines = [new Line()];
@@ -1912,8 +1971,7 @@ Line shipping = new Line();
 ```csharp
 public static List<Line> withShipping(List<Line> lines, Line shipping)
 {
-    lines.add(shipping);
-    return lines;
+    return [...lines, shipping];
 }
 
 lines = Cart.withShipping(lines, shipping);   // the caller keeps the change
@@ -1934,7 +1992,7 @@ public class Order
 
 order.lines.add(line);    // compile error outside Order: lines has a private set
 let copy = order.lines;
-copy.add(line);           // changes only copy
+copy.add(line);           // compile error: `copy` is changed here and never read, so the change is lost.
 ```
 
 **Element types are checked where a collection enters PHP# from plain PHP,** not on every write. Plain PHP can change only its own copy, so a wrong element reaches PHP# code only by crossing in:
@@ -1961,7 +2019,7 @@ $order->number;                      // "A-12"
 
 **Plain PHP's write into a PHP# collection is checked too.** A `Map` or a `Set` PHP# code makes carries its type from when it is made, as `new` of a generic class does: a literal takes the type of where it lands, `entries()`, `groupBy()`, `associateBy()` and `toSet()` the type of their result, `filter()` its receiver's, and a PHP array that crosses into a typed place the type of that place. One plain PHP makes, as `new \Sharp\Map()`, takes its type at the first typed place that holds it, a property, a parameter or a return. Each keeps its one type from then on. A property's initial value that makes one whose type names a type parameter, as `Map<string, T> index = [:]`, runs in the constructor, and a static's for each type argument, so it has the object's or the type argument's type. A literal in a generic method whose place names the method's own type parameter, as `Map<string, TItem> made = [:]` in `build<TItem>()`, has the type argument of the call. So does a literal in a lambda written in that method, since the lambda sees its method's type arguments. A parameter's default runs with neither, so a `Map` or a `Set` it makes whose type names a type parameter has no type, and plain PHP's writes into it are not checked. A key and a value plain PHP writes into a `Map`, as `$larder->stock["k"] = "x"`, and an element it adds to a `Set` cross as a PHP array's entry does, and a wrong one throws the `TypeError` at the write. A write into a `List` property, as `$order->counts[] = "z"`, a write into a `Map`'s value, as `$larder->shelves["k"][] = "x"`, an index write, a nested write, a write through a reference, `sort()`, `array_push()` and `foreach` by reference, writes plain PHP's value. The next PHP# read of the property or of the `Map`'s entries, by an index, a loop, a method such as `values()` or `filter()`, `json_encode` or `serialize`, throws the `TypeError` that names its type and the element. So PHP# code never reads an element its type doesn't hold.
 
-**A plain PHP array keyed by `int` alone arrives as a `List`, renumbered.** PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. A shape whose keys are all `int`, as `list{int, int}` or `array{0: int, 1: int}`, is a `List` too, of its elements in order, and so is each array keyed by `int` alone that a shape's field, a `Map`'s value or a `List`'s element holds. An array keyed by `string` or by `int|string` stays a `Map`, and a value plain PHP types as a list or a map, as `list<int>|array<string, int>`, keeps the keys it holds, so no `string` key is ever lost. A call of a plain PHP function whose declared result is conditional, as `array_slice`'s `($preserve_keys is true ? array<int, V> : list<V>)`, gives the type of the branch its arguments pick, so `array_slice(list, 1, null, true)` arrives as a `List` whose first element is at `0`, and one whose arguments pick no branch gives both. A PHP array that crosses into a `Map` keyed by `string` gives each `int` key back as its `string`, so `"5"` stays `"5"`.
+**A plain PHP array keyed by `int` alone arrives as a `List`, renumbered.** PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. A shape whose keys are all `int`, as `list{int, int}` or `array{0: int, 1: int}`, is a `List` too, of its elements in order, and so is each array keyed by `int` alone that a shape's field, a `Map`'s value or a `List`'s element holds. An array keyed by `string` stays a `Map`. One keyed by `int|string`, as `array`, `array<V>` and `array<array-key, V>`, is a `List` or a `Map`, as a value plain PHP types as a list or a map, as `list<int>|array<string, int>`, is: it keeps the array plain PHP gave, so no `string` key is ever lost, and its keys decide what `is`, `as` and `Json.encode` see. A call of a plain PHP function whose declared result is conditional, as `array_slice`'s `($preserve_keys is true ? array<int, V> : list<V>)`, gives the type of the branch its arguments pick, so `array_slice(list, 1, null, true)` arrives as a `List` whose first element is at `0`, and one whose arguments pick no branch gives both. A PHP array that crosses into a `Map` keyed by `string` gives each `int` key back as its `string`, so `"5"` stays `"5"`.
 
 <!-- example plain-list-arrival -->
 ```php
@@ -1996,6 +2054,48 @@ Map<int, Line> byKey = Shelf.kept();        // compiles: the Map keeps plain PHP
 List<int> pair = Shelf.pair();              // compiles: an int-keyed shape is a List
 const sum = match (Shelf.pair()) { [int a, int b] => a + b, default => 0 };   // compiles: sum is 11
 List<int> attached = Shelf.changes().get("attached") ?? [];   // compiles: attached[0] is 7
+```
+
+<!-- example plain-list-or-map -->
+```php
+final class Bag
+{
+    /** @return array<string, array<string>> */
+    public function messages(): array { return ['price' => ['The price must be at least 0.']]; }
+
+    /** @return array */
+    public function toArray(): array { return ['price' => ['The price must be at least 0.']]; }
+}
+```
+
+<!-- example plain-list-or-map -->
+```csharp
+// app/Stubs/Bag.sharp
+namespace App.Stubs;
+
+import App.Bag;
+
+extern Bag uses none;
+```
+
+<!-- example plain-list-or-map: statements
+import Sharp.Encoding.Json;
+const bag = new Bag();
+-->
+```csharp
+const messages = bag.messages();
+Json.encode(messages);                          // {"price":["The price must be at least 0."]}
+messages as Map<string, List<string>>;          // the map, since each value is a list
+string? first = null;
+for (const lines of messages.values()) {
+    lines.get(0);                               // compile error: `lines` is a `List<string>` or a `Map<int|string, string>`, since plain PHP's `array<string>` holds either, and `get` is a `Map`'s. Test it with `is` first.
+    if (lines is List<string> list) {
+        first = list[0];
+    }
+}
+first;                                          // "The price must be at least 0."
+const fields = bag.toArray();
+const named = fields as Map<string, Any?>;      // the map, or null if plain PHP gave a list
 ```
 
 **A `Map` literal passed to a plain PHP array shape is checked against the shape, key by key.** In an application, a `Map` literal whose keys are fixed at compile time, passed where a plain PHP parameter declares a shape, as `array{code: string, raw: bool}`, gives each key the shape declares a value of the key's type. A key the shape doesn't declare, unless the shape is open, a key it requires that the literal doesn't give, and a value of another type are each a compile error that names the shape and the key:
@@ -2108,6 +2208,7 @@ int|string id = 1;
 const first = lines[0];       // throws OutOfRangeException when lines is empty
 lines[0] = line;              // replaces the element at 0; throws OutOfRangeException when lines is empty
 plans["pro"] = pro;           // inserts or replaces
+plans.count();                // compiles: reads plans
 items[-1];                    // throws OutOfRangeException: write items.last()
 items.last();                 // the last item
 items.getOrNull(5);           // null: index 5 is missing
@@ -2302,6 +2403,8 @@ lines.remove(line);           // by value: the first equal element, and true whe
 lines.clear();
 plans["pro"] = pro;
 plans.remove("pro");          // by key
+lines.count();                // 0
+plans.count();                // 0
 ```
 
 A `List`'s `removeAt(i)` removes the element at index `i` and returns it, `removeFirst()` and `removeLast()` remove the first and the last element and return it, and `set(i, v)`, which `list[i] = v` runs, replaces the element at `i` and returns the one it replaced. Each throws `OutOfRangeException` on an empty list or an index outside the list. A `Map`'s `set(key, value)`, which `map[key] = value` runs, inserts the key with the value, or replaces the value of an equal key. `isEmpty()` and `isNotEmpty()` tell whether a `List`, a `Map` or a `Set` holds no element.
@@ -2320,6 +2423,7 @@ Map<string, Plan> plans = ["pro": new Plan()];
 List<string> tags = ["a", "b", "a"];
 tags.remove("a");                     // true, and tags is ["b", "a"]
 tags.remove("z");                     // false, and tags is unchanged
+tags.count();                         // 2
 lines.filter(l => l.free);            // List<Line>, renumbered
 plans.filter(p => p.active);          // Map<string, Plan>, keys kept
 ```
@@ -4655,7 +4759,7 @@ float area = 0.0;
 -->
 ```csharp
 if (shape is Circle circle) {
-    area = circle.radius;              // compiles: here shape is a Circle
+    area += circle.radius;             // compiles: here shape is a Circle
 }
 circle.radius;                         // compile error: `circle` exists only where `shape is Circle circle` is true
 ```
@@ -7453,12 +7557,6 @@ app/Orders/Order.sharp is out of date (app/Shared/Database/BaseModel.php changed
 ```
 
 - **Production leaves the setting empty,** as the runtime images do. A stale deploy is then refused, and no request waits for a compile.
-- **`mago compile` writes `.sharp/preload.php`, which preloads every type it compiled.** A production `php.ini` names it in `opcache.preload`. The file requires the project's Composer autoloader, then each accepted `.sharp` file that declares a type, the packages' in `vendor/` included, so a type whose parent another file declares, plain PHP or PHP#, gets it from the autoloader, as in a request. PHP declares an anonymous class only when its code runs, so the file then loads each type, PHP's own left out, that an anonymous class in a file the preload loads names as its parent, an interface or a trait. Such a file is one Composer's autoloader loads up front, as `illuminate/reflection`'s `helpers.php`, or the file of a type a preloaded type extends. Opcache would warn otherwise that it can't preload the class. A file in an `autoload-dev` folder stays out, so production never preloads a test. The compile rewrites it on every compile:
-
-```text
-opcache.preload = /srv/app/.sharp/preload.php
-```
-
 - **A type error stops the file from running, an import its module's `imports` line leaves out included.** So does a law the checker cannot prove, a compile error that names the law and what is still to show.
 - **A plain PHP class that doesn't satisfy a PHP# type it extends or implements stops `mago compile`** (section 22), and `mago compile` still writes every accepted `.sharp` file.
 - **`mago compile` hides exactly what `mago analyze` hides:** the same `ignore` entries and baseline hide a host rule's error from both, so the two commands report the same errors.
@@ -7809,7 +7907,7 @@ extern now uses Clock;               // compile error: a bare name names a class
 - **A plain PHP trait's member is one body, so its `extern` line covers every class that takes the member from the trait.** After `extern Dispatchable.dispatch uses Database;`, `ReceiveEvent.dispatch(…)` has the effect `Database` where `ReceiveEvent` lists `Dispatchable` in its header. A class that writes `dispatch` itself runs its own body, which the line does not cover.
 - **Reflection has the effects of the code it runs** (section 25). `Property.get` and `Property.set` run an accessor no `uses` can name, so each may have every effect. `Parameter.defaultValue()` reads only a default that runs no code and refuses any other, so it is pure. `Property.defaultValue()` and `Field.defaultValue()` run the initial value they read, so they have the effects of each one the program declares that is not constant. A constant initial value, as `null`, `0`, `[]` or an enum case, runs no code, so in a program whose initial values are all constant a method held to `uses Database` reads one. `Method.createDelegate` and `Method.createInvoker` are pure, and a call of the value each gives has the effects its function type lists, which the method's own must fit. `Field.get`, `Field.set` and every `isInitialized` run no code a project wrote, so each is pure. `attributes<T>()` creates attributes, so it is pure when `T` is a PHP# class that no plain PHP class extends, whose constructor and initial values have no effects (section 1), and may have every effect for a plain PHP `T` or for `Object`.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way. `mago convert` writes `extern X uses any;` there for each plain PHP class a converted file reaches that has no line, so the converted file compiles, and the project narrows each `uses any` to the effects it knows.
-- **An `extern` line takes any attribute, which the class, method or function it declares carries as its own,** as every declaration takes one (section 1). The checker reads it as the declaration's, so a `[DynamicallyAccessed]` written on a class's line marks a library's attribute class whose source carries no mark (section 5). At run time PHP#'s `typeof(X).attributes<T>()` and `Method.attributes<T>()`, and plain PHP's `ReflectionClass`, `ReflectionMethod` and `ReflectionFunction` `getAttributes()`, give the declaration's own attributes and then the line's, though no code loads the file that holds the line. A method takes them on the line of the class that declares it, so an attributed line of a method the class only inherits is a compile error that names that class. An `extern namespace` line (section 23) declares nothing, so an attribute on it is a compile error. `import` and `extern` stay separate lines.
+- **An `extern` line takes any attribute, which the class, method or function it declares carries as its own,** as every declaration takes one (section 1). The checker reads it as the declaration's, so a `[DynamicallyAccessed]` written on a class's line marks a library's attribute class or base class whose source carries no mark, as `[DynamicallyAccessed] extern Model uses Database;` marks Eloquent's `Model` (section 5). At run time PHP#'s `typeof(X).attributes<T>()` and `Method.attributes<T>()`, and plain PHP's `ReflectionClass`, `ReflectionMethod` and `ReflectionFunction` `getAttributes()`, give the declaration's own attributes and then the line's, though no code loads the file that holds the line. A method takes them on the line of the class that declares it, so an attributed line of a method the class only inherits is a compile error that names that class. An `extern namespace` line (section 23) declares nothing, so an attribute on it is a compile error. `import` and `extern` stay separate lines.
 
 <!-- example extern-attributes -->
 ```csharp
@@ -7821,6 +7919,18 @@ import Symfony.Component.EventDispatcher.Attribute.AsEventListener;
 [DynamicallyAccessed]
 extern AsEventListener uses none;   // compiles: AsEventListener carries [DynamicallyAccessed], so a method marked
                                     // [AsEventListener] is never too wide
+```
+
+<!-- example extern-attributes -->
+```csharp
+// app/Stubs/Model.sharp
+namespace App.Stubs;
+
+import Illuminate.Database.Eloquent.Model;
+
+[DynamicallyAccessed]
+extern Model uses Database;   // compiles: Model is no attribute class, so the mark covers each class that extends
+                              // it, whose public and protected methods are never too wide
 ```
 - **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package declares the effect of each built-in function the standard library calls, so `Files` has the effect `Files`. Each built-in exception class is declared `uses none`, so pure code may `throw new ValueError("empty")`.
 

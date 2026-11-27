@@ -15,8 +15,8 @@ $basket->sell('pie', 3);
 echo implode(', ', Basket::$log), "\n";
 echo $basket->counted(), "\n";
 $library = 'vendor/heyjordanparker/php-sharp-composer';
-echo is_dir(__DIR__ . "/.sharp/$library") ? "The project compiled the library.\n" : "The project compiled no file of the library.\n";
-echo is_file(__DIR__ . "/$library/.sharp/library/Sharp/Encoding/Json.sharpc") ? "The library's package holds its compiled files.\n" : "The library's package holds no compiled file.\n";
+echo is_dir(__DIR__ . "/.sharp/current/$library") ? "The project compiled the library.\n" : "The project compiled no file of the library.\n";
+echo is_file(__DIR__ . "/$library/.sharp/current/library/Sharp/Encoding/Json.sharpc") ? "The library's package holds its compiled files.\n" : "The library's package holds no compiled file.\n";
 ?>
 --EXPECT--
 heard tea, watched 2, heard cake, watched 1, heard pie

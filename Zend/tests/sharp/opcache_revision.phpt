@@ -1,5 +1,5 @@
 --TEST--
-Opcache keeps a .sharp file's op array while its compiled file stays current, new stamps and an input's body edit included, while the edited input itself is refused when it loads, and drops it when an input goes missing or the file's own source changes, making the compiled file out of date
+A server's process serves each request from the newest compile, whose generation it checks once: an edit no compile has seen, an input's body edit, a missing input or the file's own source changed, leaves it serving the code as compiled, with opcache keeping the file's op array, and a compile reaches the next request, opcache dropping an op array whose compiled file changed
 --EXTENSIONS--
 opcache
 --CONFLICTS--
@@ -77,9 +77,9 @@ first: ran, Shop.run(1) gives 1, cached with 0 hits
 again: ran, Shop.run(1) gives 1, cached with 1 hits
 an input with a new stamp: ran, Shop.run(1) gives 1, cached with 2 hits
 an input with a new comment, compiled again: ran, Shop.run(1) gives 1, cached with 3 hits
-an input with a new body: Counter.sharp is out of date (Counter.sharp changed). Run vendor/bin/mago compile., cached with 4 hits
+an input with a new body: ran, Shop.run(1) gives 1, cached with 4 hits
 compiled again: ran, Shop.run(1) gives 2, cached with 5 hits
-an input went missing: Shop.sharp is out of date (Counter.sharp changed). Run vendor/bin/mago compile., not cached
-the input back, compiled again: ran, Shop.run(1) gives 1, cached with 0 hits
-its own source changed: Shop.sharp is out of date (Shop.sharp changed). Run vendor/bin/mago compile., not cached
+an input went missing: ran, Shop.run(1) gives 2, cached with 6 hits
+the input back, compiled again: ran, Shop.run(1) gives 1, cached with 7 hits
+its own source changed: ran, Shop.run(1) gives 1, cached with 8 hits
 compiled once more: ran, Shop.run(1) gives 2, cached with 0 hits

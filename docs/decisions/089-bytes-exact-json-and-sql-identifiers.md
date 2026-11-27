@@ -10,7 +10,7 @@ The language owner's rulings of 11-07 and 11-08, approved 11-11. [Decision 98](0
 
 **`Json.encode` takes `escapeSlashes`, `escapeUnicode` and `keepZeroFraction`,** which default to `false`, `false` and `true`, its output before them, so a payload can match the bytes another system signs.
 
-**`Json.parse` returns a `JsonValue`,** a struct whose `value` holds the decoded value, `null`, a `bool`, an `int`, a `float`, a `string`, a `List` or a `Map<string, …>` of them, and compares by structure: two `JsonValue`s are `==` when their values are, at every depth, an object's keys in any order and `1` equal to `1.0`. `Json.encode` writes the value it holds. An empty object and an empty array decode alike, as `Json.parse` decoded them before.
+**`Json.parse` returns a `JsonValue`,** a struct whose `value` holds the decoded value, `null`, a `bool`, an `int`, a `float`, a `string`, a `List` or a `Map<string, …>` of them, and compares by structure: two `JsonValue`s are `==` when their values are, at every depth, an object's keys in any order and `1` equal to `1.0`. `Json.encode` writes the value it holds. An empty object decodes as an empty `Map`, which fails `is List<Any?>`, and an empty array as an empty `List`, and `Json.encode` writes them back as `{}` and `[]`.
 
 **`Sql.identifier(string name, List<string> allowed)` returns a `literal-string`** only for a name in the allow-list, and throws `ValueError` for any other, so a column or a table chosen at run time reaches a plain PHP `literal-string` parameter, as Laravel's `orderByRaw` and `selectRaw` declare one, and no composed text does. The engine declares `Sharp\Data\Sql`, since a PHP# return type can't say `literal-string`, and it returns the allow-list's own element.
 

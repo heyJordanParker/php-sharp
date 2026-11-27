@@ -45,12 +45,10 @@ line 7: Invalid argument type for argument #2 of `string.replace`: expected `str
   help: Change the argument value to match `string`, or update the parameter's type declaration.
 line 9: Method `shuffled` does not exist on `string`.
   help: A `string` has the methods `capitalized`, `characters`, `codePoints`, `compareTo`, `contains`, `decapitalized`, `endsWith`, `equals`, `indexOf`, `isDigit`, `isEmpty`, `isLetter`, `isLetterOrDigit`, `isLowercase`, `isNotEmpty`, `isUppercase`, `isWhitespace`, `lastIndexOf`, `length`, `lines`, `lowercase`, `normalized`, `padEnd`, `padStart`, `parseCsv`, `removePrefix`, `removeSuffix`, `repeat`, `replace`, `slug`, `split`, `startsWith`, `substring`, `titlecase`, `toBytes`, `trim`, `trimEnd`, `trimStart`, `uppercase`.
-line 11: Invalid return type for method `Refusals.values`: expected `List<int>`, but found `List<[string, int]>`.
-  The type `List<[string, int]>` returned here is not compatible with the declared return type `List<int>`.
-  help: Change the return value to match `List<int>`, or update the method's return type declaration.
-line 13: Invalid return type for method `Refusals.keys`: expected `List<string>`, but found `List<[string, int]>`.
-  The type `List<[string, int]>` returned here is not compatible with the declared return type `List<string>`.
-  help: Change the return value to match `List<string>`, or update the method's return type declaration.
+line 11: List<[string, int]> cannot be used as List<int>.
+  A type parameter without `out` or `in` is invariant, so neither substitution is allowed.
+line 13: List<[string, int]> cannot be used as List<string>.
+  A type parameter without `out` or `in` is invariant, so neither substitution is allowed.
 line 15: Invalid argument type for argument #1 of `List<List<int>>.flatMap`: expected `Function<Iterable<Any?>(List<int>)>`, but found `Function<int(List<int>)>`.
   The provided type `Function<int(List<int>)>` is not compatible with the expected type `Function<Iterable<Any?>(List<int>)>`.
   help: Change the argument value to match `Function<Iterable<Any?>(List<int>)>`, or update the parameter's type declaration.

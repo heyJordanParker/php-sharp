@@ -1,5 +1,5 @@
 --TEST--
-An empty plain PHP array passes both as Map<K, V> and as List<T>, and is agrees, so a request's empty query array reads as an empty Map, while a non-empty map passes only as a Map; and Json.parse gives an empty Map for {}, which is no List, and an empty List for [], which encode writes back as {} and []
+An empty plain PHP array is a list, as PHP's array_is_list([]) is, so as and is take it as a List<T> and never as a Map<string, V>, a request's empty query array included, while a non-empty map passes only as a Map; and Json.parse gives an empty Map for {}, which is no List, and an empty List for [], which is no Map, and encode writes them back as {} and []
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -10,6 +10,6 @@ echo json_encode(EmptyArrays\Reads::of(['page' => 2])), "\n";
 echo json_encode(EmptyArrays\Reads::parsed()), "\n";
 ?>
 --EXPECT--
-[true,0,true,0,true,true]
+[false,null,true,0,false,true]
 [true,1,false,null,true,false]
-[true,false,true,true,true,true]
+[true,false,true,false,true,true]

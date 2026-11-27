@@ -12,7 +12,7 @@ echo 'either: ', Narrowed::either(['a' => 1, 'b' => 2]), ', ', Narrowed::either(
 echo 'matched: ', Narrowed::matched(['a' => 1]), ', ', Narrowed::matched('x'), "\n";
 var_dump(Narrowed::holdsTwo([1, 2]), Narrowed::holdsTwo([1]));
 var_dump(Narrowed::onlyA(['a' => 1]), Narrowed::onlyA(['b' => 1]));
-// Each test in the list is a value, which narrows nothing, so the Map test leaves the empty array a plain array the List test passes.
+// Each test in the list is a value, which narrows nothing, so the Map<int, int> test, which an empty list passes, leaves the empty array a plain array the List test passes.
 echo 'both: ', json_encode(Narrowed::both([])), "\n";
 // A test under `!` or `||` in a condition narrows the reads after a failed test, as a guard clause's return leaves them.
 echo 'counted: ', Narrowed::counted([1, 2]), ', ', Narrowed::counted([]), "\n";

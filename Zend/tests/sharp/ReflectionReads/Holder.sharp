@@ -1,0 +1,6 @@
+namespace ReflectionReads;
+
+public class Holder
+{
+    public Holder([Marker] int size) { }
+}

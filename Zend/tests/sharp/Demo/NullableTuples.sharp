@@ -1,0 +1,45 @@
+namespace Demo;
+
+public class NullableTuples
+{
+    private [int step, string label]? held = [3, "close"];
+
+    private static [int step, string label]? find(List<[int step, string label]> rows, int step)
+        => rows.firstOrNull(([int step, string label] row) => row.step == step);
+
+    public static string repro()
+    {
+        List<[int step, string label]> rows = [[1, "open"], [2, "close"]];
+        const hit = rows.firstOrNull(([int step, string label] row) => row.step == 2);
+        return `${rows[0].label} ${hit?.label ?? "null"}`;
+    }
+
+    public static string parameter([int step, string label]? row) => row?.label ?? "null";
+
+    public string field() => this.held?.label ?? "null";
+
+    public static string returned() => NullableTuples.find([[4, "close"]], 4)?.label ?? "null";
+
+    public static string assigned()
+    {
+        [int step, string label]? row = null;
+        row ??= [5, "close"];
+        return row?.label ?? "null";
+    }
+
+    public static string nested()
+    {
+        [int step, [int depth, string label]? inner]? outer = [6, [7, "close"]];
+        return outer?.inner?.label ?? "null";
+    }
+
+    public static string narrowed([int step, string label]? row)
+    {
+        if (row != null) {
+            return row.label;
+        }
+        return "null";
+    }
+
+    public static int called([int step, Function<int(int)> twice]? entry) => entry?.twice(2) ?? -1;
+}
