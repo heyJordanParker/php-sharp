@@ -345,7 +345,9 @@ ZEND_API zend_result zend_get_attribute_object(zval *obj, zend_class_entry *attr
 
 	if (filename) {
 		/* Set up dummy call frame that makes it look like the attribute was invoked
-		 * from where it occurs in the code. */
+		 * from where it occurs in the code. PHP#: the frame runs in the scope of the declaration the attribute is
+		 * written on, so the constructor builds where `new` of the attribute could be written there: an `internal`
+		 * attribute class read in its own namespace builds, spec section 5. */
 		zend_function dummy_func;
 		zend_op *opline;
 
@@ -374,6 +376,7 @@ ZEND_API zend_result zend_get_attribute_object(zval *obj, zend_class_entry *attr
 			attribute_data->flags & ZEND_ATTRIBUTE_STRICT_TYPES ? ZEND_ACC_STRICT_TYPES : 0;
 		call->func->op_array.fn_flags |= ZEND_ACC_CALL_VIA_TRAMPOLINE;
 		call->func->op_array.filename = filename;
+		call->func->op_array.scope = scope;
 
 		EG(current_execute_data) = call;
 	}
