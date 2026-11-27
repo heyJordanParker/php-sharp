@@ -32,21 +32,22 @@ export CARGO_BUILD_JOBS
 
 # A release publishes three parts, each once, and a published one stays: assets, the GitHub release v<version> with
 # mago's files, images, the runtime image ghcr.io/heyjordanparker/php-sharp:<version> and its <version>-dev, and
-# composer, tag v<version> of heyJordanParker/php-sharp-composer and heyJordanParker/mago-sharp. A rerun of the push run
-# whose commit the tag names publishes what an earlier attempt left missing, since only that run built its assets and
-# images. Run 45033462105 published a GitHub release and failed before its images and its Composer tags, which a check
-# of the tag alone then counted as released. So RELEASE fills a draft, PUBLISH makes it public on the tag LAND pushed,
-# and then tags the images, and COMPOSER pushes the mirrors' tags last, and assets is missing until the release is
+# composer, tag v<version> of heyJordanParker/php-sharp-composer and heyJordanParker/mago-sharp. A release run of the
+# commit the tag names publishes what an earlier attempt left missing, since it builds its own assets and images. Run
+# 45033462105 published a GitHub release and failed before its images and its Composer tags, which a check of the tag
+# alone then counted as released. So release.yml's RELEASE fills a draft, PUBLISH makes it public, which creates the
+# tag, and then tags the images, and COMPOSER pushes the mirrors' tags last, and assets is missing until the release is
 # public. The image and the mirrors are public, so their checks need no login. git
 # ls-remote --exit-code exits 2 when a remote has no such ref, and with another code when it can't ask.
 #
-# A version lives in its tag alone. A commit a tag already names publishes that tag's version, so a rerun finishes the
-# release it started. Any other commit publishes the newest tag's version plus one patch, or one minor when the title of
-# a pull request the commit holds since that tag has `!` before its colon, as range_pulls finds them. LAND pushes the
-# tag as it moves master, and queue.yml starts the next batch's run only once a run landed, so the next run takes the
-# next version, and two runs never take one version (#854, #1023). A run that fails before LAND leaves no tag, and the
-# next run takes the same version. A release's notes are every pull request it holds since the tag of the version
-# before it, which its own release's notes list.
+# A version lives in its tag alone. A commit a tag already names publishes that tag's version, so a later run finishes
+# the release it started. Any other commit publishes the newest tag's version plus one patch, or one minor when the
+# title of a pull request the commit holds since that tag has `!` before its colon, as range_pulls finds them. The tag
+# goes on as PUBLISH makes the release public, and release.yml's `release` group runs one release at a time, so the
+# next release takes the next version, and two releases never take one version (#854, #1023). A release that fails
+# before PUBLISH leaves no tag, and the next release, of the same tip or a newer one, takes the same version. A
+# release's notes are every pull request it holds since the tag of the version before it, so they cover every landing
+# the release ships.
 # Prints each pull request into master whose head commit the commits from $1 to $2 hold: its number, a tab, and its
 # title. GitHub's compare endpoint lists those commits, so a checkout of one commit, as CI's is, reads the range a full
 # one does: a fetch of the history with --shallow-exclude made a release's first merge a shallow boundary, whose pull
