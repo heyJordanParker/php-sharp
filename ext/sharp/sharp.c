@@ -11968,10 +11968,54 @@ static sharp_scope *sharp_scope_start(void)
 	return scope;
 }
 
-/* The scope drops its services, and builds none from then on. */
-static void sharp_scope_end(sharp_scope *scope)
+/* The service, or each one a binding of a list holds, that is Disposable disposes, spec section 2. Each runs as a
+ * finally block does: what a dispose() throws takes the throw already pending as its previous, and the next service
+ * still disposes. */
+static void sharp_dispose_service(zval *service, zend_class_entry *disposable)
+{
+	if (Z_TYPE_P(service) == IS_ARRAY) {
+		zval *element;
+		ZEND_HASH_REVERSE_FOREACH_VAL(Z_ARRVAL_P(service), element) {
+			sharp_dispose_service(element, disposable);
+		} ZEND_HASH_FOREACH_END();
+		return;
+	}
+	if (Z_TYPE_P(service) != IS_OBJECT || !instanceof_function(Z_OBJCE_P(service), disposable)) {
+		return;
+	}
+
+	zval result;
+	zend_exception_save();
+	zend_call_method_with_0_params(Z_OBJ_P(service), Z_OBJCE_P(service), NULL, "dispose", &result);
+	zval_ptr_dtor(&result);
+	zend_exception_restore();
+}
+
+/* Spec section 32: the services kept in services that are Disposable dispose, newest first, as nested using locals
+ * do: a service is kept once the services it needs are, so each disposes before what it needs. A service is
+ * Disposable only once its class, and with it the interface, is loaded. */
+static void sharp_dispose_services(HashTable *services)
+{
+	zend_string *name = zend_string_init_interned("Sharp\\Disposable", sizeof("Sharp\\Disposable") - 1, false);
+	zend_class_entry *disposable = zend_lookup_class_ex(name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+	zend_string_release(name);
+	if (!disposable) {
+		return;
+	}
+
+	zval *service;
+	ZEND_HASH_REVERSE_FOREACH_VAL(services, service) {
+		sharp_dispose_service(service, disposable);
+	} ZEND_HASH_FOREACH_END();
+}
+
+/* The scope builds no service from then on, disposes the services it kept when dispose is set, and drops them. */
+static void sharp_scope_end(sharp_scope *scope, bool dispose)
 {
 	scope->ended = true;
+	if (dispose) {
+		sharp_dispose_services(&scope->services);
+	}
 	zend_hash_clean(&scope->services);
 }
 
@@ -12760,7 +12804,7 @@ ZEND_METHOD(Sharp_Container, has)
 }
 
 /* Spec section 32: Scope.run runs body in a new scope of the running fiber, and ends the scope when body returns or
- * throws. A fatal error leaves it to the request's end. */
+ * throws, disposing each Disposable service it built, newest first. A fatal error leaves it to the request's end. */
 ZEND_FUNCTION(Sharp_Internal_runScoped)
 {
 	zend_fcall_info fci;
@@ -12784,7 +12828,7 @@ ZEND_FUNCTION(Sharp_Internal_runScoped)
 	} zend_end_try();
 
 	running->current = outer;
-	sharp_scope_end(scope);
+	sharp_scope_end(scope, true);
 	sharp_scope_release(scope);
 }
 
@@ -18066,8 +18110,18 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 		sharp_write_effect_report();
 		zend_hash_destroy(&SHARP_G(effect_runs));
 	}
-	/* A fiber that is still to be freed keeps the request's scope, ended, until it is. */
-	sharp_scope_end(SHARP_G(container_main_scopes).started_in);
+	/* Spec section 32: the request's scope ends, disposing each Disposable service it built, and then each Disposable
+	 * singleton disposes, newest first, as ext/session runs a user save handler here. No PHP code runs below them, so
+	 * a throw is an uncaught exception's fatal error, as PHP reports one, and the request's end goes on. After a fatal
+	 * error no PHP# code runs. A fiber that is still to be freed keeps the request's scope, ended, until it is. */
+	bool clean = !CG(unclean_shutdown);
+	zend_try {
+		sharp_scope_end(SHARP_G(container_main_scopes).started_in, clean);
+		if (clean) {
+			sharp_dispose_services(&SHARP_G(container_singletons));
+		}
+	} zend_end_try();
+	sharp_scope_end(SHARP_G(container_main_scopes).started_in, false);
 	sharp_fiber_scopes_end(&SHARP_G(container_main_scopes));
 	zend_hash_destroy(&SHARP_G(container_singletons));
 	zend_hash_destroy(&SHARP_G(container_bindings));
