@@ -130,6 +130,8 @@
             "IntBounds\\": "IntBounds/",
             "InterfaceInit\\": "InterfaceInit/",
             "InterfaceMembers\\": "InterfaceMembers/",
+            "InterfaceReach\\": "InterfaceReach/",
+            "InterfaceReachOutside\\": "InterfaceReachOutside/",
             "InternalAttributes\\": "InternalAttributes/",
             "InteropMatrix\\": "InteropMatrix/",
             "Intersections\\": "Intersections/",
