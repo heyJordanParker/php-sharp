@@ -8677,6 +8677,16 @@ public Result<int, PaymentError> total(Cart cart) => Result.Ok((try this.gateway
 public Result<int, PaymentError> cartTotal => Result.Ok((try this.gateway.charge(this.cart)).total);   // the getter returns the failure
 ```
 
+**`ok()` and `unwrap()` read the `Ok` value without a `match`,** as Rust's `Result::ok` and `Result::unwrap` do. `ok()` gives the `Ok` value, or null for an `Err`. `unwrap()` gives the `Ok` value, and an `Err` throws `LogicException` with the error's `message`, since code that unwraps states that the failure can't happen.
+
+<!-- example result-ok-unwrap: statements -->
+```csharp
+Result<int, PaymentError>.Ok(8080).ok();                       // 8080
+Result<int, PaymentError>.Err(PaymentError.Expired).ok();      // null
+Result<int, PaymentError>.Ok(8080).unwrap();                   // 8080
+Result<int, PaymentError>.Err(PaymentError.Expired).unwrap();  // throws: "card expired"
+```
+
 `try`/`catch` blocks remain for exceptions, which are now mostly limited to the edges, such as wrapping a plain PHP exception.
 
 Methods declare no thrown exceptions, and the checker never reports an undeclared one.
