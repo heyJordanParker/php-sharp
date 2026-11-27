@@ -12046,7 +12046,7 @@ static bool zend_is_allowed_in_const_expr(zend_ast_kind kind) /* {{{ */
 		|| kind == ZEND_AST_CLASS_NAME
 		|| kind == ZEND_AST_MAGIC_CONST || kind == ZEND_AST_COALESCE
 		|| kind == ZEND_AST_CONST_ENUM_INIT
-		|| kind == ZEND_AST_NEW || kind == ZEND_AST_ARG_LIST
+		|| kind == ZEND_AST_NEW || kind == ZEND_AST_SHARP_TYPE_ARGS || kind == ZEND_AST_ARG_LIST
 		|| kind == ZEND_AST_NAMED_ARG
 		|| kind == ZEND_AST_PROP || kind == ZEND_AST_NULLSAFE_PROP
 		|| kind == ZEND_AST_CLOSURE
@@ -12298,11 +12298,14 @@ typedef struct {
  * default may create one of those two, and no other object. PHP evaluates the default once, at the class's first use,
  * and every object of the class starts with that one object, which sharp_separate copies before any write, so sharing
  * it changes nothing another holder sees. */
-static bool zend_is_sharp_table_default(const zend_ast *ast, const const_expr_context *ctx)
+static bool zend_is_sharp_table_new(const zend_ast *ast)
 {
+	if (ast->kind != ZEND_AST_NEW) {
+		return false;
+	}
 	const zend_ast *class_ast = ast->child[0];
 
-	if (!ctx->property_default || class_ast->kind != ZEND_AST_ZVAL || class_ast->attr != ZEND_NAME_FQ
+	if (class_ast->kind != ZEND_AST_ZVAL || class_ast->attr != ZEND_NAME_FQ
 			|| Z_TYPE_P(zend_ast_get_zval((zend_ast *) class_ast)) != IS_STRING) {
 		return false;
 	}
@@ -12310,6 +12313,11 @@ static bool zend_is_sharp_table_default(const zend_ast *ast, const const_expr_co
 
 	return (zend_string_equals_literal_ci(class_name, "Sharp\\Map") || zend_string_equals_literal_ci(class_name, "Sharp\\Set"))
 		&& zend_compiling_sharp_file();
+}
+
+static bool zend_is_sharp_table_default(const zend_ast *ast, const const_expr_context *ctx)
+{
+	return ctx->property_default && zend_is_sharp_table_new(ast);
 }
 
 /* A .sharp file lowers a value PHP evaluates as a constant expression, and that PHP builds only while code runs, to a
@@ -12360,6 +12368,13 @@ static void zend_compile_const_expr(zend_ast **ast_ptr, void *context) /* {{{ */
 					"New expressions are not supported in this context");
 			}
 			zend_compile_const_expr_new(ast_ptr);
+			break;
+		case ZEND_AST_SHARP_TYPE_ARGS:
+			if (!ctx->allow_dynamic || !zend_is_sharp_table_new(ast->child[0]) || !ast->child[1]) {
+				zend_error_noreturn(E_COMPILE_ERROR,
+					"PHP# type arguments are not supported in this constant expression");
+			}
+			zend_sharp_type_text(ast->child[1]);
 			break;
 		case ZEND_AST_ARG_LIST:
 			zend_compile_const_expr_args(ast_ptr);

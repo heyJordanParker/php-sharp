@@ -1,0 +1,43 @@
+namespace AssignableTypes;
+
+// Spec section 25: `isAssignableTo` answers as `is` answers for a value of the first type, so each pair of lists
+// matches: a class to its interface and back, a list to `Iterable`, a type to its nullable type and back, a union to
+// a wider union, and a generic class to the same class with a base class as its invariant type argument.
+public static class Checks
+{
+    public static List<bool> assignable() => [
+        typeof(CardPayment).isAssignableTo(typeof(Payment)),
+        typeof(Payment).isAssignableTo(typeof(CardPayment)),
+        typeof(List<int>).isAssignableTo(typeof(Iterable<Any?>)),
+        typeof(int).isAssignableTo(typeof(int?)),
+        typeof(int?).isAssignableTo(typeof(int)),
+        typeof(int|string).isAssignableTo(typeof(int|string|bool)),
+        typeof(Box<Dog>).isAssignableTo(typeof(Box<Animal>)),
+    ];
+
+    // What `is` gives for a value of each first type above, one that only the first type holds where the second
+    // doesn't: a `BankPayment` is a `Payment` and no `CardPayment`, and null is an `int?` and no `int`.
+    public static List<bool> tested() => [
+        Checks.isPayment(new CardPayment()),
+        Checks.isCardPayment(new BankPayment()),
+        Checks.isIterable([1, 2]),
+        Checks.isNullableInt(3),
+        Checks.isInt(null),
+        Checks.isWiderUnion("a") && Checks.isWiderUnion(3),
+        Checks.isBoxOfAnimal(new Box<Dog>(new Dog())),
+    ];
+
+    private static bool isPayment(Any? value) => value is Payment;
+
+    private static bool isCardPayment(Any? value) => value is CardPayment;
+
+    private static bool isIterable(Any? value) => value is Iterable<Any?>;
+
+    private static bool isNullableInt(Any? value) => value is int?;
+
+    private static bool isInt(Any? value) => value is int;
+
+    private static bool isWiderUnion(Any? value) => value is int|string|bool;
+
+    private static bool isBoxOfAnimal(Any? value) => value is Box<Animal>;
+}
