@@ -1,0 +1,19 @@
+namespace Tests.Support;
+
+import PHPUnit.Runner.Extension.Extension;
+import PHPUnit.Runner.Extension.Facade;
+import PHPUnit.Runner.Extension.ParameterCollection;
+import PHPUnit.TextUI.Configuration.Configuration;
+import Sharp.IO.Console;
+
+// PHPUnit creates its extensions with no argument, once, before the first test, and the container fills this one's
+// `Console` from the base modules.
+public class ProgressReporter : Extension
+{
+    public ProgressReporter(private Console console) { }
+
+    public void bootstrap(Configuration configuration, Facade facade, ParameterCollection parameters)
+    {
+        this.console.writeLine("The fixture's tests start.");
+    }
+}
