@@ -119,6 +119,9 @@ struct FileState {
     entry_keys: CodebaseEntryKeys,
     unreconciled_analysis_issues: IssueCollection,
     analysis_issues: IssueCollection,
+    /// The file's parse errors, which `analysis_issues` holds too, and which are all a scan reports of the file, so a
+    /// scan from an analysis's state reports what a scan from scratch does.
+    parse_issues: IssueCollection,
     codebase_issues: IssueCollection,
     late_symbol_references: SymbolReferences,
     /// What the file's analysis read from the codebase, kept apart from the references it contributes: a read only
@@ -191,6 +194,8 @@ struct SelectiveAnalysisOutput {
     /// The entries of the workers' class logs the analysis's responses reported.
     class_logs: ClassLogs,
     per_file_issues: HashMap<FileId, IssueCollection>,
+    /// The parse errors of each file the analysis analyzed, which its issues hold too.
+    per_file_parse_issues: HashMap<FileId, IssueCollection>,
     snapshots: Vec<Arc<FileAnalysisSnapshot>>,
     codebase_issues: IssueCollection,
     per_file_effect_summaries: HashMap<FileId, Vec<EffectSummary>>,
@@ -883,8 +888,20 @@ impl IncrementalAnalysisService {
 
     /// Assembles the full issue list from codebase-level issues + all per-file cached issues.
     ///
-    /// This avoids storing a separate snapshot by reconstructing on demand.
+    /// This avoids storing a separate snapshot by reconstructing on demand. A scan reports the before-analysis hooks'
+    /// issues and each file's parse errors alone, whichever analysis left the state it rechecked.
     fn collect_all_issues(&self) -> IssueCollection {
+        let mut states = self.file_states.iter().collect::<Vec<_>>();
+        states.sort_unstable_by_key(|(file_id, _)| **file_id);
+        if self.scan_only {
+            let mut issues = self.lifecycle_issues.clone();
+            for (_, state) in states {
+                issues.extend(state.parse_issues.iter().cloned());
+            }
+
+            return issues;
+        }
+
         let total: usize = self.codebase_issues.len()
             + self.lifecycle_issues.len()
             + self
@@ -892,9 +909,6 @@ impl IncrementalAnalysisService {
                 .values()
                 .map(|s| s.analysis_issues.len() + s.project_issues.len() + s.codebase_issues.len())
                 .sum::<usize>();
-
-        let mut states = self.file_states.iter().collect::<Vec<_>>();
-        states.sort_unstable_by_key(|(file_id, _)| **file_id);
 
         let mut issues = IssueCollection::default();
         issues.reserve(total);
@@ -929,6 +943,15 @@ impl IncrementalAnalysisService {
                 state.effect_summaries = file_summaries;
             }
             state.project_issues = issues.remove(file_id).unwrap_or_default();
+        }
+    }
+
+    /// Caches the parse errors of each file this run analyzed.
+    fn store_parse_issues(&mut self, issues: HashMap<FileId, IssueCollection>) {
+        for (file_id, file_issues) in issues {
+            if let Some(state) = self.file_states.get_mut(&file_id) {
+                state.parse_issues = file_issues;
+            }
         }
     }
 
@@ -1197,6 +1220,7 @@ impl IncrementalAnalysisService {
                     entry_keys,
                     unreconciled_analysis_issues: IssueCollection::default(),
                     analysis_issues: IssueCollection::default(),
+                    parse_issues: IssueCollection::default(),
                     codebase_issues: IssueCollection::default(),
                     late_symbol_references: SymbolReferences::new(),
                     reads: AnalysisReads::default(),
@@ -1222,6 +1246,7 @@ impl IncrementalAnalysisService {
             before_analysis_reads,
             class_logs,
             per_file_issues,
+            per_file_parse_issues,
             snapshots,
             codebase_issues: all_codebase_issues,
             per_file_effect_summaries,
@@ -1269,6 +1294,7 @@ impl IncrementalAnalysisService {
         }
         self.store_project_passes(per_file_effect_summaries, per_file_project_issues);
         self.store_package_errors(per_file_package_errors);
+        self.store_parse_issues(per_file_parse_issues);
 
         self.codebase = merged_codebase;
         self.symbol_references = std::mem::take(&mut analysis_result.symbol_references);
@@ -1391,7 +1417,8 @@ impl IncrementalAnalysisService {
             }
         }
 
-        if changed_files.is_empty() && deleted_count == 0 {
+        // A restored state's first analysis runs the hooks over it, which this process's extension hosts never saw.
+        if changed_files.is_empty() && deleted_count == 0 && !self.codebase_scan_unsent {
             scan_phase.end();
             tracing::debug!("No files changed, reconstructing cached issues");
             let mut result = AnalysisResult::new(SymbolReferences::new());
@@ -1886,6 +1913,7 @@ impl IncrementalAnalysisService {
                 before_analysis_reads,
                 class_logs,
                 mut per_file_issues,
+                per_file_parse_issues,
                 snapshots,
                 codebase_issues: new_codebase_issues,
                 per_file_effect_summaries,
@@ -1961,6 +1989,7 @@ impl IncrementalAnalysisService {
                         entry_keys,
                         unreconciled_analysis_issues: analysis_issues.clone(),
                         analysis_issues,
+                        parse_issues: IssueCollection::default(),
                         codebase_issues,
                         late_symbol_references,
                         reads: reads_by_file.remove(&file_id).unwrap_or_default(),
@@ -1975,6 +2004,7 @@ impl IncrementalAnalysisService {
             }
             self.store_project_passes(per_file_effect_summaries, per_file_project_issues);
             self.store_package_errors(per_file_package_errors);
+            self.store_parse_issues(per_file_parse_issues);
 
             self.codebase = merged_codebase;
             if self.dropped_a_read(&extension_reads) {
@@ -2180,6 +2210,7 @@ impl IncrementalAnalysisService {
             before_analysis_reads,
             class_logs,
             mut per_file_issues,
+            per_file_parse_issues,
             snapshots,
             codebase_issues: new_codebase_issues,
             per_file_effect_summaries,
@@ -2255,6 +2286,7 @@ impl IncrementalAnalysisService {
                     entry_keys,
                     unreconciled_analysis_issues: analysis_issues.clone(),
                     analysis_issues,
+                    parse_issues: IssueCollection::default(),
                     codebase_issues,
                     late_symbol_references,
                     reads: reads_by_file.remove(&file_id).unwrap_or_default(),
@@ -2269,6 +2301,7 @@ impl IncrementalAnalysisService {
         }
         self.store_project_passes(per_file_effect_summaries, per_file_project_issues);
         self.store_package_errors(per_file_package_errors);
+        self.store_parse_issues(per_file_parse_issues);
 
         self.codebase = merged_codebase;
         if self.dropped_a_read(&extension_reads) {
@@ -2796,11 +2829,12 @@ impl IncrementalAnalysisService {
 
                 let program = parse_file_with_settings(arena, &source_file, parser_settings);
                 // A parse error is an error in every mode, so a scan, which analyzes no file, still reports it.
+                let parse_issues: IssueCollection = program.errors.iter().map(Issue::from).collect();
                 if self.scan_only {
-                    analysis_result.issues.extend(program.errors.iter().map(Issue::from));
+                    analysis_result.issues.extend(parse_issues.iter().cloned());
                     arena.reset();
 
-                    return Ok((file_id, analysis_result, None, Vec::new(), HashSet::default(), None));
+                    return Ok((file_id, analysis_result, parse_issues, None, Vec::new(), HashSet::default(), None));
                 }
                 let resolved_names = NameResolver::new(arena).resolve_in(
                     program,
@@ -2824,10 +2858,9 @@ impl IncrementalAnalysisService {
                 if summarized_files.contains(&file_id) {
                     let mut artifacts = analyzer.analyze_with_artifacts(program, &mut analysis_result)?;
                     let mut errors = AnalysisResult::new(SymbolReferences::new());
-                    errors.issues = program
-                        .errors
+                    errors.issues = parse_issues
                         .iter()
-                        .map(Issue::from)
+                        .cloned()
                         .chain(analysis_result.issues)
                         .filter(|issue| issue.level == Level::Error)
                         .collect();
@@ -2839,6 +2872,7 @@ impl IncrementalAnalysisService {
                     return Ok((
                         file_id,
                         errors,
+                        parse_issues,
                         None,
                         std::mem::take(&mut artifacts.effect_summaries),
                         HashSet::default(),
@@ -2853,12 +2887,12 @@ impl IncrementalAnalysisService {
                     let analyzer_issues = std::mem::take(&mut analysis_result.issues);
                     let analyzer_issues =
                         drop_follow_on_issues(&source_file, program.errors, &semantic_issues, analyzer_issues);
-                    analysis_result.issues.extend(program.errors.iter().map(Issue::from));
+                    analysis_result.issues.extend(parse_issues.iter().cloned());
                     analysis_result.issues.extend(semantic_issues);
                     analysis_result.issues.extend(analyzer_issues);
                     artifacts
                 } else {
-                    analysis_result.issues.extend(program.errors.iter().map(Issue::from));
+                    analysis_result.issues.extend(parse_issues.iter().cloned());
                     analysis_result.issues.extend(semantic_issues);
                     analyzer.analyze_with_artifacts(program, &mut analysis_result)?
                 };
@@ -2914,7 +2948,7 @@ impl IncrementalAnalysisService {
                     (artifacts.into_lowering_input(), reaches_extension(codebase, &analysis_result.symbol_references))
                 });
 
-                Ok((file_id, analysis_result, snapshot, effect_summaries, listings, lowering_input))
+                Ok((file_id, analysis_result, parse_issues, snapshot, effect_summaries, listings, lowering_input))
             })
             .collect::<Result<Vec<_>, OrchestratorError>>()?;
         if let Some(analyzing_bar) = analyzing_bar {
@@ -2941,6 +2975,7 @@ impl IncrementalAnalysisService {
         let mut aggregated_result = AnalysisResult::new(current_symbol_references);
         aggregated_result.issues = before.issues.into_iter().filter(in_project).collect();
         let mut per_file_issues: HashMap<FileId, IssueCollection> = HashMap::default();
+        let mut per_file_parse_issues: HashMap<FileId, IssueCollection> = HashMap::default();
         let mut snapshots = Vec::new();
         let mut per_file_effect_summaries: HashMap<FileId, Vec<EffectSummary>> = HashMap::default();
         // The sets each file's analysis read whole, which join what its extensions read from the codebase.
@@ -2948,7 +2983,7 @@ impl IncrementalAnalysisService {
         let mut lowering_inputs: HashMap<FileId, (LoweringInput, bool)> = HashMap::default();
         let mut per_file_package_errors: HashMap<FileId, IssueCollection> = HashMap::default();
 
-        for (file_id, result, snapshot, effect_summaries, listings, lowering_input) in results {
+        for (file_id, result, parse_issues, snapshot, effect_summaries, listings, lowering_input) in results {
             per_file_effect_summaries.insert(file_id, effect_summaries);
             if summarized_files.contains(&file_id) {
                 per_file_package_errors.insert(file_id, result.issues);
@@ -2959,6 +2994,7 @@ impl IncrementalAnalysisService {
             }
             aggregated_result.symbol_references.extend(result.symbol_references);
             per_file_issues.insert(file_id, result.issues);
+            per_file_parse_issues.insert(file_id, parse_issues);
             if !listings.is_empty() {
                 reads_by_file.insert(file_id, AnalysisReads { listings, ..AnalysisReads::default() });
             }
@@ -3152,6 +3188,7 @@ impl IncrementalAnalysisService {
             before_analysis_reads: before_analysis,
             class_logs,
             per_file_issues,
+            per_file_parse_issues,
             snapshots,
             codebase_issues,
             per_file_effect_summaries,

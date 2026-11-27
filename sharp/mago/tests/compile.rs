@@ -4989,6 +4989,110 @@ fn a_compile_with_an_extension_host_after_a_body_edit_gives_what_a_full_compile_
     assert_eq!(compiled_keys(seeded.path()), compiled_keys(fresh.path()));
 }
 
+/// An extension host whose before-analysis hook writes, to `parents.log`, each class of `App` with its parent classes,
+/// as a host that writes a manifest from the codebase does.
+const HOST_RECORDING_THE_PARENTS: &str = r#"<?php
+
+declare(strict_types=1);
+
+use Mago\Sdk\Analyzer\BeforeAnalysisContext;
+use Mago\Sdk\Analyzer\BeforeAnalysisHook;
+use Mago\Sdk\Analyzer\Plugin;
+use Mago\Sdk\Analyzer\PluginDefinition;
+use Mago\Sdk\Analyzer\PluginRegistry;
+use Mago\Sdk\Extension;
+use Mago\Sdk\Worker;
+
+final class RecordsTheParents implements Plugin, BeforeAnalysisHook
+{
+    public function getDefinition(): PluginDefinition
+    {
+        return new PluginDefinition('records-the-parents', 'Records the parents', 'Records each class and its parents.');
+    }
+
+    public function register(PluginRegistry $registry): void
+    {
+        $registry->registerBeforeAnalysisHook($this);
+    }
+
+    public function beforeAnalysis(BeforeAnalysisContext $context): void
+    {
+        $lines = [];
+        foreach ($context->codebase->getClassNames() as $name) {
+            if (stripos($name, 'App\\') === 0) {
+                $lines[] = $name . ': ' . implode(',', $context->codebase->getClass($name)->parentClasses);
+            }
+        }
+        sort($lines);
+        file_put_contents('parents.log', implode("\n", $lines) . "\n");
+    }
+}
+
+(new Worker(new Extension('parents', 'Parents', '0.0.0', analyzerPlugins: [new RecordsTheParents()])))->run();
+"#;
+
+/// `mago analyze --scan-only` of the project at `root`, with mago's cache in `cache`, its issues one to a line and its
+/// debug log, which names each file a recheck finds changed.
+fn scan_only(root: &Path, cache: &Path) -> Output {
+    process::output(
+        Command::new(env!("CARGO_BIN_EXE_mago"))
+            .args(["--no-version-check", "--colors", "never", "analyze", "--scan-only"])
+            .env("MAGO_LOG", "debug")
+            .env("MAGO_REPORTING_FORMAT", "emacs")
+            .env("XDG_CACHE_HOME", cache)
+            .current_dir(root),
+    )
+    .unwrap()
+}
+
+/// A scan-only run after a compile and a body edit restores the analysis the compile kept and rescans the edited file
+/// alone, and its before-analysis hook reads the codebase a scan from scratch gives, every class's parents included,
+/// and it reports what that scan reports, none of the compile's analysis errors.
+#[test]
+fn a_scan_only_run_after_a_compile_restores_the_stored_analysis_and_gives_its_hooks_the_same_codebase() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the scan-only restore test") {
+        return;
+    }
+    let directory = library_project(&[
+        ("app/Shapes/Shape.sharp", "namespace App.Shapes;\n\npublic class Shape\n{\n    public int sides() => 0;\n}\n"),
+        (
+            "app/Shapes/Square.sharp",
+            "namespace App.Shapes;\n\npublic class Square : Shape\n{\n    public int size() => 4;\n}\n",
+        ),
+        ("tools/host.php", HOST_RECORDING_THE_PARENTS),
+    ]);
+    let root = directory.path();
+    write(
+        root,
+        "mago.toml",
+        "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n\n[extension-hosts.parents]\nfile = \"tools/host.php\"\n",
+    );
+    let cache = tempfile::tempdir().unwrap();
+    let compiled = process::output(command(root, "never").env("XDG_CACHE_HOME", cache.path())).unwrap();
+    assert!(root.join(".sharp/analysis.bin").is_file(), "the compile kept no analysis: {}", printed(&compiled));
+    write(
+        root,
+        "app/Shapes/Square.sharp",
+        "namespace App.Shapes;\n\npublic class Square : Shape\n{\n    public int size() => 5;\n}\n",
+    );
+
+    let restored = scan_only(root, cache.path());
+    let restored_parents = std::fs::read_to_string(root.join("parents.log")).unwrap();
+    std::fs::remove_file(root.join(".sharp/analysis.bin")).unwrap();
+    let scanned = scan_only(root, cache.path());
+    let scanned_parents = std::fs::read_to_string(root.join("parents.log")).unwrap();
+
+    let log = printed(&restored);
+    let changed: Vec<&str> = log.lines().filter(|line| line.contains("File changed")).collect();
+    assert_eq!(changed.len(), 1, "{}", printed(&restored));
+    assert!(changed[0].ends_with("app/Shapes/Square.sharp"), "{}", printed(&restored));
+    assert!(restored_parents.contains("App\\Shapes\\Square: App\\Shapes\\Shape\n"), "{restored_parents}");
+    assert_eq!(restored_parents, scanned_parents);
+    assert_eq!(restored.status.code(), scanned.status.code(), "{}", printed(&restored));
+    assert_eq!(issue_lines(&restored), issue_lines(&scanned), "{}", printed(&restored));
+}
+
 /// After a signature edit that breaks a caller in another file, a compile restores the last analysis, checks the
 /// caller again, and refuses it as a full compile does.
 #[test]

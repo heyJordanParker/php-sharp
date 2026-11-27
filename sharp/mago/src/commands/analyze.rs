@@ -86,6 +86,7 @@ use crate::commands::compile::Recompiled;
 use crate::commands::compile::compile_for_hosts;
 use crate::commands::compile::compile_with_hosts;
 use crate::commands::compile::release_hosts_folders;
+use crate::commands::compile::restored_project_server;
 use crate::commands::outcome::CommandOutcome;
 use crate::commands::stdin_input;
 use crate::config::Configuration;
@@ -349,6 +350,23 @@ impl AnalyzeCommand {
                 load_inputs_duration = load_inputs_start.map(|s| s.elapsed());
                 service_run_start = trace_enabled.then(Instant::now);
                 (*server, issues)
+            }
+            // A scan of the whole project that reads the files as the compile reads them scans it as the compile
+            // does, from the analysis the last compile left, so it rescans only what changed since.
+            Loaded::Nothing
+                if self.scan_only
+                    && scope.is_none()
+                    && !self.stdin_input
+                    && !self.no_stubs
+                    && substitutions.is_empty() =>
+            {
+                let load = Phase::start("load");
+                let mut server = restored_project_server(&configuration, &orchestrator)?.scan_only();
+                load_inputs_duration = load_inputs_start.map(|s| s.elapsed());
+                load.end();
+                service_run_start = trace_enabled.then(Instant::now);
+                let issues = server.analyze_changed()?.issues;
+                (server, issues)
             }
             loaded => {
                 let (files, scans) = match loaded {

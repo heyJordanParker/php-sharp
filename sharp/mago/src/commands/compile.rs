@@ -1616,6 +1616,50 @@ fn compile(configuration: &Configuration, color_choice: ColorChoice) -> Result<C
     outcome.with_hosts_errors(errors).print(database, configuration, color_choice)
 }
 
+/// The server that analyzes the project as a compile does, with the settings and the extension hosts of
+/// `orchestrator`: over the project's database, as [`project_database`] gives it, with the standard library from its
+/// codex, and each Composer package's `.sharp` file checked as a file of the project.
+///
+/// # Errors
+///
+/// Returns the error of loading the project or of reading the library's codex.
+fn project_server(configuration: &Configuration, orchestrator: &Orchestrator<'_>) -> Result<Server, Error> {
+    let (database, included) = project_database(orchestrator, &configuration.source.workspace)?;
+    let package_files = package_files(&database, &included);
+    let codex = library_codex(&configuration.source.workspace, &database).map_err(OrchestratorError::General)?;
+
+    Ok(Server::new(database, decode_prelude, server_settings(orchestrator))
+        .with_library(codex)
+        .with_package_files(package_files))
+}
+
+/// The [`project_server`], with the analysis the last compile of the project left restored while every input of that
+/// compile but the source files is current, so its first analysis rechecks only what changed since, as the compile's
+/// does. The compile keeps that analysis under the key of `configuration` without its extension hosts, and never
+/// writes it here.
+///
+/// # Errors
+///
+/// Returns the error of loading the project, of reading the library's codex, or of restoring the analysis.
+pub(crate) fn restored_project_server(
+    configuration: &Configuration,
+    orchestrator: &Orchestrator<'_>,
+) -> Result<Server, Error> {
+    let mut server = project_server(configuration, orchestrator)?;
+    let workspace = configuration.source.workspace.as_path();
+    let root = workspace.canonicalize().map_err(|error| Error::CanonicalizingPath(workspace.to_path_buf(), error))?;
+    let compiled_folder = root.join(unit::COMPILED_FOLDER);
+    let without_hosts = without_hosts(configuration);
+    if let Some(record) = Record::read(&compiled_folder.join(INPUTS))
+        && every_input_but_the_sources_is_current(&record, &without_hosts, &root, &mut Filesystems::new())
+        && let Ok(bytes) = std::fs::read(compiled_folder.join(ANALYSIS))
+    {
+        server.restore(&bytes, &analysis_key(&without_hosts, record.marker))?;
+    }
+
+    Ok(server)
+}
+
 /// The issues the extension hosts `started` report in the PHP# files a compile lowers, the project's own, never a
 /// Composer package's, with the database they point into, as the compile's own analysis with the hosts reported them:
 /// the compile's analysis that `loaded` holds, scoped to those files, which the hosts take over as a whole `mago analyze`
@@ -1644,14 +1688,7 @@ fn hosted(
     let (server, issues) = match loaded.taken_over(&orchestrator)? {
         Loaded::Analysis(server, issues) => (*server, issues),
         Loaded::Nothing | Loaded::Files(..) | Loaded::Hosted { .. } => {
-            let (database, included) = project_database(&orchestrator, &configuration.source.workspace)?;
-            let package_files = package_files(&database, &included);
-            let codex =
-                library_codex(&configuration.source.workspace, &database).map_err(OrchestratorError::General)?;
-            let mut server = Server::new(database, decode_prelude, server_settings(&orchestrator))
-                .with_library(codex)
-                .with_package_files(package_files)
-                .scoped_to(is_lowered);
+            let mut server = project_server(configuration, &orchestrator)?.scoped_to(is_lowered);
             let issues = server.analyze()?.issues;
 
             (server, issues)
