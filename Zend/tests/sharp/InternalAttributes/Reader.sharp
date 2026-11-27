@@ -1,4 +1,4 @@
-namespace AttributeObjects.Marks;
+namespace InternalAttributes;
 
 public class Reader
 {

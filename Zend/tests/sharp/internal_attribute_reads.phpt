@@ -4,14 +4,14 @@ attributes<T>() builds an internal attribute class read in its own namespace, as
 <?php
 require __DIR__ . '/vendor/autoload.php';
 
-var_dump(AttributeObjects\Marks\Reader::count());
+var_dump(InternalAttributes\Reader::count());
 
 try {
-    new AttributeObjects\Marks\Marker();
+    new InternalAttributes\Marker();
 } catch (Error $e) {
     echo $e->getMessage(), "\n";
 }
 ?>
 --EXPECT--
 int(1)
-Cannot instantiate internal class AttributeObjects\Marks\Marker from global scope, outside namespace AttributeObjects\Marks
+Cannot instantiate internal class InternalAttributes\Marker from global scope, outside namespace InternalAttributes
