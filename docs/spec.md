@@ -204,6 +204,36 @@ public class Report
 }
 ```
 
+**A `Disposable` value has one owner,** which disposes it. A `new` of a `Disposable` class, or a call whose value is a `Disposable`, makes one, and one of four owners takes it there: a `using` local, the caller a `return` hands it to, a field of `this` in a class that is itself `Disposable`, or the container, through a module binding (section 32). Anywhere else it's a compile error, since nothing would dispose it. A local, field or parameter that holds one only borrows it, so reading it never moves the value.
+
+<!-- example disposable-owners -->
+```csharp
+public class Lease : Disposable
+{
+    public void dispose() { }
+
+    public static Lease take() => new Lease();                // compiles: its caller owns the lease
+}
+
+public class Renter : Disposable
+{
+    private Lease? lease = null;
+
+    public void move() { this.lease = Lease.take(); }       // compiles: Renter is Disposable
+    public void dispose() { this.lease?.dispose(); }
+}
+
+public class Agent
+{
+    public void show()
+    {
+        using lease = Lease.take();                           // compiles
+        const held = lease;                                   // compiles: borrows it
+        const lost = Lease.take();                            // compile error: `Lease.take()` makes a `Disposable`, and only its owner may hold it: a `using` local, a `return`, a field of a `Disposable` class, or a module binding.
+    }
+}
+```
+
 **A parameter never changes,** as a `const` local never does. A method that should change its caller's collection is a `ref` extension (section 26), and one that computes a new value returns it.
 
 <!-- example parameters-never-change: members -->
@@ -8918,7 +8948,7 @@ public class Worker
 }
 ```
 
-**The container disposes the services it keeps.** When a scope ends, each `scoped` service it built that is `Disposable` (section 2) is disposed, newest first, so a service is disposed before the services it needs, as nested `using` locals are. A throw in `body` still disposes them, and what a `dispose()` throws takes the pending throw as its previous, as in a `finally` block. PHP's request is the default scope: it ends when the request does, and each `Disposable` singleton is disposed after it, newest first.
+**The container disposes the services it keeps.** When a scope ends, each `scoped` service it built that is `Disposable` (section 2) is disposed, newest first, so a service is disposed before the services it needs, as nested `using` locals are. A throw in `body` still disposes them, and what a `dispose()` throws takes the pending throw as its previous, as in a `finally` block. PHP's request is the default scope: it ends when the request does, and each `Disposable` singleton is disposed after it, newest first. A `transient` service is the class's that takes it, so a class that takes a `transient` `Disposable` owns it, and must be `Disposable` itself to dispose it: anything else is a compile error at the binding.
 
 <!-- example scoped-disposable -->
 ```csharp
