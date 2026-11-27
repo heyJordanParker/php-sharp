@@ -172,6 +172,38 @@ const plan = this.plan();   // type inferred, cannot be reassigned
 const Plan plan = …;        // type written, cannot be reassigned
 ```
 
+**A `using` local releases what its value holds when its block ends.** `using name = value;` declares a local that cannot be reassigned, whose value is a `Disposable`: the standard library's interface with one member, `void dispose();`. When the block ends, by a `return`, by reaching its end or by a throw, the block calls `dispose()` on the value. Several `using` locals in one block are disposed newest first. A `dispose()` may have any effect, and the method that declares a `using` local has the effects of its value's `dispose()` (section 29).
+
+<!-- example using-locals -->
+```csharp
+public class Lease : Disposable
+{
+    public void dispose() { }
+}
+
+public class Report
+{
+    public int count()
+    {
+        using first = new Lease();
+        using second = new Lease();
+        return 2;                       // disposes `second`, then `first`
+    }
+
+    public int total()
+    {
+        using total = 3;                // compile error: A `using` local holds a `Disposable`, and the type of `3` is `int`.
+        return total;
+    }
+
+    public void renew()
+    {
+        using lease = new Lease();
+        lease = new Lease();            // compile error: Cannot assign to `lease`: it is declared with `using`, and its block disposes the value it holds.
+    }
+}
+```
+
 **A parameter never changes,** as a `const` local never does. A method that should change its caller's collection is a `ref` extension (section 26), and one that computes a new value returns it.
 
 <!-- example parameters-never-change: members -->
@@ -8356,6 +8388,7 @@ public class Stamp
 ```
 
 - **A class's effects** are the effects it holds, directly or through its fields, or that its methods take, the effects of the plain PHP its methods call, and the events its methods emit. A method that calls an effect object it takes has that effect, as when it calls one it holds, and a caller that uses one a method returns has the effect at that call. The checker works them out from field, constructor and parameter types and from method bodies. Nothing is written down.
+- **A `using` local carries its value's `dispose()`** (section 2). `Disposable.dispose()` lists no effects and an implementation may have any, so the method that declares `using transaction = new Transaction(connection);` has the effects of `Transaction`'s `dispose()`, as a written call of `dispose()` would, and a `using` of a pure `Disposable` adds none.
 - **An effect object**, an object of an `effect class`, is created in a module binding (section 32), as often as its binding's lifetime decides, and passed on through constructors, method parameters and return values. Creating one anywhere else in PHP# code, or storing one in a static, is a compile error. Plain PHP creates one as it creates any object. A fake is created anywhere.
 
 **Pure code** reaches no effect object, emits no event, and calls no plain PHP but what an `extern` line declares `uses none`. Pure limits only what code reaches outside the program, so a pure method may change its own object and its arguments. `readonly` after the parameters is what promises a method changes nothing, as in `T peek() readonly;`, and it holds every implementation to that (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code that changes nothing it was given, so a law that reaches a change is a compile error naming the method, and a law cannot see inside effect classes or plain PHP.
