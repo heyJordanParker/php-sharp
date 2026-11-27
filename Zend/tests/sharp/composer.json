@@ -212,6 +212,7 @@
             "Unions\\": "Unions/",
             "VariantTags\\": "VariantTags/",
             "Writes\\": "Writes/",
+            "WrittenAttributes\\": "WrittenAttributes/",
             "XmlDocuments\\": "XmlDocuments/"
         }
     },

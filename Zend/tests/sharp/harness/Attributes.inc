@@ -34,6 +34,17 @@ namespace Lib {
         }
     }
 
+    // An attribute whose constructor prints, so a read that builds it shows, and one that only reads it as written
+    // doesn't.
+    #[\Attribute(\Attribute::TARGET_ALL)]
+    final class Noisy
+    {
+        public function __construct()
+        {
+            echo "Noisy was built\n";
+        }
+    }
+
     // A plain PHP object an attribute argument creates.
     final class Throttle
     {
