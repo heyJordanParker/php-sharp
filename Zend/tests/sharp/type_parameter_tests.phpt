@@ -8,7 +8,7 @@ use TypeTests\Decoded;
 
 echo 'direct: ', Decoded::direct('{"a":1,"b":2}'), "\n";
 echo 'generic: ', Decoded::generic('{"a":1,"b":2}'), "\n";
-// `as` gives the converted copy, and leaves its subject the plain array a later test reads.
+// `as` gives the converted copy, and leaves its subject the plain array a later test reads. Plain PHP decodes {} as [], an empty list, which is no Map<string, int>.
 echo 'as: ', Decoded::cast('{"a":1,"b":2}'), ', empty:', Decoded::cast('{}'), "\n";
 var_dump(Decoded::directSet('[1,2,2]'), Decoded::genericSet('[1,2,2]'), Decoded::genericSetCount('[1,2,2]'));
 // The optimizer knows the list a local holds, and the test that binds it still runs.
@@ -17,7 +17,7 @@ var_dump(Decoded::constantList());
 --EXPECT--
 direct: a,b
 generic: a,b
-as: a,b, empty: and a list
+as: a,b, empty:not a map and a list
 bool(true)
 bool(true)
 int(2)

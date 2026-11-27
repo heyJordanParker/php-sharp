@@ -2,7 +2,7 @@ namespace EmptyArrays;
 
 import Sharp.Encoding.Json;
 
-// What `as` and `is` give a plain PHP array, which holds no element that tells a `Map` from a `List` when it is empty.
+// What `as` and `is` give a plain PHP array. An empty one is a list, as PHP's `array_is_list([])` is, so it holds no `Map` of string keys.
 public static class Reads
 {
     public static List<Any?> of(Any? value)
