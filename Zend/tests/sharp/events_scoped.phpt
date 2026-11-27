@@ -39,13 +39,21 @@ container_project('events-scoped', [
         {
             public void watch(int orderId)
             {
-                const listening = Events.on<Paid>(e => Notices.log.add(`screen ${e.orderId}`));
+                using listening = Events.on<Paid>(e => Notices.log.add(`screen ${e.orderId}`));
                 emit new Paid(orderId);
+            }
+
+            public void stopEarly(int orderId)
+            {
+                using listening = Events.on<Paid>(e => Notices.log.add(`early ${e.orderId}`));
+                emit new Paid(orderId);
+                listening.dispose();
+                emit new Paid(orderId + 1);
             }
 
             public void watchEvery(int orderId)
             {
-                const listening = Events.on<OrderEvent>(e => Notices.log.add(`any ${e.orderId}`));
+                using listening = Events.on<OrderEvent>(e => Notices.log.add(`any ${e.orderId}`));
                 emit new Paid(orderId);
             }
         }
@@ -187,6 +195,10 @@ for ($run = 0; $run < 2; $run++) {
         (new App\Scoped\Screen())->watch(10);
         pay(11);
     });
+    heard('Events.on until its handle is disposed, and its using local disposes it again for nothing', function (): void {
+        (new App\Scoped\Screen())->stopEarly(30);
+        pay(32);
+    });
     heard('Events.on through an interface', function (): void {
         (new App\Scoped\Screen())->watchEvery(12);
         pay(13);
@@ -209,6 +221,7 @@ one started during an emit hears only the next: table 6, starter 6, table 7, sta
 one whose handle is gone runs nothing under a dispatcher that runs it later: table 8
 a type no class has: table 9
 Events.on in PHP#, until its method returns: table 10, screen 10, table 11
+Events.on until its handle is disposed, and its using local disposes it again for nothing: table 30, early 30, table 31, table 32
 Events.on through an interface: table 12, any 12, table 13
 a handle in a property of the object its listener uses, until the collector collects both: table 14, kept 14, keeper destroyed, table 15
 a handle in a local, until its function returns: table 1, scoped 1, table 2
@@ -219,5 +232,6 @@ one started during an emit hears only the next: table 6, starter 6, table 7, sta
 one whose handle is gone runs nothing under a dispatcher that runs it later: table 8
 a type no class has: table 9
 Events.on in PHP#, until its method returns: table 10, screen 10, table 11
+Events.on until its handle is disposed, and its using local disposes it again for nothing: table 30, early 30, table 31, table 32
 Events.on through an interface: table 12, any 12, table 13
 a handle in a property of the object its listener uses, until the collector collects both: table 14, kept 14, keeper destroyed, table 15
