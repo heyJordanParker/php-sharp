@@ -2,5 +2,5 @@ namespace App;
 
 public class Manifest
 {
-    public static Result<Manifest, ParseError> parse(Any? value) => Result.Ok(new Manifest());
+    public static Manifest read(string json) => new Manifest();
 }

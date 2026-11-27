@@ -1259,7 +1259,7 @@ string json = "{}";
 -->
 ```csharp
 public Artifact(public Manifest manifest { get; }) { }
-public Artifact.fromJson(string json) : this(Manifest.parse(json).unwrap()) { }
+public Artifact.fromJson(string json) : this(Manifest.read(json)) { }
 
 let artifact = new Artifact.fromJson(json);
 ```
@@ -1310,8 +1310,8 @@ public class CreditNote : Document
 <!-- example constructor-call-this: members in Artifact -->
 ```csharp
 public Artifact(public Manifest manifest { get; }) { }
-public Artifact.fromJson(string json) : this(Manifest.parse(json).unwrap()) { }   // compiles
-public Artifact.copy() : this(this.manifest) { }                                  // compile error: `this` is not available before the constructor runs: pass a parameter instead.
+public Artifact.fromJson(string json) : this(Manifest.read(json)) { }   // compiles
+public Artifact.copy() : this(this.manifest) { }                        // compile error: `this` is not available before the constructor runs: pass a parameter instead.
 ```
 
 **A get-only property is set once.** A named constructor runs on the new object after the main constructor, so it can't set a get-only property again. A property that a named constructor sets again is declared `{ get; init; }` (section 6.1):
@@ -1768,7 +1768,7 @@ public class Record
     public Record() { }
     public required Record.fromJson(Map<string, string> json) : this() { this.id = json["id"] ?? ""; }
     public Record.blank() : this() { }
-    public static Self parse(Map<string, string> json) => new Self.fromJson(json);   // compiles: the fromJson of the class parse was called on
+    public static Self read(Map<string, string> json) => new Self.fromJson(json);   // compiles: the fromJson of the class read was called on
 }
 ```
 
@@ -1849,7 +1849,7 @@ import App.Records.Repository;
 new Repository<Invoice>().load(["id": "7"]).id;   // "invoice 7"
 new Repository<Record>().load(["id": "8"]).id;    // "8"
 new Documents<Receipt>().load(["id": "9"]).id;    // "receipt 9"
-Invoice.parse(["id": "6"]).unwrap().id;           // "invoice 6"
+Invoice.read(["id": "6"]).id;                     // "invoice 6"
 -->
 
 <!-- example required-named-constructors -->
