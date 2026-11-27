@@ -1143,10 +1143,8 @@ jobs:
             && "$RUNNER_TEMP/mago-$VERSION-x86_64-unknown-linux-gnu/mago" --no-version-check compile)
       # A release's tag here becomes the plugin release of the same version: the split plus a commit that adds the
       # release's docs/spec.md as spec.md, so a project reads the spec its version follows at
-      # vendor/heyjordanparker/php-sharp-composer/spec.md, and the library's codex and compiled files as .sharp, from
-      # the step above. The compiled files sit in a plain .sharp/current folder, where the engine and mago read them
-      # through a project's current link, so no install has to restore a link. A rerun finds the tag an earlier attempt
-      # pushed, and leaves it.
+      # vendor/heyjordanparker/php-sharp-composer/spec.md, and the library's compiled files and codex as .sharp, from
+      # the step above. A rerun finds the tag an earlier attempt pushed, and leaves it.
       - name: Push the split, and a release's tag with its spec and compiled library
         working-directory: sharp/build/php-sharp-composer
         run: |
@@ -1162,10 +1160,9 @@ jobs:
           git fetch "$GITHUB_WORKSPACE" refs/heads/composer-release
           git switch --detach FETCH_HEAD
           git -C "$GITHUB_WORKSPACE" show "v$VERSION:docs/spec.md" > spec.md
-          compiled="$RUNNER_TEMP/release/sharp/composer/.sharp"
-          mkdir -p .sharp/current
-          cp "$compiled/library.codex" .sharp/
-          (cd "$compiled/current" && find . -type f -name '*.sharpc' -exec cp --parents {} "$OLDPWD/.sharp/current/" \;)
+          mkdir .sharp
+          (cd "$RUNNER_TEMP/release/sharp/composer/.sharp" && find . -type f \( -name '*.sharpc' -o -name library.codex \) \
+            -exec cp --parents {} "$OLDPWD/.sharp/" \;)
           git add spec.md
           git add --force .sharp
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \

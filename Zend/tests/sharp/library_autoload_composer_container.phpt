@@ -138,10 +138,7 @@ PHP,
     'preload.php' => composer_script('preload', 'autoload.php', null),
     'no_plugins.php' => composer_script('callback', 'composer/autoload_real.php', ['a require of app/Clock.sharp', 'a require_once of app/Clock.sharp']),
 ];
-foreach (LIBRARY_MODULE as $library) {
-    $files["vendor/heyjordanparker/php-sharp-composer/library/Sharp/$library.sharp"] = file_get_contents("$package/library/Sharp/$library.sharp");
-}
-$root = compile_project('library-autoload-composer-container', $files);
+$root = compile_project('library-autoload-composer-container', $files + standard_library('vendor/heyjordanparker/php-sharp-composer'));
 
 $preloading = ' -d opcache.enable=1 -d opcache.enable_cli=1 -d ' . escapeshellarg("opcache.preload=$root/preload.php");
 foreach ([

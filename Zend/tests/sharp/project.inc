@@ -18,6 +18,23 @@ const LIBRARY_MODULE = [
     'MapMembers', 'SetMembers', 'IterableMembers', 'Internal/Builtins', 'Data/Database', 'Data/Cache',
 ];
 
+// The standard library as a release installs it in the package folder $library, by path: its sources, and the codex
+// and compiled files sharp/bin/build-mago compiles into sharp/composer/.sharp, which a project's compile and the engine
+// read in place of the sources.
+function standard_library(string $library): array
+{
+    $package = dirname(__DIR__, 3) . '/sharp/composer';
+    $files = ["$library/.sharp/library.codex" => file_get_contents("$package/.sharp/library.codex")];
+    foreach (['library', '.sharp/current/library'] as $folder) {
+        $found = new RecursiveIteratorIterator(new RecursiveDirectoryIterator("$package/$folder", FilesystemIterator::SKIP_DOTS));
+        foreach ($found as $file) {
+            $files["$library/" . substr($file->getPathname(), strlen("$package/"))] = file_get_contents($file->getPathname());
+        }
+    }
+
+    return $files;
+}
+
 // A library unless $files holds a composer.json of its own, so spec section 5's strict rules, which an application's
 // code meets, leave alone a test's classes, which only the test itself calls. Its `autoload-dev` folder is tests/, as a
 // Composer project's is, so a test module there belongs to a test file.

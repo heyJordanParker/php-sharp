@@ -1140,11 +1140,11 @@ fi
 # autoloader and the PHP# package's, from the packages its composer.lock pins, and mago compile checks the project with
 # its vendor folder. The PHP# package is a copy of sharp/composer, as an application installs it, since a compile
 # refuses a link outside the project. Composer keeps the copy an earlier run installed while the lock is unchanged, so
-# a copy that differs from sharp/composer in a file git tracks there, or in a compiled file of the current generation
-# or the codex of the library's .sharp folder, which sharp/bin/build-mago compiles the library into and the project's
-# compile reads the library from, is reinstalled first, and the install then dumps the autoloader, which runs the
-# package's plugin: composer reinstall runs no plugin. The rest of that folder, the record and locks of the library's
-# compile, never counts.
+# a copy that differs from sharp/composer in a file git tracks there, or in a compiled file or the codex of the
+# library's .sharp folder, which sharp/bin/build-mago compiles the library into and the project's compile reads the
+# library from, is reinstalled first, and the install then dumps the autoloader, which runs the package's plugin:
+# composer reinstall runs no plugin. The rest of that folder, the record and locks of the library's compile, never
+# counts.
 part "composer install in Zend/tests/sharp"
 package="$root/Zend/tests/sharp/vendor/heyjordanparker/php-sharp-composer"
 differs_from_library() {
@@ -1157,7 +1157,7 @@ differs_from_library() {
     echo "sharp/composer/.sharp is missing: sharp/bin/build-mago compiles the standard library into it." >&2
     exit 1
   fi
-  files+=$'\n'".sharp/library.codex"$'\n'"$(cd "$root/sharp/composer" && find -L .sharp/current -type f -name '*.sharpc')"
+  files+=$'\n'"$(cd "$root/sharp/composer" && find .sharp -type f \( -name '*.sharpc' -o -name library.codex \))"
   while IFS= read -r file; do
     if ! cmp -s "$root/sharp/composer/$file" "$package/$file"; then
       return 0
