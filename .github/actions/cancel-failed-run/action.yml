@@ -1,16 +1,18 @@
 name: Cancel the run of a failed job
 description: >-
-  Each job of a staging or push run calls it, as the step after its checks, when one of them failed, and it cancels the
-  whole run, so the run ends the moment it can no longer pass, and the one Mac runner and the queue move on. A pull
-  request's run doesn't call it: it uses no Mac, a newer push cancels it through sharp.yml's concurrency group, and run
-  to its end it reports every failure, where PR #972's cancelled runs reported one failed test each (#983). Master
-  ran one push at a time, so a failed run that went on held the newest push's run pending: run 45007969043
-  failed SPEC (2/4) at 09:59Z, then its Mac job ran 48 more minutes, and the next run waited 36 minutes until it was
-  cancelled by hand. A push's run that failed publishes nothing, and the newest push's run holds every commit before
-  it, so that run publishes them: push run 45554410438 failed IMAGE (linux/arm64) at 07:02Z on 11-25, then started its
-  Mac release job at 07:13Z, while push run 45566492258 waited behind it. A job that needs every other job starts only
-  once they all ended, so the cancel is a step of each job. Steps that run always, as the usage notice and CI_PASSED's
-  red-master issue, still run in a cancelled run. The calling job needs actions: write.
+  Each job of sharp.yml's staging or push run calls it, as the step after its checks, when one of them failed, and it
+  cancels the whole run, so the run ends the moment it can no longer pass, and the one Mac runner and the queue move
+  on. release.yml's jobs don't call it: its batch lands on the checks alone, so a failed release job opens the
+  red-master issue from release.yml's red_master_issue and lets the batch land (#952). A pull request's run doesn't
+  call it: it uses no Mac, a newer push cancels it through sharp.yml's concurrency group, and run to its end it reports
+  every failure, where PR #972's cancelled runs reported one failed test each (#983). Master ran one push at a time, so
+  a failed run that went on held the newest push's run pending: run 45007969043 failed SPEC (2/4) at 09:59Z, then its
+  Mac job ran 48 more minutes, and the next run waited 36 minutes until it was cancelled by hand. A push's run that
+  failed publishes nothing, and the newest push's run holds every commit before it, so that run publishes them: push
+  run 45554410438 failed IMAGE (linux/arm64) at 07:02Z on 11-25, then started its Mac release job at 07:13Z, while push
+  run 45566492258 waited behind it. A job that needs every other job starts only once they all ended, so the cancel is
+  a step of each job. Steps that run always, as the usage notice and CI_PASSED's red-master issue, still run in a
+  cancelled run. The calling job needs actions: write.
 
 runs:
   using: composite
