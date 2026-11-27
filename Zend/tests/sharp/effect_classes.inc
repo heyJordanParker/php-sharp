@@ -9,7 +9,7 @@ if (!class_exists(Sharp\Time\Clock::class, false)) {
     foreach ([
         'Int', 'ByteOrder', 'Bytes', 'Time/Duration', 'Time/Instant', 'Interop/PhpDates', 'Net/Url', 'Net/HttpMethod', 'Net/HttpRequest', 'Net/HttpResponse',
         'Net/MailAddress', 'Net/MailMessage', 'System/ProcessResult', 'System/Environment', 'Time/Clock', 'Random',
-        'IO/Console', 'System/Process', 'System/ChildProcess', 'IO/Files', 'Text/StringMembers', 'Net/Http', 'Data/Cache', 'Net/Mail',
+        'IO/Console', 'System/Process', 'System/ExitCode', 'System/ChildProcess', 'IO/Files', 'Text/StringMembers', 'Net/Http', 'Data/Cache', 'Net/Mail',
         'Net/IpFamily', 'Net/IpAddress', 'Net/Dns', 'Interop/Superglobal', 'Interop/PhpGlobals', 'Data/Database', 'ListMembers', 'MapMembers', 'SetMembers',
         'System/SystemEnvironment', 'Time/SystemClock', 'SystemRandom', 'IO/SystemConsole', 'System/SystemProcess', 'IO/SystemFiles',
         'Net/SystemHttp', 'Net/SystemMail', 'Net/SystemDns', 'Interop/SystemPhpGlobals', 'Data/SystemDatabase', 'Data/SystemCache',

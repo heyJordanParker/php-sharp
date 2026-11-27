@@ -2,6 +2,7 @@ namespace Demo;
 
 import Sharp.IO.Console;
 import Sharp.System.Environment;
+import Sharp.System.ExitCode;
 import Sharp.System.Process;
 
 public class PhpForms
@@ -23,7 +24,7 @@ public class PhpForms
     public void fail(string message, int code)
     {
         this.warn(message);
-        this.process.exit(code);
+        this.process.exit(new ExitCode(code));
     }
 
     public string setting(string name) => this.environment.variable(name) ?? "unset";
