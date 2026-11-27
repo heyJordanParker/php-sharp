@@ -245,7 +245,6 @@
 4	sharp/mago/crates/analyzer/tests/main.rs::sharp::closure_gets_what_an_unknown_class_name_gets
 4	sharp/mago/crates/analyzer/tests/main.rs::sharp::every_struct_parses
 4	sharp/mago/crates/analyzer/tests/main.rs::sharp::the_declared_type_a_call_goes_into_fixes_its_type_arguments
-4	sharp/mago/crates/database/src/lib.rs::watcher::tests::a_poll_writes_a_missed_cookie_again_only_once_per_cookie_timeout
 4	sharp/mago/src/main.rs::commands::compile::tests::each_watch_round_of_the_hosts_compile_writes_what_a_fresh_compile_of_the_tree_writes
 4	sharp/mago/src/main.rs::commands::convert::tests::each_proof_stops_its_hosts_before_the_next_proof_starts_its_own
 4	sharp/mago/src/main.rs::commands::convert::tests::the_proof_lowers_with_the_standard_library_mago_compile_lowers_with
