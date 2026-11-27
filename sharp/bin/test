@@ -290,6 +290,9 @@ start_unit() {
   (
     # shellcheck disable=SC2030 # The unit's own failed steps, which run_pool reads from its file.
     failed=()
+    # Every git a test starts reads no system or global git config, as Git's own test suite runs it, so a developer's
+    # config, such as signed commits, changes no test, and each test that commits names its own author (#1067).
+    export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
     part_times="$output.time"
     part "${unit_heading[u]}"
     if [[ -n $step ]]; then

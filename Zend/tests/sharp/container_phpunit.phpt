@@ -34,7 +34,7 @@ foreach ((new ReflectionClass('App\Shop\CheckoutTest'))->getMethods() as $method
         $hooks[$attribute->getName()][] = $method->getName();
     }
 }
-$test = new App\Shop\CheckoutTest();
+$test = new App\Shop\CheckoutTest('testUsesTheTestModule');
 echo "before the test: ", $mailer(), "\n";
 foreach ($hooks['PHPUnit\Framework\Attributes\Before'] as $before) {
     $test->$before();
@@ -50,7 +50,7 @@ $child = <<<'PHP'
 require $argv[1] . '/Container.inc';
 container_load($argv[2]);
 require $argv[2] . '/tests/Shop/CheckoutTest.sharp';
-$test = new App\Shop\CheckoutTest();
+$test = new App\Shop\CheckoutTest('testUsesTheTestModule');
 $test->__sharpStartTest();
 echo "in a child process: ", (new Sharp\Container())->get('App\Shop\Checkout')->usedMailer()->name(), "\n";
 $test->__sharpEndTest();
