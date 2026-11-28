@@ -76,10 +76,12 @@ jobs:
               | jq '[.[].jobs[] | select(.name == "LAND" and .status == "completed")] | length')
             ((ended > 0))
           }
-          # Starts release.yml's run of master's tip once $1 landings since the newest tag are unreleased. A tip a tag
-          # names is released, and a run of it that hasn't ended releases it. Each staging run's commit that master
-          # holds past the newest tag is one landing, since only LAND moves master, to its staging run's commit. The
-          # release group keeps the run in progress, and the newest run waiting replaces an older one.
+          # Starts release.yml's run of master's tip once $1 landings since the newest public release are unreleased.
+          # A tip a tag names is released, and a run of it that hasn't ended releases it. Each staging run's commit that
+          # master holds past the newest public release's tag is one landing, since only LAND moves master, to its
+          # staging run's commit. A tag whose release stayed a draft shipped nothing: counted from the newest tag,
+          # v0.8.55's, whose PUBLISH failed (#1111), master held 2 landings where 3 were unreleased, and no release
+          # started. The release group keeps the run in progress, and the newest run waiting replaces an older one.
           release() {
             local tags newest commit landings
             tags=$(git ls-remote --tags origin 'refs/tags/v*')
@@ -92,8 +94,8 @@ jobs:
               echo "release.yml's run of master's tip $master hasn't ended, so it releases it."
               return
             fi
-            newest=$(sed -n 's#.*refs/tags/v\([0-9]*\.[0-9]*\.[0-9]*\)$#\1#p' <<< "$tags" \
-              | sort -t . -k 1,1n -k 2,2n -k 3,3n | tail -n 1)
+            newest=$(gh release list --limit 1000 --json tagName,isDraft --jq '.[] | select(.isDraft | not) | .tagName' \
+              | sed -n 's#^v\([0-9]*\.[0-9]*\.[0-9]*\)$#\1#p' | sort -t . -k 1,1n -k 2,2n -k 3,3n | tail -n 1)
             commit=$(awk -v tag="refs/tags/v$newest" '$2 == tag || $2 == tag "^{}" { commit = $1 } END { print commit }' \
               <<< "$tags")
             landings=$(comm -12 \
