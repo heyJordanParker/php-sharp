@@ -996,10 +996,13 @@ jobs:
     needs: [CHANGES, CI_PASSED]
     if: ${{ !failure() && !cancelled() && needs.CI_PASSED.result == 'success' && github.event_name == 'push' }}
     runs-on: ubuntu-24.04
+    # pull-requests: write lets it comment on a pull request that moved while queued: issues: write alone failed that
+    # comment with "GraphQL: Resource not accessible by integration (addComment)" on staging run 46096756775.
     permissions:
       actions: write
       contents: read
       issues: write
+      pull-requests: write
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -1025,6 +1028,8 @@ jobs:
             if [[ $head != "$merged" ]]; then
               moved=$((moved + 1))
               echo "::warning::#$number's head is $head, past $merged, which this batch merged, so master stays where it is and queue.yml takes the ready pull requests again."
+              # The pull request's lane reads why it waited on the pull request itself.
+              gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --body "queue: #$number moved to $head while queued, re-queued"
             fi
           done < <(jq -r '.commits[] | select((.parents | length) == 2 and (.commit.message | startswith("Merge pull request #")))
             | [(.commit.message | capture("^Merge pull request #(?<n>[0-9]+)").n), .parents[1].sha] | @tsv' <<< "$compare")
