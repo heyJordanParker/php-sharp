@@ -156,7 +156,7 @@ def targets():
 
 # The speed targets, by the name targets.py prints. The language owner set speed as a standing priority on 11-24,
 # triaged like any other problem: each one off its goal is an intake entry headed `## Speed: <name>` (TRIAGE.md).
-SPEED_TARGETS = ("edit CPU", "edit peak memory", "CI run, pull request", "CI run, staging",
+SPEED_TARGETS = ("edit to feedback", "edit peak memory", "CI run, pull request", "CI run, staging",
                  "longest local loop, last 24 h")
 
 
@@ -281,7 +281,12 @@ def report():
             goal = "unset" if unset else found.group(4) + found.group(5)
             verdict = "no goal" if unset else "met" if off == 0 else f"{off:.1f}x off"
             goals.append((off, f"  {name:<36} {found.group(2) + found.group(3):>12}  {day:>12}  {goal:>8}  {verdict:>9}{mark}{when}"))
-    block += ["", f"  {'Targets, worst first':<36} {'now':>12}  {'24 h ago':>12}  {'goal':>8}  {'':>9}", *[row for _, row in sorted(goals, reverse=True)]]
+        # A target with a goal and no reading leads the table, since nothing shows how far off it is.
+        unmeasured = re.match(r"\s+(.+?): NOT MEASURED / (\S+ ?\S*), (.+)$", line)
+        if unmeasured:
+            goals.append((float("inf"), f"  {unmeasured.group(1):<36} {'none':>12}  {'none':>12}  {unmeasured.group(2):>8}  "
+                                        f"{'unmeasured':>9}  ({unmeasured.group(3)})"))
+    block +=["", f"  {'Targets, worst first':<36} {'now':>12}  {'24 h ago':>12}  {'goal':>8}  {'':>9}", *[row for _, row in sorted(goals, reverse=True)]]
     block += [f"  commit to shipped {line.split('by release: ', 1)[1]}" for line in lines if line.strip().startswith("by release: ")]
     block += [f"  {line.strip()}" for line in lines if line.strip().startswith("release ETA: ")]
     block += ["", "Lanes"]
@@ -342,6 +347,8 @@ def main():
     else:
         # `sop <n>` injects part n of the whole maintain SOP, so a tick never runs from memory of it.
         project = os.environ.get("CLAUDE_PROJECT_DIR") or event.get("cwd", "")
+        if len(sys.argv) < 3 or not sys.argv[2].isdigit():
+            return 0
         parts = sop_parts(project)
         number = int(sys.argv[2])
         if number > len(parts):
