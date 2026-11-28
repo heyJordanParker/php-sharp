@@ -53,6 +53,7 @@ use mago_codex::metadata::CodebaseMetadata;
 use mago_codex::metadata::r#extern::ExternMetadata;
 use mago_codex::metadata::r#extern::ExternNamespaceMetadata;
 use mago_codex::metadata::r#extern::extern_namespace_classes;
+use mago_codex::metadata::shared::Shared;
 use mago_codex::metadata::ttype::TypeMetadata;
 use mago_codex::populator::populate_codebase;
 use mago_codex::populator::populate_codebase_targeted;
@@ -116,7 +117,8 @@ pub mod compile;
 /// reached.
 type IncrementalScan<Snapshot> = ((FileId, CodebaseMetadata, Snapshot, Vec<mago_word::Word>), WordSet);
 
-/// Per-file cached state for incremental analysis.
+/// Per-file cached state for incremental analysis, which the service holds as a [`Shared`] entry, so a store sees which
+/// file's state a write replaced, as it sees a codebase entry's.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct FileState {
     content_hash: u64,
@@ -169,7 +171,6 @@ struct Persisted<'state> {
     native_symbol_references: Cow<'state, SymbolReferences>,
     external_symbol_references: Cow<'state, SymbolReferences>,
     late_symbol_references: Cow<'state, SymbolReferences>,
-    file_states: Cow<'state, HashMap<FileId, FileState>>,
     before_analysis_reads: Cow<'state, ExtensionReads>,
     codebase_issues: Cow<'state, IssueCollection>,
     lifecycle_issues: Cow<'state, IssueCollection>,
@@ -217,12 +218,29 @@ fn not_stored(error: std::io::Error) -> OrchestratorError {
 struct StoredPart {
     /// The part's blob.
     id: ObjectId,
-    /// The content hash of the part's file then, or 0 for the [`SHARED`] part, which no file owns.
-    content_hash: u64,
-    /// The part's class-likes, their scans and function-likes, each the copy the part held, so a part whose file is
-    /// unchanged and whose copies no write replaced since holds what its blob holds.
+    /// The state of the part's file, the copy the part held, or none for the [`SHARED`] part, which no file owns.
+    state: Option<Shared<FileState>>,
+    /// The part's class-likes, their scans and function-likes, each the copy the part held, so a part whose file's
+    /// state and copies no write replaced since holds what its blob holds.
     entries: CodebaseMetadata,
 }
+
+impl StoredPart {
+    /// Whether the part holds what `state`, the state of its file or none, and `entries` hold now.
+    fn holds(&self, state: Option<&Shared<FileState>>, entries: &CodebaseMetadata) -> bool {
+        let same_state = match (&self.state, state) {
+            (Some(last), Some(state)) => Shared::ptr_eq(last, state),
+            (None, None) => true,
+            _ => false,
+        };
+
+        same_state && self.entries.shares_entries_with(entries)
+    }
+}
+
+/// What a codebase part's blob holds: the ID and state of the file that owns the part, or none for the [`SHARED`]
+/// part, and the part itself.
+type PartBlob = (Option<(FileId, Shared<FileState>)>, CodebaseMetadata);
 
 struct SelectiveAnalysisOutput {
     result: AnalysisResult,
@@ -272,7 +290,7 @@ pub struct IncrementalAnalysisService {
     prelude: fn() -> (CodebaseMetadata, SymbolReferences),
     settings: Settings,
     parser_settings: ParserSettings,
-    file_states: HashMap<FileId, FileState>,
+    file_states: HashMap<FileId, Shared<FileState>>,
     /// What the before-analysis hooks read in the last analysis, which counts for every file.
     before_analysis_reads: ExtensionReads,
     plugin_registry: Arc<PluginRegistry>,
@@ -567,10 +585,10 @@ impl IncrementalAnalysisService {
     }
 
     /// Stores the service's state after its last analysis in `objects`, as a tree [`Self::restore`] reads back, and
-    /// gives the tree's ID: the codebase part each file owns and the part of the class-likes and function-likes no file
-    /// owns, each in a blob of its own, and the rest of the state in the [`STATE`] blob after `key`, the reference
-    /// graphs and each file's state, so a later run rechecks only what changed since, as watch mode does, the extensions'
-    /// codebase scan and its refinements included. A part whose file is unchanged and whose entries no write replaced
+    /// gives the tree's ID: each file's state with the codebase part it owns, and the part of the class-likes and
+    /// function-likes no file owns, each in a blob of its own, and the rest of the state in the [`STATE`] blob after
+    /// `key`, the reference graphs among it, so a later run rechecks only what changed since, as watch mode does, the
+    /// extensions' codebase scan and its refinements included. A part whose file's state and entries no write replaced
     /// since the service last stored or restored it keeps its blob, unencoded and unwritten. None before the first
     /// analysis, and when a vendor file the autoloader served has no path to read again.
     ///
@@ -584,31 +602,32 @@ impl IncrementalAnalysisService {
         let Some(autoloaded) = self.autoloaded.iter().map(|file| file.path.clone()).collect::<Option<Vec<_>>>() else {
             return Ok(None);
         };
-        let mut owners: Vec<(&FileId, &FileState)> = self.file_states.iter().collect();
+        let mut owners: Vec<(&FileId, &Shared<FileState>)> = self.file_states.iter().collect();
         owners.sort_unstable_by_key(|(file_id, _)| **file_id);
         let mut rest = self.codebase.clone();
         let parts = rest.split_off_files(&owners.iter().map(|(_, state)| &state.entry_keys).collect::<Vec<_>>());
         let shared = rest.split_off_shared_entries();
-        let named: Vec<((Vec<u8>, u64), CodebaseMetadata)> = owners
+        let named: Vec<(Vec<u8>, PartBlob)> = owners
             .iter()
-            .map(|(file_id, state)| (part_name(**file_id), state.content_hash))
+            .map(|(file_id, state)| (part_name(**file_id), Some((**file_id, Shared::clone(state)))))
             .zip(parts)
-            .chain(std::iter::once(((SHARED.to_vec(), 0), shared)))
+            .map(|((name, file), part)| (name, (file, part)))
+            .chain(std::iter::once((SHARED.to_vec(), (None, shared))))
             .collect();
         let mut last = self.stored.lock().unwrap_or_else(PoisonError::into_inner);
         let previous = &*last;
         let stored: Vec<(Vec<u8>, StoredPart, bool)> = named
             .into_par_iter()
-            .map(|((name, content_hash), part)| {
-                let entries = part.shared_entries();
+            .map(|(name, blob)| {
+                let entries = blob.1.shared_entries();
+                let state = blob.0.as_ref().map(|(_, state)| state);
                 let (id, encoded) = match previous.get(&name) {
-                    Some(last) if last.content_hash == content_hash && last.entries.shares_entries_with(&entries) => {
-                        (last.id, false)
-                    }
-                    _ => (objects.write_blob(&encode(&part)?).map_err(not_stored)?, true),
+                    Some(last) if last.holds(state, &entries) => (last.id, false),
+                    _ => (objects.write_blob(&encode(&blob)?).map_err(not_stored)?, true),
                 };
+                let state = blob.0.map(|(_, state)| state);
 
-                Ok((name, StoredPart { id, content_hash, entries }, encoded))
+                Ok((name, StoredPart { id, state, entries }, encoded))
             })
             .collect::<Result<_, OrchestratorError>>()?;
 
@@ -618,7 +637,6 @@ impl IncrementalAnalysisService {
             native_symbol_references: Cow::Borrowed(&self.native_symbol_references),
             external_symbol_references: Cow::Borrowed(&self.external_symbol_references),
             late_symbol_references: Cow::Borrowed(&self.late_symbol_references),
-            file_states: Cow::Borrowed(&self.file_states),
             before_analysis_reads: Cow::Borrowed(&self.before_analysis_reads),
             codebase_issues: Cow::Borrowed(&self.codebase_issues),
             lifecycle_issues: Cow::Borrowed(&self.lifecycle_issues),
@@ -688,11 +706,10 @@ impl IncrementalAnalysisService {
             .into_par_iter()
             .map(|(name, id)| {
                 let bytes = objects.read_blob(id).ok()?;
-                let (part, _) =
-                    bincode::serde::decode_from_slice::<CodebaseMetadata, _>(&bytes, bincode::config::standard())
-                        .ok()?;
+                let (blob, _) =
+                    bincode::serde::decode_from_slice::<PartBlob, _>(&bytes, bincode::config::standard()).ok()?;
 
-                Some((name, id, part))
+                Some((name, id, blob))
             })
             .collect::<Option<Vec<_>>>()
         else {
@@ -708,16 +725,18 @@ impl IncrementalAnalysisService {
         }
         self.database.extend(autoloaded.iter().cloned());
         self.autoloaded = autoloaded;
-        self.file_states = state.file_states.into_owned();
-        let content_hashes: HashMap<Vec<u8>, u64> =
-            self.file_states.iter().map(|(file_id, state)| (part_name(*file_id), state.content_hash)).collect();
+        let mut file_states = HashMap::default();
         let mut stored = HashMap::default();
         let mut joined = Vec::with_capacity(parts.len());
-        for (name, id, part) in parts {
-            let content_hash = content_hashes.get(&name).copied().unwrap_or(0);
-            stored.insert(name, StoredPart { id, content_hash, entries: part.shared_entries() });
+        for (name, id, (file, part)) in parts {
+            let state = file.map(|(file_id, state)| {
+                file_states.insert(file_id, Shared::clone(&state));
+                state
+            });
+            stored.insert(name, StoredPart { id, state, entries: part.shared_entries() });
             joined.push(part);
         }
+        self.file_states = file_states;
         let mut codebase = state.codebase.into_owned();
         codebase.join(joined);
         codebase.populate_derived_maps();
@@ -1063,7 +1082,10 @@ impl IncrementalAnalysisService {
             if let Some(file_summaries) = summaries.remove(file_id) {
                 state.effect_summaries = file_summaries;
             }
-            state.project_issues = issues.remove(file_id).unwrap_or_default();
+            let file_issues = issues.remove(file_id).unwrap_or_default();
+            if state.project_issues != file_issues {
+                state.project_issues = file_issues;
+            }
         }
     }
 
@@ -1079,14 +1101,19 @@ impl IncrementalAnalysisService {
     fn refresh_late_reference_issues(&mut self) {
         if self.late_symbol_references.is_empty() {
             for state in self.file_states.values_mut() {
-                state.analysis_issues = state.unreconciled_analysis_issues.clone();
+                if state.analysis_issues != state.unreconciled_analysis_issues {
+                    state.analysis_issues = state.unreconciled_analysis_issues.clone();
+                }
             }
             return;
         }
 
         let reconciler = LateSymbolReferenceIssueReconciler::new(&self.codebase, &self.symbol_references);
         for state in self.file_states.values_mut() {
-            state.analysis_issues = reconciler.reconcile(state.unreconciled_analysis_issues.clone());
+            let issues = reconciler.reconcile(state.unreconciled_analysis_issues.clone());
+            if state.analysis_issues != issues {
+                state.analysis_issues = issues;
+            }
         }
     }
 
@@ -1322,12 +1349,12 @@ impl IncrementalAnalysisService {
         populate_codebase(&mut merged_codebase, &mut symbol_references, WordSet::default(), HashSet::default());
         let merged_aliases =
             merged_codebase.class_like_alias_declarations().map(|(alias, _, span)| (alias, span.file_id)).collect();
-        let mut file_states: HashMap<FileId, FileState> = HashMap::default();
+        let mut file_states: HashMap<FileId, Shared<FileState>> = HashMap::default();
         for (file_id, content_hash, mut entry_keys, named_namespace_classes) in staged {
             retain_owned_keys(&mut entry_keys, file_id, &merged_codebase, &merged_aliases);
             file_states.insert(
                 file_id,
-                FileState {
+                Shared::new(FileState {
                     content_hash,
                     entry_keys,
                     unreconciled_analysis_issues: IssueCollection::default(),
@@ -1341,7 +1368,7 @@ impl IncrementalAnalysisService {
                     lowering_input: None,
                     reaches_extension: false,
                     named_namespace_classes,
-                },
+                }),
             );
         }
         self.declare_body_returns(&mut merged_codebase, |_| true, &HashSet::default());
@@ -1444,7 +1471,9 @@ impl IncrementalAnalysisService {
         let scan_phase = Phase::start("scan");
         // What the last analysis gave the lowering holds for the files it saw, and this one may change any of them.
         for state in self.file_states.values_mut() {
-            state.lowering_input = None;
+            if state.lowering_input.is_some() {
+                state.lowering_input = None;
+            }
         }
 
         let source_files: Vec<_> = self.database.files().filter(|f| f.file_type != FileType::Builtin).collect();
@@ -2060,7 +2089,7 @@ impl IncrementalAnalysisService {
 
             // Clear codebase issues for every file analyzed in this generation.
             for (file_id, state) in self.file_states.iter_mut() {
-                if !files_to_skip.contains(file_id) {
+                if !files_to_skip.contains(file_id) && !state.codebase_issues.is_empty() {
                     state.codebase_issues = IssueCollection::default();
                 }
             }
@@ -2091,7 +2120,7 @@ impl IncrementalAnalysisService {
                 let late_symbol_references = late_symbol_references_by_file.remove(&file_id).unwrap_or_default();
                 self.file_states.insert(
                     file_id,
-                    FileState {
+                    Shared::new(FileState {
                         content_hash,
                         entry_keys,
                         unreconciled_analysis_issues: analysis_issues.clone(),
@@ -2105,7 +2134,7 @@ impl IncrementalAnalysisService {
                         lowering_input: None,
                         reaches_extension: false,
                         named_namespace_classes: named_by_file.remove(&file_id).unwrap_or_default(),
-                    },
+                    }),
                 );
             }
             self.store_project_passes(per_file_effect_summaries, per_file_project_issues);
@@ -2355,7 +2384,7 @@ impl IncrementalAnalysisService {
         // Clear codebase issues for files that were NOT skipped (their symbols were re-populated).
         // Files in files_to_skip keep their old codebase_issues intact.
         for (file_id, state) in self.file_states.iter_mut() {
-            if !files_to_skip.contains(file_id) {
+            if !files_to_skip.contains(file_id) && !state.codebase_issues.is_empty() {
                 state.codebase_issues = IssueCollection::default();
             }
         }
@@ -2385,7 +2414,7 @@ impl IncrementalAnalysisService {
             let late_symbol_references = late_symbol_references_by_file.remove(&file_id).unwrap_or_default();
             self.file_states.insert(
                 file_id,
-                FileState {
+                Shared::new(FileState {
                     content_hash,
                     entry_keys,
                     unreconciled_analysis_issues: analysis_issues.clone(),
@@ -2399,7 +2428,7 @@ impl IncrementalAnalysisService {
                     lowering_input: None,
                     reaches_extension: false,
                     named_namespace_classes: named_by_file.remove(&file_id).unwrap_or_default(),
-                },
+                }),
             );
         }
         self.store_project_passes(per_file_effect_summaries, per_file_project_issues);
@@ -3590,7 +3619,7 @@ fn extensions_in(codebase: &CodebaseMetadata, file_id: FileId) -> Vec<(Word, Met
 /// read before the analysis or for one file on its own object, as a rule keeps the methods a search found or a class's
 /// ancestors, and answer any later file of its worker from it with no read of its own. Which files a worker takes first
 /// changes from run to run, so only the reads of every file together name what each file read.
-fn extension_reads(file_states: &HashMap<FileId, FileState>, before_analysis: &ExtensionReads) -> FileReads {
+fn extension_reads(file_states: &HashMap<FileId, Shared<FileState>>, before_analysis: &ExtensionReads) -> FileReads {
     let mut reads = code_reads(file_states, before_analysis);
     reads.extend(before_analysis.issues.clone());
     for state in file_states.values() {
@@ -3602,7 +3631,7 @@ fn extension_reads(file_states: &HashMap<FileId, FileState>, before_analysis: &E
 
 /// What the plugins that register a provider read from the codebase in the last analysis, in any callback, which can
 /// change any file's analyzed code, taken as read by every file for the reasons [`extension_reads`] gives.
-fn code_reads(file_states: &HashMap<FileId, FileState>, before_analysis: &ExtensionReads) -> FileReads {
+fn code_reads(file_states: &HashMap<FileId, Shared<FileState>>, before_analysis: &ExtensionReads) -> FileReads {
     let mut reads = before_analysis.code.clone();
     for state in file_states.values() {
         reads.extend(state.reads.extension.code.clone());
