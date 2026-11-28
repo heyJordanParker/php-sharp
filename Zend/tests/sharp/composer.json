@@ -113,6 +113,7 @@
             "Exports\\": "Exports/",
             "Extended\\": "Extended/",
             "ExternCallables\\": "ExternCallables/",
+            "ExternListDefaults\\": "ExternListDefaults/",
             "ExternProperties\\": "ExternProperties/",
             "Fields\\": "Fields/",
             "FixedStrings\\": "FixedStrings/",
