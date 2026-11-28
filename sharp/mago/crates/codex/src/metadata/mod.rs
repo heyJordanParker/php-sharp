@@ -375,12 +375,6 @@ impl CodebaseMetadata {
             }
         }
 
-        for metadata in self.class_likes.values_mut() {
-            if !metadata.aliases.is_empty() {
-                metadata.aliases.clear();
-            }
-        }
-
         let mut aliases = WordMap::default();
         for alias in self.class_like_alias_declarations.keys().copied() {
             if self.class_likes.contains_key(&alias) {
@@ -394,20 +388,22 @@ impl CodebaseMetadata {
 
         let aliases_changed = aliases != previous_aliases;
         self.class_like_aliases = aliases;
-        let mut aliased_classes = WordSet::default();
+        let mut aliases_of: WordMap<Vec<Word>> = WordMap::default();
         for (alias, actual) in &self.class_like_aliases {
-            let Some(metadata) = self.class_likes.get_mut(actual) else {
+            let Some(metadata) = self.class_likes.get(actual) else {
                 continue;
             };
 
-            metadata.aliases.push(*alias);
-            aliased_classes.insert(*actual);
+            aliases_of.entry(*actual).or_default().push(*alias);
             self.symbols.add_symbol_name(*alias, metadata.kind);
         }
 
-        for actual in aliased_classes {
-            if let Some(metadata) = self.class_likes.get_mut(&actual) {
-                metadata.aliases.sort_unstable();
+        // Each class-like takes its aliases only when they changed, so a codebase that shares it copies it only then.
+        for (name, metadata) in &mut self.class_likes {
+            let mut aliases = aliases_of.remove(name).unwrap_or_default();
+            aliases.sort_unstable();
+            if metadata.aliases != aliases {
+                metadata.aliases = aliases;
             }
         }
 

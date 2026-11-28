@@ -863,7 +863,9 @@ impl IncrementalAnalysisService {
                     .map_err(mago_analyzer::error::AnalysisError::from)?;
                 let SessionReads { files, class_logs, .. } = session.take_reads();
                 for (file_id, reads) in files {
-                    if let Some(state) = self.file_states.get_mut(&file_id) {
+                    if let Some(state) = self.file_states.get_mut(&file_id)
+                        && state.reads.extension != reads
+                    {
                         state.reads.extension = reads;
                     }
                 }
@@ -1079,7 +1081,9 @@ impl IncrementalAnalysisService {
         mut issues: HashMap<FileId, IssueCollection>,
     ) {
         for (file_id, state) in &mut self.file_states {
-            if let Some(file_summaries) = summaries.remove(file_id) {
+            if let Some(file_summaries) = summaries.remove(file_id)
+                && state.effect_summaries != file_summaries
+            {
                 state.effect_summaries = file_summaries;
             }
             let file_issues = issues.remove(file_id).unwrap_or_default();
@@ -1092,7 +1096,9 @@ impl IncrementalAnalysisService {
     /// Caches the errors of each package's PHP# file this run summarized.
     fn store_package_errors(&mut self, mut errors: HashMap<FileId, IssueCollection>) {
         for (file_id, state) in &mut self.file_states {
-            if let Some(file_errors) = errors.remove(file_id) {
+            if let Some(file_errors) = errors.remove(file_id)
+                && state.package_errors != file_errors
+            {
                 state.package_errors = file_errors;
             }
         }
@@ -3994,9 +4000,11 @@ mod tests {
         assert!(!restored.is_initialized());
     }
 
-    /// A service stored after each edit encodes again only the parts the edit changed: a method body edit's file, a
-    /// signature edit's file and its caller's, a parent's edit and its child's, an added file's, and none for a deleted
-    /// file. The codebase restored from that store is the codebase restored from a store the service writes whole.
+    /// A service restored from the store after each edit, as each `mago compile` is, encodes again only the parts the
+    /// edit changed: a method body edit's file, a signature edit's file and its caller's, a parent's edit and its
+    /// child's, an added file's, and none for a deleted file. A package's PHP# file, which every run summarizes again,
+    /// is never encoded again. The codebase restored from that store is the codebase restored from a store the service
+    /// writes whole.
     #[test]
     fn a_stored_service_encodes_again_only_the_parts_an_edit_changed_and_restores_what_a_whole_store_gives() {
         let mut db = make_database(vec![
@@ -4005,11 +4013,18 @@ mod tests {
             ("src/a.php", "<?php\nclass Value { public function get(): int { return 42; } }\n"),
             ("src/b.php", "<?php\nclass User { public function read(Value $value): int { return $value->get(); } }\n"),
         ]);
-        let mut service = make_service(&db);
-        service.analyze().expect("the first analysis runs");
+        let package = "vendor/acme/tools/Tools/Writer.sharp";
+        db.add(File::new(
+            Cow::Borrowed(package.as_bytes()),
+            FileType::Vendored,
+            None,
+            Cow::Borrowed(&b"namespace Tools;\n\npublic class Writer\n{\n    public int write() => 1;\n}\n"[..]),
+        ));
+        let mut first = make_service(&db);
+        first.analyze().expect("the first analysis runs");
         let store = tempfile::tempdir().unwrap();
         let objects = Objects::at(store.path());
-        service.persist(b"key", &objects).expect("the state is stored");
+        let mut root = first.persist(b"key", &objects).expect("the state is stored").expect("the service holds state");
         let parent = "<?php\nclass ParentThing { public function name(): string { return 'p'; } public function size(): int { return 1; } }\n";
         let edits: [(&str, Option<&str>, &[&str]); 5] = [
             ("src/a.php", Some("<?php\nclass Value { public function get(): int { return 43; } }\n"), &["src/a.php"]),
@@ -4045,7 +4060,8 @@ mod tests {
                     db.delete(file_id);
                 }
             }
-            service.update_database(db.read_only());
+            let mut service = make_service(&db);
+            assert!(service.restore(&objects, root, b"key").expect("the state restores"), "{name}");
             service.analyze_incremental(None).expect("the recheck runs");
 
             let reused = std::mem::take(service.stored.get_mut().unwrap());
@@ -4053,9 +4069,9 @@ mod tests {
             let whole_objects = Objects::at(whole_store.path());
             let whole = service.persist(b"key", &whole_objects).expect("the whole state is stored").unwrap();
             *service.stored.get_mut().unwrap() = reused;
-            let root = service.persist(b"key", &objects).expect("the state is stored").unwrap();
+            root = service.persist(b"key", &objects).expect("the state is stored").unwrap();
 
-            let files = ["src/parent.php", "src/child.php", "src/a.php", "src/b.php", "src/new.php"];
+            let files = ["src/parent.php", "src/child.php", "src/a.php", "src/b.php", "src/new.php", package];
             let mut parts: Vec<&str> = files
                 .into_iter()
                 .filter(|file| service.encoded_parts.lock().unwrap().contains(&part_name(FileId::new(file.as_bytes()))))
