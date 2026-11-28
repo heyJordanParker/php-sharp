@@ -991,7 +991,7 @@ jobs:
   # git refuses a push that isn't a fast-forward, and master history refuses one with no bypass, so a master that moved
   # fails LAND, and queue.yml merges the batch again onto it. GitHub marks each pull request whose head master now holds
   # merged. LAND then starts queue.yml, since no event of its own does, and queue.yml starts the next batch's run, and
-  # release.yml's release of master's tip when nothing waits to land or 3 landings are unreleased (#1023).
+  # release.yml's release of master's tip when nothing waits to land or 2 landings are unreleased (#1023).
   LAND:
     needs: [CHANGES, CI_PASSED]
     if: ${{ !failure() && !cancelled() && needs.CI_PASSED.result == 'success' && github.event_name == 'push' }}

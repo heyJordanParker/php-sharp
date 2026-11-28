@@ -4,9 +4,10 @@ name: Queue
 # staging, whose run runs every check, the Mac's among them, on that tree. That run's LAND moves master to its commit,
 # so each landed tree crosses the Mac's tests once: #828 crossed them twice, in pull request run 45570037780 for 55
 # minutes, then in push run 45600915642 for 87. It then starts release.yml's release of master's tip when no pull
-# request waits to land, or once 3 landings are unreleased, as continuous deployment ships the newest commit: the one
+# request waits to land, or once 2 landings are unreleased, as continuous deployment ships the newest commit: the one
 # Mac ran each landing's tests and its 33-minute release build in series, so batches landed 47 to 50 minutes apart
-# where their checks take about 26, and the queue's wait grew with each batch (#1023). A pull request is ready once its
+# where their checks take about 26, and the queue's wait grew with each batch (#1023). With the nightly profile reused
+# (#1134), v0.8.60's Mac build took 17 minutes, so every second landing ships. A pull request is ready once its
 # auto-merge is on and its head passed every check master merge gate requires, which are the Linux checks of its own
 # run. The gate also requires QUEUE, a check no run reports, so GitHub never merges a pull request itself, and LAND,
 # pushing with the deploy key the gate lets past, is the only way onto master.
@@ -256,4 +257,4 @@ jobs:
           fi
           git push --force origin HEAD:refs/heads/staging
           echo "staging is $(git rev-parse HEAD): master $master with pull requests ${batch[*]/#/#} merged onto it."
-          release 3
+          release 2
