@@ -2758,7 +2758,8 @@ fn compile_proves_a_law_over_an_interface_that_extends_equatable() {
 
 /// Spec sections 19, 20.1 and 28: `==` on two values of a sealed interface that extends `Equatable` runs the `==` of the
 /// implementer both are, the one a struct gets with no code or the one a class declares, so a law over the family
-/// proves when that `==` holds, and a claim it breaks names the implementers it is broken for.
+/// proves when that `==` holds, one that holds only by a class's own `==`, which takes every two of its values as
+/// equal, included, and a claim it breaks names the implementers it is broken for.
 #[test]
 fn a_law_over_a_sealed_equatable_family_of_structs_and_classes_proves() {
     let card =
@@ -2766,6 +2767,7 @@ fn a_law_over_a_sealed_equatable_family_of_structs_and_classes_proves() {
     let cash_struct =
         "namespace App.Pay;\n\npublic struct Cash : Tender\n{\n    public Cash(public int cents { get; }) { }\n}\n";
     let cash_class = "namespace App.Pay;\n\npublic final class Cash : Tender\n{\n    public Cash(public int cents { get; }) { }\n\n    public static bool operator ==(Cash a, Cash b) => a.cents == b.cents;\n\n    public int hash() => this.cents;\n}\n";
+    let cash_all_equal = "namespace App.Pay;\n\npublic final class Cash : Tender\n{\n    public Cash(public int cents { get; }) { }\n\n    public static bool operator ==(Cash a, Cash b) => true;\n\n    public int hash() => 0;\n}\n";
     let compiled_with = |law: &str, cash: &str| {
         let tender = format!("namespace App.Pay;\n\npublic sealed interface Tender : Equatable\n{{\n    {law}\n}}\n");
         let directory = lawful_project(&[
@@ -2785,11 +2787,43 @@ fn a_law_over_a_sealed_equatable_family_of_structs_and_classes_proves() {
         assert!(compiled(directory.path(), "app/Pay/Tender.sharp").exists());
     }
 
+    let (directory, output) =
+        compiled_with("law cashAreOne(Tender a, Tender b) => !(a is Cash && b is Cash) || a == b;", cash_all_equal);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(directory.path(), "app/Pay/Tender.sharp").exists());
+
     let (_directory, output) = compiled_with("law anyTwoAreOne(Tender a, Tender b) => a == b;", cash_class);
 
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     assert!(printed(&output).contains("`Card` breaks `Tender.anyTwoAreOne`"), "{}", printed(&output));
     assert!(printed(&output).contains("when a is Card && b is Cash"), "{}", printed(&output));
+}
+
+/// Spec sections 19, 20.1 and 22: a class compares with the `operator ==` it or a parent declares, so an implementer
+/// of a sealed interface that extends `Equatable`, or a struct's field, that inherits its `==` from a base class runs
+/// the base class's, and a law over each proves.
+#[test]
+fn a_law_over_a_sealed_equatable_family_runs_an_implementer_s_inherited_equality() {
+    let tender = "namespace App.Pay;\n\npublic sealed interface Tender : Equatable\n{\n    law sameIsSame(Tender a) => a == a;\n}\n";
+    let card =
+        "namespace App.Pay;\n\npublic struct Card : Tender\n{\n    public Card(public string last4 { get; }) { }\n}\n";
+    let money = "namespace App.Pay;\n\npublic class Money\n{\n    public Money(public int cents { get; }) { }\n\n    public static bool operator ==(Money a, Money b) => a.cents == b.cents;\n\n    public int hash() => this.cents;\n}\n";
+    let cash = "namespace App.Pay;\n\npublic final class Cash : Money, Tender\n{\n    public Cash(int cents) : super(cents) { }\n}\n";
+    let wallet = "namespace App.Pay;\n\npublic struct Wallet\n{\n    public Wallet(public Cash cash { get; }) { }\n\n    law sameWallet(Wallet w) => w == w;\n}\n";
+    let directory = lawful_project(&[
+        ("app/Pay/Tender.sharp", tender),
+        ("app/Pay/Card.sharp", card),
+        ("app/Pay/Money.sharp", money),
+        ("app/Pay/Cash.sharp", cash),
+        ("app/Pay/Wallet.sharp", wallet),
+    ]);
+
+    let output = compile(directory.path());
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(directory.path(), "app/Pay/Tender.sharp").exists());
+    assert!(compiled(directory.path(), "app/Pay/Wallet.sharp").exists());
 }
 
 /// A type test over an interface that is not sealed is refused: its implementers are open, so a law cannot tell them apart.
