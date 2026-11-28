@@ -108,6 +108,19 @@ jobs:
               echo "master holds $landings landings since v$newest, fewer than $1, so its release waits."
               return
             fi
+            # As release-please releases only when a change since the last release is a feat or a fix, a release
+            # starts only when a pull request master holds since the newest public release has a ## Changelog entry:
+            # sharp/bin/release-notes prints the same for them as for none, its empty case, when none has. v0.8.57
+            # held only #1114, which has none, and its Mac build held the next batch's MAC_TESTS 32.4 minutes (#1125).
+            # The batch above may have left HEAD on its merges, and sharp/bin/check --release reads HEAD's pull
+            # requests.
+            git checkout --quiet --detach "$master"
+            pulls=$(sharp/bin/check --release | sed -n 's/^pulls=//p')
+            # shellcheck disable=SC2086 # pulls is a list of pull request numbers.
+            if [[ $(sharp/bin/release-notes $pulls) == "$(sharp/bin/release-notes)" ]]; then
+              echo "No pull request master holds since v$newest has a ## Changelog entry, so no release starts, and they ship with the next release that changes what users see."
+              return
+            fi
             echo "master holds $landings landings since v$newest, so release.yml releases its tip $master."
             gh workflow run release.yml --ref master
           }

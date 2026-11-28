@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Prints a release's notes: the ## Changelog sections of the pull requests it merges, named by number, as gh reads
+# their bodies, so the list of releases on GitHub is the changelog. Each section runs to its body's next ## heading,
+# without the HTML comment in which .github/pull_request_template.md explains it. The notes hold every section's lines
+# under its ### headings, one heading for all the pull requests, Upgrading first, since users act on it, and each item
+# names its pull request. With no entry, it prints "This release changes nothing users see.", its empty case, which
+# release.yml publishes and queue.yml reads as no release to start: v0.8.57 held only #1114, which has no entry, and its
+# Mac build held the next batch's MAC_TESTS for 32.4 minutes (#1125).
+#
+# Usage: sharp/bin/release-notes [<pull request>...]
+
+notes="$(mktemp)"
+trap 'rm -f "$notes"' EXIT
+for pull in "$@"; do
+  gh pr view "$pull" --json body --jq .body | tr -d '\r' | awk -v pull="$pull" '
+    /<!--/ { comment = 1 }
+    comment { if (/-->/) { comment = 0 }; next }
+    /^## / { on = $0 == "## Changelog"; next }
+    on && /^- / { $0 = $0 " (#" pull ")" }
+    on { print }
+  '
+done | awk '
+  /^### / { heading = $0; if (!(heading in seen)) { seen[heading] = 1; order[++headings] = heading }; next }
+  /[^[:space:]]/ { lines[heading] = lines[heading] $0 "\n" }
+  function section(heading) {
+    if (lines[heading] != "") {
+      printf "%s%s\n\n%s", printed ? "\n" : "", heading, lines[heading]
+      printed = 1
+    }
+  }
+  END {
+    printf "%s", lines[""]
+    printed = lines[""] != ""
+    section("### Upgrading")
+    for (i = 1; i <= headings; i++) {
+      if (order[i] != "### Upgrading") {
+        section(order[i])
+      }
+    }
+  }
+' > "$notes"
+if ! grep -q '[^[:space:]]' "$notes"; then
+  echo "This release changes nothing users see." > "$notes"
+fi
+cat "$notes"
