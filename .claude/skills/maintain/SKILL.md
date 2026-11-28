@@ -85,7 +85,7 @@ A `blocking` fix, a speed gain or a change consumers rewrite code for ships the 
 
 Every reply, notification replies too, opens with what `.claude/hooks/maintain_tick.py report` printed in the last 15 minutes, every line, never shortened, with NOW and NEXT filled in. A number it lacks, a release ETA included, is added to the script, never counted by hand. Then a few plain sentences say what PHP# can do now, what is broken, and its fix, never by issue number. Every claim about a mechanism is read from the code or a run that turn. Every open proposal is shown in full, never linked. An item the language owner has answered leaves every later reply. Work is delivered as files on disk, linked by path, with its substance in the reply, never as a claude.ai Artifact page.
 
-When the language owner asks a question, answer it and change nothing. Each correction from him rewrites, the same turn, every SOP file that let the mistake happen, as one consistent whole, and turns each part a program can check into that check, deleting its sentence. Each SOP change is committed that turn, and a sentence leaves only after the log line that added it is read.
+When the language owner asks a question, answer it and change nothing. Each correction from him rewrites, the same turn, every SOP file that let the mistake happen, as one consistent whole, and turns each part a program can check into that check, deleting its sentence. Each SOP change is committed that turn, and a sentence leaves only after the log line that added it is read. The maintainer reads, writes and checks every SOP change itself, never through a subagent. A standing rule lives only in these SOP files, never in a memory file.
 
 ## 8. Stay safe
 

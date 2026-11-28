@@ -45,24 +45,26 @@ Wait on a long run with one `Monitor` that ends when the run ends, never by endi
 
 A run counts only for the tree it built. An edit, or a `Brief update:` that changes what you build, voids every run started before it, so stop that run and start it again after your last edit. The stale-run hook names each one after every edit.
 
-## 4. Work in your lane's worktree
+## 4. Work in your lane's folders
 
-Work, build, test and commit in `/Users/jordan/Developer/php-sharp/worktrees/<lane>`, your lane's own worktree and build folder, so no lane's build waits on another's. The dispatch names your lane. Create it once with `git worktree add --detach worktrees/<lane> origin/master` from the checkout. Start each issue on its own branch from master as it is now: `git fetch origin`, then `git switch -c issue/<issue> origin/master`, with the issue before it committed:
+Two machines share the work. The Mac Studio, `ssh mac-studio`, builds, tests and measures, in your lane's own tree under `~/lanes/<lane>/`, so no lane's build waits on another's. Every command there runs as `taskpolicy -c utility <command>`. This MacBook only signs, commits and pushes, and runs `gh`, git and file reads. The dispatch names your lane. Start each issue on its own branch from master as it is now, in a Studio tree: `git fetch origin`, then `git switch -c issue/<issue> origin/master`, with the issue before it committed. To commit, `git diff` the change to a patch on the Studio, `scp` it to this MacBook, and `git apply` it in that issue's one worktree, `worktrees/<lane>-<issue>`, made with `git worktree add -b issue/<issue> worktrees/<lane>-<issue> origin/master`. Never send data and a heredoc into the same `ssh … 'bash -s'`.
 - Change only the files the brief lists, plus any test file, fixture or `[dev-dependencies]` line a criterion's test needs. A change that needs any other file is a question for the maintainer.
 - Never edit `docs/spec.md` beyond the spec text the brief quotes. The spec is the language owner's: a rule it seems to need is a question for the maintainer.
-- Make no branch but `issue/<issue>` for the issue you build, and never make another copy of the repository: no clone or copy beyond your lane's worktree.
-- Never build or test in the checkout or in another lane's worktree.
-- Never start a subagent.
+- Make no branch but `issue/<issue>` for the issue you build, and never make another copy of the repository beyond your lane's Studio tree and one MacBook worktree per open pull request.
+- Never build or test on this MacBook, in the checkout, or in another lane's folders.
+- Never start a subagent. Never write a memory file, a rule or an SOP change: a rule the loop seems to need goes to the maintainer.
 - Read each file before you edit it.
 - Stop only a process you started, by the PID you recorded, never by a name or a pattern another lane's build can match.
 - Never use `git reset`, `git restore`, `git clean` or `git checkout` to undo work, nor `git read-tree --reset`, which does the same. A branch takes master's newer commits with `git merge origin/master`, never a rebase.
+- Delete only with plain `rm <literal path>`, or `/usr/bin/trash <literal path>` in a script, which move it to the Trash on both machines. Remove a worktree with `rm -r <literal path>`, then `git worktree prune`. Never `/bin/rm`, `git worktree remove`, `cargo clean` or any command that deletes outright.
+- The turn your pull request merges, move its MacBook worktree and its Studio trees, build folders and scratch to the Trash. Before each Studio build, read `df -g /System/Volumes/Data`. Under 20 GiB free, build nothing and tell the maintainer.
 
 ## 5. Commit and push
 
 Commit each issue the moment its acceptance criteria pass, and push it. Each issue's pull request holds only that issue's commits, on its branch made from `origin/master`, because the merge queue lands pull requests in batches and a commit one pull request carries for another lands or fails with it.
 1. In your worktree, on `issue/<issue>`, run `git add -- <files only you changed>`, then commit with `git commit -F <message-file>` as a call of its own, the message ending in `Closes #<issue>`: the commit rule lets this repository commit without `/commit` only when the call is that one command, and refuses a `git commit` inside `export … && …`.
 2. Check that `git status --short` lists none of your files, and that `git log --oneline origin/master..HEAD` lists only this issue's commits.
-3. Push with `git push origin issue/<issue>`, then `gh pr create --base master --head issue/<issue> --fill` and `gh pr merge issue/<issue> --auto --merge`: the language owner approved each commit, push and pull request this skill names, so none waits on another approval. A fix to your pull request is a new commit on the same branch, pushed, never a rebase or a force-push. Then watch your pull request's `PHP#` and `Mago` runs with one `Monitor` while you build the next issue, read every job that fails, and fix each red check your commit caused before you report. An issue is done when its pull request merges.
+3. Push with `git push origin issue/<issue>`, then `gh pr create --base master --head issue/<issue> --fill` and `gh pr merge issue/<issue> --auto --merge`: the language owner approved each commit, push and pull request this skill names, so none waits on another approval. A fix to your pull request is a new commit on the same branch, pushed, never a rebase or a force-push. Every commit is signed, so never `-c commit.gpgsign=false`. Never open a draft pull request, turn auto-merge off, push while the pull request's batch is on `staging`, push an empty commit, or cancel or rerun a CI run by hand. Then watch your pull request's `PHP#` and `Mago` runs with one `Monitor` while you build the next issue, read every job that fails, and fix each red check your commit caused before you report. An issue is done when its pull request merges.
 
 The pull request's `## Changelog` section, which the release notes are made of, says what a user can do now. It compares with the newest published release, the tag `gh release view --json tagName` names, never the version `Cargo.toml` holds, which is the release in progress.
 
