@@ -2,9 +2,10 @@ name: Release
 
 # Builds and publishes the release of master's tip: the mago binary per platform with its attestation, Mago's source
 # archives, the SHA-256 of every asset, the release's notes, the runtime images, and the Composer packages' tags. PHP#
-# and Mago release at one version, which VERSION finds from the tags, and each job that builds writes it into its
-# checkout's sharp/mago/Cargo.toml first, where mago reads it and the engine builds it into ext/sharp's
-# sharp_version.h. The notes are the ## Changelog sections of the pull requests the release merges since the last
+# and Mago release at one version, which VERSION finds from the tags. The build job sets it as MAGO_RELEASE, which
+# sharp/mago/build.rs builds into mago and ext/sharp/Makefile.frag into the engine's sharp_version.h, as rustc's
+# release builds take CFG_RELEASE: every crate stays 0.0.0, which cargo hashes into its symbols, so the release's
+# symbols are its profile's wherever their code is the same (#1164). The notes are the ## Changelog sections of the pull requests the release merges since the last
 # release, so the list of releases on GitHub is the changelog.
 #
 # queue.yml starts this workflow on master, whose tip every staging run's LAND moved there once its checks passed, when
@@ -137,11 +138,6 @@ jobs:
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
 
-      - name: Write the release's version into the checkout
-        env:
-          VERSION: ${{ needs.crate_metadata.outputs.version }}
-        run: ../bin/set-version "$VERSION"
-
       - name: Create source archives
         id: source_package
         run: |
@@ -221,6 +217,9 @@ jobs:
           - { target: aarch64-apple-darwin, os: macos-arm64-local, pgo: true }
           - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm }
           - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04 }
+    # The release's version, which mago and the engine read, as the workflow's header explains.
+    env:
+      MAGO_RELEASE: ${{ needs.crate_metadata.outputs.version }}
 
     steps:
       # actions/checkout's clean removes every file an earlier job of the Mac runner's one work folder left, sharp/build
@@ -255,13 +254,6 @@ jobs:
         id: version
         shell: bash
         run: echo "VERSION=${{ needs.crate_metadata.outputs.version }}" >> "$GITHUB_OUTPUT"
-
-      # Before the engine's build, which reads it into sharp_version.h, and mago's.
-      - name: Write the release's version into the checkout
-        shell: bash
-        env:
-          VERSION: ${{ needs.crate_metadata.outputs.version }}
-        run: ../bin/set-version "$VERSION"
 
       - name: Install what the PHP# engine builds with
         if: contains(matrix.job.os, 'ubuntu')

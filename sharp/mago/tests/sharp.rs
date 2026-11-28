@@ -2145,7 +2145,7 @@ fn compile_and_analyze_stop_on_a_mago_reporting_format_that_names_no_format() {
 #[test]
 fn analyze_refuses_a_pin_to_the_next_major_and_names_the_pin_of_this_binary() {
     let directory = tempfile::tempdir().unwrap();
-    let next_major = env!("CARGO_PKG_VERSION_MAJOR").parse::<u64>().unwrap() + 1;
+    let next_major = env!("MAGO_RELEASE_MAJOR").parse::<u64>().unwrap() + 1;
     std::fs::write(directory.path().join("mago.toml"), format!("version = \"{next_major}\"\n")).unwrap();
 
     let output = process::output(
@@ -2156,7 +2156,7 @@ fn analyze_refuses_a_pin_to_the_next_major_and_names_the_pin_of_this_binary() {
     )
     .unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let pin = concat!("version = \"", env!("CARGO_PKG_VERSION_MAJOR"), ".", env!("CARGO_PKG_VERSION_MINOR"), "\"");
+    let pin = concat!("version = \"", env!("MAGO_RELEASE_MAJOR"), ".", env!("MAGO_RELEASE_MINOR"), "\"");
 
     assert!(!output.status.success(), "{stderr}");
     assert!(stderr.contains(pin), "{stderr}");

@@ -6,11 +6,8 @@ name: Profile
 # landing's MAC_TESTS also waits for (#1134). This run builds the instrumented mago as release.yml's Mac build builds
 # mago, trains it on corpus/, and uploads the training's raw profiles as the artifact mago-profile, which the newest
 # release run downloads. A function the profile doesn't match, as code changed since, compiles without profile data,
-# and the release logs how many.
-#
-# It trains at the version the next release takes, which sharp/bin/check --release finds, since cargo hashes a crate's
-# version into its symbols: the same tree trained at 0.0.0 left 11,192 functions without profile data in its 0.6.52
-# build, against 1,406 in its 0.0.0 one. It runs at 07:23 UTC, when the queue started the fewest staging runs: 1 of
+# and the release logs how many. It trains at the tree's 0.0.0, as every release builds every crate at 0.0.0, so the
+# release's version changes none of the symbols the profile names (#1164). It runs at 07:23 UTC, when the queue started the fewest staging runs: 1 of
 # 200 from 11-25 19:19 to 11-28 04:00 started in hour 7, against 7 in hour 19.
 on:
   schedule:
@@ -65,11 +62,6 @@ jobs:
       - name: Read the toolchain sharp/mago/Cargo.toml's rust-version names
         id: rust
         run: echo "version=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
-      - name: Write the next release's version into the checkout
-        working-directory: ${{ github.workspace }}
-        run: |
-          version=$(sharp/bin/check --release | sed -n 's/^version=//p')
-          sharp/bin/set-version "$version"
       - name: install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:

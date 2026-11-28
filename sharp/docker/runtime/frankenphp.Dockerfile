@@ -107,6 +107,10 @@ COPY --from=source /usr/src/php.tar.xz /usr/src/
 
 COPY sharp/docker/runtime/docker-php-source /usr/local/bin/
 
+# PHP#: the release's version, which ext/sharp/Makefile.frag writes into the engine, or else the root package's 0.0.0 in
+# sharp/mago/Cargo.toml (#1164).
+ARG MAGO_RELEASE
+
 RUN --mount=type=bind,from=tools,source=/runtime/install-pear-nozlib.phar,target=/tmp/install-pear-nozlib.phar \
 	set -eux; \
 	\
