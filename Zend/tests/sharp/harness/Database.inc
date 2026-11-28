@@ -16,4 +16,10 @@ final class Db
     {
         return count($ids);
     }
+
+    /** The headers the call passed. Plain PHP's own default holds one, so a call that passes the line's `[:]` gives none. */
+    public static function headers(array $headers = ['from' => 'php']): array
+    {
+        return $headers;
+    }
 }
