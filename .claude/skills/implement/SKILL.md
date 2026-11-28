@@ -41,7 +41,7 @@ Before you push, run only what CI can't tell you sooner: the tests the acceptanc
 
 Every cargo command runs as `rustup run <rust-version> cargo …`, with the `rust-version` `sharp/mago/Cargo.toml` names, because the `cargo` on `PATH` is an older Rust that refuses the workspace. It runs with `CARGO_TARGET_DIR` set to the absolute path of `sharp/build/<platform>/mago` in your lane's worktree, and at most the job count `sharp/bin/jobs` prints. Every build serves a criterion of an open issue in your batch: never build from an empty target folder, never build in the release profile unless a criterion or a speed measurement names it, and never build for a closed issue.
 
-Wait on a long run with one `Monitor` that ends when the run ends, never by ending your turn to wait, since each turn you end sends the maintainer a notification. A `Monitor` expires after 30 minutes, so re-arm it at each expiry until the run ends, and stop every process you started before you report.
+Wait on a long run with one `Monitor` that ends when the run's process exits, checked by its PID, never by a line the run may not print, and never by ending your turn to wait, since each turn you end sends the maintainer a notification. A `Monitor` expires after 30 minutes, so re-arm it at each expiry until the run ends, and stop every process you started before you report.
 
 A run counts only for the tree it built. An edit, or a `Brief update:` that changes what you build, voids every run started before it, so stop that run and start it again after your last edit. The stale-run hook names each one after every edit.
 
