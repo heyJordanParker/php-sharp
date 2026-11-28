@@ -1,7 +1,7 @@
 //! A content-addressed store of objects, as Git's object database keeps them: each object is a blob of bytes, or a tree
 //! that names blobs and trees, stored once, under the hash of its kind and bytes. A tree whose few entries change is
 //! written again as a new tree beside the objects it keeps, so a store writes only what changed. A ref file names a
-//! root tree, and [`Objects::collect`] deletes each object no root reaches, as `git gc` prunes.
+//! root tree, and [`Objects::collect`] deletes each object no root reaches, as `git prune` does.
 
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -13,13 +13,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
-
-/// How many objects a store holds before [`Objects::collect_auto`] collects it, as Git's `gc.auto` sets it.
-const GC_AUTO: usize = 6700;
-
-/// The fan-out folder [`Objects::collect_auto`] counts to estimate how many objects a store holds, as `git gc --auto`
-/// counts `17`.
-const SAMPLED_FOLDER: &str = "17";
 
 /// The start of the name of a file [`Objects`] writes before it renames it to its object's name.
 const TEMPORARY_PREFIX: &str = "tmp_obj_";
@@ -281,7 +274,7 @@ impl Objects {
         self.folder.join(&hex[..2]).join(&hex[2..])
     }
 
-    /// Deletes each object no tree of `roots` reaches, and each file a write left behind, as `git gc` prunes, while
+    /// Deletes each object no tree of `roots` reaches, and each file a write left behind, as `git prune` does, while
     /// nothing else writes to the store. Gives how many files it deleted.
     ///
     /// # Errors
@@ -289,31 +282,6 @@ impl Objects {
     /// Returns the error of reading a tree, or of listing or deleting a file.
     pub fn collect(&self, roots: &[ObjectId]) -> io::Result<usize> {
         let reached = self.reached(roots)?;
-
-        self.sweep(&reached)
-    }
-
-    /// Collects the store as [`Self::collect`] does, once it holds more objects than Git's `gc.auto` and than twice
-    /// those `roots` reach, as `git gc --auto` estimates it from the objects of one fan-out folder. Gives how many files
-    /// it deleted.
-    ///
-    /// # Errors
-    ///
-    /// Returns the error of reading a tree, or of listing or deleting a file.
-    pub fn collect_auto(&self, roots: &[ObjectId]) -> io::Result<usize> {
-        let sampled = match fs::read_dir(self.folder.join(SAMPLED_FOLDER)) {
-            Ok(entries) => entries.count(),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => 0,
-            Err(error) => return Err(error),
-        };
-        let estimate = sampled * 256;
-        if estimate <= GC_AUTO {
-            return Ok(0);
-        }
-        let reached = self.reached(roots)?;
-        if estimate <= 2 * reached.len() {
-            return Ok(0);
-        }
 
         self.sweep(&reached)
     }
@@ -468,17 +436,6 @@ mod tests {
         for id in [inner_id, root_id] {
             objects.read_tree(id).unwrap();
         }
-    }
-
-    #[test]
-    fn an_automatic_collection_waits_until_the_store_holds_more_than_git_s_gc_auto() {
-        let folder = tempfile::tempdir().unwrap();
-        let objects = Objects::at(folder.path().join("objects"));
-        let root = objects.write_tree(&Tree::new()).unwrap();
-        let gone = objects.write_blob(b"gone").unwrap();
-
-        assert_eq!(objects.collect_auto(&[root]).unwrap(), 0);
-        objects.read_blob(gone).unwrap();
     }
 
     #[test]

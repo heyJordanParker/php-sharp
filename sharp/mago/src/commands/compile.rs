@@ -169,7 +169,7 @@ fn stored_analysis(folder: &Path) -> Option<ObjectId> {
 }
 
 /// Stores the analysis `server` holds in the store of `folder` under `key`, points the folder's [`ANALYSIS`] ref at its
-/// tree, and then deletes each object no ref reaches, once the store holds enough of them, as `git gc --auto` does.
+/// tree, and then deletes each object no ref reaches, as `git prune` does, so the store holds one analysis.
 /// Gives whether it stored one, which the server leaves out when its analysis holds state no store keeps.
 ///
 /// # Errors
@@ -182,7 +182,7 @@ fn store_analysis(server: &Server, folder: &Path, key: &[u8]) -> Result<bool, Er
     };
     let path = folder.join(ANALYSIS);
     write_ref(&path, root).map_err(|error| DatabaseError::io(IOAction::WriteFile, &path, error))?;
-    objects.collect_auto(&[root]).map_err(|error| DatabaseError::io(IOAction::DeleteFile, objects.folder(), error))?;
+    objects.collect(&[root]).map_err(|error| DatabaseError::io(IOAction::DeleteFile, objects.folder(), error))?;
 
     Ok(true)
 }
