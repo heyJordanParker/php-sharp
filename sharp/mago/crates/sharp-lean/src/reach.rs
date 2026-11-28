@@ -232,10 +232,7 @@ impl Reach {
                             .extend(inheritors.iter().map(|inheritor| (codebase.class_key(*inheritor), empty_word())));
                         if is_equatable_interface(next.0, codebase) {
                             pending.extend(
-                                inheritors
-                                    .iter()
-                                    .map(|inheritor| keyed(codebase, (*inheritor, word("op_Equality"))))
-                                    .filter(|(class, method)| codebase.get_method(*class, *method).is_some()),
+                                inheritors.iter().filter_map(|inheritor| declared_equality(codebase, *inheritor)),
                             );
                         }
                         let mut implementers: Vec<Word> = inheritors
@@ -535,9 +532,17 @@ fn field_equalities(codebase: &CodebaseMetadata, equality: SymbolIdentifier) -> 
         .keys()
         .filter_map(|property| codebase.get_declaring_property(equality.0, *property)?.type_metadata.as_ref())
         .flat_map(|r#type| compared_classes(codebase, &r#type.type_union))
-        .map(|class| keyed(codebase, (class, word("op_Equality"))))
-        .filter(|(class, method)| codebase.get_method(*class, *method).is_some())
+        .filter_map(|class| declared_equality(codebase, class))
         .collect()
+}
+
+/// The `==` of `class`, keyed under the class that declares it, `class` or a parent, spec section 19, or none when no
+/// class declares one.
+fn declared_equality(codebase: &CodebaseMetadata, class: Word) -> Option<SymbolIdentifier> {
+    let declared = codebase.get_declaring_method_identifier(&MethodIdentifier::new(class, word("op_Equality")));
+    let (declaring, method) = (declared.get_class_name(), declared.get_method_name());
+
+    codebase.get_method(declaring, method).map(|_| keyed(codebase, (declaring, method)))
 }
 
 /// Each class-like of `reach` whose every value keeps a precondition a law reads, spec section 28, by its key: each one
