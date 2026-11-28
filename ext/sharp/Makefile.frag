@@ -21,9 +21,12 @@ $(builddir)/sharp_build_id.h: $(builddir)/target/release/libsharp.a sharp-always
 	echo "#define SHARP_BUILD_ID \"$$id\"" > $@.tmp; \
 	if cmp -s $@.tmp $@; then rm $@.tmp; else mv $@.tmp $@; fi
 
-# PHP# and Mago release at one version, the root package's in sharp/mago/Cargo.toml.
-$(builddir)/sharp_version.h: $(top_srcdir)/sharp/mago/Cargo.toml
-	@version=`sed -n '/^version = /{s/^version = "\(.*\)"$$/\1/p;q;}' $(top_srcdir)/sharp/mago/Cargo.toml`; \
+# PHP# and Mago release at one version: MAGO_RELEASE, which a release's build sets, or else the root package's in
+# sharp/mago/Cargo.toml, as sharp/mago/build.rs reads it (#1164). The variable is no file, so the header is written on
+# every build, and a version that didn't change leaves it as it was.
+$(builddir)/sharp_version.h: $(top_srcdir)/sharp/mago/Cargo.toml sharp-always
+	@version="$$MAGO_RELEASE"; \
+	if test -z "$$version"; then version=`sed -n '/^version = /{s/^version = "\(.*\)"$$/\1/p;q;}' $(top_srcdir)/sharp/mago/Cargo.toml`; fi; \
 	if test -z "$$version"; then echo "$(top_srcdir)/sharp/mago/Cargo.toml names no version." >&2; exit 1; fi; \
 	echo "#define PHP_SHARP_VERSION \"$$version\"" > $@.tmp; \
 	if cmp -s $@.tmp $@; then rm $@.tmp; else mv $@.tmp $@; fi

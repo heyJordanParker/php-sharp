@@ -390,7 +390,7 @@ pub enum MagoCommand {
 /// support ANSI escape codes.
 #[derive(Parser, Debug)]
 #[command(
-    version,
+    version = crate::consts::VERSION,
     author,
     styles = CLAP_STYLING,
     about = "PHP#'s checker and toolchain: checks PHP and PHP# code, compiles PHP#, and lints and formats PHP.",

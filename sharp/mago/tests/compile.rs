@@ -116,7 +116,7 @@ fn compile_names_the_installed_standard_library_in_each_compiled_file() {
         "namespace Sharp;\n\npublic static class Math\n{\n    public static int twice(int value) => value * 2;\n}\n",
     );
     release_library(&root.join(library));
-    let version = format!("v{}", env!("CARGO_PKG_VERSION"));
+    let version = format!("v{}", env!("MAGO_RELEASE"));
     write(
         root,
         "vendor/composer/installed.json",
@@ -181,7 +181,7 @@ fn compile_refuses_a_standard_library_of_another_release() {
             ),
         );
     };
-    let mago = env!("CARGO_PKG_VERSION");
+    let mago = env!("MAGO_RELEASE");
 
     install("v0.5.9");
     let output = compile(root);
@@ -875,7 +875,7 @@ fn a_project_with_a_host_and_a_standard_library_of_another_release_is_told_to_ma
         "{\"packages\": [{\"name\": \"heyjordanparker/php-sharp-composer\", \"version\": \"v0.5.9\"}]}\n",
     );
     let cache = tempfile::tempdir().unwrap();
-    let mago = env!("CARGO_PKG_VERSION");
+    let mago = env!("MAGO_RELEASE");
     let refusal = format!("This project's PHP# standard library is 0.5.9, and mago is {mago}.");
 
     let first = process::output(command(root, "never").env("XDG_CACHE_HOME", cache.path())).unwrap();
@@ -3472,7 +3472,7 @@ fn a_compile_after_one_refused_in_a_library_file_prints_the_same_refusal() {
         "vendor/composer/installed.json",
         &format!(
             "{{\"packages\": [{{\"name\": \"heyjordanparker/php-sharp-composer\", \"version\": \"v{}\"}}]}}\n",
-            env!("CARGO_PKG_VERSION")
+            env!("MAGO_RELEASE")
         ),
     );
     // The rich format prints every annotation's lines, the library file's too.
@@ -5134,7 +5134,7 @@ fn a_standard_library_compiled_file_of_another_release_is_refused() {
     let output = compile(root);
 
     assert!(!output.status.success(), "{}", printed(&output));
-    let version = env!("CARGO_PKG_VERSION");
+    let version = env!("MAGO_RELEASE");
     assert!(
         printed(&output).contains(&format!(
             "{} was compiled by another release of PHP#, and mago is {version}. Reinstall heyjordanparker/php-sharp-composer {version}.",

@@ -6,6 +6,7 @@ use std::io::Write;
 use serde_json::Value;
 use ureq::typestate::WithoutBody;
 
+use crate::consts::VERSION;
 use crate::updater::error::UpdateError;
 
 /// Returns a GitHub authentication token from the environment, if available.
@@ -15,8 +16,7 @@ fn get_github_token() -> Option<String> {
 
 /// Applies common headers (User-Agent, Accept, and optional Authorization) to a request.
 fn github_api_request(url: &str, accept: &str) -> ureq::RequestBuilder<WithoutBody> {
-    let req =
-        ureq::get(url).header("User-Agent", &format!("mago/{}", env!("CARGO_PKG_VERSION"))).header("Accept", accept);
+    let req = ureq::get(url).header("User-Agent", &format!("mago/{VERSION}")).header("Accept", accept);
 
     if let Some(token) = get_github_token() { req.header("Authorization", &format!("Bearer {token}")) } else { req }
 }

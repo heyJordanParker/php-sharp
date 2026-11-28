@@ -677,7 +677,7 @@ composer_install() {
     return 1
   fi
   php -v
-  version="$(awk -F '"' '/^version = /{ print $2; exit }' "$root/sharp/mago/Cargo.toml")"
+  version="${MAGO_RELEASE:-$(awk -F '"' '/^version = /{ print $2; exit }' "$root/sharp/mago/Cargo.toml")}"
   mkdir -p "$package" "$project/src/App"
   # git stash create writes the working tree's changes to tracked files as a commit and changes nothing, so the package
   # holds them, as a commit of them would ship them. It prints nothing for a working tree with no change.

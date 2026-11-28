@@ -49,6 +49,9 @@ jobs:
       # The builds' platform, BuildKit and SBOM scanner.
       PLATFORM: ${{ matrix.platform }}
       BUILDKIT: ghcr.io/heyjordanparker/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
+      # A release's images name its version, which the build passes to the Dockerfile as MAGO_RELEASE, and a check's
+      # leave it unset, so they name the tree's 0.0.0.
+      MAGO_RELEASE: ${{ inputs.version }}
       SBOM: generator=ghcr.io/heyjordanparker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
     steps:
       # The builds' context, and .github/actions/boot-image and sharp/bin/php-extensions.
@@ -56,12 +59,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
-      # A release's images name its version, which sharp/bin/set-version writes into the context.
-      - name: Write the release's version into the checkout
-        if: inputs.version
-        env:
-          VERSION: ${{ inputs.version }}
-        run: sharp/bin/set-version "$VERSION"
       - name: Log in to ghcr.io
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -111,6 +108,7 @@ jobs:
             ${TARGET:+--target "$TARGET"} \
             --platform "$PLATFORM" \
             --build-arg REGISTRY=ghcr.io/heyjordanparker \
+            ${MAGO_RELEASE:+--build-arg "MAGO_RELEASE=$MAGO_RELEASE"} \
             --build-context "tools=$TOOLS" \
             --provenance "mode=max,builder-id=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT" \
             --sbom "$SBOM" \
