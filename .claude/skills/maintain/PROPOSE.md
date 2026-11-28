@@ -4,7 +4,7 @@ Steps 1 to 3 govern every architectural call the maintainer makes: the checker, 
 
 ## 1. Read the system before deciding a change to it
 
-Read the whole spec section the change touches, every decision it cites, the standard library code and the checker or engine code that implement it, and the tests beside them. Then write steps 1 to 3 into one research file in the scratchpad before step 4 starts: how the system does the job today, end to end, every ruling it touches quoted from the rulings record, and the one precedent system's whole shape. Each construct a proposal's program uses, such as a binding form, a type a binding takes or a module header, is quoted in the research file from the spec, or compiled there with the released `mago` with its output. A construct the research file doesn't show is not in the program. A call made before that reading is neither built nor sent, and an issue filed as `ready-for-human` carries the problem and what was verified, never a proposal not yet researched.
+Read the whole spec section the change touches, every decision it cites, the standard library code and the checker or engine code that implement it, and the tests beside them. Then write steps 1 to 3 into one research file in the scratchpad before step 4 starts: how the system does the job today, end to end, every ruling it touches quoted from the rulings record, and the one precedent system's whole shape. Each construct a proposal's program uses, such as a binding form, a type a binding takes or a module header, is quoted in the research file from the spec, or compiled there with the released `mago` with its output. A construct the research file doesn't show is not in the program. Issues that touch one API are designed together, in one research file that maps every member of every related type. A call made before that reading is neither built nor sent, and an issue filed as `ready-for-human` carries the problem and what was verified, never a proposal not yet researched.
 
 ## 2. Hold every rule to the bar
 
@@ -47,5 +47,7 @@ Every fact about PHP# in a reply about architecture, a discussion or an answer i
 Never: a PHP# fact from memory, or new PHP# syntax anywhere but a proposal that met steps 1 to 4.
 
 A question about a proposal gets its answer, then the whole proposal again, unchanged. A question is not a correction.
+
+A proposal opens with `Proposal N of M`, where M counts every decision waiting on the language owner, this one included, recounted before each one. A proposal shown to him is his until he rules: the maintainer never closes its issue, withdraws it or tells a consumer it is settled, and new evidence, an answer that needs no change included, goes to him inside the whole proposal shown again. A design asks for the most correct shape, so a form PHP# has today is evidence, never the answer.
 
 Write every proposal and every answer about one with `/present`, and draw its code and architecture with `/show-me`. Each one stands alone: it never compares itself to an earlier reply or inbox item, and it calls each actor what the reader sees, as "this Claude session", "CI" or "you", never a role from this file such as "the maintainer".

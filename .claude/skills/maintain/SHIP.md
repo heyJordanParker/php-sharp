@@ -14,7 +14,7 @@ A change to `sharp/bin/spec` goes in a PR that carries nothing else but Markdown
 
 ## 1. Watch the push run
 
-A failed check of `master`'s push run gets fixed at its root, with a test that fails first, never rerun. The maintainer reads every failure and posts each cause the same tick as a `Brief update:` on the issue whose commit caused it, and that fix goes first in its lane's next batch. The maintainer never edits code or runs cargo.
+A failed check of `master`'s push run gets fixed at its root, with a test that fails first, never rerun. A run whose `CI_PASSED` failed is a failed run even when its jobs show `cancelled`, since `cancel-failed-run` cancels the rest after the first failed step, so each job's failed step is found before the run's result is reported. The maintainer reads every failure and posts each cause the same tick as a `Brief update:` on the issue whose commit caused it, and that fix goes first in its lane's next batch. The maintainer never edits code or runs cargo.
 
 ## 2. Verify what users install
 

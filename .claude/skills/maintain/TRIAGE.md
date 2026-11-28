@@ -21,6 +21,8 @@ source: <who hit it, and where>
 - [ ] proposal: today's program compiled, and the change attacked per PROPOSE.md step 4
 ```
 
+Each box holds the maintainer's own command from that turn and its output. A builder's report, a consumer's log or an older run never fills one, and the `verified:` box of an issue going to the language owner is a run on the newest release that day.
+
 The intake file is the maintainer's one queue, the language owner's requests included. An entry goes in at its rank from SKILL.md section 4, a red check or a `blocking` problem first. One entry at a time carries `(in progress)` in its heading, and it is worked through every box before the next one starts. Only a red check or a `blocking` fix that is green and not yet released goes ahead of it, and the paused entry's heading says where it stopped. An entry whose next box waits on a builder's run or the language owner's answer is marked `(waiting on …)`, and the next entry by rank is worked meanwhile.
 
 The design box applies to every brief or proposal that makes an architectural call, the maintainer's own included, and the proposal box only to a `ready-for-human` change to what a PHP# program says or means. CI, tests, speed, releases and the process are the maintainer's, decided in the design box and never proposed. An entry leaves intake when every box that applies is checked, and only then is its brief posted, its builder dispatched or its proposal shown. A reply names an entry still in intake by its problem and the next box it needs, never as a decision for the language owner.
