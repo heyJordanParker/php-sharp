@@ -1667,19 +1667,18 @@ fn project_server(configuration: &Configuration, orchestrator: &Orchestrator<'_>
         .with_package_files(package_files))
 }
 
-/// The [`project_server`], with the analysis the last compile of the project left restored while every input of that
-/// compile but the source files is current, so its first analysis rechecks only what changed since, as the compile's
-/// does. The compile keeps that analysis under the key of `configuration` without its extension hosts, and never
-/// writes it here.
+/// The [`project_server`] as a scan only, with the analysis the last compile of the project left restored while every
+/// input of that compile but the source files is current, so its first scan rescans only what changed since. The
+/// compile keeps that analysis under the key of `configuration` without its extension hosts, and never writes it here.
 ///
 /// # Errors
 ///
 /// Returns the error of loading the project, of reading the library's codex, or of restoring the analysis.
-pub(crate) fn restored_project_server(
+pub(crate) fn restored_scan_server(
     configuration: &Configuration,
     orchestrator: &Orchestrator<'_>,
 ) -> Result<Server, Error> {
-    let mut server = project_server(configuration, orchestrator)?;
+    let mut server = project_server(configuration, orchestrator)?.scan_only();
     let workspace = configuration.source.workspace.as_path();
     let root = workspace.canonicalize().map_err(|error| Error::CanonicalizingPath(workspace.to_path_buf(), error))?;
     let compiled_folder = root.join(unit::COMPILED_FOLDER);

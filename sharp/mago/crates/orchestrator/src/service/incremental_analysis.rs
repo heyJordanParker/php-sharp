@@ -170,10 +170,6 @@ struct Persisted<'state> {
     /// The codebase without the parts the tree's other blobs hold: what no file owns and no copy of a codebase shares,
     /// as the derived maps and the prelude's constants.
     codebase: Cow<'state, CodebaseMetadata>,
-    symbol_references: Cow<'state, SymbolReferences>,
-    native_symbol_references: Cow<'state, SymbolReferences>,
-    external_symbol_references: Cow<'state, SymbolReferences>,
-    late_symbol_references: Cow<'state, SymbolReferences>,
     before_analysis_reads: Cow<'state, ExtensionReads>,
     codebase_issues: Cow<'state, IssueCollection>,
     lifecycle_issues: Cow<'state, IssueCollection>,
@@ -189,8 +185,22 @@ struct Persisted<'state> {
     autoloaded: Vec<PathBuf>,
 }
 
+/// The reference graphs of the state the last analysis left, which [`IncrementalAnalysisService::persist`] encodes into
+/// the [`REFERENCES`] blob of its tree, and which a scan-only service's [`IncrementalAnalysisService::restore`] never
+/// reads, since a scan analyzes no file.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct References<'state> {
+    symbol_references: Cow<'state, SymbolReferences>,
+    native_symbol_references: Cow<'state, SymbolReferences>,
+    external_symbol_references: Cow<'state, SymbolReferences>,
+    late_symbol_references: Cow<'state, SymbolReferences>,
+}
+
 /// The name of the blob of an analysis's tree that holds its [`Persisted`] state, after the key it was stored under.
 const STATE: &[u8] = b"state";
+
+/// The name of the blob of an analysis's tree that holds its [`References`].
+const REFERENCES: &[u8] = b"references";
 
 /// The name of the blob of an analysis's tree that holds the class-likes and function-likes no file owns: the prelude's,
 /// the standard library's and those of each vendor file the autoloader served.
@@ -638,10 +648,6 @@ impl IncrementalAnalysisService {
 
         let state = Persisted {
             codebase: Cow::Owned(rest),
-            symbol_references: Cow::Borrowed(&self.symbol_references),
-            native_symbol_references: Cow::Borrowed(&self.native_symbol_references),
-            external_symbol_references: Cow::Borrowed(&self.external_symbol_references),
-            late_symbol_references: Cow::Borrowed(&self.late_symbol_references),
             before_analysis_reads: Cow::Borrowed(&self.before_analysis_reads),
             codebase_issues: Cow::Borrowed(&self.codebase_issues),
             lifecycle_issues: Cow::Borrowed(&self.lifecycle_issues),
@@ -666,8 +672,15 @@ impl IncrementalAnalysisService {
             stored.len(),
             bytes.len()
         );
+        let references = References {
+            symbol_references: Cow::Borrowed(&self.symbol_references),
+            native_symbol_references: Cow::Borrowed(&self.native_symbol_references),
+            external_symbol_references: Cow::Borrowed(&self.external_symbol_references),
+            late_symbol_references: Cow::Borrowed(&self.late_symbol_references),
+        };
         let mut tree = Tree::new();
         tree.insert(STATE, Kind::Blob, objects.write_blob(&bytes).map_err(not_stored)?);
+        tree.insert(REFERENCES, Kind::Blob, objects.write_blob(&encode(&references)?).map_err(not_stored)?);
         for (name, part, _) in &stored {
             tree.insert(name.clone(), Kind::Blob, part.id);
         }
@@ -705,8 +718,23 @@ impl IncrementalAnalysisService {
         }) else {
             return Ok(false);
         };
-        let named: Vec<(Vec<u8>, ObjectId)> =
-            tree.iter().filter(|(name, ..)| *name != STATE).map(|(name, _, id)| (name.to_vec(), id)).collect();
+        let references = if self.scan_only {
+            None
+        } else {
+            let Some(Ok((references, _))) =
+                tree.get(REFERENCES).and_then(|(_, id)| objects.read_blob(id).ok()).map(|bytes| {
+                    bincode::serde::decode_from_slice::<References<'static>, _>(&bytes, bincode::config::standard())
+                })
+            else {
+                return Ok(false);
+            };
+            Some(references)
+        };
+        let named: Vec<(Vec<u8>, ObjectId)> = tree
+            .iter()
+            .filter(|(name, ..)| *name != STATE && *name != REFERENCES)
+            .map(|(name, _, id)| (name.to_vec(), id))
+            .collect();
         let Some(parts) = named
             .into_par_iter()
             .map(|(name, id)| {
@@ -747,10 +775,12 @@ impl IncrementalAnalysisService {
         codebase.populate_derived_maps();
         self.codebase = codebase;
         *self.stored.get_mut().unwrap_or_else(PoisonError::into_inner) = stored;
-        self.symbol_references = state.symbol_references.into_owned();
-        self.native_symbol_references = state.native_symbol_references.into_owned();
-        self.external_symbol_references = state.external_symbol_references.into_owned();
-        self.late_symbol_references = state.late_symbol_references.into_owned();
+        if let Some(references) = references {
+            self.symbol_references = references.symbol_references.into_owned();
+            self.native_symbol_references = references.native_symbol_references.into_owned();
+            self.external_symbol_references = references.external_symbol_references.into_owned();
+            self.late_symbol_references = references.late_symbol_references.into_owned();
+        }
         self.before_analysis_reads = state.before_analysis_reads.into_owned();
         self.codebase_issues = state.codebase_issues.into_owned();
         self.lifecycle_issues = state.lifecycle_issues.into_owned();

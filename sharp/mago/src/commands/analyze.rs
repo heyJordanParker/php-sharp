@@ -86,7 +86,7 @@ use crate::commands::compile::Recompiled;
 use crate::commands::compile::compile_for_hosts;
 use crate::commands::compile::compile_with_hosts;
 use crate::commands::compile::release_hosts_folders;
-use crate::commands::compile::restored_project_server;
+use crate::commands::compile::restored_scan_server;
 use crate::commands::outcome::CommandOutcome;
 use crate::commands::stdin_input;
 use crate::config::Configuration;
@@ -361,7 +361,7 @@ impl AnalyzeCommand {
                     && substitutions.is_empty() =>
             {
                 let load = Phase::start("load");
-                let mut server = restored_project_server(&configuration, &orchestrator)?.scan_only();
+                let mut server = restored_scan_server(&configuration, &orchestrator)?;
                 load_inputs_duration = load_inputs_start.map(|s| s.elapsed());
                 load.end();
                 service_run_start = trace_enabled.then(Instant::now);
