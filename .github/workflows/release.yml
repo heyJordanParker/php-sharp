@@ -198,15 +198,19 @@ jobs:
   # builds the PHP# engine mago links from its Ubuntu's static archives: 24.04's on arm64, so that binary runs on glibc
   # 2.39 and later, and 22.04's on x86_64, so that one runs on glibc 2.35 and later.
   #
-  # `pgo: true` builds with profile-guided optimization, profiled on corpus/. Only aarch64-apple-darwin sets it. On the
-  # M2 Max, fat LTO with one codegen unit and this profile analyzed and compiled a 14,860-file vendor tree in 15% fewer
-  # instructions and 15 to 19% fewer CPU-seconds than a thin-LTO build of the same source with 16 units, and a
-  # 1,536-file PHP# project in 1.6 to 2.4% fewer instructions.
+  # `pgo: true` builds with profile-guided optimization, with the profile profile.yml trained on corpus/ and published
+  # last. Only aarch64-apple-darwin sets it. On the M2 Max, fat LTO with one codegen unit and a profile analyzed and
+  # compiled a 14,860-file vendor tree in 15% fewer instructions and 15 to 19% fewer CPU-seconds than a thin-LTO build
+  # of the same source with 16 units, and a 1,536-file PHP# project in 1.6 to 2.4% fewer instructions. The release
+  # trains no profile of its own, as Chromium's release builds compile with a published one: the instrumented build and
+  # the training took 15.5 of the Mac build's 32.5 to 33.7 minutes, on the one Mac every landing's MAC_TESTS waits for
+  # (#1134).
   build:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     needs: crate_metadata
     permissions:
+      actions: read
       contents: read
       id-token: write
       attestations: write
@@ -291,18 +295,6 @@ jobs:
           cargo -V
           rustc -V
 
-      # The corpus's packages, as its committed lock names them, with the self-hosted Mac's Homebrew Composer and the
-      # job's token, so GitHub's rate limit for anonymous downloads never stops a release. The token goes as a bearer
-      # token: Composer 2.9.3 refuses a github-oauth token holding "-", "/", "+" or "=", and refused the job's token
-      # so on run 45016534123, while it sends a bearer token as it is.
-      - name: setup PHP corpus for PGO profiling
-        if: matrix.job.pgo
-        shell: bash
-        working-directory: sharp/mago/corpus
-        env:
-          COMPOSER_AUTH: '{"bearer": {"github.com": "${{ secrets.GITHUB_TOKEN }}"}}'
-        run: composer install --ignore-platform-reqs --no-interaction --no-progress
-
       # The PHP# engine mago links, which sharp/bin/build-mago --engine builds for the runner's own platform.
       - name: Build the engine mago links
         shell: bash
@@ -329,39 +321,41 @@ jobs:
         shell: bash
         run: cargo build --locked --release --target=${{ matrix.job.target }}
 
-      # A profile-guided build runs as three steps, so the run's timeline times each (#860). The instrumented build and
-      # the optimized build both compile with [profile.release], as cargo-pgo's flow does: cargo hashes the profile into
-      # each crate's module names, and LLVM finds a local function's profile by its module's name, so an instrumented
-      # build without fat LTO in 16 codegen units left 31,616 functions with no profile on the 0.8.9 release (#897).
-      - name: Build the instrumented mago
+      # The newest profile profile.yml published, the raw profiles of its training run, where cargo pgo optimize reads
+      # them. A release with no published profile fails here and trains none, so no release spends the Mac's 15.5
+      # minutes on one: a dispatch of profile.yml publishes it.
+      - name: Download the newest published profile
         if: matrix.job.pgo
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          rm -rf "$CARGO_TARGET_DIR/pgo-profiles"
-          cargo pgo build -- --target=${{ matrix.job.target }}
-
-      # mago exits 1 when the analysis finds issues, which the corpus holds, and any other exit, a crash, a kill or a
-      # tool error, fails the step, so no binary ships built from a broken profile.
-      - name: Profile the instrumented mago on corpus/
-        if: matrix.job.pgo
-        shell: bash
-        run: |
-          status=0
-          LLVM_PROFILE_FILE="$CARGO_TARGET_DIR/pgo-profiles/mago_%m_%p.profraw" \
-            "$CARGO_TARGET_DIR/${{ matrix.job.target }}/release/mago" --workspace corpus/ analyze --reporting-format count || status=$?
-          if ((status != 1)); then
-            echo "::error::The instrumented mago analyzed corpus/ with exit code $status, where an analysis that finds the corpus's issues exits 1."
+          read -r run commit trained < <(gh run list --workflow profile.yml --branch master --status success --limit 1 \
+            --json databaseId,headSha,updatedAt --jq '.[] | "\(.databaseId) \(.headSha) \(.updatedAt)"') || true
+          if [[ -z ${run:-} ]]; then
+            echo "::error::profile.yml published no profile, so the release has none to compile with. Dispatch profile.yml, then release again."
             exit 1
           fi
+          gh run download "$run" --name mago-profile --dir "$CARGO_TARGET_DIR/pgo-profiles"
+          echo "PROFILE=profile run $run, trained on $commit at $trained" >> "$GITHUB_ENV"
+          echo "The release compiles with the profile of profile run $run, trained on $commit at $trained."
 
       # cargo-pgo logs each function the profile lacks, with its module, only at debug level, so the log names the crates
-      # its "PGO profile data was not found" count belongs to (#897).
+      # its "PGO profile data was not found" count belongs to (#897), and the count goes in the run's summary. The build
+      # compiles with [profile.release], as profile.yml's instrumented build does: cargo hashes the profile into each
+      # crate's module names, and LLVM finds a local function's profile by its module's name, so an instrumented build
+      # without fat LTO in 16 codegen units left 31,616 functions with no profile on the 0.8.9 release (#897).
       - name: Build the release mago with the profile
         if: matrix.job.pgo
         shell: bash
         env:
           RUST_LOG: cargo_pgo=debug
-        run: cargo pgo optimize build -- --target=${{ matrix.job.target }}
+        run: |
+          cargo pgo optimize build -- --target=${{ matrix.job.target }} 2>&1 | tee "$RUNNER_TEMP/optimize.log"
+          missing=$(sed -n 's/.*PGO profile data was not found for \([0-9]*\) functions.*/\1/p' "$RUNNER_TEMP/optimize.log" | tail -n 1)
+          echo "::notice title=Functions without profile data::${missing:-0}, with the $PROFILE."
+          echo "${missing:-0} functions compiled without profile data, with the $PROFILE." >> "$GITHUB_STEP_SUMMARY"
 
       - name: set binary name
         id: bin
