@@ -1,5 +1,5 @@
 --TEST--
-PHP# Console writes standard output and standard error and reads standard input, and Process runs a program from an argument list and exits with a code from 0 to 254, skipping every finally
+PHP# Console writes standard output and standard error and reads standard input, and Process runs a program from an argument list and exits with an ExitCode, from 0 to 255, skipping every finally
 --STDIN--
 first line
 second line
@@ -26,18 +26,18 @@ var_dump($result->exitCode, $result->output, $result->errorOutput, $result->succ
 $echoed = $process->run($php, ['-n', '-r', 'echo $argv[1];', '--', '"quoted"; $(id)']);
 var_dump($echoed->output, $echoed->successful);
 
-$exited = $process->run($php, ['-n', '-r', $classes . ' try { (new Sharp\System\SystemProcess())->exit(4); } finally { echo "finally ran"; }']);
+$exited = $process->run($php, ['-n', '-r', $classes . ' try { (new Sharp\System\SystemProcess())->exit(new Sharp\System\ExitCode(4)); } finally { echo "finally ran"; }']);
 var_dump($exited->exitCode, $exited->output);
 
-// A code past 254 is refused, as a negative one is, so the process keeps running.
-foreach ([-1, 255] as $code) {
+// An ExitCode past 255 is refused, as a negative one is, so the process keeps running.
+foreach ([-1, 256] as $code) {
     try {
-        $process->exit($code);
+        $process->exit(new Sharp\System\ExitCode($code));
     } catch (ValueError $e) {
         echo $e::class, ': ', $e->getMessage(), "\n";
     }
 }
-$highest = $process->run($php, ['-n', '-r', $classes . ' (new Sharp\System\SystemProcess())->exit(254);']);
+$highest = $process->run($php, ['-n', '-r', $classes . ' (new Sharp\System\SystemProcess())->exit(new Sharp\System\ExitCode(255));']);
 var_dump($highest->exitCode);
 
 try {
@@ -60,7 +60,7 @@ string(15) ""quoted"; $(id)"
 bool(true)
 int(4)
 string(0) ""
-ValueError: Process.exit: the code -1 is not from 0 to 254
-ValueError: Process.exit: the code 255 is not from 0 to 254
-int(254)
+ValueError: ExitCode: the code -1 is not from 0 to 255
+ValueError: ExitCode: the code 256 is not from 0 to 255
+int(255)
 RuntimeException: Process.run: <php> ran past its timeout

@@ -1,6 +1,7 @@
 namespace Demo;
 
 import Sharp.IO.Console;
+import Sharp.System.ExitCode;
 import Sharp.System.Process;
 
 public class Exits
@@ -10,7 +11,7 @@ public class Exits
     public void stop(int code)
     {
         try {
-            this.process.exit(code);
+            this.process.exit(new ExitCode(code));
         } finally {
             this.console.write("finally\n");
         }

@@ -1207,6 +1207,7 @@ public class Receipt
 <!-- example output-and-exit: statements -->
 ```csharp
 import Sharp.IO.Console;
+import Sharp.System.ExitCode;
 import Sharp.System.Process;
 
 public class Prune
@@ -1217,7 +1218,8 @@ public class Prune
     {
         if (failed) {
             this.console.writeError("Prune failed");         // compiles: the message goes to standard error
-            this.process.exit(1);                            // compiles: ends the process with status 1
+            this.process.exit(ExitCode.failure);             // compiles: ends the process with status 1
+            this.process.exit(2);                            // compile error: Process.exit takes an ExitCode, as new ExitCode(2)
         }
         this.console.writeLine(`Pruned ${pruned} carts`);    // compiles
     }
@@ -1230,6 +1232,7 @@ public void stop() { exit(1); }                              // compile error: n
 public void fail() { die("Prune failed"); }                  // compile error: no function die exists
 ```
 
+- `Process.exit(code)` takes an `ExitCode`, the status a program ends with, from 0 to 255 (section 27).
 - Exiting skips every `finally` block, as PHP's `exit` does.
 - Printing has the effect `Console`, and exiting has the effect `Process` (section 29).
 
@@ -7657,6 +7660,7 @@ Plain PHP files keep `.php` and `<?php`, and the two call each other freely. Com
 namespace App.Console;
 
 import Sharp.System.Environment;
+import Sharp.System.ExitCode;
 
 public class Import
 {
@@ -7667,20 +7671,100 @@ public class Import
         this.environment = environment;
     }
 
-    public int main()
+    public ExitCode main()
     {
         if (this.environment.arguments.count() < 2) {
-            return 64;
+            return new ExitCode(64);          // sysexits' EX_USAGE: bad arguments
         }
 
-        return 0;
+        return ExitCode.success;
     }
 }
 ```
 
-- `main` is `public int main()` or `public void main()`. It takes no parameters, and any other `main` is a compile error.
+- `main` is `public void main()`, `public ExitCode main()` or `public Result<ExitCode, TError> main()`. It takes no parameters, and any other `main` is a compile error.
 - When PHP runs the file as its script, the CLI's script, a server's script or `auto_prepend_file`, the engine builds the class through the container, as it builds a class that declares an `on` method, with no module binding, and calls `main`. Before it builds the class, the engine loads the project's Composer autoloader.
-- An `int` result is the process's exit code. A `void` `main` returns to PHP, as a web front controller that names the `.sharp` file as the server's script does, and as a prepend does.
+- `ExitCode`, in `Sharp.System`, is the status a program ends with. `new ExitCode(code)` throws `ValueError` for a code outside 0 to 255, and `ExitCode.success` is 0 and `ExitCode.failure` is 1.
+- A `void` `main` returns to PHP, as a web front controller that names the `.sharp` file as the server's script does, and as a prepend does, so a script exits 0.
+
+**Each way a program ends exits with its own code, so a failed program never exits 0,** after Rust's `Termination`: 0 is success, 1 is a failure the program returns, and 101 is a bug.
+
+| The program | Exits with |
+|---|---|
+| A `void` `main` returns | 0 |
+| An `ExitCode` `main` returns `code` | that code: `ExitCode.success` 0, `ExitCode.failure` 1, `new ExitCode(64)` 64 |
+| A `Result` `main` returns `Ok(code)` | that code |
+| A `Result` `main` returns `Err(error)` | 1, after it writes `Error: ` and `error.message` to standard error |
+| A throw escapes `main` | 101, after the exception handler plain PHP installed runs, or PHP reports the uncaught throw |
+| The engine stops it, for memory or a time limit | 101 |
+| `process.exit(code)` runs | that code, at once |
+| A signal kills it | 128 plus the signal, as the shell reports it |
+
+A program whose failure is expected returns a `Result` (section 31):
+
+<!-- example program-result -->
+```csharp
+// app/Console/ImportError.sharp
+namespace App.Console;
+
+public class ImportError : Error
+{
+    public ImportError(public string message { get; }) { }
+}
+```
+
+<!-- example program-result -->
+```csharp
+// app/Console/RowReader.sharp
+namespace App.Console;
+
+public class RowReader
+{
+    public Result<List<string>, ImportError> read(string path)
+        => path == "" ? Result.Err(new ImportError("file missing")) : Result.Ok([path]);
+}
+```
+
+<!-- example program-result -->
+```csharp
+// app/Console/RowStore.sharp
+namespace App.Console;
+
+public class RowStore
+{
+    public void save(List<string> rows) { }
+}
+```
+
+<!-- example program-result -->
+```csharp
+// app/Console/Load.sharp
+namespace App.Console;
+
+import Sharp.System.Environment;
+import Sharp.System.ExitCode;
+
+public class Load
+{
+    private RowReader reader = new RowReader();
+    private RowStore store = new RowStore();
+
+    public Load(private Environment environment) { }
+
+    public Result<ExitCode, ImportError> main()
+    {
+        const rows = try this.reader.read(this.environment.arguments[1]);   // an Err writes "Error: file missing" and exits 1
+        this.store.save(rows);
+        return Result.Ok(ExitCode.success);
+    }
+}
+```
+
+<!-- example program-int-main: members -->
+```csharp
+public int main() { return 0; }          // compile error: main returns void, ExitCode or Result<ExitCode, TError>
+```
+
 - A file that `include` or the autoloader loads only declares its class.
 - A `#!` line is allowed as a `.sharp` file's first line only, and is skipped. A `#!` anywhere else is a compile error.
 - The program reads its arguments from `Environment.arguments`, and exits from elsewhere with `Process.exit`.
@@ -8154,7 +8238,7 @@ extern Model uses Database;   // compiles: Model is no attribute class, so the m
 - `Http`, in `Sharp.Net`, replaces curl.
 - `Files`, in `Sharp.IO`, replaces every file function outside standard output and standard error.
 - `Console`, in `Sharp.IO`, replaces printing to standard output and standard error.
-- `Process`, in `Sharp.System`, replaces `exit` and `shell_exec()`.
+- `Process`, in `Sharp.System`, replaces `exit` and `shell_exec()`. Its `exit` takes an `ExitCode`, the status `main` returns (section 27).
 - `Clock`, in `Sharp.Time`, replaces `time()`, and its `now()` gives an `Instant`.
 - `Random`, in `Sharp`, replaces `random_int`.
 - `Cache`, in `Sharp.Data`, replaces the APCu functions.
@@ -8873,6 +8957,8 @@ public enum PaymentError : Error
 
 **Inside `.sharp` files, a bare `Error` means this interface by default,** and an import or a class of the file's own namespace named `Error` shadows it, as it shadows every default name (section 23). PHP's global engine class `Error` is never named in PHP# code, so an import of it is a compile error. The standard library alone imports it, to state its members' effects on an `extern` line (section 29).
 - **Bugs are caught as `Throwable`,** so `catch (Error failure)` is a compile error that names `Throwable`. Engine subclasses such as `TypeError` keep their names.
+
+**A program's `main` may return `Result<ExitCode, TError>`.** Its `Ok(code)` exits with that code, and its `Err(error)` writes `Error: ` and `error.message` to standard error and exits 1, so a `try` in `main` ends the program with the failure it passes up (section 27).
 
 ## 32. Modules
 
