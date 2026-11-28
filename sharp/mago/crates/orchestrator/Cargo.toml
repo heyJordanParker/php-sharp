@@ -19,6 +19,7 @@ mago-reporting = { workspace = true }
 mago-bytes = { workspace = true }
 mago-word = { workspace = true, features = ["serde"] }
 mago-database = { workspace = true, features = ["loader"] }
+mago-objects = { workspace = true }
 mago-linter = { workspace = true }
 mago-names = { workspace = true }
 mago-formatter = { workspace = true }

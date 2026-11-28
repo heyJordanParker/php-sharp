@@ -186,6 +186,7 @@ mago-prelude = { path = "crates/prelude" }
 mago-semantics = { path = "crates/semantics" }
 mago-collector = { path = "crates/collector" }
 mago-database = { path = "crates/database", default-features = false }
+mago-objects = { path = "crates/objects" }
 mago-guard = { path = "crates/guard" }
 mago-orchestrator = { path = "crates/orchestrator" }
 mago-server = { path = "crates/server" }
@@ -284,6 +285,7 @@ mago-analyzer = { workspace = true }
 mago-algebra = { workspace = true }
 mago-codex = { workspace = true }
 mago-guard = { workspace = true, features = ["serde"] }
+mago-objects = { workspace = true }
 mago-orchestrator = { workspace = true }
 mago-server = { workspace = true }
 mago-sharp-bridge = { workspace = true }

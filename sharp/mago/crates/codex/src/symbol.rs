@@ -216,6 +216,23 @@ impl Symbols {
         }
     }
 
+    /// The symbols `names` key, each with its kind and whether it is a PHP# class-like, without the namespaces, which
+    /// [`Self::remove`] leaves to the symbols that remain.
+    #[must_use]
+    pub fn part(&self, names: &[Word]) -> Symbols {
+        let mut part = Symbols::new();
+        for name in names {
+            if let Some(kind) = self.all.get(name) {
+                part.all.insert(*name, *kind);
+            }
+            if self.sharp.contains(name) {
+                part.sharp.insert(*name);
+            }
+        }
+
+        part
+    }
+
     /// Removes a symbol by its key.
     ///
     /// Note: does not remove namespaces (they may be shared by other symbols).

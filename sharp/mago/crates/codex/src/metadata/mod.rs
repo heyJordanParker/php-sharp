@@ -375,12 +375,6 @@ impl CodebaseMetadata {
             }
         }
 
-        for metadata in self.class_likes.values_mut() {
-            if !metadata.aliases.is_empty() {
-                metadata.aliases.clear();
-            }
-        }
-
         let mut aliases = WordMap::default();
         for alias in self.class_like_alias_declarations.keys().copied() {
             if self.class_likes.contains_key(&alias) {
@@ -394,20 +388,22 @@ impl CodebaseMetadata {
 
         let aliases_changed = aliases != previous_aliases;
         self.class_like_aliases = aliases;
-        let mut aliased_classes = WordSet::default();
+        let mut aliases_of: WordMap<Vec<Word>> = WordMap::default();
         for (alias, actual) in &self.class_like_aliases {
-            let Some(metadata) = self.class_likes.get_mut(actual) else {
+            let Some(metadata) = self.class_likes.get(actual) else {
                 continue;
             };
 
-            metadata.aliases.push(*alias);
-            aliased_classes.insert(*actual);
+            aliases_of.entry(*actual).or_default().push(*alias);
             self.symbols.add_symbol_name(*alias, metadata.kind);
         }
 
-        for actual in aliased_classes {
-            if let Some(metadata) = self.class_likes.get_mut(&actual) {
-                metadata.aliases.sort_unstable();
+        // Each class-like takes its aliases only when they changed, so a codebase that shares it copies it only then.
+        for (name, metadata) in &mut self.class_likes {
+            let mut aliases = aliases_of.remove(name).unwrap_or_default();
+            aliases.sort_unstable();
+            if metadata.aliases != aliases {
+                metadata.aliases = aliases;
             }
         }
 
@@ -2606,12 +2602,18 @@ impl CodebaseMetadata {
             declarations.retain(|declaration| !removed_files.contains(&declaration.span.file_id));
         }
         self.externs.retain(|_, declarations| !declarations.is_empty());
-        // An `extern` line of a file that goes takes its attributes away from what it declares.
+        // An `extern` line of a file that goes takes its attributes away from what it declares. An entry that holds none of
+        // them stays as it is, so no copy of the codebase copies an entry it shares.
+        let removed = |attribute: &AttributeMetadata| removed_files.contains(&attribute.span.file_id);
         for class_like in self.class_likes.values_mut() {
-            class_like.attributes.retain(|attribute| !removed_files.contains(&attribute.span.file_id));
+            if class_like.attributes.iter().any(removed) {
+                class_like.attributes.retain(|attribute| !removed(attribute));
+            }
         }
         for function_like in self.function_likes.values_mut() {
-            function_like.attributes.retain(|attribute| !removed_files.contains(&attribute.span.file_id));
+            if function_like.attributes.iter().any(removed) {
+                function_like.attributes.retain(|attribute| !removed(attribute));
+            }
         }
         self.modules.retain(|module| !removed_files.contains(&module.span.file_id));
         self.extern_namespaces.retain(|declaration| !removed_files.contains(&declaration.span.file_id));
@@ -2620,6 +2622,221 @@ impl CodebaseMetadata {
             members.retain(|(span, _)| !removed_files.contains(&span.file_id));
         }
         self.extensions.retain(|_, members| !members.is_empty());
+    }
+
+    /// Moves the entries each file of `owners` owns out of this codebase, as its keys name them and as
+    /// [`Self::remove_entries_by_keys`] removes them, into a part of its own, in the order of `owners`. The codebase keeps
+    /// what no file of `owners` owns, and each entry it keeps keeps the attributes every file's `extern` lines give it.
+    /// [`Self::join`] puts the parts back.
+    pub fn split_off_files(&mut self, owners: &[&CodebaseEntryKeys]) -> Vec<CodebaseMetadata> {
+        let mut parts: Vec<CodebaseMetadata> = owners.iter().map(|_| CodebaseMetadata::default()).collect();
+        let mut owner_of: HashMap<FileId, usize> = HashMap::default();
+        for (index, keys) in owners.iter().enumerate() {
+            let part = &mut parts[index];
+            for name in &keys.class_like_names {
+                if let Some(class_like) = self.class_likes.remove(name) {
+                    part.class_likes.insert(*name, class_like);
+                }
+                if let Some(class_like) = self.scanned_class_likes.remove(name) {
+                    part.scanned_class_likes.insert(*name, class_like);
+                }
+            }
+            part.symbols = self.symbols.part(&keys.class_like_names);
+            for name in &keys.class_like_names {
+                self.symbols.remove(*name);
+            }
+            for (alias, _, _) in &keys.class_like_aliases {
+                if let Some(declaration) = self.class_like_alias_declarations.remove(alias) {
+                    part.class_like_alias_declarations.insert(*alias, declaration);
+                }
+            }
+            for key in &keys.function_like_keys {
+                if let Some(function_like) = self.function_likes.remove(key) {
+                    part.function_likes.insert(*key, function_like);
+                }
+            }
+            for name in &keys.constant_names {
+                if let Some(constant) = self.constants.remove(name) {
+                    part.constants.insert(*name, constant);
+                }
+            }
+            for file in &keys.file_ids {
+                owner_of.insert(*file, index);
+                if let Some(signature) = self.file_signatures.remove(file) {
+                    part.file_signatures.insert(*file, signature);
+                }
+                if let Some(name) = self.file_names.remove(file) {
+                    part.file_names.insert(*file, name);
+                }
+                if self.standard_library_files.remove(file) {
+                    part.standard_library_files.insert(*file);
+                }
+                if self.test_files.remove(file) {
+                    part.test_files.insert(*file);
+                }
+                if let Some(packages) = self.dev_packages.remove(file) {
+                    part.dev_packages.insert(*file, packages);
+                }
+            }
+        }
+        let owner = |span: &Span| owner_of.get(&span.file_id).copied();
+        for (name, patch) in std::mem::take(&mut self.patch_class_likes) {
+            match owner(&patch.span) {
+                Some(index) => parts[index].patch_class_likes.insert(name, patch),
+                None => self.patch_class_likes.insert(name, patch),
+            };
+        }
+        for (key, patch) in std::mem::take(&mut self.patch_function_likes) {
+            match owner(&patch.span) {
+                Some(index) => parts[index].patch_function_likes.insert(key, patch),
+                None => self.patch_function_likes.insert(key, patch),
+            };
+        }
+        for (name, patch) in std::mem::take(&mut self.patch_constants) {
+            match owner(&patch.span) {
+                Some(index) => parts[index].patch_constants.insert(name, patch),
+                None => self.patch_constants.insert(name, patch),
+            };
+        }
+        for (target, declarations) in std::mem::take(&mut self.externs) {
+            for declaration in declarations {
+                match owner(&declaration.span) {
+                    Some(index) => parts[index].externs.entry(target).or_default().push(declaration),
+                    None => self.externs.entry(target).or_default().push(declaration),
+                }
+            }
+        }
+        for module in std::mem::take(&mut self.modules) {
+            match owner(&module.span) {
+                Some(index) => parts[index].modules.push(module),
+                None => self.modules.push(module),
+            }
+        }
+        for declaration in std::mem::take(&mut self.extern_namespaces) {
+            match owner(&declaration.span) {
+                Some(index) => parts[index].extern_namespaces.push(declaration),
+                None => self.extern_namespaces.push(declaration),
+            }
+        }
+        for import in std::mem::take(&mut self.namespace_imports) {
+            match owner(&import.span) {
+                Some(index) => parts[index].namespace_imports.push(import),
+                None => self.namespace_imports.push(import),
+            }
+        }
+        for (name, members) in std::mem::take(&mut self.extensions) {
+            for member in members {
+                match owner(&member.0) {
+                    Some(index) => parts[index].extensions.entry(name).or_default().push(member),
+                    None => self.extensions.entry(name).or_default().push(member),
+                }
+            }
+        }
+
+        parts
+    }
+
+    /// Moves the class-likes, their scans and the function-likes out of this codebase into a part of their own, the
+    /// entries each copy of a codebase shares, which [`Self::join`] puts back.
+    #[must_use]
+    pub fn split_off_shared_entries(&mut self) -> CodebaseMetadata {
+        CodebaseMetadata {
+            class_likes: std::mem::take(&mut self.class_likes),
+            scanned_class_likes: std::mem::take(&mut self.scanned_class_likes),
+            function_likes: std::mem::take(&mut self.function_likes),
+            ..CodebaseMetadata::default()
+        }
+    }
+
+    /// A codebase of this one's class-likes, their scans and function-likes alone, each shared with this one.
+    #[must_use]
+    pub fn shared_entries(&self) -> CodebaseMetadata {
+        CodebaseMetadata {
+            class_likes: self.class_likes.clone(),
+            scanned_class_likes: self.scanned_class_likes.clone(),
+            function_likes: self.function_likes.clone(),
+            ..CodebaseMetadata::default()
+        }
+    }
+
+    /// Whether this codebase and `other` hold the same class-likes, scans of them and function-likes, each the same copy
+    /// of its entry, so no write changed one since one codebase was cloned from the other.
+    #[must_use]
+    pub fn shares_entries_with(&self, other: &CodebaseMetadata) -> bool {
+        same_copies(&self.class_likes, &other.class_likes)
+            && same_copies(&self.scanned_class_likes, &other.scanned_class_likes)
+            && same_copies(&self.function_likes, &other.function_likes)
+    }
+
+    /// Puts `parts` back into this codebase, each a part [`Self::split_off_files`] or [`Self::split_off_shared_entries`]
+    /// split off a codebase this one is the rest of, so the codebase is the one they were split from.
+    pub fn join(&mut self, parts: impl IntoIterator<Item = CodebaseMetadata>) {
+        for part in parts {
+            let CodebaseMetadata {
+                infer_types_from_usage: _,
+                class_likes,
+                short_names: _,
+                interop_names: _,
+                class_like_aliases: _,
+                class_like_alias_declarations,
+                class_like_aliases_dirty: _,
+                function_likes,
+                symbols,
+                constants,
+                externs,
+                extern_signatures: _,
+                modules,
+                extern_namespaces,
+                namespace_imports,
+                import_cycles: _,
+                extensions,
+                all_class_like_descendants: _,
+                direct_classlike_descendants: _,
+                safe_symbols: _,
+                safe_symbol_members: _,
+                file_signatures,
+                patch_class_likes,
+                patch_function_likes,
+                patch_constants,
+                file_names,
+                standard_library_files,
+                test_files,
+                dev_packages,
+                scanned_class_likes,
+            } = part;
+            self.class_likes.extend(class_likes);
+            self.scanned_class_likes.extend(scanned_class_likes);
+            self.class_like_alias_declarations.extend(class_like_alias_declarations);
+            self.function_likes.extend(function_likes);
+            self.symbols.extend(symbols);
+            self.constants.extend(constants);
+            for (target, declarations) in externs {
+                self.externs.entry(target).or_default().extend(declarations);
+            }
+            self.modules.extend(modules);
+            self.extern_namespaces.extend(extern_namespaces);
+            self.namespace_imports.extend(namespace_imports);
+            for (name, members) in extensions {
+                self.extensions.entry(name).or_default().extend(members);
+            }
+            self.file_signatures.extend(file_signatures);
+            self.patch_class_likes.extend(patch_class_likes);
+            self.patch_function_likes.extend(patch_function_likes);
+            self.patch_constants.extend(patch_constants);
+            self.file_names.extend(file_names);
+            self.standard_library_files.extend(standard_library_files);
+            self.test_files.extend(test_files);
+            self.dev_packages.extend(dev_packages);
+        }
+        for declarations in self.externs.values_mut() {
+            declarations.sort_unstable();
+        }
+        self.modules.sort_by_key(|module| (module.file, module.span.start.offset));
+        self.extern_namespaces.sort_unstable();
+        self.namespace_imports.sort_unstable();
+        for members in self.extensions.values_mut() {
+            members.sort_unstable();
+        }
     }
 
     /// Takes all issues from the codebase metadata.
@@ -2846,6 +3063,18 @@ fn template_types<'metadata>(template: &'metadata GenericTemplate, unions: &mut 
 /// Adds `incoming` to `sorted`, which stays sorted with no duplicate. One file's entries sort together, so a file's
 /// entries land in one gap of the others and move only the entries after them, where sorting the whole on each of the
 /// project's files made merging them quadratic.
+/// Whether `a` and `b` hold the same keys, each with the same copy of its entry.
+fn same_copies<K, T, S>(
+    a: &std::collections::HashMap<K, Shared<T>, S>,
+    b: &std::collections::HashMap<K, Shared<T>, S>,
+) -> bool
+where
+    K: Eq + std::hash::Hash,
+    S: std::hash::BuildHasher,
+{
+    a.len() == b.len() && a.iter().all(|(key, entry)| b.get(key).is_some_and(|other| Shared::ptr_eq(entry, other)))
+}
+
 fn merge_sorted<T>(sorted: &mut Vec<T>, incoming: impl IntoIterator<Item = T>)
 where
     T: Ord + Copy,

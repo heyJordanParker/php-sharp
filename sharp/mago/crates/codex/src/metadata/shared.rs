@@ -16,6 +16,13 @@ impl<T> Shared<T> {
     pub fn new(value: T) -> Self {
         Self(Arc::new(value))
     }
+
+    /// Whether `a` and `b` are the same copy of an entry, which no write changed since one was cloned from the other.
+    #[inline]
+    #[must_use]
+    pub fn ptr_eq(a: &Self, b: &Self) -> bool {
+        Arc::ptr_eq(&a.0, &b.0)
+    }
 }
 
 impl<T: Clone> Shared<T> {

@@ -814,7 +814,7 @@ impl IncrementalAnalysisService {
         // writes.
         let (_, reached_by_laws) = self.law_reach(&reach);
         for (file_id, state) in &mut self.file_states {
-            if !reached_by_laws.contains(file_id) {
+            if !reached_by_laws.contains(file_id) && state.lowering_input.is_some() {
                 state.lowering_input = None;
             }
         }
@@ -4243,6 +4243,41 @@ mod tests {
         let (after, _, read) = compile_keeping(&mut warm, &last, &before, database_stamp(&edited), |_| true);
 
         (before, after, read)
+    }
+
+    /// A compile leaves the state of each file the recheck before it did not analyze again as the last store holds it,
+    /// so the store after a compile of a body edit of `app/Unrelated.sharp` encodes that file's part alone again.
+    #[test]
+    fn a_store_after_the_compile_of_a_body_edit_encodes_again_only_the_edited_file_s_part() {
+        let base = shop_project(&shop(MONEY, RATE));
+        let mut service = analyzed(&base);
+        let (before, last, _) =
+            compile_keeping(&mut service, &CompiledFiles::default(), &BTreeMap::new(), database_stamp(&base), |_| {
+                false
+            });
+        let store = tempfile::tempdir().unwrap();
+        let objects = mago_objects::Objects::at(store.path());
+        service.persist(b"key", &objects).expect("the state is stored");
+
+        let mut files = shop(MONEY, RATE);
+        files.retain(|(name, _)| *name != "app/Unrelated.sharp");
+        files.push(("app/Unrelated.sharp", UNRELATED.replace("return 1;", "return 2;")));
+        let edited = shop_project(&files);
+        service.update_database(edited.read_only());
+        service.analyze_incremental(None).expect("the recheck runs");
+        compile_keeping(&mut service, &last, &before, database_stamp(&edited), |_| true);
+        service.persist(b"key", &objects).expect("the state is stored");
+
+        let encoded = service.encoded_parts.lock().unwrap().clone();
+        let mut names: Vec<&str> = files
+            .iter()
+            .map(|(name, _)| *name)
+            .filter(|name| encoded.contains(&super::super::part_name(FileId::new(name.as_bytes()))))
+            .collect();
+        if encoded.contains(super::super::SHARED) {
+            names.push("the shared part");
+        }
+        assert_eq!((names, encoded.len()), (vec!["app/Unrelated.sharp"], 1));
     }
 
     /// Spec sections 27 and 32: a file reads the modules of its namespaces only through their `imports` lines and

@@ -45,6 +45,7 @@ use crate::common::compiling::printed;
 use crate::common::compiling::project;
 use crate::common::compiling::read;
 use crate::common::compiling::release_library;
+use crate::common::compiling::sharp_folder_files;
 use crate::common::compiling::source_lean_files;
 use crate::common::compiling::unwritable_cache;
 use crate::common::compiling::write;
@@ -63,9 +64,9 @@ fn compile_writes_each_accepted_file_into_the_sharp_folder_at_its_source_path() 
 
     assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
-        files_under(&root.join(".sharp")),
+        sharp_folder_files(root),
         [
-            Path::new("analysis.bin"),
+            Path::new("analysis"),
             Path::new("autoload.php"),
             Path::new("compiled.bin"),
             Path::new("current/app/Order.sharpc"),
@@ -1470,7 +1471,7 @@ fn a_source_deleted_while_the_compile_runs_fails_nothing_and_the_next_compile_le
     let without = project(ORDER, MONEY);
     with_host(without.path());
     compile_succeeds(without.path());
-    assert_eq!(files_under(&root.join(".sharp")), files_under(&without.path().join(".sharp")));
+    assert_eq!(sharp_folder_files(root), sharp_folder_files(without.path()));
     assert_eq!(files_under(&root.join("app")), files_under(&without.path().join("app")));
 }
 
@@ -2778,9 +2779,9 @@ fn compile_deletes_the_compiled_file_of_a_renamed_or_removed_source() {
     std::fs::remove_file(root.join("app/Invoice.sharp")).unwrap();
     compile_succeeds(root);
     assert_eq!(
-        files_under(&root.join(".sharp")),
+        sharp_folder_files(root),
         [
-            Path::new("analysis.bin"),
+            Path::new("analysis"),
             Path::new("autoload.php"),
             Path::new("compiled.bin"),
             Path::new("current/generation.lock"),
@@ -2861,9 +2862,9 @@ fn compile_reports_a_link_to_a_file_outside_the_project_and_writes_no_compiled_f
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     assert!(printed(&output).contains("vendor/acme/money/src/Money.sharp is a link to"), "{}", printed(&output));
     assert_eq!(
-        files_under(&root.join(".sharp")),
+        sharp_folder_files(root),
         [
-            Path::new("analysis.bin"),
+            Path::new("analysis"),
             Path::new("autoload.php"),
             Path::new("compiled.bin"),
             Path::new("current/app/Order.sharpc"),
@@ -3146,11 +3147,11 @@ fn compiles_that_start_together_take_turns_on_the_sharp_folder() {
             assert!(output.status.success(), "round {round}: {}", printed(output));
         }
     }
-    let together = files_under(&root.join(".sharp"));
+    let together = sharp_folder_files(root);
     std::fs::remove_dir_all(root.join(".sharp")).unwrap();
     compile_succeeds(root);
 
-    assert_eq!(together, files_under(&root.join(".sharp")));
+    assert_eq!(together, sharp_folder_files(root));
 }
 
 /// A compile that starts while another run holds the `.sharp` folder's write lock writes nothing until the lock is let
@@ -4544,7 +4545,7 @@ fn compile_deletes_the_lean_package_once_no_law_remains() {
     assert!(output.status.success(), "{}", printed(&output));
     assert!(!root.join(".sharp/.lean").exists());
     assert_eq!(
-        files_under(&root.join(".sharp")),
+        sharp_folder_files(root),
         [
             Path::new("autoload.php"),
             Path::new("compiled.bin"),
@@ -4987,7 +4988,7 @@ fn assert_a_compile_after_an_edit_matches_a_full_compile(between: impl Fn(&Path)
     let seeded = project(ORDER, MONEY);
     write(seeded.path(), "app/Cart.sharp", CART);
     compile_succeeds(seeded.path());
-    assert!(seeded.path().join(".sharp/analysis.bin").is_file());
+    assert!(seeded.path().join(".sharp/analysis").is_file());
     between(seeded.path());
     edit(seeded.path());
 
@@ -5034,7 +5035,7 @@ fn a_compile_with_an_extension_host_after_a_body_edit_gives_what_a_full_compile_
     hosted(seeded.path());
     let first = compile_lines(seeded.path());
     assert!(issue_lines(&first).iter().any(|line| line.contains("Money")), "{}", printed(&first));
-    assert!(seeded.path().join(".sharp/analysis.bin").is_file(), "the compile with a host kept no analysis");
+    assert!(seeded.path().join(".sharp/analysis").is_file(), "the compile with a host kept no analysis");
     edit(seeded.path());
 
     let after = compile_lines(seeded.path());
@@ -5079,9 +5080,11 @@ fn a_compile_after_a_file_is_added_or_deleted_gives_what_a_full_compile_gives() 
 fn a_compile_after_a_damaged_analysis_analyzes_from_scratch() {
     assert_a_compile_after_an_edit_matches_a_full_compile(
         |root| {
-            let path = root.join(".sharp/analysis.bin");
-            let bytes = std::fs::read(&path).unwrap();
-            std::fs::write(&path, &bytes[..bytes.len() / 2]).unwrap();
+            for object in files_under(&root.join(".sharp/objects")) {
+                let path = root.join(".sharp/objects").join(object);
+                let bytes = std::fs::read(&path).unwrap();
+                std::fs::write(&path, &bytes[..bytes.len() / 2]).unwrap();
+            }
         },
         |root| write(root, "app/Order.sharp", &ORDER.replace("extra + 1", "extra + 2")),
     );

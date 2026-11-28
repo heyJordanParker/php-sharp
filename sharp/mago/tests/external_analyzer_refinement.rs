@@ -15,6 +15,7 @@ use mago_database::Database;
 use mago_database::file::File;
 use mago_database::file::FileId;
 use mago_database::file::FileType;
+use mago_objects::Objects;
 use mago_orchestrator::service::incremental_analysis::IncrementalAnalysisService;
 use mago_orchestrator::service::incremental_analysis::compile::Compilation;
 use mago_orchestrator::service::incremental_analysis::compile::CompiledFiles;
@@ -257,11 +258,14 @@ fn a_restored_analysis_with_a_refining_host_rechecks_an_edit_as_a_fresh_analysis
         let (first, _) = database(before);
         let mut analyzed = service(&first, registry(repository));
         analyzed.analyze().expect("the first analysis runs");
-        let bytes = analyzed.persist(KEY).expect("the state encodes").expect("an analysis with a host is stored");
+        let store = tempfile::tempdir().unwrap();
+        let objects = Objects::at(store.path());
+        let root =
+            analyzed.persist(KEY, &objects).expect("the state is stored").expect("an analysis with a host is stored");
 
         let (edited, _) = database(after);
         let mut restored = service(&first, registry(repository));
-        assert!(restored.restore(&bytes, KEY).expect("the state decodes"), "the stored state is restored");
+        assert!(restored.restore(&objects, root, KEY).expect("the state decodes"), "the stored state is restored");
         restored.update_database(edited.read_only());
         let rechecked = codes(&restored.analyze_incremental(None).expect("the recheck runs").issues);
 

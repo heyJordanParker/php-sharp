@@ -450,8 +450,14 @@ fn refuse_missing_bounds(codebase: &mut CodebaseMetadata) {
     let CodebaseMetadata { symbols, class_likes, function_likes, .. } = codebase;
     let declares = |name: Word| symbols.get_kind(symbols.class_key(name)).is_some();
 
-    let sharp_classes = class_likes.values_mut().filter(|class| class.flags.is_sharp());
-    let sharp_functions = function_likes.values_mut().filter(|function| function.flags.is_sharp());
+    // Only a written bound is refused, so an entry with none stays as it is, and no copy of the codebase copies an entry
+    // it shares.
+    let sharp_classes = class_likes.values_mut().filter(|class| {
+        class.flags.is_sharp() && class.template_types.values().any(|template| template.written_bound.is_some())
+    });
+    let sharp_functions = function_likes.values_mut().filter(|function| {
+        function.flags.is_sharp() && function.template_types.values().any(|template| template.written_bound.is_some())
+    });
     // The type parameters whose bound names a missing type: the checker's refusals are refused where they are scanned.
     let mut refused: HashSet<(GenericParent, Word)> = HashSet::default();
     for template_types in sharp_classes
