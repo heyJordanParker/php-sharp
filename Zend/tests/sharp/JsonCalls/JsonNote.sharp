@@ -1,0 +1,7 @@
+namespace Demo;
+
+// A note whose `meta` may be absent.
+public struct JsonNote
+{
+    public JsonNote(public string text { get; }, public Map<string, int>? meta { get; }) { }
+}

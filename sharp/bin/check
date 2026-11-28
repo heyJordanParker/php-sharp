@@ -7,11 +7,12 @@ set -euo pipefail
 # each check meets the platform it meets in CI. CI's jobs run the gates no other script holds through this script:
 # BUILD_LINUX the generated files, WORKFLOWS the workflows, and MAGO_CHECKS and PLAIN_PHP theirs.
 #
-# With --release, it prints what CI's CHANGES jobs write to $GITHUB_OUTPUT about the release the checked-out commit
-# publishes: the version; tagged, the commit when tag v<version> already names it, empty until LAND pushes it;
-# pulls, the pull requests whose head the commit holds since the version before it, whose ## Changelog sections are the
-# release's notes; missing, each part of the release not published yet; and bump, whether any is. A pull request title
-# after --release counts as one more pull request, which is a dry run of the version.
+# With --release, it prints what release.yml's VERSION job writes to $GITHUB_OUTPUT about the release the checked-out
+# commit publishes: the version; tagged, the commit when tag v<version> already names it, empty until PUBLISH creates
+# it; pulls, the pull requests whose head the commit holds since the newest public release before it, whose
+# ## Changelog sections are the release's notes; missing, each part of the release not published yet; and bump,
+# whether any is. A pull request title after --release counts as one more pull request, which is a dry run of the
+# version.
 #
 # With --speed-baseline, it downloads the speed.json the SPEED gate compares with into the folder it names.
 usage() {
@@ -46,8 +47,9 @@ export CARGO_BUILD_JOBS
 # goes on as PUBLISH makes the release public, and release.yml's `release` group runs one release at a time, so the
 # next release takes the next version, and two releases never take one version (#854, #1023). A release that fails
 # before PUBLISH leaves no tag, and the next release, of the same tip or a newer one, takes the same version. A
-# release's notes are every pull request it holds since the tag of the version before it, so they cover every landing
-# the release ships.
+# release's notes, and whether a title makes it a minor, are every pull request it holds since the newest public
+# release before it, so they cover every landing the release ships, a tagged version that never went public among
+# them: v0.8.55's tag stayed with its release a draft, and v0.8.56 ships its pull requests (#1111).
 # Prints each pull request into master whose head commit the commits from $1 to $2 hold: its number, a tab, and its
 # title. GitHub's compare endpoint lists those commits, so a checkout of one commit, as CI's is, reads the range a full
 # one does: a fetch of the history with --shallow-exclude made a release's first merge a shallow boundary, whose pull
@@ -69,7 +71,8 @@ range_pulls() {
     | awk -F '\t' 'NR == FNR { held[$1] = 1; next } $1 in held { print $2 "\t" $3 }' <(echo "$commits") -
 }
 release() {
-  local title=${1:-} head refs versions previous commit major minor patch version='' tagged='' pulls=() titles=() held
+  local title=${1:-} head refs versions newest released previous commit major minor patch version='' tagged='' pulls=()
+  local titles=() held
   local missing=() published token tag code mirror status
   head="$(git -C "$root" rev-parse HEAD)"
   if ! refs="$(git -C "$root" ls-remote --tags origin 'refs/tags/v*')"; then
@@ -80,17 +83,38 @@ release() {
   version="$(awk -v head="$head" '$1 == head {sub(/^refs\/tags\/v/, "", $2); sub(/\^\{\}$/, "", $2); print $2; exit}' \
     <<< "$refs")"
   versions="$(sed -n 's#.*refs/tags/v\([0-9]*\.[0-9]*\.[0-9]*\)$#\1#p' <<< "$refs" | sort -t . -k 1,1n -k 2,2n -k 3,3n)"
-  # The version before this one: the tag below the head's own, or the newest tag.
+  newest="$(tail -n 1 <<< "$versions")"
+  if [[ -z $newest ]]; then
+    echo "origin has no tag v<major>.<minor>.<patch>, so there is no version to add one to." >&2
+    exit 1
+  fi
+  # Every version whose GitHub release is public. A tag whose release stayed a draft never shipped: v0.8.55's
+  # PUBLISH failed after its LAND tagged it (#1111).
+  if ! released="$(cd "$root" && gh release list --limit 1000 --json tagName,isDraft \
+    --jq '.[] | select(.isDraft | not) | .tagName')"; then
+    echo "gh couldn't list the releases." >&2
+    exit 1
+  fi
+  released="$(sed -n 's#^v\([0-9]*\.[0-9]*\.[0-9]*\)$#\1#p' <<< "$released" | sort -t . -k 1,1n -k 2,2n -k 3,3n)"
   if [[ -n $version ]]; then
     tagged=$head
-    previous="$(awk -v version="$version" '$0 == version { print last; exit } { last = $0 }' <<< "$versions")"
-  else
-    previous="$(tail -n 1 <<< "$versions")"
-    if [[ -z $previous ]]; then
-      echo "origin has no tag v<major>.<minor>.<patch>, so there is no version to add one to." >&2
-      exit 1
-    fi
   fi
+  # The version before this one, whose release's notes end where this one's start: the newest public release below
+  # the head's own version, or the newest public release.
+  previous="$(awk -v version="$version" '
+    function below(a, b, x, y, i) {
+      split(a, x, ".")
+      split(b, y, ".")
+      for (i = 1; i <= 3; i++) {
+        if (x[i] != y[i]) {
+          return x[i] + 0 < y[i] + 0
+        }
+      }
+      return 0
+    }
+    NF && (version == "" || below($0, version)) { last = $0 }
+    END { print last }
+  ' <<< "$released")"
   # The list is read in this shell, so a failed request stops the release rather than leave its notes empty.
   if [[ -n $previous ]]; then
     commit="$(awk -v tag="refs/tags/v$previous" '$2 == tag || $2 == tag "^{}" {commit = $1} END {print commit}' <<< "$refs")"
@@ -104,7 +128,7 @@ release() {
     if [[ -n $title ]]; then
       titles+=("$title")
     fi
-    IFS=. read -r major minor patch <<< "$previous"
+    IFS=. read -r major minor patch <<< "$newest"
     version="$major.$minor.$((patch + 1))"
     for title in "${titles[@]}"; do
       if [[ $title == *:* && ${title%%:*} == *'!'* ]]; then
@@ -305,11 +329,41 @@ queue_lost_runner() {
     fi
   done
 }
+# sharp/bin/network runs a command again when its output shows the network failed it, and keeps its standard output
+# apart, so a caller reads the counted try's: PUBLISH's read of the release's tree got gh's "Server Error (HTTP 502)"
+# on run 46074219253, wrote the error into its output and left v0.8.55 a draft (#1111). The command here counts its
+# tries in a file and prints its try on its standard output.
+network_retries() {
+  local tries="$TMPDIR/network-tries" printed status
+  # shellcheck disable=SC2016 # The program is the command's own, whose $1 and $n the shell must not expand.
+  local command='n=$(($(< "$1") + 1)); echo "$n" > "$1"; echo "try $n"; if ((n <= $2)); then echo "$3" >&2; exit $4; fi'
+  echo 0 > "$tries"
+  printed="$("$root/sharp/bin/network" bash -c "$command" _ "$tries" 1 'gh: Server Error (HTTP 502)' 1 2> /dev/null)" || true
+  if [[ $printed != 'try 2' || $(< "$tries") != 2 ]]; then
+    echo "sharp/bin/network printed '$printed' after $(< "$tries") tries of a command gh's HTTP 502 failed once, not 'try 2' after 2." >&2
+    return 1
+  fi
+  echo 0 > "$tries"
+  status=0
+  "$root/sharp/bin/network" bash -c "$command" _ "$tries" 1 'No such file or directory' 3 > /dev/null 2>&1 || status=$?
+  if ((status != 3)) || [[ $(< "$tries") != 1 ]]; then
+    echo "sharp/bin/network exited $status after $(< "$tries") tries of a command that failed with exit 3 on no network failure, not 3 after 1." >&2
+    return 1
+  fi
+  echo 0 > "$tries"
+  status=0
+  "$root/sharp/bin/network" bash -c "$command" _ "$tries" 3 'connection reset by peer' 4 > /dev/null 2>&1 || status=$?
+  if ((status != 4)) || [[ $(< "$tries") != 3 ]]; then
+    echo "sharp/bin/network exited $status after $(< "$tries") tries of a command the network failed every time, not 4 after 3." >&2
+    return 1
+  fi
+}
 gate_workflows() {
   step unpinned
   step syntax_frontend
   step lint_workflows
   step queue_lost_runner
+  step network_retries
 }
 
 # Every test sharp/baseline/seconds lists exists, since a renamed test's new name weighs 1 s in sharp/bin/test's slices
