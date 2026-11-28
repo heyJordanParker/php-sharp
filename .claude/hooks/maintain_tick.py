@@ -189,8 +189,9 @@ def upstream_engine():
 
     The engine takes upstream by merging each patch release's tag, for its security fixes (proposals/engine-8-5-13.md),
     so a newer tag is a problem the tick names until an intake entry merges it."""
-    with open("main/php_version.h", encoding="utf-8") as fh:
-        ours = re.search(r'#define PHP_VERSION "(\d+)\.(\d+)\.(\d+)"', fh.read())
+    # origin/master's header, since this checkout's own branch falls behind what has landed.
+    header = subprocess.run(["git", "show", "origin/master:main/php_version.h"], capture_output=True, text=True).stdout
+    ours = re.search(r'#define PHP_VERSION "(\d+)\.(\d+)\.(\d+)"', header)
     minor = f"{ours.group(1)}.{ours.group(2)}"
     listed = subprocess.run(["git", "ls-remote", "--tags", "https://github.com/php/php-src.git", f"php-{minor}.*"],
                             capture_output=True, text=True, timeout=30).stdout
