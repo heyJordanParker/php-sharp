@@ -1,0 +1,12 @@
+namespace ExternListDefaults;
+
+import Lib.Database.Db;
+
+public static class Reports
+{
+    public static int bound() => Db.select("select * from plans").count();
+
+    public static int configured() => Db.configure();
+
+    public static int given() => Db.select("select * from plans where id = ?", [7, 8]).count();
+}
