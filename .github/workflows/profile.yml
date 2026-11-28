@@ -1,0 +1,162 @@
+name: Profile
+
+# Trains the profile release.yml's Mac build compiles with, nightly on master's tip, as Chromium's release builds take
+# the profile a builder of its own published and train none themselves. The release's profile-guided build spent 15.5
+# of its 32.5 to 33.7 minutes on the instrumented build and the training run on corpus/, on the one Mac that every
+# landing's MAC_TESTS also waits for (#1134). This run builds the instrumented mago as release.yml's Mac build builds
+# mago, trains it on corpus/, and uploads the training's raw profiles as the artifact mago-profile, which the newest
+# release run downloads. A function the profile doesn't match, as code changed since, compiles without profile data,
+# and the release logs how many.
+#
+# It trains at the version the next release takes, which sharp/bin/check --release finds, since cargo hashes a crate's
+# version into its symbols: the same tree trained at 0.0.0 left 11,192 functions without profile data in its 0.6.52
+# build, against 1,406 in its 0.0.0 one. It runs at 07:23 UTC, when the queue started the fewest staging runs: 1 of
+# 200 from 11-25 19:19 to 11-28 04:00 started in hour 7, against 7 in hour 19.
+on:
+  schedule:
+    - cron: '23 7 * * *'
+  # A dispatch trains a profile when none is published, as before the first release that reads one.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: profile
+  cancel-in-progress: false
+
+# bash with pipefail, which a step gets only when it names bash, as release.yml's Mac steps do.
+defaults:
+  run:
+    shell: bash
+    working-directory: sharp/mago
+
+jobs:
+  PROFILE:
+    name: Train mago's profile on corpus/
+    runs-on: macos-arm64-local
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      # actions/checkout's clean removes every file an earlier job of the Mac runner's one work folder left, sharp/build
+      # among them, so the job builds everything from its tree.
+      - name: checkout source code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+      # As release.yml's Mac build keeps it.
+      - name: Keep mago's cache folder in the checkout
+        run: echo "XDG_CACHE_HOME=$GITHUB_WORKSPACE/sharp/build/cache" >> "$GITHUB_ENV"
+      - name: Homebrew has the build's formulae
+        env:
+          FORMULAE: autoconf bison re2c pkgconf icu4c libsodium oniguruma
+        run: |
+          # shellcheck disable=SC2086 # FORMULAE is a list of formulae.
+          brew list --versions $FORMULAE
+      - name: Point CARGO_TARGET_DIR at the release target
+        run: echo "CARGO_TARGET_DIR=$GITHUB_WORKSPACE/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago-release" >> "$GITHUB_ENV"
+      # The root package's rust-version, which release.yml builds the binaries with, so the profile's format is the one
+      # the release's LLVM reads.
+      - name: Read the toolchain sharp/mago/Cargo.toml's rust-version names
+        id: rust
+        run: echo "version=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - name: Write the next release's version into the checkout
+        working-directory: ${{ github.workspace }}
+        run: |
+          version=$(sharp/bin/check --release | sed -n 's/^version=//p')
+          sharp/bin/set-version "$version"
+      - name: install Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: ${{ steps.rust.outputs.version }}
+          targets: aarch64-apple-darwin
+      # cargo install puts cargo-pgo in the runner's CARGO_HOME, which the Mac's runner keeps, so it installs it once.
+      - name: install PGO tools
+        run: |
+          rustup component add llvm-tools-preview
+          if ! command -v cargo-pgo &>/dev/null; then
+            cargo install cargo-pgo
+          fi
+      # The corpus's packages, as its committed lock names them, with the self-hosted Mac's Homebrew Composer and the
+      # job's token, so GitHub's rate limit for anonymous downloads never stops the training. The token goes as a
+      # bearer token: Composer 2.9.3 refuses a github-oauth token holding "-", "/", "+" or "=", and refused the job's
+      # token so on run 45016534123, while it sends a bearer token as it is.
+      - name: setup PHP corpus for PGO profiling
+        working-directory: sharp/mago/corpus
+        env:
+          COMPOSER_AUTH: '{"bearer": {"github.com": "${{ secrets.GITHUB_TOKEN }}"}}'
+        run: composer install --ignore-platform-reqs --no-interaction --no-progress
+      - name: Build the engine mago links
+        working-directory: ${{ github.workspace }}
+        run: sharp/bin/build-mago --engine
+      - name: Install elan and Lean
+        uses: ./.github/actions/setup-lean
+      - name: Build the law checker mago embeds
+        run: |
+          cargo run --locked -p mago-sharp-lean --example checker -- "$RUNNER_TEMP/checker.tar.zst"
+          echo "MAGO_CHECKER_ARCHIVE=$RUNNER_TEMP/checker.tar.zst" >> "$GITHUB_ENV"
+      # The instrumented build compiles with [profile.release], as release.yml's optimized build does: cargo hashes the
+      # profile into each crate's module names, and LLVM finds a local function's profile by its module's name (#897).
+      - name: Build the instrumented mago
+        run: cargo pgo build -- --target=aarch64-apple-darwin
+      # mago exits 1 when the analysis finds issues, which the corpus holds, and any other exit, a crash, a kill or a
+      # tool error, fails the step, so no profile is published from a broken run.
+      - name: Profile the instrumented mago on corpus/
+        run: |
+          status=0
+          LLVM_PROFILE_FILE="$CARGO_TARGET_DIR/pgo-profiles/mago_%m_%p.profraw" \
+            "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/mago" --workspace corpus/ analyze --reporting-format count || status=$?
+          if ((status != 1)); then
+            echo "::error::The instrumented mago analyzed corpus/ with exit code $status, where an analysis that finds the corpus's issues exits 1."
+            exit 1
+          fi
+      # Kept as long as the repository's artifact retention sets, 90 days, so a release finds the newest one.
+      - name: Publish the profile for release.yml
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mago-profile
+          path: ${{ env.CARGO_TARGET_DIR }}/pgo-profiles/*.profraw
+          if-no-files-found: error
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+      # Every process the job started ends with it, as release.yml's Mac build explains.
+      - name: End every process the job started
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          ps -axwwo pid=,command= | awk -v self=$$ '$1 != self && index($0, ENVIRON["GITHUB_WORKSPACE"])' > "$RUNNER_TEMP/left"
+          while read -r pid command; do
+            echo "::notice title=Ended a process the job left::$pid ${command//%/%25}"
+            if ! kill -KILL "$pid" 2> /dev/null; then
+              echo "$pid had already ended."
+            fi
+          done < "$RUNNER_TEMP/left"
+
+  # A failed training publishes no profile, so the next release compiles with the one before or fails, and the issue
+  # says why, as release.yml's red_master_issue does for a release.
+  red_master_issue:
+    name: Open an issue for the failed profile
+    runs-on: ubuntu-latest
+    needs: PROFILE
+    if: failure()
+    permissions:
+      contents: read
+      issues: write
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: checkout source code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Open an issue for the failed profile
+        uses: ./.github/actions/red-master-issue
+        with:
+          title: The nightly profile run failed
