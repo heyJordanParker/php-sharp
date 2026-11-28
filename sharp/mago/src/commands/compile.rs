@@ -1686,9 +1686,9 @@ pub(crate) fn restored_project_server(
     let without_hosts = without_hosts(configuration);
     if let Some(record) = Record::read(&compiled_folder.join(INPUTS))
         && every_input_but_the_sources_is_current(&record, &without_hosts, &root, &mut Filesystems::new())
-        && let Ok(bytes) = std::fs::read(compiled_folder.join(ANALYSIS))
+        && let Some(root) = stored_analysis(&compiled_folder)
     {
-        server.restore(&bytes, &analysis_key(&without_hosts, record.marker))?;
+        server.restore(&objects(&compiled_folder), root, &analysis_key(&without_hosts, record.marker))?;
     }
 
     Ok(server)

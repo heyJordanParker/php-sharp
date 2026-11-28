@@ -5071,7 +5071,7 @@ fn a_scan_only_run_after_a_compile_restores_the_stored_analysis_and_gives_its_ho
     );
     let cache = tempfile::tempdir().unwrap();
     let compiled = process::output(command(root, "never").env("XDG_CACHE_HOME", cache.path())).unwrap();
-    assert!(root.join(".sharp/analysis.bin").is_file(), "the compile kept no analysis: {}", printed(&compiled));
+    assert!(root.join(".sharp/analysis").is_file(), "the compile kept no analysis: {}", printed(&compiled));
     write(
         root,
         "app/Shapes/Square.sharp",
@@ -5080,7 +5080,7 @@ fn a_scan_only_run_after_a_compile_restores_the_stored_analysis_and_gives_its_ho
 
     let restored = scan_only(root, cache.path());
     let restored_parents = std::fs::read_to_string(root.join("parents.log")).unwrap();
-    std::fs::remove_file(root.join(".sharp/analysis.bin")).unwrap();
+    std::fs::remove_file(root.join(".sharp/analysis")).unwrap();
     let scanned = scan_only(root, cache.path());
     let scanned_parents = std::fs::read_to_string(root.join("parents.log")).unwrap();
 
