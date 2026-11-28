@@ -6,6 +6,7 @@ use std::process::Command;
 use std::process::Output;
 use std::process::Stdio;
 
+use mago_database::clock::poll_until;
 use mago_database::process;
 use mago_sharp_bridge::unit::GENERATION_LOCK;
 use mago_sharp_bridge::unit::GENERATION_PREFIX;
@@ -838,6 +839,56 @@ fn a_compile_error_in_a_file_no_host_reaches_reports_that_file_and_every_host_ru
     assert_eq!(std::fs::read_to_string(root.join("host.log")).unwrap(), "first\n");
 }
 
+/// A rule a host asks as it loads, whose lowering fails on its errors, is refused in the hosts' folder before the hosts
+/// start, so the first compile with an empty cache names the rule's errors, as every later compile does, and never
+/// says the rule isn't compiled yet.
+#[test]
+fn a_host_that_loads_a_refused_rule_gets_its_errors_on_the_first_compile_with_an_empty_cache() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the refused rule host test") {
+        return;
+    }
+    let directory = project_with_a_host_asking_a_rule();
+    let root = directory.path();
+    let refused = "namespace App.Rules;\n\nimport Sharp.Encoding.Missing;\n\npublic class Naming\n{\n    public static string message() => Missing.of(\"x\");\n}\n";
+    write(root, "app/Rules/Naming.sharp", refused);
+    let cache = tempfile::tempdir().unwrap();
+
+    let first = process::output(command(root, "never").env("XDG_CACHE_HOME", cache.path())).unwrap();
+    let second = process::output(command(root, "never").env("XDG_CACHE_HOME", cache.path())).unwrap();
+
+    assert!(!printed(&first).contains("isn't compiled for the extension hosts yet"), "{}", printed(&first));
+    assert!(printed(&second).contains("app/Rules/Naming.sharp has"), "{}", printed(&second));
+    assert!(printed(&first).contains("app/Rules/Naming.sharp has"), "{}", printed(&first));
+}
+
+/// A project whose standard library is another release than mago's, as a project halfway through an upgrade is, starts
+/// no extension host, so every compile and analyze with an empty cache, and every one after, names the two releases,
+/// and none says a host's file isn't compiled yet.
+#[test]
+fn a_project_with_a_host_and_a_standard_library_of_another_release_is_told_to_match_the_releases() {
+    let directory = project_with_a_host_asking_a_rule();
+    let root = directory.path();
+    write(
+        root,
+        "vendor/composer/installed.json",
+        "{\"packages\": [{\"name\": \"heyjordanparker/php-sharp-composer\", \"version\": \"v0.5.9\"}]}\n",
+    );
+    let cache = tempfile::tempdir().unwrap();
+    let mago = env!("CARGO_PKG_VERSION");
+    let refusal = format!("This project's PHP# standard library is 0.5.9, and mago is {mago}.");
+
+    let first = process::output(command(root, "never").env("XDG_CACHE_HOME", cache.path())).unwrap();
+    let second = process::output(command(root, "never").env("XDG_CACHE_HOME", cache.path())).unwrap();
+    let analyzed = analyze_with_cache(root, cache.path());
+
+    for output in [&first, &second, &analyzed] {
+        assert_eq!(output.status.code(), Some(1), "{}", printed(output));
+        assert!(printed(output).contains(&refusal), "{}", printed(output));
+        assert!(!printed(output).contains("isn't compiled for the extension hosts yet"), "{}", printed(output));
+    }
+}
+
 /// The `extern` lines of a file nothing names apply to every file, as an analysis of the whole project applies them, so
 /// a rule a host asks as it loads that calls a Composer `files` helper an `extern` line declares compiles before the
 /// hosts start, and the first compile with the host passes.
@@ -1310,10 +1361,7 @@ fn a_later_run_rewrites_the_hosts_folder_only_once_the_hosts_reading_it_are_done
     };
     let log = || std::fs::read_to_string(root.join("host.log")).unwrap_or_default();
     let wait_until = |done: &dyn Fn() -> bool, seconds: u64| {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(seconds);
-        while !done() && std::time::Instant::now() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-        }
+        poll_until(std::time::Duration::from_secs(seconds), done);
     };
 
     let (first, next) = std::thread::scope(|scope| {
@@ -4756,7 +4804,6 @@ fn a_signal_that_ends_a_compile_ends_the_lean_it_waits_on() {
     use std::os::unix::process::ExitStatusExt;
     use std::process::Stdio;
     use std::time::Duration;
-    use std::time::Instant;
 
     for signal in [libc::SIGINT, libc::SIGQUIT, libc::SIGHUP, libc::SIGTERM] {
         let lake = tempfile::tempdir().unwrap();
@@ -4779,20 +4826,16 @@ fn a_signal_that_ends_a_compile_ends_the_lean_it_waits_on() {
             })
         };
         let mut compile = process::spawn(&mut compiling).unwrap();
-        let started = Instant::now();
-        while !lake.path().join("stalled").exists() {
-            assert!(started.elapsed() < Duration::from_secs(300), "{signal}: the stalled Lean never started");
-            std::thread::sleep(Duration::from_millis(100));
-        }
+        assert!(
+            poll_until(Duration::from_secs(300), || lake.path().join("stalled").exists()),
+            "{signal}: the stalled Lean never started"
+        );
 
         // SAFETY: `kill` only sends a signal, to the group the compile leads, as a terminal does.
         assert_eq!(unsafe { libc::kill(-i32::try_from(compile.id()).unwrap(), signal) }, 0);
 
         assert_eq!(compile.wait().unwrap().signal(), Some(signal));
-        let ended = Instant::now();
-        while !leans().is_empty() && ended.elapsed() < Duration::from_secs(10) {
-            std::thread::sleep(Duration::from_millis(100));
-        }
+        poll_until(Duration::from_secs(10), || leans().is_empty());
         let left = leans();
         if !left.is_empty() {
             process::status(Command::new("pkill").args(["-f", &script])).unwrap();
@@ -4957,6 +5000,43 @@ fn a_compile_after_a_body_edit_gives_what_a_full_compile_gives() {
         |_| {},
         |root| write(root, "app/Order.sharp", &ORDER.replace("extra + 1", "extra + 2")),
     );
+}
+
+/// A compile with an extension host keeps the analysis the host took over, and after a body edit restores it and
+/// reports what a full compile with the host reports, in a project whose package holds a `.sharp` file with an error.
+#[test]
+fn a_compile_with_an_extension_host_after_a_body_edit_gives_what_a_full_compile_gives() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the compile with a host after an edit") {
+        return;
+    }
+    let hosted = |root: &Path| {
+        write(root, "app/Cart.sharp", CART);
+        write(root, MONEY_PATH, &MONEY.replace("return 100;", "return \"100\";"));
+        write(root, "tools/host.php", HOST_READING_THE_COMPILED_FILE);
+        write(
+            root,
+            "mago.toml",
+            "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n\n[extension-hosts.reader]\nfile = \"tools/host.php\"\n",
+        );
+    };
+    let edit = |root: &Path| write(root, "app/Order.sharp", &ORDER.replace("extra + 1", "extra + 2"));
+    let seeded = project(ORDER, MONEY);
+    hosted(seeded.path());
+    let first = compile_lines(seeded.path());
+    assert!(issue_lines(&first).iter().any(|line| line.contains("Money")), "{}", printed(&first));
+    assert!(seeded.path().join(".sharp/analysis.bin").is_file(), "the compile with a host kept no analysis");
+    edit(seeded.path());
+
+    let after = compile_lines(seeded.path());
+
+    let fresh = project(ORDER, MONEY);
+    hosted(fresh.path());
+    edit(fresh.path());
+    let full = compile_lines(fresh.path());
+    assert_eq!(after.status.code(), full.status.code(), "{}", printed(&after));
+    assert_eq!(issue_lines(&after), issue_lines(&full), "{}", printed(&after));
+    assert_eq!(compiled_keys(seeded.path()), compiled_keys(fresh.path()));
 }
 
 /// After a signature edit that breaks a caller in another file, a compile restores the last analysis, checks the

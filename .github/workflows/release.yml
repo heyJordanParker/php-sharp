@@ -1,36 +1,31 @@
 name: Release
 
-# Builds a release's assets: the mago binary per platform with its attestation, Mago's source archives, the SHA-256 of
-# every asset and the release's notes. PHP# and Mago release at one version, which sharp.yml's CHANGES finds from the
-# tags and passes in, and each job that builds writes it into its checkout's sharp/mago/Cargo.toml first, where mago
-# reads it and the engine builds it into ext/sharp's sharp_version.h. The notes are the ## Changelog sections of the
-# pull requests the release merges, so the list of releases on GitHub is the changelog.
+# Builds and publishes the release of master's tip: the mago binary per platform with its attestation, Mago's source
+# archives, the SHA-256 of every asset, the release's notes, the runtime images, and the Composer packages' tags. PHP#
+# and Mago release at one version, which VERSION finds from the tags, and each job that builds writes it into its
+# checkout's sharp/mago/Cargo.toml first, where mago reads it and the engine builds it into ext/sharp's
+# sharp_version.h. The notes are the ## Changelog sections of the pull requests the release merges since the last
+# release, so the list of releases on GitHub is the changelog.
 #
-# sharp.yml's MACOS calls this workflow in a staging run whose version's GitHub release isn't published, once the Mac's
-# checks in MAC_TESTS passed. A release builds its binaries once, as Humble and Farley's Continuous Delivery asks, and
-# sharp.yml's RELEASE publishes exactly the files it built in that run. A pull request's run never builds them: once the
-# version moved to the start of each cycle, every run on next built the profile-guided release, and run 44997846679 took
-# 45 minutes, 16.5 of them the release build alone after every check had ended. LAND doesn't wait for this workflow, as
-# a merge queue gates on the tests and a release pipeline builds the artifacts after the merge (#952), so a failed
-# release job opens the red-master issue from red_master_issue and is fixed forward. Its attestations name this
-# workflow as their signer, which install.sh and mago self-update verify, so the binaries build here and nowhere else.
+# queue.yml starts this workflow on master, whose tip every staging run's LAND moved there once its checks passed, when
+# no pull request waits to land or 3 landings since the newest tag are unreleased. A release builds its binaries and
+# images once, as Humble and Farley's Continuous Delivery asks, and RELEASE and PUBLISH publish exactly the files this
+# run built. The one Mac ran each landing's MAC_TESTS and its 33-minute profile-guided build in series, 47 minutes a
+# batch, so batches waiting to land landed 47 to 50 minutes apart and the queue's wait grew with each batch, where the
+# staging run's own checks land it in about 26 (#1023). A release of the newest landed tree ships every landing before
+# it, as continuous deployment ships the newest commit and skips the ones it supersedes: the `release` group keeps the
+# run in progress and one waiting, and a newer run waiting replaces the older one. A pull request's run never builds a
+# release: once the version moved to the start of each cycle, every run on next built the profile-guided release, and
+# run 44997846679 took 45 minutes, 16.5 of them the release build alone after every check had ended. A failed release
+# job opens the red-master issue from red_master_issue and is fixed forward, and the next release of a newer tip takes
+# the same version. Its attestations name this workflow as their signer, which install.sh and mago self-update verify,
+# so the binaries build here and nowhere else.
 on:
-  workflow_call:
-    inputs:
-      version:
-        description: The release's version, <major>.<minor>.<patch>, which tag v<version> names once it is published.
-        type: string
-        required: true
-      pulls:
-        description: The numbers of the pull requests merged since the last release, separated by spaces.
-        type: string
-        required: false
-        default: ''
-      range:
-        description: The commits the staging run tests, as <base>..<sha>, which the red-master issue names.
-        type: string
-        required: false
-        default: ''
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 # Every artifact is kept as long as the repository's artifact retention sets, 90 days, GitHub's longest.
 env:
@@ -44,8 +39,43 @@ defaults:
     working-directory: sharp/mago
 
 jobs:
+  # sharp/bin/check --release prints the version this run releases: its tag's, when a tag already names master's tip,
+  # or else the newest tag's plus one, the pull requests the tip holds since the version before it, and each part of
+  # the release not published yet, as sharp/bin/check --release explains. The `release` group runs one release at a
+  # time, so the next run looks once this one has published. A tip whose release is whole releases nothing.
+  VERSION:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      bump: ${{ steps.version.outputs.bump }}
+      missing: ${{ steps.version.outputs.missing }}
+      pulls: ${{ steps.version.outputs.pulls }}
+      version: ${{ steps.version.outputs.version }}
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+      - name: Find the version, and what of its release is missing
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sharp/bin/check --release | tee -a "$GITHUB_OUTPUT"
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+
   crate_metadata:
     name: extract crate metadata
+    needs: VERSION
+    if: contains(needs.VERSION.outputs.missing, 'assets')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -69,7 +99,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          PULLS: ${{ inputs.pulls }}
+          PULLS: ${{ needs.VERSION.outputs.pulls }}
         run: |
           notes="$RUNNER_TEMP/release-notes.md"
           for pull in $PULLS; do
@@ -104,7 +134,7 @@ jobs:
             echo "This release changes nothing users see." > "$notes"
           fi
           cat "$notes"
-      # sharp.yml's RELEASE publishes them with the assets.
+      # RELEASE publishes them with the assets.
       - name: "Artifact upload: release notes"
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -118,7 +148,7 @@ jobs:
           end: true
     outputs:
       bin-name: "mago"
-      version: ${{ inputs.version }}
+      version: ${{ needs.VERSION.outputs.version }}
       msrv: ${{ steps.crate_metadata.outputs.msrv }}
 
   # sharp/mago/.gitattributes leaves Mago's build script, tests and docs out of git archive, so Mago's source archives
@@ -140,7 +170,7 @@ jobs:
 
       - name: Write the release's version into the checkout
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.crate_metadata.outputs.version }}
         run: ../bin/set-version "$VERSION"
 
       - name: Create source archives
@@ -257,7 +287,7 @@ jobs:
       - name: Write the release's version into the checkout
         shell: bash
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.crate_metadata.outputs.version }}
         run: ../bin/set-version "$VERSION"
 
       - name: Install what the PHP# engine builds with
@@ -381,7 +411,7 @@ jobs:
           echo "binary for target '${{ matrix.job.target }}' requires the following GLIBC versions:"
           strings "${{ steps.bin.outputs.BIN_PATH }}" | grep GLIBC_ || echo "No GLIBC version strings found."
 
-      # The calling run's suites check the tree, so this checks only the binary this job builds, as sharp.yml's
+      # The staging run that landed the tree checked it, so this checks only the binary this job builds, as sharp.yml's
       # PLAIN_PHP checks the one CI built.
       - name: The binary prints the release's version, and analyzes and compiles a one-class PHP# project
         shell: bash
@@ -495,7 +525,7 @@ jobs:
             fi
           done < "$RUNNER_TEMP/left"
 
-  # install.sh checks a download against these SHA-256s when gh is missing, and sharp.yml's COMPOSER pins them in the
+  # install.sh checks a download against these SHA-256s when gh is missing, and COMPOSER pins them in the
   # release's heyjordanparker/mago-sharp version. They are written where the assets were built, so the release
   # publishes the SHA-256s of exactly these assets.
   sums:
@@ -559,23 +589,563 @@ jobs:
           path: ${{ runner.temp }}/mago-${{ env.VERSION }}-sha256sums.txt
           if-no-files-found: error
 
-  # A failed release job cancels no run, since its batch lands on the checks alone, and opens the issue of a red staging
-  # run from this one job, as .github/actions/red-master-issue explains, under the title sharp.yml's jobs open it with.
-  # failure() is true here when any job it needs failed, so a failed crate_metadata, source_archive, build or sums opens
-  # it the same way.
+  # The release's runtime images, built from master's tip at the release's version, as image.yml explains, which PUBLISH
+  # tags once the release is public.
+  IMAGE:
+    needs: VERSION
+    if: contains(needs.VERSION.outputs.missing, 'images')
+    uses: ./.github/workflows/image.yml
+    with:
+      version: ${{ needs.VERSION.outputs.version }}
+    permissions:
+      actions: write
+      contents: read
+      packages: write
+
+  # Fills the draft GitHub release of the version VERSION found with the files this run built, once every job before it
+  # passed. The draft targets this run's commit, PUBLISH makes it public, which creates tag v<version> on that commit,
+  # then tags the images, and COMPOSER pushes the Composer packages' tags after it. So no part of a release is public
+  # before every part is in, and no tag names a version that isn't public: v0.7.0 and v0.8.3 were tagged, never
+  # published, and skipped for good, since each next run took the version after them (#854). A run that fails before
+  # PUBLISH leaves a draft, and the next release run, of the same tip or a newer one, takes the same version. Each part
+  # publishes once, as sharp/bin/check --release explains, and a later run leaves what an earlier one published.
+  RELEASE:
+    needs: [VERSION, sums, IMAGE]
+    # failure() and cancelled() count no needed job that ended cancelled: cancelled() is true only when the run is
+    # cancelled, and a job past its timeout-minutes ends cancelled. Run 45455237056's IMAGE (linux/arm64) did, and
+    # RELEASE then made its release public with no image and no Composer tag. So it also reads each needed job's result.
+    if: ${{ !failure() && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && needs.VERSION.outputs.bump == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      attestations: read
+      contents: write
+    outputs:
+      version: ${{ needs.VERSION.outputs.version }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.VERSION.outputs.version }}
+      MISSING: ${{ needs.VERSION.outputs.missing }}
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      # The checkout is the job's first step, since its clean deletes every file the workspace holds: as a step after the
+      # downloads, it deleted assets/, and run 45434990708 left its release a draft with no asset.
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            .github/actions
+            sharp/bin
+      # The release is this run's commit, master's tip as queue.yml started the run, and this run built what the
+      # release publishes: each attestation names that commit as the one it was built from, and IMAGE built the images
+      # PUBLISH tags. Each read of GitHub's API in RELEASE and PUBLISH runs through sharp/bin/network, which runs it
+      # again on a server's error, and the read is assigned before it is written, so a failed read stops the step and
+      # writes nothing: PUBLISH wrote gh's "Server Error" into its output on run 46074219253 (#1111).
+      - name: Find the release's tree
+        id: run
+        run: |
+          tree=$(sharp/bin/network gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "Release $VERSION is commit $GITHUB_SHA, and publishes:${MISSING:+ $MISSING}."
+      # Each download stops after 1 minute and runs once more, as LINUX's explain.
+      - name: Download the assets
+        id: assets
+        if: contains(env.MISSING, 'assets')
+        continue-on-error: true
+        timeout-minutes: 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mago-${{ env.VERSION }}-*
+          path: assets
+          merge-multiple: true
+      - name: Download the assets, the second try
+        if: steps.assets.outcome == 'failure'
+        timeout-minutes: 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mago-${{ env.VERSION }}-*
+          path: assets
+          merge-multiple: true
+      - name: Download the SHA-256s
+        id: sha256sums
+        if: contains(env.MISSING, 'assets')
+        continue-on-error: true
+        timeout-minutes: 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sha256sums
+          path: assets
+      - name: Download the SHA-256s, the second try
+        if: steps.sha256sums.outcome == 'failure'
+        timeout-minutes: 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sha256sums
+          path: assets
+      - name: Download the release notes
+        id: notes
+        if: contains(env.MISSING, 'assets')
+        continue-on-error: true
+        timeout-minutes: 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}
+      - name: Download the release notes, the second try
+        if: steps.notes.outcome == 'failure'
+        timeout-minutes: 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}
+      # An asset changed after its build fails its SHA-256 or its attestation, and one built from another tree fails the
+      # tree, so nothing is published.
+      - name: The assets are the ones the SHA-256s name, signed by release.yml and built from the release's tree
+        if: contains(env.MISSING, 'assets')
+        env:
+          TREE: ${{ steps.run.outputs.tree }}
+        run: |
+          sums="mago-$VERSION-sha256sums.txt"
+          { cut -d ' ' -f 3- "assets/$sums"; echo "$sums"; } | sort > expected-assets.txt
+          find assets -type f -printf '%f\n' | sort > downloaded-assets.txt
+          diff -u expected-assets.txt downloaded-assets.txt || {
+            echo "::error::This run kept other assets than the ones $sums names, so nothing is published."
+            exit 1
+          }
+          (cd assets && sha256sum --check --strict "$sums")
+          mapfile -t assets < <(cut -d ' ' -f 3- "assets/$sums")
+          for asset in "${assets[@]}"; do
+            commits=$(gh attestation verify "assets/$asset" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" --format json \
+              --jq '.[].verificationResult.statement.predicate.buildDefinition.resolvedDependencies[].digest.gitCommit // empty')
+            if [[ -z $commits ]]; then
+              echo "::error::$asset's attestation names no commit it was built from, so nothing is published."
+              exit 1
+            fi
+            for commit in $commits; do
+              built=$(sharp/bin/network gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)
+              if [[ $built != "$TREE" ]]; then
+                echo "::error::$asset was built from commit $commit, whose tree $built isn't the release's tree $TREE, so nothing is published."
+                exit 1
+              fi
+            done
+          done
+          echo "Every asset matches its SHA-256 and its attestation, and was built from tree $TREE."
+      # The release stays a draft that targets this run's commit until PUBLISH, so a failure anywhere leaves nothing
+      # public. A draft of the version that targets another commit is a failed run's, whose assets are another
+      # tree's, so it is deleted and made again: only a token that may write sees a draft. GitHub refused this job's
+      # token a release on a commit whose workflows differ from master's, with HTTP 403 on runs 45025602373 and
+      # 45027728255, as master moved during each run. Batches land while a release builds, so a landing that changes
+      # .github/workflows fails this step the same way, and the release of the newer tip, which queue.yml starts, takes
+      # the version. Each asset the draft lacks uploads
+      # alone, and one it holds at another size, or whose upload never finished, uploads again, so a later run
+      # finishes an upload GitHub broke off: gh release upload --clobber stopped at its first failed asset on 0.8.3's
+      # run 45637122432, with "HTTP 422: ReleaseAsset.name already exists" after a GitHub 500, and left the draft
+      # without the rest (#849).
+      - name: Upload every asset to the draft release, check it, and write its notes
+        if: contains(env.MISSING, 'assets')
+        env:
+          NOTES: ${{ runner.temp }}/release-notes.md
+        run: |
+          tag="v$VERSION"
+          if ! release=$(gh release view "$tag" --json isDraft,targetCommitish \
+            --jq '[.isDraft, .targetCommitish] | @tsv' 2> view-error.txt); then
+            grep -q "release not found" view-error.txt || { cat view-error.txt >&2; exit 1; }
+            release=''
+          fi
+          IFS=$'\t' read -r is_draft target <<< "$release"
+          if [[ $is_draft == false ]]; then
+            echo "Release $tag is already published."
+            exit 0
+          fi
+          if [[ -n $release && $target != "$GITHUB_SHA" ]]; then
+            echo "Draft release $tag targets $target, not this run's $GITHUB_SHA, so it is made again."
+            gh release delete "$tag" --yes
+            release=''
+          fi
+          if [[ -z $release ]]; then
+            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "$tag" --notes-file "$NOTES"
+          fi
+          gh release view "$tag" --json assets --jq '.assets[] | [.name, .size, .state] | @tsv' > draft-assets.tsv
+          while IFS= read -r asset; do
+            size=$(($(wc -c < "assets/$asset")))
+            printf '%s\t%s\n' "$asset" "$size" >> expected-sizes.tsv
+            held=$(awk -F '\t' -v name="$asset" '$1 == name { print $2 " bytes, " $3 }' draft-assets.tsv)
+            if [[ $held == "$size bytes, uploaded" ]]; then
+              continue
+            fi
+            if [[ -n $held ]]; then
+              echo "Draft release $tag holds $asset at $held, not $size bytes uploaded, so it uploads again."
+              gh release delete-asset "$tag" "$asset" --yes
+            fi
+            gh release upload "$tag" "assets/$asset"
+          done < expected-assets.txt
+          gh release view "$tag" --json assets --jq '.assets[] | select(.state == "uploaded") | [.name, .size] | @tsv' \
+            | sort > released-sizes.tsv
+          sort -o expected-sizes.tsv expected-sizes.tsv
+          diff -u expected-sizes.tsv released-sizes.tsv || {
+            echo "::error::Draft release $tag holds different assets or sizes than expected, so it stays a draft."
+            exit 1
+          }
+          gh release edit "$tag" --notes-file "$NOTES"
+
+  # Splits sharp/composer and sharp/mago at this run's commit, master's tip, and pushes them to master of
+  # heyJordanParker/php-sharp-composer and heyJordanParker/mago-sharp, whose webhooks tell Packagist: it needs RELEASE
+  # and PUBLISH, and a job's failure() counts every job before it. A staging run's COMPOSER pushed them to the mirrors'
+  # staging, its own ref, which no one reads, so the mirrors' master stayed behind. For a release, it then pushes tag
+  # v<version> to each mirror that lacks it, once PUBLISH made the release public, so a version Packagist lists always
+  # downloads its binary (#854): the split of the release's commit, which tag v<version> names, so a later run that
+  # finishes a release tags what the release holds. The pushes never force, so a mistake can't rewind a published
+  # package. A needed job that ended cancelled, as one past its timeout does, stops it, as RELEASE's if explains.
+  COMPOSER:
+    needs: [VERSION, RELEASE, PUBLISH]
+    if: ${{ !failure() && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    runs-on: ubuntu-24.04
+    concurrency: composer-${{ github.ref }}
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.RELEASE.outputs.version }}
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+      - name: Install splitsh-lite
+        uses: ./.github/actions/splitsh-lite
+      - name: Split sharp/composer
+        run: splitsh-lite --prefix=sharp/composer --target=refs/heads/composer
+      - name: Split sharp/composer and sharp/mago at the release's tag
+        if: env.VERSION
+        run: |
+          splitsh-lite --prefix=sharp/composer --origin="tags/v$VERSION" --target=refs/heads/composer-release
+          splitsh-lite --prefix=sharp/mago --origin="tags/v$VERSION" --target=refs/heads/mago-release
+      - name: git checkout heyJordanParker/php-sharp-composer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: heyJordanParker/php-sharp-composer
+          ssh-key: ${{ secrets.PHP_SHARP_COMPOSER_DEPLOY_KEY }}
+          path: sharp/build/php-sharp-composer
+          fetch-depth: 0
+      # A release's heyjordanparker/mago-sharp version is the split plus a commit that adds the release's SHA-256s as
+      # composer/sha256sums.txt, and its version as composer/bin/version, which composer/bin/mago downloads the binary
+      # of, so `composer require --dev heyjordanparker/mago-sharp` alone gives a mago that runs, where 0.8.4's refused
+      # every run with "mago's binary is not installed" (#862). php-sharp-composer's plugin refuses an archive whose
+      # SHA-256 differs, as the launcher does, so the package
+      # version pins the exact binary, as esbuild's and Biome's npm packages do. The tag pins them for good, so they are
+      # the release's sums file, which install.sh checks a download against, and every asset a user downloads from the
+      # release must match them, as the release PUBLISH made public holds them. The library's compile runs the Linux one.
+      - name: The release's assets match its SHA-256s
+        if: env.VERSION
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          published="$RUNNER_TEMP/published"
+          gh release download "v$VERSION" --dir "$published"
+          if ! (cd "$published" && sha256sum --check --strict "mago-$VERSION-sha256sums.txt"); then
+            echo "::error::An asset of release v$VERSION has a SHA-256 other than its sums file names, so no Composer tag is pushed."
+            exit 1
+          fi
+      # PHP# compiles the standard library once, at its release, for every platform: the release's own Linux mago
+      # compiles sharp/composer at the release's tag into its .sharp folder with the library's codex, the command
+      # sharp/bin/build-mago runs for a source build. Every project's compile reads the library from that folder in
+      # place of its sources.
+      - name: Compile the release's standard library with the release's mago
+        if: env.VERSION
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/release" "v$VERSION"
+          tar -xzf "$RUNNER_TEMP/published/mago-$VERSION-x86_64-unknown-linux-gnu.tar.gz" -C "$RUNNER_TEMP"
+          (cd "$RUNNER_TEMP/release/sharp/composer" \
+            && "$RUNNER_TEMP/mago-$VERSION-x86_64-unknown-linux-gnu/mago" --no-version-check compile)
+      # A release's tag here becomes the plugin release of the same version: the split plus a commit that adds the
+      # release's docs/spec.md as spec.md, so a project reads the spec its version follows at
+      # vendor/heyjordanparker/php-sharp-composer/spec.md, and the library's compiled files and codex as .sharp, from
+      # the step above. A rerun finds the tag an earlier attempt pushed, and leaves it.
+      - name: Push the split, and a release's tag with its spec and compiled library
+        working-directory: sharp/build/php-sharp-composer
+        run: |
+          git fetch "$GITHUB_WORKSPACE" refs/heads/composer
+          git push origin "FETCH_HEAD:$GITHUB_REF"
+          if [[ -z $VERSION ]]; then
+            exit 0
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null; then
+            echo "heyJordanParker/php-sharp-composer already has tag v$VERSION."
+            exit 0
+          fi
+          git fetch "$GITHUB_WORKSPACE" refs/heads/composer-release
+          git switch --detach FETCH_HEAD
+          git -C "$GITHUB_WORKSPACE" show "v$VERSION:docs/spec.md" > spec.md
+          mkdir .sharp
+          (cd "$RUNNER_TEMP/release/sharp/composer/.sharp" && find . -type f \( -name '*.sharpc' -o -name library.codex \) \
+            -exec cp --parents {} "$OLDPWD/.sharp/" \;)
+          git add spec.md
+          git add --force .sharp
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit --message "The spec PHP# $VERSION follows, and the standard library it compiled"
+          git push origin "HEAD:refs/tags/v$VERSION"
+      - name: Split sharp/mago
+        run: splitsh-lite --prefix=sharp/mago --target=refs/heads/mago
+      - name: git checkout heyJordanParker/mago-sharp
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: heyJordanParker/mago-sharp
+          ssh-key: ${{ secrets.MAGO_SHARP_DEPLOY_KEY }}
+          path: sharp/build/mago-sharp
+          fetch-depth: 0
+      # splitsh-lite starts the split at the commit that added sharp/mago, so a branch the mirror had before the move
+      # isn't in the split, and its push is skipped until that branch is rewritten once. git subtree split would keep
+      # that history, but it walks all of Mago's history in shell recursion and took more than 8 minutes without
+      # finishing.
+      - name: Push the split
+        working-directory: sharp/build/mago-sharp
+        run: |
+          git fetch "$GITHUB_WORKSPACE" refs/heads/mago
+          if git rev-parse -q --verify "origin/$GITHUB_REF_NAME" > /dev/null \
+            && ! git merge-base --is-ancestor "origin/$GITHUB_REF_NAME" FETCH_HEAD; then
+            echo "::warning::The split of sharp/mago does not contain heyJordanParker/mago-sharp's $GITHUB_REF_NAME, so pushing it would rewrite that branch. The push is skipped."
+            exit 0
+          fi
+          git push origin "FETCH_HEAD:$GITHUB_REF"
+      # A rerun finds the tag an earlier attempt pushed, and leaves it. The tag also carries schema.json, the editor
+      # schema of the release's configuration, from the release's own Linux binary run outside any project, which the
+      # library's compile extracted, so no start and no install of the package writes it.
+      - name: Push the release's tag, with the SHA-256 of every release asset, its version and its configuration's schema
+        if: env.VERSION
+        working-directory: sharp/build/mago-sharp
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null; then
+            echo "heyJordanParker/mago-sharp already has tag v$VERSION."
+            exit 0
+          fi
+          git fetch "$GITHUB_WORKSPACE" refs/heads/mago-release
+          git switch --detach FETCH_HEAD
+          cp "$RUNNER_TEMP/published/mago-$VERSION-sha256sums.txt" composer/sha256sums.txt
+          echo "$VERSION" > composer/bin/version
+          (cd "$RUNNER_TEMP" && "./mago-$VERSION-x86_64-unknown-linux-gnu/mago" config --schema) > schema.json
+          git add composer/sha256sums.txt composer/bin/version schema.json
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit --message "The SHA-256 of every mago $VERSION release asset, its version and its configuration's schema"
+          git push origin "HEAD:refs/tags/v$VERSION"
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+  # Makes the release public once RELEASE filled its draft: one call publishes the draft and creates tag v<version> on
+  # this run's commit, which it targets, so the tag and the release go public together. It then tags this run's IMAGE
+  # as ghcr.io/heyjordanparker/php-sharp:<version> and <major>.<minor>, never as latest, with its -dev image as
+  # <version>-dev and <major>.<minor>-dev, and attests both. It checks both platforms' digests before it publishes, so
+  # a release never goes public without its images: run 45455237056 made its release public before its images, which
+  # then never came. COMPOSER needs it, so Packagist reads a Composer tag only once its release downloads: COMPOSER
+  # pushed them 0.5 to 0.9 min before the release went public on every release from v0.7.2 to v0.8.2 (#854).
+  PUBLISH:
+    needs: [VERSION, RELEASE]
+    if: ${{ !failure() && !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && needs.RELEASE.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.RELEASE.outputs.version }}
+      MISSING: ${{ needs.VERSION.outputs.missing }}
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      # Only for the actions below, and sharp/bin/record, which the usage action writes the job's line in the build
+      # record with.
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            .github/actions
+            sharp/bin
+      - name: Measure the job's CPU-seconds and peak memory
+        uses: ./.github/actions/usage
+      # As RELEASE's explains.
+      - name: Find the release's tree
+        id: run
+        run: |
+          tree=$(sharp/bin/network gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+      - name: Download the platforms' digests
+        id: digests
+        if: contains(env.MISSING, 'images')
+        continue-on-error: true
+        timeout-minutes: 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-frankenphp-*
+          path: ${{ runner.temp }}/digests/runtime
+          merge-multiple: true
+      - name: Download the platforms' digests, the second try
+        if: steps.digests.outcome == 'failure'
+        timeout-minutes: 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-frankenphp-*
+          path: ${{ runner.temp }}/digests/runtime
+          merge-multiple: true
+      - name: Download the platforms' -dev digests
+        id: dev-digests
+        if: contains(env.MISSING, 'images')
+        continue-on-error: true
+        timeout-minutes: 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-dev-*
+          path: ${{ runner.temp }}/digests/dev
+          merge-multiple: true
+      - name: Download the platforms' -dev digests, the second try
+        if: steps.dev-digests.outcome == 'failure'
+        timeout-minutes: 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-dev-*
+          path: ${{ runner.temp }}/digests/dev
+          merge-multiple: true
+      # Each digest's file holds the commit IMAGE built it from: the runtime image's in runtime/, and the -dev image's in
+      # dev/. A download that found no digest leaves its folder out, and an image built from another tree isn't this
+      # release's, so either stops the job before the release goes public.
+      - name: Both platforms' images were built from the release's tree
+        id: images
+        if: contains(env.MISSING, 'images')
+        env:
+          TREE: ${{ steps.run.outputs.tree }}
+        run: |
+          image=ghcr.io/heyjordanparker/php-sharp
+          for kind in runtime dev; do
+            sources=()
+            for file in "$RUNNER_TEMP/digests/$kind"/*; do
+              if [[ ! -f $file ]]; then
+                echo "::error::IMAGE kept no $kind digest in this run, so release v$VERSION stays a draft."
+                exit 1
+              fi
+              digest=${file##*/}
+              commit=$(< "$file")
+              built=$(sharp/bin/network gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)
+              if [[ $built != "$TREE" ]]; then
+                echo "::error::IMAGE built $image@sha256:$digest from commit $commit, whose tree $built isn't the release's tree $TREE."
+                exit 1
+              fi
+              sources+=("$image@sha256:$digest")
+            done
+            if [[ ${#sources[@]} != 2 ]]; then
+              echo "::error::IMAGE pushed ${#sources[@]} $kind platform images, not linux/amd64's and linux/arm64's."
+              exit 1
+            fi
+            echo "$kind=${sources[*]}" >> "$GITHUB_OUTPUT"
+          done
+      # GitHub creates tag v<version> on the commit the draft targets, this run's, as it publishes it.
+      - name: Publish the release on tag v<version> of this run's commit
+        if: contains(env.MISSING, 'assets')
+        run: |
+          gh release edit "v$VERSION" --draft=false
+          tagged=$(sharp/bin/network gh api "repos/$GITHUB_REPOSITORY/commits/v$VERSION" --jq .sha)
+          if [[ $tagged != "$GITHUB_SHA" ]]; then
+            echo "::error::Tag v$VERSION names commit $tagged, not this run's $GITHUB_SHA."
+            exit 1
+          fi
+          echo "Release v$VERSION is public, and tag v$VERSION names $GITHUB_SHA."
+      - name: Log in to ghcr.io
+        if: contains(env.MISSING, 'images')
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Each image also takes <major>.<minor>, which a project names to get every fix of that minor, unless a newer
+      # patch of the minor has a tag already, as when a rerun finishes an older release.
+      - name: Find whether this is its minor's newest version
+        id: minor
+        if: contains(env.MISSING, 'images')
+        run: |
+          newest=$(sharp/bin/network gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v${VERSION%.*}." --jq '.[].ref' \
+            | sed -n 's#^refs/tags/v\([0-9]*\.[0-9]*\.[0-9]*\)$#\1#p' | sort -t . -k 3,3n | tail -n 1)
+          if [[ -z $newest || $newest == "$VERSION" ]]; then
+            echo "tag=${VERSION%.*}" >> "$GITHUB_OUTPUT"
+          else
+            echo "$newest is newer than $VERSION, so ${VERSION%.*} stays on $newest."
+          fi
+      - name: Tag the platforms' images as one image each
+        id: tag
+        if: contains(env.MISSING, 'images')
+        env:
+          RUNTIME: ${{ steps.images.outputs.runtime }}
+          DEV: ${{ steps.images.outputs.dev }}
+          MINOR: ${{ steps.minor.outputs.tag }}
+        run: |
+          image=ghcr.io/heyjordanparker/php-sharp
+          for kind in runtime dev; do
+            suffix=''
+            sources=$RUNTIME
+            if [[ $kind == dev ]]; then
+              suffix=-dev
+              sources=$DEV
+            fi
+            tag="$image:$VERSION$suffix"
+            tags=(--tag "$tag")
+            if [[ -n $MINOR ]]; then
+              tags+=(--tag "$image:$MINOR$suffix")
+            fi
+            read -ra sources <<< "$sources"
+            docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+            docker buildx imagetools inspect "$tag"
+            echo "$kind=$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_OUTPUT"
+          done
+      # `gh attestation verify oci://ghcr.io/heyjordanparker/php-sharp:<version> --repo heyJordanParker/php-sharp` checks it,
+      # and the same command with <version>-dev the -dev image's.
+      - name: Attest the image's provenance
+        if: contains(env.MISSING, 'images')
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-name: ghcr.io/heyjordanparker/php-sharp
+          subject-digest: ${{ steps.tag.outputs.runtime }}
+          push-to-registry: true
+      - name: Attest the -dev image's provenance
+        if: contains(env.MISSING, 'images')
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-name: ghcr.io/heyjordanparker/php-sharp
+          subject-digest: ${{ steps.tag.outputs.dev }}
+          push-to-registry: true
+      - name: Write the job's CPU-seconds and peak memory
+        if: always()
+        uses: ./.github/actions/usage
+        with:
+          end: true
+
+  # A failed release job cancels no run, since its tree already landed, and opens the issue of a red release from this
+  # one job, as .github/actions/red-master-issue explains. failure() is true here when any job it needs failed, so a
+  # failed VERSION, crate_metadata, source_archive, build, sums, IMAGE, RELEASE, PUBLISH or COMPOSER opens it the same
+  # way.
   red_master_issue:
     name: Open an issue for the failed release
     runs-on: ubuntu-latest
-    needs: [crate_metadata, source_archive, build, sums]
-    if: failure() && github.event_name == 'push'
+    needs: [VERSION, crate_metadata, source_archive, build, sums, IMAGE, RELEASE, PUBLISH, COMPOSER]
+    if: failure()
     permissions:
       contents: read
       issues: write
     steps:
       - name: checkout source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Open an issue for the failed staging run
+      - name: Open an issue for the failed release
         uses: ./.github/actions/red-master-issue
         with:
-          title: A staging run failed PHP# CI
-          range: ${{ inputs.range }}
+          title: A release run failed PHP# CI

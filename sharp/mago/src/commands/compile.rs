@@ -416,7 +416,11 @@ impl HostsCompile {
         let (compiled, last) = match compiled {
             Some((compiled, last)) => (Some(compiled), keeping.then_some(last)),
             None if keeping => {
-                let outputs = Record::read(&folder.join(INPUTS)).map(|mut record| std::mem::take(&mut record.outputs));
+                let record = Record::read(&folder.join(INPUTS));
+                let analysis = record.as_ref().and_then(|record| {
+                    Some((std::fs::read(folder.join(ANALYSIS)).ok()?, analysis_key(configuration, record.marker)))
+                });
+                let outputs = record.map(|mut record| std::mem::take(&mut record.outputs));
                 let last = LastCompile::analyzed(
                     configuration,
                     root,
@@ -426,6 +430,7 @@ impl HostsCompile {
                     &sources,
                     filesystems,
                     outputs.unwrap_or_default(),
+                    analysis.as_ref(),
                 )?;
                 (None, Some(last))
             }
@@ -598,14 +603,33 @@ fn compile_into(
     filesystems: Filesystems,
 ) -> Result<(Option<Recompiled>, LastCompile), Error> {
     let record_path = folder.join(INPUTS);
+    let mut filesystems = filesystems;
+    let last_record = Record::read(&record_path);
+    // A record that holds in all but the source files names the analysis its compile left, which this compile restores
+    // and rechecks the changed files from, as the project's own compile does.
+    let analysis = last_record
+        .as_ref()
+        .filter(|record| every_input_but_the_sources_is_current(record, configuration, root, &mut filesystems))
+        .and_then(|record| {
+            Some((std::fs::read(folder.join(ANALYSIS)).ok()?, analysis_key(configuration, record.marker)))
+        });
     // The last compile's outputs, which it keeps unread while their status holds.
-    let outputs = Record::read(&record_path).map(|mut record| std::mem::take(&mut record.outputs)).unwrap_or_default();
+    let outputs = last_record.map(|mut record| std::mem::take(&mut record.outputs)).unwrap_or_default();
     // A record the compile can't delete is in a folder it then fails to write its compiled files to.
     let _ = std::fs::remove_file(&record_path);
     let record =
         Record::start(configuration, root, sources, folder, filesystems.clone(), orchestrator.autoloader().as_deref());
-    let mut last =
-        LastCompile::analyzed(configuration, root, folder, orchestrator, listing, sources, filesystems, outputs)?;
+    let mut last = LastCompile::analyzed(
+        configuration,
+        root,
+        folder,
+        orchestrator,
+        listing,
+        sources,
+        filesystems,
+        outputs,
+        analysis.as_ref(),
+    )?;
     let compiled = write_hosts_folder(configuration, root, folder, &mut last, record)?;
 
     Ok((compiled, last))
@@ -668,7 +692,8 @@ impl LastCompile {
     /// What a compile into `folder` for the hosts of the project at `root` starts from: the analysis of the project
     /// without the hosts, of the files `listing` names, which `orchestrator` listed, whose source files are `sources`, as
     /// [`source_files`] found them with `filesystems`, the record of the compiled files the folder holds, and
-    /// `outputs`, the status and hash of each file the folder's record names as written.
+    /// `outputs`, the status and hash of each file the folder's record names as written. The analysis starts from
+    /// `analysis`, the bytes of the folder's last analysis and the key they were written under, when they restore.
     #[allow(clippy::too_many_arguments)]
     fn analyzed(
         configuration: &Configuration,
@@ -679,6 +704,7 @@ impl LastCompile {
         sources: &BTreeMap<String, Found>,
         filesystems: Filesystems,
         outputs: Outputs,
+        analysis: Option<&(Vec<u8>, Vec<u8>)>,
     ) -> Result<Self, Error> {
         let (database, _) =
             with_packages(orchestrator.load_listed(&configuration.source.workspace, listing)?.into_static());
@@ -687,7 +713,10 @@ impl LastCompile {
         let mut server = Server::new(database.into_static(), decode_prelude, server_settings(orchestrator))
             .with_library(codex)
             .keeping_lowering_inputs();
-        server.analyze()?;
+        if let Some((bytes, key)) = analysis {
+            server.restore(bytes, key)?;
+        }
+        server.analyze_changed()?;
 
         Ok(Self {
             server,
@@ -899,23 +928,7 @@ fn write_hosts(
         written.insert(table);
     }
 
-    let lowered = refused.is_empty();
-    let (target, report) = ReportingTarget::buffer();
-    Reporter::new(
-        database.read_only(),
-        ReporterConfig {
-            target,
-            format: ReportingFormat::Json,
-            color_choice: ReportingColorChoice::Never,
-            filter_fixable: false,
-            sort: false,
-            minimum_report_level: None,
-            editor_url: None,
-            tool_version: VERSION,
-        },
-    )
-    .report(refused, None)?;
-    let report = report.lock().unwrap_or_else(PoisonError::into_inner).clone();
+    let report = host_report(database.read_only(), refused)?;
     let path = folder.join(HOST_REPORT);
     keep(&path, unit::source_hash(&report), write_if_changed(&path, &report)?);
     written.insert(path);
@@ -928,10 +941,15 @@ fn write_hosts(
     }
     // The statuses of the files this compile wrote or kept, which the next one keeps unread while they hold.
     let next_outputs = record.as_ref().map(|record| record.outputs.clone()).unwrap_or_default();
-    // A compile with a file that doesn't lower keeps no record, so the next one tries that file again.
-    let record = record.filter(|_| lowered);
     written.extend(record.as_ref().and_then(Record::marker_path));
     written.insert(folder.join(COMPILE_LOCK));
+    let analysis = folder.join(ANALYSIS);
+    if let Some(record) = record.as_ref()
+        && let Some(bytes) = server.persist(&analysis_key(configuration, record.marker))?
+    {
+        write_by_rename(&analysis, &bytes)?;
+    }
+    written.insert(analysis);
     let deleted = delete_all_but(folder, &written, &folder.join(PACKAGE_FOLDER))?;
     if let Some(record) = record {
         let listed = inputs.iter().map(|input| recorded(&input.path, Some(input)));
@@ -1188,7 +1206,8 @@ fn holds_compiled(
 /// Lowers what the extension hosts of `hosts` load as their workers start, [`hosts_reach`], alone into their folder of
 /// the project at `root`, whose source files are `sources`, against `library` and its codex `codex`, unless the folder
 /// holds a current compiled file of each of those files already: the compiled file of each of those files of
-/// `database`, the project's database as [`with_packages`] gives it, written only when its bytes changed, and no other
+/// `database`, the project's database as [`with_packages`] gives it, written only when its bytes changed, and the
+/// folder's [`HOST_REPORT`] of those it refuses, so a worker that loads one gets the checker's errors, and no other
 /// file, so the compile of the whole project that follows writes the rest of the folder and its record. Those files name no file outside them, so
 /// their analysis holds them and Composer's packages alone, and runs as the hosts' compile does, without the hosts, on
 /// an orchestrator of its own, since the compile's orchestrator records what the hosts are asked. Returns that reach.
@@ -1241,13 +1260,45 @@ fn write_hosts_reach(
     );
     std::panic::set_hook(printing);
     let ((compilations, _), _) = compilations?;
+    let mut refused = IssueCollection::default();
     for (_, compilation) in compilations {
-        if let Compilation::Accepted(written) = compilation {
-            written?;
+        match compilation {
+            Compilation::Accepted(written) => {
+                written?;
+            }
+            Compilation::Refused(issues) => refused.extend(issues),
+            Compilation::Kept => {}
         }
     }
+    write_if_changed(&folder.join(HOST_REPORT), &host_report(held, refused)?)?;
 
     Ok(reach)
+}
+
+/// The checker's report of `refused`, the issues of each file a hosts' compile refused, with the files of `database`
+/// they point into, as the folder's [`HOST_REPORT`] holds it.
+///
+/// # Errors
+///
+/// Returns the error of writing the report.
+fn host_report(database: ReadDatabase, refused: IssueCollection) -> Result<Vec<u8>, Error> {
+    let (target, report) = ReportingTarget::buffer();
+    Reporter::new(
+        database,
+        ReporterConfig {
+            target,
+            format: ReportingFormat::Json,
+            color_choice: ReportingColorChoice::Never,
+            filter_fixable: false,
+            sort: false,
+            minimum_report_level: None,
+            editor_url: None,
+            tool_version: VERSION,
+        },
+    )
+    .report(refused, None)?;
+
+    Ok(report.lock().unwrap_or_else(PoisonError::into_inner).clone())
 }
 
 /// The project's database: every file the analyzer loads with the prelude, each `.sharp` file of a package as a file of
@@ -1574,6 +1625,9 @@ fn compile(configuration: &Configuration, color_choice: ColorChoice) -> Result<C
     }
 
     let (started, outcome, loaded) = compile_with_hosts(configuration, color_choice, true)?;
+    if let Some(refused) = outcome.report_library_refusal() {
+        return Ok(refused);
+    }
     let (database, issues) = hosted(configuration, color_choice, started, loaded)?;
     let errors = issues
         .into_iter()
@@ -1601,6 +1655,7 @@ fn hosted(
     if let Some(started) = started {
         orchestrator.set_external_analyzer_handle(started);
     }
+    let taken_over = matches!(loaded, Loaded::Hosted { .. });
     let loaded = match loaded {
         Loaded::Hosted { server, requests } => {
             Loaded::Hosted { server: Box::new(server.scoped_to(is_lowered)), requests }
@@ -1623,6 +1678,15 @@ fn hosted(
             (server, issues)
         }
     };
+    // The analysis the hosts took over, under the key of the record the compile kept, for the next compile to restore
+    // when only source files changed since.
+    let compiled_folder = configuration.source.workspace.join(unit::COMPILED_FOLDER);
+    if taken_over
+        && let Some(record) = Record::read(&compiled_folder.join(INPUTS))
+        && let Some(bytes) = server.persist(&analysis_key(&without_hosts(configuration), record.marker))?
+    {
+        write_by_rename(&compiled_folder.join(ANALYSIS), &bytes)?;
+    }
 
     Ok((server.database().read_only(), issues))
 }
@@ -1736,8 +1800,7 @@ pub(crate) fn compile_with_hosts(
     analysis: bool,
 ) -> Result<(Started, Outcome, Loaded), Error> {
     let hosts = HostsCompile::new(configuration)?;
-    let mut without_hosts = configuration.clone();
-    without_hosts.extension_hosts.clear();
+    let without_hosts = without_hosts(configuration);
     let keeping = match (analysis, hosts.enabled) {
         (true, false) => Keeping::Analysis,
         (true, true) => Keeping::Hosted,
@@ -1747,6 +1810,14 @@ pub(crate) fn compile_with_hosts(
         compiled(&without_hosts, color_choice, hosts.enabled.then_some(&hosts), keeping)?;
 
     Ok((started, outcome, loaded))
+}
+
+/// `configuration` with no extension host, as the compile before the hosts take its analysis over runs with it.
+fn without_hosts(configuration: &Configuration) -> Configuration {
+    let mut without_hosts = configuration.clone();
+    without_hosts.extension_hosts.clear();
+
+    without_hosts
 }
 
 /// Compiles the project with `configuration`, which enables no extension host, into its `.sharp` folder, as [`compile`]
@@ -1759,7 +1830,9 @@ pub(crate) fn compile_with_hosts(
 /// [`hosts_reach`] finds a host's code reaches, since a host's file runs as its worker starts, before the compile reads
 /// what the host registers, and may construct a class there, as a host that builds its rules or its services does. A
 /// stale folder gets those files lowered alone into it first, so the hosts start on them as they are now, and the rest
-/// of the project compiles beside the hosts. With `keeping` [`Keeping::Hosted`], what the hosts register decides
+/// of the project compiles beside the hosts. A compile that refuses the project's standard library starts no host and
+/// leaves the hosts' folder as it is, since a host's code compiles against the library, so the run reports the refusal
+/// alone. With `keeping` [`Keeping::Hosted`], what the hosts register decides
 /// whether the compile records their return-type requests or keeps its scans. Returns the outcome of the compile into
 /// the `.sharp` folder, with the database its issues point into, what `keeping` names, nothing when the compile had
 /// nothing to do or when its analysis reports in no file of the project, and the started hosts.
@@ -1825,8 +1898,9 @@ fn compiled(
             collect_generations(&compiled_folder)?;
         }
         drop(writing);
+        let refused_library = record.outcome.refused_library;
         if let Some((hosts, (lock, held, exclusive, stale))) = hosts {
-            let compiled = if stale {
+            let compiled = if stale && !refused_library {
                 let phase = Phase::start("hosts");
                 let (compiled, _) = silenced(|| {
                     compile_into(configuration, &root, &hosts.folder, &orchestrator, &listing, &sources, filesystems)
@@ -1839,14 +1913,19 @@ fn compiled(
             hosts.hold(lock, held, exclusive, compiled)?;
         }
 
-        return Ok((std::mem::take(&mut record.outcome), database, Loaded::Nothing, start()));
+        return Ok((
+            std::mem::take(&mut record.outcome),
+            database,
+            Loaded::Nothing,
+            (!refused_library).then(start).flatten(),
+        ));
     }
     // A record that holds in all but the source files names the analysis its compile left, which this compile restores
-    // and rechecks the changed files from, as watch mode does. A run that passes its analysis on, or compiles with the
-    // extension hosts, analyzes from scratch.
+    // and rechecks the changed files from, as watch mode does, the analysis the hosts took over included. A run that
+    // passes its analysis on otherwise analyzes from scratch.
     let analysis = last
         .as_ref()
-        .filter(|_| all_but_the_sources && keeping == Keeping::Nothing && hosts.is_none())
+        .filter(|_| all_but_the_sources && matches!(keeping, Keeping::Nothing | Keeping::Hosted))
         .and_then(|record| {
             Some((std::fs::read(compiled_folder.join(ANALYSIS)).ok()?, analysis_key(configuration, record.marker)))
         });
@@ -1898,7 +1977,8 @@ fn compiled(
         match standard_library(&root, &database).and_then(|library| Ok((library, library_codex(&root, &database)?))) {
             Ok(library) => library,
             Err(refusal) => {
-                let outcome = Outcome { errors, summary: refusal, failed: true, ..Outcome::default() };
+                let outcome =
+                    Outcome { errors, summary: refusal, failed: true, refused_library: true, ..Outcome::default() };
                 let record = record.filter(|_| logger::warnings() == warnings);
                 let (outcome, database) = finish(record, &record_path, outcome, &database, Vec::new())?;
                 drop(writing);
@@ -1910,7 +1990,7 @@ fn compiled(
                     outcome,
                     database,
                     loaded_files.map_or(Loaded::Nothing, |files| Loaded::Files(Box::new(files), Scans::default())),
-                    started.or_else(start),
+                    started,
                 ));
             }
         };
@@ -2305,6 +2385,9 @@ pub(crate) struct Outcome {
     summary: String,
     /// Whether the compile failed, which its exit status says.
     failed: bool,
+    /// Whether the compile refused the project's standard library, the summary, so the run starts no extension host,
+    /// whose code compiles against the library.
+    refused_library: bool,
 }
 
 impl Outcome {
@@ -2326,7 +2409,17 @@ impl Outcome {
             .into_iter()
             .collect();
 
-        Self { issues, issue_files, errors, summary, failed }
+        Self { issues, issue_files, errors, summary, failed, refused_library: false }
+    }
+
+    /// Reports the refusal of the project's standard library, when the compile refused it, and gives the run's exit
+    /// status, so a run with extension hosts reports it alone, as a run with none does.
+    pub(crate) fn report_library_refusal(&self) -> Option<CommandOutcome> {
+        self.refused_library.then(|| {
+            tracing::error!("{}", self.summary);
+
+            ExitCode::FAILURE.into()
+        })
     }
 
     /// The issues of each file the compile refused, and each other error it found.
@@ -3489,6 +3582,61 @@ final class Boxes implements Plugin, MethodReturnTypeProvider
         assert!(Record::read(&hosts.join(INPUTS)).is_some(), "the hosts' folder is compiled again");
     }
 
+    /// A file the hosts' compile refuses, here for a parse error, is refused again by the next compile of the same
+    /// files, so the hosts' folder keeps its record, and a compile with nothing changed compiles nothing into it.
+    #[test]
+    fn a_hosts_folder_with_a_refused_file_keeps_its_record_and_a_compile_with_no_change_writes_nothing_there() {
+        if !php_sdk() {
+            return;
+        }
+        let (_directory, root, configuration) = boxed_project();
+        write(&root, "app/Broken.sharp", "namespace App;\n\npublic class Broken\n{\n    public int count( => 1;\n}\n");
+        let hosts = HostsCompile::new(&configuration).unwrap().folder;
+        let mago_compile = || {
+            compile(&configuration, ColorChoice::Never).unwrap();
+        };
+        mago_compile();
+
+        assert!(Record::read(&hosts.join(INPUTS)).is_some(), "the hosts' folder kept no record");
+        assert_eq!(written_under(&hosts, mago_compile), BTreeSet::new());
+    }
+
+    /// The hosts' compile keeps its analysis in the hosts' folder, and the compile after an edit that fixes the file it
+    /// refused restores that analysis and leaves the hosts' folder with the report and the compiled files a compile of
+    /// the edited files from scratch leaves.
+    #[test]
+    fn a_hosts_compile_after_an_edit_restores_its_analysis_and_compiles_what_a_compile_from_scratch_compiles() {
+        if !php_sdk() {
+            return;
+        }
+        const BROKEN: &str = "namespace App;\n\npublic class Broken\n{\n    public int count( => 1;\n}\n";
+        const FIXED: &str = "namespace App;\n\npublic class Broken\n{\n    public int count() => 1;\n}\n";
+        let hosts_folder = |root: &Path, configuration: &Configuration| {
+            compile(configuration, ColorChoice::Never).unwrap();
+            let folder = HostsCompile::new(configuration).unwrap().folder;
+            let report = std::fs::read_to_string(folder.join(HOST_REPORT)).unwrap();
+            let compiled: BTreeSet<PathBuf> = files_as_written(&folder)
+                .into_keys()
+                .filter(|path| path.extension().is_some_and(|extension| extension == "sharpc"))
+                .map(|path| path.strip_prefix(&folder).map_or(path.clone(), Path::to_path_buf))
+                .collect();
+
+            (folder, report.replace(&root.display().to_string(), "<root>"), compiled)
+        };
+        let (_directory, root, configuration) = boxed_project();
+        write(&root, "app/Broken.sharp", BROKEN);
+        let (folder, _, _) = hosts_folder(&root, &configuration);
+        assert!(folder.join(ANALYSIS).is_file(), "the hosts' folder holds no analysis");
+        write(&root, "app/Broken.sharp", FIXED);
+        let seeded = hosts_folder(&root, &configuration);
+
+        let (_scratch_directory, scratch_root, scratch_configuration) = boxed_project();
+        write(&scratch_root, "app/Broken.sharp", FIXED);
+        let scratch = hosts_folder(&scratch_root, &scratch_configuration);
+
+        assert_eq!((seeded.1, seeded.2), (scratch.1, scratch.2));
+    }
+
     /// A `vendor/` file a PHP# file calls is no input of its compiled file, which `composer.lock` stands for, so the
     /// record of the hosts' compile's source files is what sees an edit of it.
     #[test]
@@ -3543,7 +3691,8 @@ final class Boxes implements Plugin, MethodReturnTypeProvider
         assert!(!folder.path().join("app/Order.sharpc").exists());
     }
 
-    /// Each file of a hosts' folder but its record of inputs, by its path in the folder.
+    /// Each file of a hosts' folder but its record of inputs and the analysis kept under that record's marker, by its
+    /// path in the folder.
     fn folder_files(folder: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
         let mut files = BTreeMap::new();
         let mut folders = vec![folder.to_path_buf()];
@@ -3552,7 +3701,7 @@ final class Boxes implements Plugin, MethodReturnTypeProvider
                 let path = entry.unwrap().path();
                 if path.is_dir() {
                     folders.push(path);
-                } else if path != folder.join(INPUTS) {
+                } else if path != folder.join(INPUTS) && path != folder.join(ANALYSIS) {
                     files.insert(path.strip_prefix(folder).unwrap().to_path_buf(), std::fs::read(&path).unwrap());
                 }
             }
