@@ -95,6 +95,12 @@ pub fn files_under(folder: &Path) -> Vec<PathBuf> {
     files
 }
 
+/// Every file of the `.sharp` folder of `root`, relative to it, in path order, but the objects of its store, which their
+/// hashes name.
+pub fn sharp_folder_files(root: &Path) -> Vec<PathBuf> {
+    files_under(&root.join(".sharp")).into_iter().filter(|path| !path.starts_with("objects")).collect()
+}
+
 pub fn compiled(root: &Path, name: &str) -> PathBuf {
     root.join(".sharp").join(CURRENT_GENERATION).join(name).with_extension("sharpc")
 }

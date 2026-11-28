@@ -18,6 +18,8 @@ use mago_database::DatabaseReader;
 use mago_database::error::DatabaseError;
 use mago_database::file::File;
 use mago_database::file::FileId;
+use mago_objects::ObjectId;
+use mago_objects::Objects;
 use mago_orchestrator::error::OrchestratorError;
 use mago_orchestrator::service::incremental_analysis::IncrementalAnalysisService;
 use mago_orchestrator::service::incremental_analysis::Scans;
@@ -191,26 +193,27 @@ impl Server {
         self.pass(IncrementalAnalysisService::analyze)
     }
 
-    /// Take the analysis `bytes` hold, as [`Server::persist`] wrote them after `key` in an earlier run, as the server's
-    /// last, so [`Server::analyze_changed`] rechecks only what changed since. Returns whether it took it: it takes none
-    /// when `bytes` hold no analysis the service restores, as [`IncrementalAnalysisService::restore`] says, and the next
-    /// pass analyzes the whole workspace.
+    /// Take the analysis the tree `root` of `objects` holds, as [`Server::persist`] stored it under `key` in an earlier
+    /// run, as the server's last, so [`Server::analyze_changed`] rechecks only what changed since. Returns whether it
+    /// took it: it takes none when the tree holds no analysis the service restores, as
+    /// [`IncrementalAnalysisService::restore`] says, and the next pass analyzes the whole workspace.
     ///
     /// # Errors
     ///
     /// Returns [`ServerError`] when the restored analysis can't read what it needs again.
-    pub fn restore(&mut self, bytes: &[u8], key: &[u8]) -> Result<bool, ServerError> {
-        Ok(self.service.restore(bytes, key)?)
+    pub fn restore(&mut self, objects: &Objects, root: ObjectId, key: &[u8]) -> Result<bool, ServerError> {
+        Ok(self.service.restore(objects, root, key)?)
     }
 
-    /// The last analysis's state, encoded after `key`, for [`Server::restore`] in a later run, or `None` when it holds
-    /// state no encoding keeps, as [`IncrementalAnalysisService::persist`] says.
+    /// Stores the last analysis's state in `objects` under `key`, for [`Server::restore`] in a later run, writing only
+    /// the parts that changed since the server last stored or restored it, and gives the ID of its tree, or `None` when
+    /// it holds state no store keeps, as [`IncrementalAnalysisService::persist`] says.
     ///
     /// # Errors
     ///
-    /// Returns [`ServerError`] when the state does not encode.
-    pub fn persist(&self, key: &[u8]) -> Result<Option<Vec<u8>>, ServerError> {
-        Ok(self.service.persist(key)?)
+    /// Returns [`ServerError`] when the state does not encode or an object can't be written.
+    pub fn persist(&self, key: &[u8], objects: &Objects) -> Result<Option<ObjectId>, ServerError> {
+        Ok(self.service.persist(key, objects)?)
     }
 
     /// Recheck each file whose contents changed since the analysis the server holds, hashing every file of the

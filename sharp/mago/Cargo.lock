@@ -1438,6 +1438,7 @@ dependencies = [
  "mago-guard",
  "mago-linter",
  "mago-names",
+ "mago-objects",
  "mago-orchestrator",
  "mago-php-version",
  "mago-prelude",
@@ -1800,6 +1801,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mago-objects"
+version = "0.0.0"
+dependencies = [
+ "blake3",
+ "tempfile",
+]
+
+[[package]]
 name = "mago-orchestrator"
 version = "0.0.0"
 dependencies = [
@@ -1816,6 +1825,7 @@ dependencies = [
  "mago-guard",
  "mago-linter",
  "mago-names",
+ "mago-objects",
  "mago-php-version",
  "mago-prelude",
  "mago-reporting",
@@ -1919,6 +1929,7 @@ dependencies = [
  "mago-analyzer",
  "mago-codex",
  "mago-database",
+ "mago-objects",
  "mago-orchestrator",
  "mago-reporting",
  "mago-sharp-bridge",

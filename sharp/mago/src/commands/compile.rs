@@ -65,6 +65,10 @@ use mago_names::resolver::ChangingMembers;
 use mago_names::resolver::ExternNamespaces;
 use mago_names::resolver::NameResolver;
 use mago_names::resolver::NamespaceClasses;
+use mago_objects::ObjectId;
+use mago_objects::Objects;
+use mago_objects::read_ref;
+use mago_objects::write_ref;
 use mago_orchestrator::Autoloader;
 use mago_orchestrator::Orchestrator;
 use mago_orchestrator::OrchestratorError;
@@ -143,11 +147,45 @@ const INPUTS: &str = "inputs.json";
 /// holds instead of lowering it again.
 const COMPILED_FILES: &str = "compiled.bin";
 
-/// The state of the last compile's analysis, in the `.sharp` folder, as `Server::persist` writes it after
-/// [`analysis_key`]: the codebase, the reference graphs and each file's state. A compile whose record holds in all but
-/// its source files restores it and rechecks the files that changed since, as watch mode does. Every other compile
+/// The ref, in the `.sharp` folder and in the hosts' folder beside `current`, that names the tree of the last
+/// compile's analysis in the folder's [`OBJECTS`] store, as `Server::persist` stores it under [`analysis_key`]: the
+/// codebase part of each file, the reference graphs and each file's state. A compile whose record holds in all but its
+/// source files restores it and rechecks the files that changed since, as watch mode does. Every other compile
 /// analyzes from scratch, and the compile with nothing to do never reads it.
-const ANALYSIS: &str = "analysis.bin";
+const ANALYSIS: &str = "analysis";
+
+/// The content-addressed store of the `.sharp` folder and of the hosts' folder, as Git's object database keeps one,
+/// which holds what the folder's [`ANALYSIS`] ref reaches.
+const OBJECTS: &str = "objects";
+
+/// The store of `folder`, the `.sharp` folder or the hosts' folder.
+fn objects(folder: &Path) -> Objects {
+    Objects::at(folder.join(OBJECTS))
+}
+
+/// The tree of the analysis the last compile into `folder` stored, which the folder's [`ANALYSIS`] ref names.
+fn stored_analysis(folder: &Path) -> Option<ObjectId> {
+    read_ref(&folder.join(ANALYSIS))
+}
+
+/// Stores the analysis `server` holds in the store of `folder` under `key`, points the folder's [`ANALYSIS`] ref at its
+/// tree, and then deletes each object no ref reaches, once the store holds enough of them, as `git gc --auto` does.
+/// Gives whether it stored one, which the server leaves out when its analysis holds state no store keeps.
+///
+/// # Errors
+///
+/// Returns the error of encoding or writing the analysis, or of collecting the store.
+fn store_analysis(server: &Server, folder: &Path, key: &[u8]) -> Result<bool, Error> {
+    let objects = objects(folder);
+    let Some(root) = server.persist(key, &objects)? else {
+        return Ok(false);
+    };
+    let path = folder.join(ANALYSIS);
+    write_ref(&path, root).map_err(|error| DatabaseError::io(IOAction::WriteFile, &path, error))?;
+    objects.collect_auto(&[root]).map_err(|error| DatabaseError::io(IOAction::DeleteFile, objects.folder(), error))?;
+
+    Ok(true)
+}
 
 /// The file in the `.sharp` folder whose lock the engine holds while it runs `sharp.compile_command`, so a project
 /// compiles once at a time on demand, and in the hosts' folder whose lock [`compile_for_hosts`] takes the same way. The
@@ -417,9 +455,9 @@ impl HostsCompile {
             Some((compiled, last)) => (Some(compiled), keeping.then_some(last)),
             None if keeping => {
                 let record = Record::read(&folder.join(INPUTS));
-                let analysis = record.as_ref().and_then(|record| {
-                    Some((std::fs::read(folder.join(ANALYSIS)).ok()?, analysis_key(configuration, record.marker)))
-                });
+                let analysis = record
+                    .as_ref()
+                    .and_then(|record| Some((stored_analysis(folder)?, analysis_key(configuration, record.marker))));
                 let outputs = record.map(|mut record| std::mem::take(&mut record.outputs));
                 let last = LastCompile::analyzed(
                     configuration,
@@ -610,9 +648,7 @@ fn compile_into(
     let analysis = last_record
         .as_ref()
         .filter(|record| every_input_but_the_sources_is_current(record, configuration, root, &mut filesystems))
-        .and_then(|record| {
-            Some((std::fs::read(folder.join(ANALYSIS)).ok()?, analysis_key(configuration, record.marker)))
-        });
+        .and_then(|record| Some((stored_analysis(folder)?, analysis_key(configuration, record.marker))));
     // The last compile's outputs, which it keeps unread while their status holds.
     let outputs = last_record.map(|mut record| std::mem::take(&mut record.outputs)).unwrap_or_default();
     // A record the compile can't delete is in a folder it then fails to write its compiled files to.
@@ -704,7 +740,7 @@ impl LastCompile {
         sources: &BTreeMap<String, Found>,
         filesystems: Filesystems,
         outputs: Outputs,
-        analysis: Option<&(Vec<u8>, Vec<u8>)>,
+        analysis: Option<&(ObjectId, Vec<u8>)>,
     ) -> Result<Self, Error> {
         let (database, _) =
             with_packages(orchestrator.load_listed(&configuration.source.workspace, listing)?.into_static());
@@ -713,8 +749,8 @@ impl LastCompile {
         let mut server = Server::new(database.into_static(), decode_prelude, server_settings(orchestrator))
             .with_library(codex)
             .keeping_lowering_inputs();
-        if let Some((bytes, key)) = analysis {
-            server.restore(bytes, key)?;
+        if let Some((root, key)) = analysis {
+            server.restore(&objects(folder), *root, key)?;
         }
         server.analyze_changed()?;
 
@@ -958,13 +994,11 @@ fn write_hosts(
     let next_outputs = record.as_ref().map(|record| record.outputs.clone()).unwrap_or_default();
     written.extend(record.as_ref().and_then(Record::marker_path));
     written.insert(folder.join(COMPILE_LOCK));
-    let analysis = folder.join(ANALYSIS);
-    if let Some(record) = record.as_ref()
-        && let Some(bytes) = server.persist(&analysis_key(configuration, record.marker))?
-    {
-        write_by_rename(&analysis, &bytes)?;
+    if let Some(record) = record.as_ref() {
+        store_analysis(server, folder, &analysis_key(configuration, record.marker))?;
     }
-    written.insert(analysis);
+    written.insert(folder.join(ANALYSIS));
+    written.insert(folder.join(OBJECTS));
     let deleted = delete_all_but(folder, &written, &folder.join(PACKAGE_FOLDER))?;
     if let Some(record) = record {
         let listed = inputs.iter().map(|input| recorded(&input.path, Some(input)));
@@ -1660,11 +1694,8 @@ fn hosted(
     // The analysis the hosts took over, under the key of the record the compile kept, for the next compile to restore
     // when only source files changed since.
     let compiled_folder = configuration.source.workspace.join(unit::COMPILED_FOLDER);
-    if taken_over
-        && let Some(record) = Record::read(&compiled_folder.join(INPUTS))
-        && let Some(bytes) = server.persist(&analysis_key(&without_hosts(configuration), record.marker))?
-    {
-        write_by_rename(&compiled_folder.join(ANALYSIS), &bytes)?;
+    if taken_over && let Some(record) = Record::read(&compiled_folder.join(INPUTS)) {
+        store_analysis(&server, &compiled_folder, &analysis_key(&without_hosts(configuration), record.marker))?;
     }
 
     Ok((server.database().read_only(), issues))
@@ -1897,9 +1928,7 @@ fn compiled(
     let analysis = last
         .as_ref()
         .filter(|_| all_but_the_sources && matches!(keeping, Keeping::Nothing | Keeping::Hosted))
-        .and_then(|record| {
-            Some((std::fs::read(compiled_folder.join(ANALYSIS)).ok()?, analysis_key(configuration, record.marker)))
-        });
+        .and_then(|record| Some((stored_analysis(&compiled_folder)?, analysis_key(configuration, record.marker))));
     let (hosts, held) = match hosts {
         Some((hosts, (lock, held, exclusive, stale))) => (stale.then_some(hosts), Some((hosts, lock, held, exclusive))),
         None => (None, None),
@@ -2020,8 +2049,8 @@ fn compiled(
         if reports { server.scoped_to(move |file| !included.contains(&file.id)) } else { server.scoped_to(is_lowered) };
     // The analysis the last compile left, restored, rechecks only what changed since. One it can't restore leaves the
     // server to analyze the whole workspace.
-    if let Some((bytes, key)) = &analysis {
-        server.restore(bytes, key)?;
+    if let Some((root, key)) = &analysis {
+        server.restore(&objects(&compiled_folder), *root, key)?;
     }
     let issues = server.analyze_changed()?.issues;
     // The requests of this analysis alone: a file the compile analyzes again to lower it makes the same ones.
@@ -2213,18 +2242,20 @@ fn compiled(
         }
         written.insert(compiled_files_path);
         // The analysis this compile ran, under the key of this compile's record, for the next compile to restore when
-        // only source files changed since, written while the compile keeps that record, as it keeps it below. A run with
-        // extension hosts, or one that passes its analysis on, writes none.
-        if keeping == Keeping::Nothing
-            && held.is_none()
-            && logger::warnings() == warnings
-            && outcomes_kept
-            && let Some(record) = record.as_ref()
-            && let Some(bytes) = server.persist(&analysis_key(configuration, record.marker))?
-        {
-            let analysis = compiled_folder.join(ANALYSIS);
-            write_by_rename(&analysis, &bytes)?;
-            written.insert(analysis);
+        // only source files changed since, written while the compile keeps that record, as it keeps it below. A run
+        // that passes its analysis on writes none, and a run with extension hosts keeps the store, which it writes once
+        // the hosts took the analysis over.
+        let stored = match record.as_ref() {
+            Some(record)
+                if keeping == Keeping::Nothing && held.is_none() && logger::warnings() == warnings && outcomes_kept =>
+            {
+                store_analysis(&server, &compiled_folder, &analysis_key(configuration, record.marker))?
+            }
+            _ => false,
+        };
+        if stored || keeping == Keeping::Hosted {
+            written.insert(compiled_folder.join(ANALYSIS));
+            written.insert(compiled_folder.join(OBJECTS));
         }
         written.insert(compiled_folder.join(PROOFS));
         if let Some(bytes) = &codex_bytes {
@@ -3648,14 +3679,17 @@ final class Boxes implements Plugin, MethodReturnTypeProvider
         assert!(!folder.path().join("app/Order.sharpc").exists());
     }
 
-    /// Each file of a hosts' folder but its record of inputs and the analysis kept under that record's marker, by its
-    /// path in the folder.
+    /// Each file of a hosts' folder but its record of inputs, the ref to the analysis kept under that record's marker
+    /// and the store that holds it, by its path in the folder.
     fn folder_files(folder: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
         let mut files = BTreeMap::new();
         let mut folders = vec![folder.to_path_buf()];
         while let Some(below) = folders.pop() {
             for entry in std::fs::read_dir(below).unwrap() {
                 let path = entry.unwrap().path();
+                if path == folder.join(OBJECTS) {
+                    continue;
+                }
                 if path.is_dir() {
                     folders.push(path);
                 } else if path != folder.join(INPUTS) && path != folder.join(ANALYSIS) {
