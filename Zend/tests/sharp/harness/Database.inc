@@ -11,9 +11,9 @@ final class Db
         return $bindings;
     }
 
-    /** How many options the call passed. Plain PHP's own default holds one, so a call that passes the line's `[]` counts 0. */
-    public static function configure(array $options = ['cache' => 1]): int
+    /** How many ids the call passed. Plain PHP's own default holds two, so a call that passes the line's `[]` counts 0. */
+    public static function recent(array $ids = [1, 2]): int
     {
-        return count($options);
+        return count($ids);
     }
 }
