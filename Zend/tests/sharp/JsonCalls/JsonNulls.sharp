@@ -1,0 +1,17 @@
+namespace Demo;
+
+import Sharp.Encoding.Json;
+
+// Reads of JSON `null` into a nullable type and into one that is not.
+public class JsonNulls
+{
+    public static Map<string, Any?>? map(string json) => Json.parse<Map<string, Any?>?>(json).unwrap();
+
+    public static Map<string, Any?> required(string json) => Json.parse<Map<string, Any?>>(json).unwrap();
+
+    public static Map<string, Any?>? value(Any? value) => typeof(Map<string, Any?>?).parse(value).unwrap();
+
+    public static List<int?> elements(string json) => Json.parse<List<int?>>(json).unwrap();
+
+    public static JsonNote note(string json) => Json.parse<JsonNote>(json).unwrap();
+}
