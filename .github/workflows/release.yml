@@ -636,14 +636,19 @@ jobs:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          sparse-checkout: .github/actions
+          sparse-checkout: |
+            .github/actions
+            sharp/bin
       # The release is this run's commit, master's tip as queue.yml started the run, and this run built what the
       # release publishes: each attestation names that commit as the one it was built from, and IMAGE built the images
-      # PUBLISH tags.
+      # PUBLISH tags. Each read of GitHub's API in RELEASE and PUBLISH runs through sharp/bin/network, which runs it
+      # again on a server's error, and the read is assigned before it is written, so a failed read stops the step and
+      # writes nothing: PUBLISH wrote gh's "Server Error" into its output on run 46074219253 (#1111).
       - name: Find the release's tree
         id: run
         run: |
-          echo "tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)" >> "$GITHUB_OUTPUT"
+          tree=$(sharp/bin/network gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
           echo "Release $VERSION is commit $GITHUB_SHA, and publishes:${MISSING:+ $MISSING}."
       # Each download stops after 1 minute and runs once more, as LINUX's explain.
       - name: Download the assets
@@ -721,7 +726,7 @@ jobs:
               exit 1
             fi
             for commit in $commits; do
-              built=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)
+              built=$(sharp/bin/network gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)
               if [[ $built != "$TREE" ]]; then
                 echo "::error::$asset was built from commit $commit, whose tree $built isn't the release's tree $TREE, so nothing is published."
                 exit 1
@@ -972,9 +977,12 @@ jobs:
             sharp/bin
       - name: Measure the job's CPU-seconds and peak memory
         uses: ./.github/actions/usage
+      # As RELEASE's explains.
       - name: Find the release's tree
         id: run
-        run: echo "tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)" >> "$GITHUB_OUTPUT"
+        run: |
+          tree=$(sharp/bin/network gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
       - name: Download the platforms' digests
         id: digests
         if: contains(env.MISSING, 'images')
@@ -1030,7 +1038,7 @@ jobs:
               fi
               digest=${file##*/}
               commit=$(< "$file")
-              built=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)
+              built=$(sharp/bin/network gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)
               if [[ $built != "$TREE" ]]; then
                 echo "::error::IMAGE built $image@sha256:$digest from commit $commit, whose tree $built isn't the release's tree $TREE."
                 exit 1
@@ -1048,7 +1056,7 @@ jobs:
         if: contains(env.MISSING, 'assets')
         run: |
           gh release edit "v$VERSION" --draft=false
-          tagged=$(gh api "repos/$GITHUB_REPOSITORY/commits/v$VERSION" --jq .sha)
+          tagged=$(sharp/bin/network gh api "repos/$GITHUB_REPOSITORY/commits/v$VERSION" --jq .sha)
           if [[ $tagged != "$GITHUB_SHA" ]]; then
             echo "::error::Tag v$VERSION names commit $tagged, not this run's $GITHUB_SHA."
             exit 1
@@ -1067,7 +1075,7 @@ jobs:
         id: minor
         if: contains(env.MISSING, 'images')
         run: |
-          newest=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v${VERSION%.*}." --jq '.[].ref' \
+          newest=$(sharp/bin/network gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v${VERSION%.*}." --jq '.[].ref' \
             | sed -n 's#^refs/tags/v\([0-9]*\.[0-9]*\.[0-9]*\)$#\1#p' | sort -t . -k 3,3n | tail -n 1)
           if [[ -z $newest || $newest == "$VERSION" ]]; then
             echo "tag=${VERSION%.*}" >> "$GITHUB_OUTPUT"
