@@ -8,7 +8,7 @@ name: Release
 # release, so the list of releases on GitHub is the changelog.
 #
 # queue.yml starts this workflow on master, whose tip every staging run's LAND moved there once its checks passed, when
-# no pull request waits to land or 3 landings since the newest tag are unreleased. A release builds its binaries and
+# no pull request waits to land or 2 landings since the newest public release are unreleased. A release builds its binaries and
 # images once, as Humble and Farley's Continuous Delivery asks, and RELEASE and PUBLISH publish exactly the files this
 # run built. The one Mac ran each landing's MAC_TESTS and its 33-minute profile-guided build in series, 47 minutes a
 # batch, so batches waiting to land landed 47 to 50 minutes apart and the queue's wait grew with each batch, where the
