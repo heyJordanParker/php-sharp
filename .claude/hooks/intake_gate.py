@@ -11,7 +11,6 @@ INTAKE = Path.home() / ".claude/orchestrate/php-sharp/intake.md"
 # Reruns the `## Facts` a design rests on: two landing designs failed on facts nobody ran on 11-23 (GitHub's merge
 # queue on a user-owned repository, and next and master holding one tree).
 FACTS = INTAKE.parent / "facts.py"
-LEDGER = Path.home() / ".claude/orchestrate/php-sharp/sop-reads.json"
 # precedent and consistent (11-25, the language owner): every planned change names its system's one precedent from
 # precedents.md and the same-kind names, commands, flags or outputs it matches, so no new API acts or reads unlike its
 # neighbors; the first outline command took one client's JSON shape for want of both.
@@ -53,16 +52,6 @@ def entry_for(issue: str) -> str | None:
     return None
 
 
-def require_read(event: dict, name: str, action: str) -> None:
-    """Refuses `action` unless this session read the maintain Skill's `name` since its last compaction (sop_reads.py)."""
-    try:
-        read = json.loads(LEDGER.read_text()).get(event.get("session_id", ""), [])
-    except (OSError, ValueError):
-        read = []
-    if name not in read:
-        deny(f"{action} follows .claude/skills/maintain/{name}, which this session has not read since its last compaction. Read it, then {action[0].lower() + action[1:]}.")
-
-
 def in_progress(text: str) -> int:
     return len(re.findall(r"^## .*\(in progress\)", text, re.MULTILINE))
 
@@ -100,12 +89,7 @@ def main() -> None:
     if path == str(INTAKE):
         require_one_in_progress(event)
         return
-    if "/orchestrate/php-sharp/proposals/" in path:
-        require_read(event, "PROPOSE.md", "Writing a proposal")
-        return
     command = event.get("tool_input", {}).get("command", "")
-    if re.search(r"\bgh pr create\b", command) and re.search(r"--head\s+release/|chore: release", command):
-        require_read(event, "SHIP.md", "Opening a release pull request")
     for match in re.finditer(r"\bgh issue (create|comment|edit)\b(?:\s+(\d+))?", command):
         invocation = re.split(r"\s(?:&&|\|\||;)\s|\n(?!\s)", command[match.start():], maxsplit=1)[0]
         check(event, match, body_of(invocation))
@@ -165,7 +149,6 @@ def check(event: dict, match: re.Match, text: str) -> None:
     briefs = "## Agent Brief" in text or "## Research brief" in text or "ready-for-agent" in text
     if not briefs:
         return
-    require_read(event, "AGENT-BRIEF.md", "Posting a brief")
     if "## Research brief" in text and "## Agent Brief" not in text and "ready-for-agent" not in text:
         if entry_for(match.group(2) or "") is None:
             deny(f"#{match.group(2)} has no entry in ~/.claude/orchestrate/php-sharp/intake.md with its `issue:` box. Write it first (TRIAGE.md).")

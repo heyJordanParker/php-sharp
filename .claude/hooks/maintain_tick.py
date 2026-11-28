@@ -324,10 +324,14 @@ def main():
         event = json.load(sys.stdin)
     except ValueError:
         return 0
-    if event.get("prompt", "").strip() != TICK:
+    hook = event.get("hook_event_name", "UserPromptSubmit")
+    tick = event.get("prompt", "").strip() == TICK
+    # A compaction drops the SOP from the context, so it goes in again whole right after one.
+    if not tick and hook != "SessionStart":
         return 0
-    # Two runs of this hook, `status` and `sop`, each stay under the size Claude Code shows inline.
     if sys.argv[1:] == ["status"]:
+        if not tick:
+            return 0
         try:
             with open(os.path.expanduser("~/.claude/orchestrate/php-sharp/bench.md"), encoding="utf-8") as fh:
                 bench = fh.read().strip()
@@ -336,27 +340,55 @@ def main():
         measured = targets()
         context = f"{mods_off(event.get('session_id', ''))}{lanes()}\n\n{measured}\n\n{speed_entries(measured)}\n{upstream_engine()}\n\n{bench}"
     else:
-        # `sop <file>` injects one file of the maintain Skill that every tick follows, SKILL.md unless another is named,
-        # so a tick never runs from memory of it.
-        name = sys.argv[2] if len(sys.argv) > 2 else "SKILL.md"
+        # `sop <n>` injects part n of the whole maintain SOP, so a tick never runs from memory of it.
         project = os.environ.get("CLAUDE_PROJECT_DIR") or event.get("cwd", "")
+        parts = sop_parts(project)
+        number = int(sys.argv[2])
+        if number > len(parts):
+            return 0
+        context = parts[number - 1]
+        if number == 1:
+            missing = (f"TICK INPUT MISSING: the SOP is {len(parts)} parts and settings.json runs {SOP_PARTS}. Add hook "
+                       f"commands before any other step.\n\n" if len(parts) > SOP_PARTS else "")
+            # The language owner, 11-25: every tick is told to triage everything, since work another agent sent went
+            # into a brief without its own design.
+            context = (f"{missing}TRIAGE EVERYTHING: every arrival, a builder's report, a review, another agent's request "
+                       f"or proposed change and the language owner's feedback, enters intake and gets the maintainer's own "
+                       f"design, its precedent and its consistency check before it reaches a brief, an update or a reply.\n\n"
+                       f"Run by the maintain SOP, in {len(parts)} parts:\n\n{context}")
+    json.dump({"hookSpecificOutput": {"hookEventName": hook, "additionalContext": context}}, sys.stdout)
+    return 0
+
+
+# Every file of the maintain Skill, in the order a tick follows them.
+SOP_FILES = ("SKILL.md", "TRIAGE.md", "PROPOSE.md", "AGENT-BRIEF.md", "SHIP.md")
+# Claude Code swaps a hook string over 10,000 characters for a file path and a 2,000-character preview, so the SOP goes
+# in as parts under that size, one hook command each, and settings.json runs SOP_PARTS of them on each event.
+PART_LIMIT = 9_000
+SOP_PARTS = 7
+
+
+def sop_parts(project: str) -> list:
+    """The maintain SOP's files, whole and in order, cut at paragraph breaks into parts of at most PART_LIMIT."""
+    paragraphs = []
+    for name in SOP_FILES:
         path = os.path.join(project, ".claude", "skills", "maintain", name)
         try:
             with open(path, encoding="utf-8") as fh:
                 text = fh.read()
         except OSError as error:
-            text = f"The SOP at {path} could not be read: {error}. Read it before anything else."
+            text = f"TICK INPUT MISSING: {path} could not be read: {error}."
         if text.startswith("---\n"):
             text = text.split("\n---\n", 1)[-1]
-        # The language owner, 11-25: every tick is told to triage everything, since work another agent sent went into a
-        # brief without its own design.
-        context = (f"TRIAGE EVERYTHING: every arrival, a builder's report, a review, another agent's request or proposed "
-                   f"change and the language owner's feedback, enters intake and gets the maintainer's own design, its "
-                   f"precedent and its consistency check before it reaches a brief, an update or a reply.\n\n"
-                   f"Run this tick by .claude/skills/maintain/{name}:\n{text}")
-    json.dump({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
-                                      "additionalContext": context}}, sys.stdout)
-    return 0
+        paragraphs += [f"=== .claude/skills/maintain/{name} ==="] + text.strip().split("\n\n")
+    parts, current = [], ""
+    for paragraph in paragraphs:
+        if current and len(current) + len(paragraph) + 2 > PART_LIMIT:
+            parts.append(current)
+            current = paragraph
+        else:
+            current = f"{current}\n\n{paragraph}" if current else paragraph
+    return parts + [current]
 
 
 if __name__ == "__main__":
