@@ -14,7 +14,8 @@ declare(strict_types=1);
  * <mago> is the test-run build, which behaves as the release users run. It writes c2ks and the law corpus with
  * benchmark/c2k.php into a temporary folder, has <mago> compile the standard library package each one installed, as a
  * release compiles the one it ships, and compiles each from cold, then edits app/M66/Score.sharp of c2ks in
- * place, which no law reaches, for a whole `mago analyze`. With --write, it writes what it measured and the commit it
+ * place, which no law reaches, for a whole `mago analyze`, and times its edit to feedback as --project does below.
+ * With --write, it writes what it measured and the commit it
  * measured as a baseline, which only the SPEED job writes, since instructions differ between machines. With
  * --baseline, it exits 1 when any law of the baseline counts more than 1.2 times its heartbeats or ends unproven where
  * the baseline proved it, when the corpus counts more than 1.05 times its heartbeats, or, when the baseline counted
@@ -24,14 +25,17 @@ declare(strict_types=1);
  * counted as the SPEED job counts, and never waits for a quiet machine (#773). It clones the folder, as `cp -cR` on
  * APFS and `cp --reflink=auto` on Linux do, so the copy takes no new space where the file system shares blocks, deletes
  * the clone's .sharp folder, since a clone keeps each file's modification time and so the stamps an earlier compile
- * recorded, and gives mago an empty cache, both deleted at the end, and runs each mago on one thread, so no
+ * recorded, and gives mago an empty cache, both deleted at the end, compiles the standard library package the folder
+ * installed, as a release compiles the one it ships, and runs each mago on one thread, so no
  * interleaving decides which check elaborates a theorem first and the heartbeats are exact: a cold `compile` gives each
  * law's heartbeats and their sum, a no-change `compile` and an `analyze` after a newline is appended to the first
  * .sharp file under app/, by sorted path, give the instructions they retire. The edit's run also gives its user plus
  * system CPU-seconds and its peak memory, from the same `/usr/bin/time -l` on macOS, which --write writes as cpu_s and
  * peak_mib, and the edit targets of the speed loop read. --baseline compares with what the same project wrote, by the
  * thresholds above, the no-change compile's instructions as the edit's. Each run's wall time prints beside the counts,
- * and nothing compares it.
+ * and nothing compares it. Then it appends a newline to the same file five times more, and after each runs
+ * `mago compile` as a user does, on every thread with every extension host and its laws, on the warm cache: the median
+ * of their wall times prints as the edit to feedback, which --write writes as wall_s.
  */
 
 const LAW_GROWTH = 1.2;
@@ -139,6 +143,7 @@ function measure_generated(string $mago, string $root): array
                 'platform' => PHP_OS_FAMILY . '-' . php_uname('m'),
                 'edit' => counted($mago, ['--threads', '1', 'analyze'], $project)['instructions'],
             ];
+            $measured['wall_s'] = feedback($mago, $score, $project, []);
         }
         printf("%s: %d laws, %.1f s\n", $kind, count($laws), microtime(true) - $started);
     }
@@ -160,6 +165,7 @@ function measure_project(string $mago, string $folder, string $root): array
     run([...$clone, $folder, $project], getcwd());
     remove_tree("{$project}/.sharp");
     $environment = ['XDG_CACHE_HOME' => "{$root}/cache"];
+    run_mago($mago, ['compile'], "{$project}/vendor/heyjordanparker/php-sharp-composer", $environment);
 
     $started = microtime(true);
     $log = run_mago($mago, ['--threads', '1', 'compile'], $project, $environment);
@@ -183,6 +189,9 @@ function measure_project(string $mago, string $folder, string $root): array
     printf("edit of %s: %s instructions, %s CPU-s, %s MiB peak, %.1f s\n", substr($sharp, strlen($project) + 1),
         number_format($edit['instructions']), $edit['cpu_s'] ?? 'no', $edit['peak_mib'] ?? 'no', microtime(true) - $started);
 
+    /** @var list<float> $rounds */
+    $wall = feedback($mago, $sharp, $project, $environment);
+
     return [
         'commit' => commit(),
         'project' => basename(realpath($folder)),
@@ -195,6 +204,7 @@ function measure_project(string $mago, string $folder, string $root): array
         ],
         'cpu_s' => $edit['cpu_s'],
         'peak_mib' => $edit['peak_mib'],
+        'wall_s' => $wall,
     ];
 }
 
@@ -312,6 +322,48 @@ function counted(string $mago, array $arguments, string $folder, array $environm
     }
 
     return $measured;
+}
+
+/**
+ * Runs `mago $arguments` in `$folder` as a user does, with no debug log and no counter, with `$environment` over the
+ * script's, and gives the seconds from its start to its exit, by `hrtime`. A status other than 0 or 1 stops the script
+ * with its output, as `mago` does.
+ */
+function timed(string $mago, array $arguments, string $folder, array $environment): float
+{
+    $command = [$mago, '--no-version-check', '--colors', 'never', ...$arguments];
+    $inherited = (array) getenv();
+    $started = (int) hrtime(as_number: true);
+    [$status, $output, $errors] = output($command, $folder, array_merge($inherited, $environment));
+    $seconds = ((int) hrtime(as_number: true) - $started) / 1e9;
+    if ($status !== 0 && $status !== 1) {
+        fwrite(STDERR, implode(' ', $arguments) . " in {$folder} exited {$status}:\n{$output}{$errors}");
+        exit(1);
+    }
+
+    return $seconds;
+}
+
+/**
+ * The edit to feedback of the project in `$folder`: five times, appends a newline to `$sharp` and times a
+ * `mago compile` as a user runs it, and gives the median of their seconds, which it prints beside the load.
+ */
+function feedback(string $mago, string $sharp, string $folder, array $environment): float
+{
+    $count = 5;
+    $rounds = [];
+    for ($round = 0; $round < $count; $round++) {
+        file_put_contents($sharp, data: "\n", flags: FILE_APPEND);
+        $rounds[] = timed($mago, ['compile'], $folder, $environment);
+    }
+    sort($rounds);
+    /** @var float $median */
+    $median = $rounds[intdiv($count, num2: 2)];
+    $wall = round($median, precision: 2);
+    [, $load] = output(['uptime'], $folder, (array) getenv());
+    printf("edit to feedback: %.2f s, the median of %d compiles, at %s\n", $wall, $count, trim($load));
+
+    return $wall;
 }
 
 /**
