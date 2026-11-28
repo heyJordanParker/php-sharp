@@ -5763,11 +5763,11 @@ public class Links
 
 - **The signature fits the library's native types, never its docblock.** Each stated parameter crosses to the native one, the stated return type takes the native one, and each native parameter after the stated ones has a default. A misfit is a compile error at the `extern` line, as `extern int Routing.route(RouteName name) uses none;` is: `route` returns a `string`. A native parameter without a type takes any stated type, so a line corrects a docblock that says `array` where the method reads an object. A native `callable` or `Closure` result is a function whose types PHP never declares, so any stated function type takes it, as `extern Function<int(int) uses none> Legacy.doubler() uses none;` states one (section 21).
 - **A backed case crosses as its value** where the native parameter declares only scalars, as `string $name` does, so plain PHP receives `"checkout"`. A `keyof T` crosses as the member's name (section 11.2).
-- **A parameter takes a literal default, as a method's does,** and a call that leaves the parameter out passes the line's default to plain PHP, by the library's name, whatever default the library declares. A literal is a string shorter than 1000 bytes, an `int`, a `float`, `true`, `false`, `null`, or `[]` for a `List` parameter. A default that runs code, as `int at = Hooks.now()`, is a compile error, and so is one the parameter's type does not take, as `int priority = "10"`. A call names an argument by the line's name only when the library's parameter at its place has that name, since PHP reads a named argument by the library's name.
+- **A parameter takes a literal default, as a method's does,** and a call that leaves the parameter out passes the line's default to plain PHP, by the library's name, whatever default the library declares. A literal is a string shorter than 1000 bytes, an `int`, a `float`, `true`, `false`, `null`, `[]` for a `List` parameter, or `[:]` for a `Map` parameter. A default that runs code, as `int at = Hooks.now()`, is a compile error, and so is one the parameter's type does not take, as `int priority = "10"`. A call names an argument by the line's name only when the library's parameter at its place has that name, since PHP reads a named argument by the library's name.
 - **A `callable` parameter takes any function value** (section 7), and crosses to a native `callable`, `Closure` or untyped parameter as the closure the value is.
 - **A generic class writes its type parameters as it declares them,** as `Builder<TModel>` for Eloquent's `@template TModel`, and other names are a compile error.
 
-A plain PHP method's optional array parameter stays optional through `[]`, which a call that leaves it out passes as an empty PHP array. A list that holds a value is no literal, and a `Map` parameter takes no `[]`, which is an empty `List` (section 12):
+A plain PHP method's optional array parameter stays optional through `[]` for a `List` parameter and `[:]` for a `Map` parameter, which a call that leaves it out passes as an empty PHP array. A list or a map that holds a value is no literal, a `Map` parameter takes no `[]`, which is an empty `List`, and a `List` parameter takes no `[:]`, which is an empty `Map` (section 12):
 
 <!-- example extern-list-default -->
 ```php
@@ -5776,6 +5776,8 @@ namespace Illuminate\Support\Facades;
 class DB
 {
     public static function select(string $query, array $bindings = []): array { return [(object) ['bound' => count($bindings)]]; }
+    public static function update(string $query, array $bindings = []): int { return count($bindings); }
+    public static function delete(string $query, array $bindings = []): int { return count($bindings); }
 }
 ```
 
@@ -5788,6 +5790,8 @@ import Illuminate.Support.Facades.DB;
 
 extern List<Object> DB.select(string query, List<Any?> bindings = []) uses Database;   // compiles: bindings defaults to an empty array
 extern void DB.statement(string query, List<Any?> bindings = [1]) uses Database;      // compile error: a list that holds a value is no literal
+extern int DB.update(string query, Map<string, Any?> bindings = [:]) uses Database;    // compiles: named bindings default to an empty array
+extern int DB.delete(string query, List<Any?> bindings = [:]) uses Database;           // compile error: `[:]` is an empty Map. An empty List is written `[]`.
 ```
 
 <!-- example extern-list-default -->
