@@ -13062,9 +13062,53 @@ ZEND_FUNCTION(Sharp_Internal_startProgram)
 	efree_size(op_array, sizeof(zend_op_array));
 }
 
+/* The exit status a program ends with for `returned`, what its main returns, spec section 27, after Rust's Termination:
+ * an ExitCode's code, a Result's Ok's code, and 1 for its Err, whose error's message it writes to stderr after
+ * "Error: ". False for a void main's null, which returns to PHP, as a front controller's does. */
+static bool sharp_program_status(zval *returned, int *status)
+{
+	if (Z_TYPE_P(returned) != IS_OBJECT) {
+		return false;
+	}
+	zend_object *object = Z_OBJ_P(returned);
+	zval read;
+	if (zend_string_equals_literal(object->ce->name, "Sharp\\Result\\Err")) {
+		zval *error = zend_read_property(object->ce, object, ZEND_STRL("error"), true, &read);
+		zval said;
+		zend_string *message = Z_TYPE_P(error) == IS_OBJECT
+			? zval_get_string(zend_read_property(Z_OBJCE_P(error), Z_OBJ_P(error), ZEND_STRL("message"), true, &said))
+			: ZSTR_EMPTY_ALLOC();
+		fprintf(stderr, "Error: %s\n", ZSTR_VAL(message));
+		fflush(stderr);
+		zend_string_release(message);
+		*status = 1;
+
+		return true;
+	}
+	if (zend_string_equals_literal(object->ce->name, "Sharp\\Result\\Ok")) {
+		zval held;
+		zval *value = zend_read_property(object->ce, object, ZEND_STRL("value"), true, &held);
+		if (Z_TYPE_P(value) != IS_OBJECT) {
+			return false;
+		}
+		object = Z_OBJ_P(value);
+	}
+	if (!zend_string_equals_literal(object->ce->name, "Sharp\\System\\ExitCode")) {
+		return false;
+	}
+	*status = (int) zval_get_long(zend_read_property(object->ce, object, ZEND_STRL("code"), true, &read));
+
+	return true;
+}
+
 /* Spec section 27: a .sharp file whose class, the one name names, declares main, run as PHP's script, builds the
- * class through the container, as it builds a listener's, and calls main. An int main returns ends the run with that
- * exit code, as PHP's exit does, and a void main returns to PHP, as a front controller or auto_prepend_file does. */
+ * class through the container, as it builds a listener's, and calls main. Each way the program ends exits with its
+ * code, after Rust's Termination: a void main returns to PHP, as a front controller or auto_prepend_file does, and an
+ * ExitCode or Result main ends the run with the status sharp_program_status reads. A throw that escapes main reaches
+ * the exception handler a plain PHP caller installed, or PHP's report of an uncaught throw, and the engine stopping the
+ * program ends it too: each exits 101, as Rust's panic does, never 0. A time limit's fatal error bails out through
+ * zend_catch, and running out of memory unwinds as an exit once zend_handle_delayed_oom reports it. Process.exit's own
+ * exit passes through with its code. */
 ZEND_FUNCTION(Sharp_Internal_runProgram)
 {
 	zend_string *name;
@@ -13081,17 +13125,42 @@ ZEND_FUNCTION(Sharp_Internal_runProgram)
 		RETURN_THROWS();
 	}
 	ZVAL_UNDEF(&returned);
-	zend_call_method_with_0_params(Z_OBJ(program), Z_OBJCE(program), NULL, "main", &returned);
+	zend_try {
+		zend_call_method_with_0_params(Z_OBJ(program), Z_OBJCE(program), NULL, "main", &returned);
+	} zend_catch {
+		EG(exit_status) = 101;
+		zend_bailout();
+	} zend_end_try();
 	zval_ptr_dtor(&program);
 	if (EG(exception)) {
 		zval_ptr_dtor(&returned);
+		/* The engine running out of memory unwinds the program as an exit does, after it reports the error. */
+		if (zend_is_unwind_exit(EG(exception))) {
+			if (ZEND_HAS_OOM()) {
+				EG(exit_status) = 101;
+			}
+			RETURN_THROWS();
+		}
+		if (Z_TYPE(EG(user_exception_handler)) != IS_UNDEF) {
+			zend_user_exception_handler();
+		}
+		if (EG(exception) && zend_is_unwind_exit(EG(exception))) {
+			RETURN_THROWS();
+		}
+		if (EG(exception)) {
+			zend_exception_error(EG(exception), E_ERROR);
+		}
+		EG(exit_status) = 101;
+		zend_throw_unwind_exit();
 		RETURN_THROWS();
 	}
-	if (Z_TYPE(returned) == IS_LONG) {
-		EG(exit_status) = (int) Z_LVAL(returned);
+	int status;
+	bool ends = sharp_program_status(&returned, &status);
+	zval_ptr_dtor(&returned);
+	if (ends && !EG(exception)) {
+		EG(exit_status) = status;
 		zend_throw_unwind_exit();
 	}
-	zval_ptr_dtor(&returned);
 }
 
 /* Spec section 6.2: a property's observers run only once its object is fully built. The object is still being built
@@ -15987,7 +16056,9 @@ ZEND_FUNCTION(Sharp_Internal_parseAs)
 		Z_PARAM_BOOL(text)
 	ZEND_PARSE_PARAMETERS_END();
 
-	const sharp_type *type = sharp_class_value_read_whole(class_value);
+	/* A parse reads its value into the whole type, `?` included, so a `null` read into `T?` is null and the `Result` is
+	 * a `Result<T?, ParseError>`, spec section 10, where a member read of the class value takes the type without it. */
+	const sharp_type *type = sharp_class_value_of(class_value);
 	if (!type) {
 		RETURN_THROWS();
 	}

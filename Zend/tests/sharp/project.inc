@@ -11,7 +11,7 @@ const LIBRARY_MODULE = [
     'Testing/FakeEnvironment', 'Testing/FakeClock', 'Testing/FakeRandom', 'Testing/FakeConsole', 'Testing/FakeProcess',
     'Testing/FakeFiles', 'Testing/FakeHttp', 'Testing/FakeMail', 'Testing/FakeDns', 'Testing/FakePhpGlobals',
     'Testing/FakeDatabase', 'Testing/FakeCache',
-    'System/Process', 'System/ProcessResult', 'System/ChildProcess', 'IO/Files', 'Net/Http', 'Net/Mail', 'Net/Dns', 'Net/IpAddress',
+    'System/Process', 'System/ExitCode', 'System/ProcessResult', 'System/ChildProcess', 'IO/Files', 'Net/Http', 'Net/Mail', 'Net/Dns', 'Net/IpAddress',
     'Net/IpFamily', 'Interop/PhpGlobals', 'Interop/Superglobal', 'Time/Duration', 'Time/Instant',
     'Time/DateTime', 'Time/Date', 'Time/TimeOfDay', 'Time/TimeZone', 'Interop/PhpDates', 'Time/Weekday', 'Time/Month', 'Error', 'Result', 'ParseError', 'Int', 'ByteOrder', 'Bytes', 'Math', 'Net/HttpMethod', 'Net/HttpRequest',
     'Net/HttpResponse', 'Net/MailAddress', 'Net/MailMessage', 'Net/Url', 'Text/StringMembers', 'Text/NormalizationForm', 'ListMembers',

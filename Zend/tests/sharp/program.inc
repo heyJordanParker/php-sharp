@@ -8,6 +8,7 @@ const IMPORT = <<<'SHARP'
 namespace App.Console;
 
 import Sharp.System.Environment;
+import Sharp.System.ExitCode;
 
 public class Import
 {
@@ -18,13 +19,13 @@ public class Import
         this.environment = environment;
     }
 
-    public int main()
+    public ExitCode main()
     {
         if (this.environment.arguments.count() < 2) {
-            return 64;
+            return new ExitCode(64);
         }
 
-        return 0;
+        return ExitCode.success;
     }
 }
 
