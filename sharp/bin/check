@@ -358,12 +358,36 @@ network_retries() {
     return 1
   fi
 }
+# sharp/bin/release-notes writes a release's notes from the ## Changelog sections of its pull requests, and with no
+# entry prints its empty case, which queue.yml reads as no release to start (#1125). Each folder under
+# sharp/bin/fixtures/release-notes holds pull requests' bodies, named by number, the numbers in pulls, and the notes in
+# expected.md. A gh on the PATH prints a body for `gh pr view <number> --json body --jq .body`.
+release_notes() {
+  local case printed
+  mkdir -p "$TMPDIR/release-notes-bin"
+  # shellcheck disable=SC2016 # The program is the stand-in gh's own, whose $3 the shell must not expand.
+  printf '%s\n' '#!/usr/bin/env bash' 'cat "$RELEASE_NOTES_BODIES/$3.md"' > "$TMPDIR/release-notes-bin/gh"
+  chmod +x "$TMPDIR/release-notes-bin/gh"
+  for case in "$root"/sharp/bin/fixtures/release-notes/*/; do
+    # shellcheck disable=SC2046 # pulls is a list of pull request numbers.
+    printed="$(PATH="$TMPDIR/release-notes-bin:$PATH" RELEASE_NOTES_BODIES="$case" \
+      "$root/sharp/bin/release-notes" $(< "$case/pulls"))" || true
+    if [[ $printed != "$(< "$case/expected.md")" ]]; then
+      echo "sharp/bin/release-notes printed, for ${case#"$root"/}:" >&2
+      echo "$printed" >&2
+      echo "where expected.md holds:" >&2
+      cat "$case/expected.md" >&2
+      return 1
+    fi
+  done
+}
 gate_workflows() {
   step unpinned
   step syntax_frontend
   step lint_workflows
   step queue_lost_runner
   step network_retries
+  step release_notes
 }
 
 # Every test sharp/baseline/seconds lists exists, since a renamed test's new name weighs 1 s in sharp/bin/test's slices
