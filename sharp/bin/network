@@ -4,8 +4,10 @@ set -uo pipefail
 # Runs a command that fetches from a registry or a download server, and runs it again, up to 3 tries in all, when its
 # output shows the network failed it, so one dropped connection never fails a CI job: HOSTS failed run 45091043799 on
 # "dial tcp 4.149.173.82:443: i/o timeout" from ghcr.io, and passed on a rerun. Any other failure fails at once, with
-# the command's own status. The output streams as the command prints it, its standard error on standard output, so a
-# caller reads no data from it.
+# the command's own status. Its standard error streams as the command prints it, and its standard output prints once,
+# the last try's, so a caller reads data from it as from the command: `tree=$(sharp/bin/network gh api ...)`. A read
+# of GitHub's API is a fetch too: PUBLISH's read of the release's tree got gh's "Server Error (HTTP 502)" on run
+# 46074219253, wrote the error into its output and left v0.8.55 a draft (#1111).
 
 if [[ $# -eq 0 ]]; then
   echo "usage: sharp/bin/network <command> [arguments...]" >&2
@@ -13,15 +15,19 @@ if [[ $# -eq 0 ]]; then
 fi
 
 # An HTTP/2 stream the server reset is one too: HOSTS failed run 45465654109 on "stream error: stream ID 5; INTERNAL_ERROR;
-# received from peer" from proxy.golang.org.
-failures='i/o timeout|connection reset by peer|connection refused|TLS handshake timeout|unexpected EOF|Temporary failure in name resolution|no such host|net/http: request canceled|context deadline exceeded|stream error|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout'
+# received from peer" from proxy.golang.org. gh names a server's error by its status, as "(HTTP 502)".
+failures='i/o timeout|connection reset by peer|connection refused|TLS handshake timeout|unexpected EOF|Temporary failure in name resolution|no such host|net/http: request canceled|context deadline exceeded|stream error|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|HTTP 5[0-9][0-9]'
 log="$(mktemp)"
-trap 'rm -f "$log"' EXIT
+output="$(mktemp)"
+trap 'rm -f "$log" "$output"' EXIT
 
+# The command's standard output goes to the output file through file descriptor 3, and its standard error through the
+# pipe to tee, which streams it and keeps it in the log. pipefail makes the command's own status the group's.
 for try in 1 2 3; do
-  "$@" 2>&1 | tee "$log"
-  status="${PIPESTATUS[0]}"
-  if [[ $status -eq 0 ]] || ! grep -qE "$failures" "$log"; then
+  { "$@" 2>&1 1>&3 3>&- | tee "$log" >&2; } 3> "$output"
+  status=$?
+  if [[ $status -eq 0 ]] || ! grep -qE "$failures" "$log" "$output"; then
+    cat "$output"
     exit "$status"
   fi
   if [[ $try -lt 3 ]]; then
@@ -29,4 +35,5 @@ for try in 1 2 3; do
   fi
 done
 echo "sharp/bin/network: $1 failed on the network 3 times." >&2
+cat "$output"
 exit "$status"
