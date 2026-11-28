@@ -1,7 +1,12 @@
 //! A content-addressed store of objects, as Git's object database keeps them: each object is a blob of bytes, or a tree
 //! that names blobs and trees, stored once, under the hash of its kind and bytes. A tree whose few entries change is
 //! written again as a new tree beside the objects it keeps, so a store writes only what changed. A ref file names a
-//! root tree, and [`Objects::collect`] deletes each object no root reaches, as `git prune` does.
+//! root tree, and [`Objects::collect`] deletes each loose object no root reaches, as `git prune` does, and packs the
+//! objects the roots reach into one file once the loose ones are many, as `git gc --auto` does, so a reader opens one
+//! pack in place of a file for each object.
+
+// A pack and its index are files of fixed byte order, as a compiled file is.
+#![allow(clippy::big_endian_bytes, clippy::little_endian_bytes)]
 
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -11,6 +16,9 @@ use std::io;
 use std::io::Write as _;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::PoisonError;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
@@ -169,18 +177,166 @@ impl Tree {
     }
 }
 
-/// A store of objects in a folder, as `.git/objects` holds them: each object in a file of the fan-out folder its ID's
-/// first two digits name, named by the rest of its ID.
-#[derive(Clone, Debug)]
+/// How many loose objects a store holds before [`Objects::collect`] packs them, as Git's `gc.auto` sets it.
+const GC_AUTO: usize = 6700;
+
+/// The folder of a store that holds its packs, as `.git/objects/pack` does.
+const PACK_FOLDER: &str = "pack";
+
+/// The bytes that start a pack, as they start Git's.
+const PACK_SIGNATURE: &[u8; 4] = b"PACK";
+
+/// The bytes that start a pack's index, as they start Git's version 2 index.
+const INDEX_SIGNATURE: &[u8; 4] = b"\xfftOc";
+
+/// The version of a pack and of its index, as Git's.
+const PACK_VERSION: u32 = 2;
+
+/// A pack of a store, as Git's packfile holds a store's objects in one file, with an index of where each one starts.
+///
+/// It is Git's format without its compression and its deltas, with 32-byte BLAKE3 IDs, 64-bit offsets, and its numbers
+/// little-endian, as the compiled files' headers keep theirs.
+#[derive(Debug)]
+struct Pack {
+    file: fs::File,
+    /// The ID of each object the pack holds, in ID order, with the offset of its entry in the pack.
+    entries: Vec<(ObjectId, u64)>,
+    /// The pack's file and its index's file.
+    paths: [PathBuf; 2],
+}
+
+impl Pack {
+    /// The pack whose index is the file at `index`, beside the pack of the same name.
+    fn open(index: &Path) -> io::Result<Self> {
+        let invalid = || io::Error::new(io::ErrorKind::InvalidData, format!("{} is no index", index.display()));
+        let bytes = fs::read(index)?;
+        let version = PACK_VERSION.to_le_bytes();
+        if bytes.get(..4) != Some(INDEX_SIGNATURE.as_slice()) || bytes.get(4..8) != Some(version.as_slice()) {
+            return Err(invalid());
+        }
+        let count = usize::try_from(read_u32(&bytes, 8 + 255 * 4).ok_or_else(invalid)?).map_err(|_| invalid())?;
+        let ids = 8 + 256 * 4;
+        let offsets = ids + count * 32;
+        let mut entries = Vec::with_capacity(count);
+        for entry in 0..count {
+            let id = bytes.get(ids + entry * 32..ids + entry * 32 + 32).ok_or_else(invalid)?;
+            let offset = bytes.get(offsets + entry * 8..offsets + entry * 8 + 8).ok_or_else(invalid)?;
+            entries.push((
+                ObjectId(id.try_into().map_err(|_| invalid())?),
+                u64::from_le_bytes(offset.try_into().map_err(|_| invalid())?),
+            ));
+        }
+        let pack = index.with_extension("pack");
+
+        Ok(Self { file: fs::File::open(&pack)?, entries, paths: [pack, index.to_path_buf()] })
+    }
+
+    /// The kind and content of the object `id`, when the pack holds it.
+    fn read(&self, id: ObjectId) -> io::Result<Option<(Kind, Vec<u8>)>> {
+        let Ok(found) = self.entries.binary_search_by_key(&id, |(entry, _)| *entry) else {
+            return Ok(None);
+        };
+        let offset = self.entries[found].1;
+        // Every entry is followed by at least the pack's 32-byte trailer, so its whole header is in the next 16 bytes.
+        let mut header = [0; 16];
+        read_at(&self.file, &mut header, offset)?;
+        let invalid = || io::Error::new(io::ErrorKind::InvalidData, format!("object {id} of a pack is damaged"));
+        let (kind, size, header_length) = parse_entry_header(&header).ok_or_else(invalid)?;
+        let mut content = vec![0; usize::try_from(size).map_err(|_| invalid())?];
+        read_at(&self.file, &mut content, offset + to_u64(header_length))?;
+
+        Ok(Some((kind, content)))
+    }
+}
+
+/// Fills `buffer` from `file` at `offset`, leaving the file's position as it was, so the readers of a pack share it.
+fn read_at(file: &fs::File, buffer: &mut [u8], offset: u64) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::FileExt::read_exact_at(file, buffer, offset)
+    }
+    #[cfg(windows)]
+    {
+        let mut read = 0;
+        while read < buffer.len() {
+            match std::os::windows::fs::FileExt::seek_read(file, &mut buffer[read..], offset + to_u64(read))? {
+                0 => return Err(io::ErrorKind::UnexpectedEof.into()),
+                count => read += count,
+            }
+        }
+        Ok(())
+    }
+}
+
+/// `count` as a `u64`, which holds every length a store writes.
+fn to_u64(count: usize) -> u64 {
+    u64::try_from(count).unwrap_or(u64::MAX)
+}
+
+/// The little-endian `u32` of `bytes` at `at`.
+fn read_u32(bytes: &[u8], at: usize) -> Option<u32> {
+    Some(u32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?))
+}
+
+/// The header of a pack's entry, as Git writes it: the kind's number, 2 for a tree and 3 for a blob, and the content's
+/// size in groups of 7 bits, the first group of 4, each byte but the last with its high bit set.
+fn entry_header(kind: Kind, size: usize) -> Vec<u8> {
+    let number: u8 = match kind {
+        Kind::Tree => 2,
+        Kind::Blob => 3,
+    };
+    let mut size = to_u64(size);
+    let mut byte = (number << 4) | u8::try_from(size & 0x0f).unwrap_or_default();
+    size >>= 4;
+    let mut header = Vec::with_capacity(10);
+    while size > 0 {
+        header.push(byte | 0x80);
+        byte = u8::try_from(size & 0x7f).unwrap_or_default();
+        size >>= 7;
+    }
+    header.push(byte);
+
+    header
+}
+
+/// The kind, the content's size and the header's length of the entry whose header `bytes` start with.
+fn parse_entry_header(bytes: &[u8]) -> Option<(Kind, u64, usize)> {
+    let first = *bytes.first()?;
+    let kind = match (first >> 4) & 0x07 {
+        2 => Kind::Tree,
+        3 => Kind::Blob,
+        _ => return None,
+    };
+    let mut size = u64::from(first & 0x0f);
+    let mut shift = 4;
+    let mut length = 1;
+    let mut byte = first;
+    while byte & 0x80 != 0 {
+        byte = *bytes.get(length)?;
+        size |= u64::from(byte & 0x7f) << shift;
+        shift += 7;
+        length += 1;
+    }
+
+    Some((kind, size, length))
+}
+
+/// A store of objects in a folder, as `.git/objects` holds them.
+///
+/// Each loose object is in a file of the fan-out folder its ID's first two digits name, named by the rest of its ID, and
+/// the others are in the packs of its [`PACK_FOLDER`].
+#[derive(Debug)]
 pub struct Objects {
     folder: PathBuf,
+    /// The store's packs, read on the first read that needs them.
+    packs: Mutex<Option<Arc<[Pack]>>>,
 }
 
 impl Objects {
     /// The store in `folder`, which a first write makes.
     #[must_use]
     pub fn at(folder: impl Into<PathBuf>) -> Self {
-        Self { folder: folder.into() }
+        Self { folder: folder.into(), packs: Mutex::default() }
     }
 
     /// The store's folder.
@@ -211,7 +367,7 @@ impl Objects {
     ///
     /// # Errors
     ///
-    /// Returns the error of reading the object's file, and [`io::ErrorKind::InvalidData`] when it holds no blob.
+    /// Returns the error of reading the object, and [`io::ErrorKind::InvalidData`] when it is no blob.
     pub fn read_blob(&self, id: ObjectId) -> io::Result<Vec<u8>> {
         self.read(Kind::Blob, id)
     }
@@ -220,9 +376,34 @@ impl Objects {
     ///
     /// # Errors
     ///
-    /// Returns the error of reading the object's file, and [`io::ErrorKind::InvalidData`] when it holds no tree.
+    /// Returns the error of reading the object, and [`io::ErrorKind::InvalidData`] when it is no tree.
     pub fn read_tree(&self, id: ObjectId) -> io::Result<Tree> {
         Tree::decode(&self.read(Kind::Tree, id)?)
+    }
+
+    /// The store's packs, as their indexes name them.
+    fn packs(&self) -> io::Result<Arc<[Pack]>> {
+        let mut packs = self.packs.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(packs) = packs.as_ref() {
+            return Ok(Arc::clone(packs));
+        }
+        let mut loaded = Vec::new();
+        match fs::read_dir(self.folder.join(PACK_FOLDER)) {
+            Ok(entries) => {
+                for entry in entries {
+                    let path = entry?.path();
+                    if path.extension().is_some_and(|extension| extension == "idx") {
+                        loaded.push(Pack::open(&path)?);
+                    }
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+        let loaded: Arc<[Pack]> = loaded.into();
+        *packs = Some(Arc::clone(&loaded));
+
+        Ok(loaded)
     }
 
     /// Writes `content` as an object of `kind`, unless the store holds it, and gives its ID: its header, the kind's
@@ -235,15 +416,13 @@ impl Objects {
         hasher.update(content);
         let id = ObjectId(*hasher.finalize().as_bytes());
         let path = self.path(id);
-        if path.exists() {
+        if self.packs()?.iter().any(|pack| pack.entries.binary_search_by_key(&id, |(entry, _)| *entry).is_ok())
+            || path.exists()
+        {
             return Ok(id);
         }
         fs::create_dir_all(path.parent().unwrap_or(&self.folder))?;
-        let temporary = self.folder.join(format!(
-            "{TEMPORARY_PREFIX}{}_{}",
-            std::process::id(),
-            WRITES.fetch_add(1, Ordering::Relaxed)
-        ));
+        let temporary = self.temporary();
         let mut file = fs::File::create(&temporary)?;
         file.write_all(&header)?;
         file.write_all(content)?;
@@ -253,8 +432,20 @@ impl Objects {
         Ok(id)
     }
 
-    /// The content of the object `id`, of `kind`.
+    /// A new file's name in the store's folder, for a write to rename once it is whole.
+    fn temporary(&self) -> PathBuf {
+        self.folder.join(format!("{TEMPORARY_PREFIX}{}_{}", std::process::id(), WRITES.fetch_add(1, Ordering::Relaxed)))
+    }
+
+    /// The content of the object `id`, of `kind`, from a pack that holds it, as Git looks in its packs first, or else
+    /// from its loose file.
     fn read(&self, kind: Kind, id: ObjectId) -> io::Result<Vec<u8>> {
+        let no_kind = || io::Error::new(io::ErrorKind::InvalidData, format!("object {id} of the store is no {kind:?}"));
+        for pack in self.packs()?.iter() {
+            if let Some((found, content)) = pack.read(id)? {
+                return if found == kind { Ok(content) } else { Err(no_kind()) };
+            }
+        }
         let mut bytes = fs::read(self.path(id))?;
         let end = bytes.iter().position(|byte| *byte == 0);
         match end {
@@ -263,7 +454,16 @@ impl Objects {
 
                 Ok(bytes)
             }
-            _ => Err(io::Error::new(io::ErrorKind::InvalidData, format!("object {id} of the store is no {kind:?}"))),
+            _ => Err(no_kind()),
+        }
+    }
+
+    /// The kind and content of the object `id`, a blob or a tree.
+    fn read_any(&self, id: ObjectId) -> io::Result<(Kind, Vec<u8>)> {
+        match self.read(Kind::Blob, id) {
+            Ok(content) => Ok((Kind::Blob, content)),
+            Err(error) if error.kind() == io::ErrorKind::InvalidData => Ok((Kind::Tree, self.read(Kind::Tree, id)?)),
+            Err(error) => Err(error),
         }
     }
 
@@ -274,16 +474,22 @@ impl Objects {
         self.folder.join(&hex[..2]).join(&hex[2..])
     }
 
-    /// Deletes each object no tree of `roots` reaches, and each file a write left behind, as `git prune` does, while
-    /// nothing else writes to the store. Gives how many files it deleted.
+    /// Deletes each loose object no tree of `roots` reaches, and each file a write left behind, as `git prune` does,
+    /// and once more loose objects than Git's `gc.auto` remain, packs every object the roots reach into one pack and
+    /// deletes the loose objects and the other packs, as `git gc --auto` repacks, while nothing else writes to the
+    /// store. Gives how many files it deleted.
     ///
     /// # Errors
     ///
-    /// Returns the error of reading a tree, or of listing or deleting a file.
+    /// Returns the error of reading an object, or of listing, writing or deleting a file.
     pub fn collect(&self, roots: &[ObjectId]) -> io::Result<usize> {
         let reached = self.reached(roots)?;
+        let (mut deleted, loose) = self.sweep(&reached)?;
+        if loose > GC_AUTO {
+            deleted += self.repack(&reached)?;
+        }
 
-        self.sweep(&reached)
+        Ok(deleted)
     }
 
     /// Each object the trees `roots` reach, themselves included.
@@ -301,14 +507,15 @@ impl Objects {
         Ok(reached)
     }
 
-    /// Deletes each object not in `reached`, each fan-out folder it empties, and each temporary file.
-    fn sweep(&self, reached: &HashSet<ObjectId>) -> io::Result<usize> {
+    /// Deletes each loose object not in `reached`, each fan-out folder it empties, and each temporary file. Gives how
+    /// many files it deleted, and how many loose objects remain.
+    fn sweep(&self, reached: &HashSet<ObjectId>) -> io::Result<(usize, usize)> {
         let entries = match fs::read_dir(&self.folder) {
             Ok(entries) => entries,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(0),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok((0, 0)),
             Err(error) => return Err(error),
         };
-        let mut deleted = 0;
+        let (mut deleted, mut loose) = (0, 0);
         for entry in entries {
             let entry = entry?;
             let name = entry.file_name().to_string_lossy().into_owned();
@@ -326,6 +533,7 @@ impl Objects {
                 let id = ObjectId::from_hex(&format!("{name}{}", object.file_name().to_string_lossy()));
                 if id.is_some_and(|id| reached.contains(&id)) {
                     kept = true;
+                    loose += 1;
                 } else {
                     fs::remove_file(object.path())?;
                     deleted += 1;
@@ -333,6 +541,65 @@ impl Objects {
             }
             if !kept {
                 fs::remove_dir(entry.path())?;
+            }
+        }
+
+        Ok((deleted, loose))
+    }
+
+    /// Writes every object of `reached` into one new pack, then deletes the store's loose objects and its other packs.
+    /// Gives how many files it deleted.
+    fn repack(&self, reached: &HashSet<ObjectId>) -> io::Result<usize> {
+        let mut ids: Vec<ObjectId> = reached.iter().copied().collect();
+        ids.sort_unstable();
+        let mut pack = Vec::new();
+        pack.extend_from_slice(PACK_SIGNATURE);
+        pack.extend_from_slice(&PACK_VERSION.to_le_bytes());
+        pack.extend_from_slice(&u32::try_from(ids.len()).unwrap_or(u32::MAX).to_le_bytes());
+        let mut offsets = Vec::with_capacity(ids.len());
+        for id in &ids {
+            let (kind, content) = self.read_any(*id)?;
+            offsets.push(to_u64(pack.len()));
+            pack.extend(entry_header(kind, content.len()));
+            pack.extend_from_slice(&content);
+        }
+        let trailer = *blake3::hash(&pack).as_bytes();
+        pack.extend_from_slice(&trailer);
+        let mut index = Vec::with_capacity(8 + 256 * 4 + ids.len() * 40 + 64);
+        index.extend_from_slice(INDEX_SIGNATURE);
+        index.extend_from_slice(&PACK_VERSION.to_le_bytes());
+        for first in 0..=255u8 {
+            let below = ids.partition_point(|id| id.0[0] <= first);
+            index.extend_from_slice(&u32::try_from(below).unwrap_or(u32::MAX).to_le_bytes());
+        }
+        for id in &ids {
+            index.extend_from_slice(&id.0);
+        }
+        for offset in &offsets {
+            index.extend_from_slice(&offset.to_le_bytes());
+        }
+        index.extend_from_slice(&trailer);
+        let checksum = *blake3::hash(&index).as_bytes();
+        index.extend_from_slice(&checksum);
+
+        let folder = self.folder.join(PACK_FOLDER);
+        fs::create_dir_all(&folder)?;
+        let name = format!("pack-{}", ObjectId(trailer));
+        let (pack_path, index_path) = (folder.join(format!("{name}.pack")), folder.join(format!("{name}.idx")));
+        for (path, bytes) in [(&pack_path, &pack), (&index_path, &index)] {
+            let temporary = self.temporary();
+            fs::write(&temporary, bytes)?;
+            fs::rename(&temporary, path)?;
+        }
+        let old = self.packs()?;
+        *self.packs.lock().unwrap_or_else(PoisonError::into_inner) = None;
+        let mut deleted = self.sweep(&HashSet::default())?.0;
+        for pack in old.iter() {
+            for path in &pack.paths {
+                if *path != pack_path && *path != index_path {
+                    fs::remove_file(path)?;
+                    deleted += 1;
+                }
             }
         }
 
@@ -436,6 +703,32 @@ mod tests {
         for id in [inner_id, root_id] {
             objects.read_tree(id).unwrap();
         }
+    }
+
+    #[test]
+    fn a_collection_packs_the_reached_objects_once_the_loose_ones_outnumber_git_s_gc_auto() {
+        let folder = tempfile::tempdir().unwrap();
+        let objects = Objects::at(folder.path().join("objects"));
+        let mut tree = Tree::new();
+        for number in 0..=GC_AUTO {
+            tree.insert(number.to_string(), Kind::Blob, objects.write_blob(number.to_string().as_bytes()).unwrap());
+        }
+        let root = objects.write_tree(&tree).unwrap();
+        let gone = objects.write_blob(b"gone").unwrap();
+
+        objects.collect(&[root]).unwrap();
+
+        let files: Vec<PathBuf> = fs::read_dir(objects.folder()).unwrap().map(|entry| entry.unwrap().path()).collect();
+        assert_eq!(files, [objects.folder().join(PACK_FOLDER)]);
+        assert_eq!(fs::read_dir(objects.folder().join(PACK_FOLDER)).unwrap().count(), 2);
+        let reopened = Objects::at(objects.folder());
+        assert_eq!(reopened.read_tree(root).unwrap(), tree);
+        for (name, _, id) in tree.iter() {
+            assert_eq!(reopened.read_blob(id).unwrap(), name);
+        }
+        reopened.read_blob(gone).unwrap_err();
+        assert_eq!(reopened.write_blob(b"7").unwrap(), tree.get(b"7").unwrap().1);
+        assert_eq!(fs::read_dir(objects.folder()).unwrap().count(), 1);
     }
 
     #[test]

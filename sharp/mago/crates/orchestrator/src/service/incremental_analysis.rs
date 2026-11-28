@@ -611,11 +611,7 @@ impl IncrementalAnalysisService {
                 Ok((name, StoredPart { id, content_hash, entries }, encoded))
             })
             .collect::<Result<_, OrchestratorError>>()?;
-        tracing::debug!(
-            "Stored the analysis, encoding {} of its {} codebase parts again.",
-            stored.iter().filter(|(.., encoded)| *encoded).count(),
-            stored.len()
-        );
+
         let state = Persisted {
             codebase: Cow::Owned(rest),
             symbol_references: Cow::Borrowed(&self.symbol_references),
@@ -641,6 +637,12 @@ impl IncrementalAnalysisService {
         };
         let mut bytes = key.to_vec();
         bytes.extend(encode(&state)?);
+        tracing::debug!(
+            "Stored the analysis, encoding {} of its {} codebase parts again, and its state of {} bytes.",
+            stored.iter().filter(|(.., encoded)| *encoded).count(),
+            stored.len(),
+            bytes.len()
+        );
         let mut tree = Tree::new();
         tree.insert(STATE, Kind::Blob, objects.write_blob(&bytes).map_err(not_stored)?);
         for (name, part, _) in &stored {
