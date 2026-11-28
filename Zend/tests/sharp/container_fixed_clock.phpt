@@ -35,7 +35,7 @@ import PHPUnit.Framework.TestCase;
 
 module : App.Billing
 {
-    singleton Clock = new FakeClock(Instant.parse("2026-10-22T18:30:00Z"));
+    singleton Clock = new FakeClock(Instant.parse("2026-10-22T18:30:00Z").unwrap());
 }
 
 public class InvoiceTest : TestCase
@@ -50,7 +50,7 @@ $container = new Sharp\Container();
 // from DateTimeImmutable, as the real clock's now() does.
 $isNow = static function () use ($container): string {
     $before = (new DateTimeImmutable())->getTimestamp();
-    $issued = Sharp\Time\Instant::parse($container->get('App\Billing\Invoice')->issuedAt())->epochSeconds;
+    $issued = Sharp\Time\Instant::parse($container->get('App\Billing\Invoice')->issuedAt())->unwrap()->epochSeconds;
 
     return var_export($before <= $issued && $issued <= (new DateTimeImmutable())->getTimestamp(), true);
 };

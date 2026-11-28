@@ -15,11 +15,11 @@ public static class StoredCalls
     public static Any? recordedForm(RecordedEvent recorded) => typeof(RecordedEvent).encode(recorded);
 
     public static bool recordedReadsBack(RecordedEvent recorded)
-        => typeof(RecordedEvent).decode(typeof(RecordedEvent).encode(recorded)) == recorded;
+        => typeof(RecordedEvent).parse(typeof(RecordedEvent).encode(recorded)).unwrap() == recorded;
 
     public static Parcel parcel() => new Parcel([7: "top", 8: "floor"], ["fragile", "dry"]);
 
-    public static bool parcelReadsBack(Parcel parcel) => typeof(Parcel).decode(typeof(Parcel).encode(parcel)) == parcel;
+    public static bool parcelReadsBack(Parcel parcel) => typeof(Parcel).parse(typeof(Parcel).encode(parcel)).unwrap() == parcel;
 
     // Whether json_encode, with Json.encode's flags, writes the stored form of `value` as Json.encode writes `value`.
     // Json.encode reads `stored` in the engine, where a Map stays one, as plain PHP's json_encode never sees it.

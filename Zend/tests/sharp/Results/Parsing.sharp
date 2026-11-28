@@ -1,0 +1,19 @@
+namespace Demo;
+
+// Spec sections 10, 24 and 31: each read into a named type gives a Result, which the caller matches.
+public class Parsing
+{
+    public string request(Map<string, Any?> payload) => match (RenewRequest.parse(payload)) {
+        Result.Ok(RenewRequest request) => `Ok: ${request.customerId} ${request.plan}`,
+        Result.Err(ParseError error) => `Err: ${error.message}`,
+    };
+
+    public string number(string text) => match (Int.parse(text)) {
+        Result.Ok(int number) => `Ok: ${number}`,
+        Result.Err(ParseError error) => `Err: ${error.message}`,
+    };
+
+    public string unwrapped(string text) => `${Int.parse(text).unwrap()}`;
+
+    public int? maybe(string text) => Int.parse(text).ok();
+}

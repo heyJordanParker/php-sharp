@@ -5,6 +5,7 @@ import Sharp.Encoding.Base64;
 import Sharp.Encoding.Compression;
 import Sharp.Encoding.Hex;
 import Sharp.Encoding.Json;
+import Sharp.Encoding.JsonValue;
 import Sharp.IO.Path;
 import Sharp.Net.Ip;
 import Sharp.Net.MailAddress;
@@ -19,13 +20,13 @@ public class Library
 {
     public static Bytes initial(int code) => [code].toBytes();
 
-    public static bool isNumber(string text) => Regex.parse("/^[0-9]+$/").matches(text);
+    public static bool isNumber(string text) => Regex.parse("/^[0-9]+$/").unwrap().matches(text);
 
     public static string escape(string html) => Html.escape(html);
 
     public static float square(float side) => Math.pow(side, 2.0);
 
-    public static Any? decode(string json) => Json.parse(json).value;
+    public static Any? decode(string json) => Json.parse<JsonValue>(json).unwrap().value;
 
     public static string digest(Bytes data) => Hash.sha1(data);
 
@@ -65,7 +66,7 @@ public class Library
 
     public static string stored(Bytes data) => data.toString();
 
-    public static List<int> restored(string text) => Bytes.parse(text).toList();
+    public static List<int> restored(string text) => Base64.decode(text).toList();
 
     public static string encoded(Bytes data) => Json.encode(["data": data]);
 

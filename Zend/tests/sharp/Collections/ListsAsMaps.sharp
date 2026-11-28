@@ -1,6 +1,7 @@
 namespace Demo;
 
 import Sharp.Encoding.Json;
+import Sharp.Encoding.JsonValue;
 
 public class ListsAsMaps
 {
@@ -19,7 +20,7 @@ public class ListsAsMaps
 
     public static List<string> children()
     {
-        const decoded = Json.decode<Map<string, Any?>>("{\"a\":[1],\"b\":[]}");
+        const decoded = Json.parse<Map<string, Any?>>("{\"a\":[1],\"b\":[]}").unwrap();
         List<string> lines = [];
         for (const [key, child] of decoded) {
             lines.add(`${key}: ${Json.encode(ListsAsMaps.arrayAt(child))}`);
@@ -30,9 +31,9 @@ public class ListsAsMaps
 
     public static List<string> tests()
     {
-        Any? one = Json.parse("[1]").value;
+        Any? one = Json.parse<JsonValue>("[1]").unwrap().value;
         string byText = `[1] is Map<string, Any?>: ${one is Map<string, Any?> ? "true" : "false"}`;
-        Any? again = Json.parse("[1]").value;
+        Any? again = Json.parse<JsonValue>("[1]").unwrap().value;
         string byInt = `[1] is Map<int, Any?>: ${again is Map<int, Any?> ? "true" : "false"}`;
         return [byText, byInt];
     }

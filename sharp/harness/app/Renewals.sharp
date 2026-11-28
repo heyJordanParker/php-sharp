@@ -1,0 +1,8 @@
+namespace App;
+
+public class Renewals
+{
+    public Renewals(private Order order) { }
+
+    public Order renew(RenewRequest request) => this.order;
+}

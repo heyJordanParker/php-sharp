@@ -14,7 +14,7 @@ public class Task
         return this.priority.value;
     }
 
-    public static Priority? parse(int level)
+    public static Priority? priorityOf(int level)
     {
         return Priority.tryFrom(level);
     }

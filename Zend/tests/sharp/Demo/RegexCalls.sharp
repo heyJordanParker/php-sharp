@@ -4,19 +4,19 @@ import Sharp.Text.Regex;
 
 public class RegexCalls
 {
-    public static bool matches(string pattern, string text) => Regex.parse(pattern).matches(text);
+    public static bool matches(string pattern, string text) => Regex.parse(pattern).unwrap().matches(text);
 
-    public static Map<int|string, string>? match(string pattern, string text) => Regex.parse(pattern).match(text);
+    public static Map<int|string, string>? match(string pattern, string text) => Regex.parse(pattern).unwrap().match(text);
 
-    public static List<Map<int|string, string>> matchAll(string pattern, string text) => Regex.parse(pattern).matchAll(text);
+    public static List<Map<int|string, string>> matchAll(string pattern, string text) => Regex.parse(pattern).unwrap().matchAll(text);
 
-    public static string replace(string pattern, string replacement, string text) => Regex.parse(pattern).replace(replacement, text);
+    public static string replace(string pattern, string replacement, string text) => Regex.parse(pattern).unwrap().replace(replacement, text);
 
-    public static List<string> split(string pattern, string text) => Regex.parse(pattern).split(text);
+    public static List<string> split(string pattern, string text) => Regex.parse(pattern).unwrap().split(text);
 
-    public static List<string> filter(string pattern, List<string> texts) => Regex.parse(pattern).filter(texts);
+    public static List<string> filter(string pattern, List<string> texts) => Regex.parse(pattern).unwrap().filter(texts);
 
-    public static bool? tryMatches(string pattern, string text) => Regex.tryParse(pattern)?.matches(text);
+    public static bool? tryMatches(string pattern, string text) => Regex.parse(pattern).ok()?.matches(text);
 
     public static string escape(string text) => Regex.escape(text);
 }

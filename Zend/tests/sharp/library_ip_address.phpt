@@ -1,5 +1,5 @@
 --TEST--
-PHP# IpAddress is an IPv4 or IPv6 address, as .NET's IPAddress: parse and tryParse read either family, toString writes RFC 5952's form, == compares the address whatever text wrote it, and isLoopback and isPrivate read 127.0.0.0/8 and ::1, and RFC 1918's ranges and fc00::/7
+PHP# IpAddress is an IPv4 or IPv6 address, as .NET's IPAddress: parse reads either family into a Result, toString writes RFC 5952's form, == compares the address whatever text wrote it, and isLoopback and isPrivate read 127.0.0.0/8 and ::1, and RFC 1918's ranges and fc00::/7
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';
@@ -14,7 +14,7 @@ foreach (['127.0.0.1', '127.255.0.9', '::1', '10.1.2.3', '172.16.0.1', '172.31.2
 var_dump(NetworkQueries::same('::1', '0:0:0:0:0:0:0:1'), NetworkQueries::same('10.0.0.1', '10.0.0.2'), NetworkQueries::same('::ffff:10.0.0.1', '10.0.0.1'));
 try {
     NetworkQueries::parsed('localhost');
-} catch (ValueError $error) {
+} catch (ValueError|LogicException $error) {
     echo get_class($error), ': ', $error->getMessage(), "\n";
 }
 ?>
@@ -38,4 +38,4 @@ fe80::1 [false,false]
 bool(true)
 bool(false)
 bool(false)
-ValueError: IpAddress.parse: "localhost" is not an IPv4 or IPv6 address
+LogicException: IpAddress.parse: "localhost" is not an IPv4 or IPv6 address

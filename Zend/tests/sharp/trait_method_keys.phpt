@@ -89,13 +89,11 @@ array(2) {
 }
 string(6) "Ledger"
 string(11) "sharp shelf"
-array(3) {
+array(2) {
   [0]=>
   string(10) "stockLabel"
   [1]=>
   string(5) "parse"
-  [2]=>
-  string(8) "tryParse"
 }
 array(1) {
   [0]=>

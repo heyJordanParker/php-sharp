@@ -4,7 +4,7 @@ import Sharp.Encoding.Json;
 
 public static class Reads
 {
-    private static DecodeChild child() => typeof(DecodeChild).decode(["key": "a", "label": "b"]);
+    private static DecodeChild child() => typeof(DecodeChild).parse(["key": "a", "label": "b"]).unwrap();
 
     public static string decoded() => "label=" + Reads.child().label + " key=" + Reads.child().key;
 
@@ -12,11 +12,11 @@ public static class Reads
 
     public static string roundTripped()
     {
-        DecodeChild read = typeof(DecodeChild).decode(typeof(DecodeChild).encode(Reads.child()));
+        DecodeChild read = typeof(DecodeChild).parse(typeof(DecodeChild).encode(Reads.child())).unwrap();
 
         return "label=" + read.label + " key=" + read.key;
     }
 
     public static string secretRoundTripped()
-        => Json.encode(typeof(Child).decode(typeof(Child).encode(typeof(Child).decode(["secret": "s"]))));
+        => Json.encode(typeof(Child).parse(typeof(Child).encode(typeof(Child).parse(["secret": "s"]).unwrap())).unwrap());
 }

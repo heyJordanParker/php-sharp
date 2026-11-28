@@ -1,6 +1,7 @@
 namespace Arrivals;
 
 import Sharp.Encoding.Json;
+import Sharp.Encoding.JsonValue;
 
 // `[]` is the empty `List`, spec section 12, so an `is` test of it against a `Map` of string keys is false, while a
 // typed boundary takes plain PHP's `[]` as the empty `Map` it declares.
@@ -8,8 +9,8 @@ public static class EmptyTests
 {
     public static string run()
     {
-        const empty = Json.parse("[]").value;
-        const braces = Json.parse("{}").value;
+        const empty = Json.parse<JsonValue>("[]").unwrap().value;
+        const braces = Json.parse<JsonValue>("{}").unwrap().value;
         List<int> made = [];
         Any? held = made;
         return `json[]:${EmptyTests.bound(empty)} json{}:${EmptyTests.bound(braces)} json{}isList:${braces is List<Any?>} made[]:${EmptyTests.bound(held)}`;

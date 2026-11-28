@@ -7,5 +7,6 @@ public struct Reading : int
 
     public int value => this.celsius;
 
-    public static Reading parse(int value) => new Reading(value, "");
+    public static Result<Reading, ParseError> parse(Any? value)
+        => value is int celsius ? Result.Ok(new Reading(celsius, "")) : Result.Err(new ParseError(["": "expected int"]));
 }

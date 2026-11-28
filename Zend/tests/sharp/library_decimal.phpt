@@ -11,7 +11,7 @@ function refused(Closure $call): void
 {
     try {
         $call();
-    } catch (ValueError|DivisionByZeroError $error) {
+    } catch (ValueError|DivisionByZeroError|LogicException $error) {
         echo get_class($error), ': ', $error->getMessage(), "\n";
     }
 }
@@ -32,7 +32,7 @@ foreach ([['1', '8', 2], ['-1', '8', 2], ['1', '3', 0], ['1.0001', '8', 2], ['-1
 echo NumberQueries::round('2.5', 0, RoundingMode::HalfEven), ' ', NumberQueries::round('3.5', 0, RoundingMode::HalfEven), ' ';
 echo NumberQueries::round('-2.5', 0, RoundingMode::HalfUp), ' ', NumberQueries::roundHalfEven('1.5', 3), ' ';
 echo NumberQueries::round('2.345', 2, RoundingMode::HalfDown), ' ', NumberQueries::round('2.3451', 2, RoundingMode::HalfDown), "\n";
-refused(fn () => NumberQueries::parse('abc'));
+refused(fn () => NumberQueries::parsed('abc'));
 refused(fn () => NumberQueries::divide('1', '0.00', 2, RoundingMode::HalfEven));
 refused(fn () => NumberQueries::divide('1', '3', -1, RoundingMode::HalfEven));
 refused(fn () => NumberQueries::round('1', -1, RoundingMode::HalfEven));
@@ -50,7 +50,7 @@ bool(true)
 1.0001 / 8 at 2: HalfEven 0.13, HalfUp 0.13, HalfDown 0.13, Up 0.13, Down 0.12, Ceiling 0.13, Floor 0.12
 -1 / 300 at 2: HalfEven 0.00, HalfUp 0.00, HalfDown 0.00, Up -0.01, Down 0.00, Ceiling 0.00, Floor -0.01
 2 4 -3 1.500 2.34 2.35
-ValueError: Decimal.parse: "abc" is not a decimal number, such as "-12.50"
+LogicException: Decimal.parse: "abc" is not a decimal number, such as "-12.50"
 DivisionByZeroError: Decimal.divide: the divisor is 0
 ValueError: Decimal.divide takes a scale of 0 or more, and -1 is not one.
 ValueError: Decimal.round takes a scale of 0 or more, and -1 is not one.

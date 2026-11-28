@@ -39,16 +39,16 @@ public class Checkout
 
     public static int total(string price, string? count)
     {
-        return (int)(Float.parse(price) * 100) * ((count != null ? Int.tryParse(count) : null) ?? 1);
+        return (int)(Float.parse(price).unwrap() * 100) * ((count != null ? Int.parse(count).ok() : null) ?? 1);
     }
 
     public static int page(string value)
     {
-        return Int.parse(value);
+        return Int.parse(value).unwrap();
     }
 
     public static float price(string value)
     {
-        return Float.parse(value);
+        return Float.parse(value).unwrap();
     }
 }

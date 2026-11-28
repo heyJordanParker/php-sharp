@@ -16,8 +16,8 @@ public static class Zones
     public static bool roundTrips(string name)
     {
         const zone = new TimeZone(name);
-        const shown = Instant.parse("2026-10-22T18:30:00Z").inZone(zone);
+        const shown = Instant.parse("2026-10-22T18:30:00Z").unwrap().inZone(zone);
 
-        return new TimeZone(zone.toString()) == zone && DateTime.parse(shown.toString()) == shown && Json.decode<TimeZone>(Json.encode(zone)) == zone;
+        return new TimeZone(zone.toString()) == zone && DateTime.parse(shown.toString()).unwrap() == shown && Json.parse<TimeZone>(Json.encode(zone)).unwrap() == zone;
     }
 }

@@ -57,8 +57,8 @@ var_dump(DateCalls::phpZoned('2026-10-22 21:30:00', '+03:00'), DateCalls::phpZon
 var_dump(DateCalls::zonedCrossedBack('2026-10-22T21:30:00+03:00[Europe/Sofia]'), DateCalls::zonedCrossedBack('2026-10-22T21:30:00.123456789+03:00[Europe/Sofia]'));
 var_dump(DateCalls::instantCrossedBack('2026-10-22T18:30:00Z'), DateCalls::instantCrossedBack('1969-12-31T23:59:59.5Z'));
 foreach ([
-    Sharp\Interop\PhpDateTimes::toPhpDateTime(Sharp\Time\DateTime::parse('2026-10-22T21:30:00.25+03:00[Europe/Sofia]')),
-    Sharp\Interop\PhpDates::toPhpDateTime(Sharp\Time\Instant::parse('2026-10-22T18:30:00Z')),
+    Sharp\Interop\PhpDateTimes::toPhpDateTime(Sharp\Time\DateTime::parse('2026-10-22T21:30:00.25+03:00[Europe/Sofia]')->unwrap()),
+    Sharp\Interop\PhpDates::toPhpDateTime(Sharp\Time\Instant::parse('2026-10-22T18:30:00Z')->unwrap()),
 ] as $php) {
     echo get_class($php), ' ', $php->format('Y-m-d H:i:s.u e P'), "\n";
 }
@@ -77,7 +77,7 @@ foreach ([
 ] as $refused) {
     try {
         $refused();
-    } catch (ValueError $error) {
+    } catch (ValueError|LogicException $error) {
         echo get_class($error), ': ', $error->getMessage(), "\n";
     }
 }
@@ -194,10 +194,10 @@ DateTimeImmutable 2026-10-22 18:30:00.000000 UTC +00:00
 Refused
 ValueError: `Date` takes a day of the calendar, and 2026-2-29 is not one.
 ValueError: `Date` takes a day of the calendar, and 2026-0-1 is not one.
-ValueError: `Date.parse` reads an ISO-8601 day, such as "2026-10-22", and "2026-1-1" is not.
-ValueError: `Instant.parse` reads ISO-8601 with an offset, such as "2026-10-22T18:30:00Z", and "yesterday" is not.
+LogicException: `Date.parse` reads an ISO-8601 day, such as "2026-10-22", and "2026-1-1" is not.
+LogicException: `Instant.parse` reads ISO-8601 with an offset, such as "2026-10-22T18:30:00Z", and "yesterday" is not.
 ValueError: `Instant` takes a nanosecond from 0 to 999999999, and it is outside that range.
 ValueError: `TimeZone` takes a name from the time zone database, such as "Europe/Sofia", or an offset from -18:00 to +18:00, such as "+03:00", and "Nowhere/City" is neither. `TimeZone.tryOf` gives null for it instead.
-ValueError: `DateTime.parse` reads ISO-8601 with an offset and a zone, such as "2026-10-22T21:30:00+03:00[Europe/Sofia]", and "2026-10-22T21:30:00+02:00[Europe/Sofia]" is not.
-ValueError: `Duration.parse` reads ISO-8601, such as "PT1H30M", and "one hour" is not.
+LogicException: `DateTime.parse` reads ISO-8601 with an offset and a zone, such as "2026-10-22T21:30:00+03:00[Europe/Sofia]", and "2026-10-22T21:30:00+02:00[Europe/Sofia]" is not.
+LogicException: `Duration.parse` reads ISO-8601, such as "PT1H30M", and "one hour" is not.
 ValueError: `toDateTime` needs a zone such as "Europe/Sofia" or an offset such as "+03:00", and "EEST" is an abbreviation, not a zone of the time zone database. `toInstant()` keeps the instant without a zone.

@@ -1,14 +1,15 @@
 namespace Demo;
 
 import Sharp.Encoding.Json;
+import Sharp.Encoding.JsonValue;
 
 public class JsonCalls
 {
-    public static Any? parse(string json) => Json.parse(json).value;
+    public static Any? parsed(string json) => Json.parse<JsonValue>(json).unwrap().value;
 
-    public static JsonPoint point(string json) => Json.decode<JsonPoint>(json);
+    public static JsonPoint point(string json) => Json.parse<JsonPoint>(json).unwrap();
 
-    public static JsonOrder order(string json) => Json.decode<JsonOrder>(json);
+    public static JsonOrder order(string json) => Json.parse<JsonOrder>(json).unwrap();
 
     public static string encode(Any? value) => Json.encode(value);
 
