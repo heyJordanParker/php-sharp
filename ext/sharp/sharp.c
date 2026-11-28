@@ -16056,7 +16056,9 @@ ZEND_FUNCTION(Sharp_Internal_parseAs)
 		Z_PARAM_BOOL(text)
 	ZEND_PARSE_PARAMETERS_END();
 
-	const sharp_type *type = sharp_class_value_read_whole(class_value);
+	/* A parse reads its value into the whole type, `?` included, so a `null` read into `T?` is null and the `Result` is
+	 * a `Result<T?, ParseError>`, spec section 10, where a member read of the class value takes the type without it. */
+	const sharp_type *type = sharp_class_value_of(class_value);
 	if (!type) {
 		RETURN_THROWS();
 	}
