@@ -996,10 +996,13 @@ jobs:
     needs: [CHANGES, CI_PASSED]
     if: ${{ !failure() && !cancelled() && needs.CI_PASSED.result == 'success' && github.event_name == 'push' }}
     runs-on: ubuntu-24.04
+    # pull-requests: write lets it comment on a pull request that moved while queued: issues: write alone failed that
+    # comment with "GraphQL: Resource not accessible by integration (addComment)" on staging run 46096756775.
     permissions:
       actions: write
       contents: read
       issues: write
+      pull-requests: write
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
