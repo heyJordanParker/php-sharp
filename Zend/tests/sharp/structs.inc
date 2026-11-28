@@ -35,7 +35,7 @@ namespace {
             Structs::sameMaps(['a' => $stamp, 'b' => $heavier], ['b' => $stamp->heavier(), 'a' => Structs::stamp('post', 1)]),
             Structs::sameMaps(['a' => $stamp], ['a' => $heavier]),
         ]);
-        // A generic struct carries its type arguments through a swap, a changed copy, ==, parse and tryParse, a type
+        // A generic struct carries its type arguments through a swap, a changed copy, ==, parse and its ok(), a type
         // test, a Map key, and each type argument's own statics.
         $pair = Structs::pair(1, 'a');
         attempt(fn () => [Structs::swapped($pair)->first, Structs::renumbered($pair, 2)->first, $pair->first]);

@@ -37,8 +37,8 @@ outcome(fn () => SecretCalls::encoded('hunter2'));
 --EXPECTF--
 string(7) "hunter2"
 string(7) "hunter2"
-Sharp\InvalidFields: token: the encrypted text is not one SHARP_KEYS decrypts for Demo.Relay.token
-Sharp\InvalidFields: password: the encrypted text is not one SHARP_KEYS decrypts for Demo.SmtpAccount.password
+LogicException: token: the encrypted text is not one SHARP_KEYS decrypts for Demo.Relay.token
+LogicException: password: the encrypted text is not one SHARP_KEYS decrypts for Demo.SmtpAccount.password
 Error: `serialize` writes the stored form of Sharp.Security.Secret, the fields `Json.encode` writes, and a Secret is stored only in a field of a class or struct, whose name its encryption is bound to.
 object(Sharp\Security\Secret)#%d (1) {
   [0]=>

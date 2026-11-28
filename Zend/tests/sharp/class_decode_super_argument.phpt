@@ -1,5 +1,5 @@
 --TEST--
-Json.decode and Json.encode, spec section 10, read a property a parent's constructor sets through the main constructor's `: super(…)` once, by the parameter of its name, so the main constructor builds it
+Json.parse<T> and Json.encode, spec section 10, read a property a parent's constructor sets through the main constructor's `: super(…)` once, by the parameter of its name, so the main constructor builds it
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';

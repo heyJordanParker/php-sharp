@@ -108,9 +108,11 @@ function jsonEncode(mixed $value, int $flags, int $indent): string {}
 
 function jsonDecode(string $json): mixed {}
 
-function parseAs(string $type, mixed $value, bool $text): mixed {}
+function parseAs(string $type, mixed $value, bool $text): object {}
 
-function parseVariant(string $family, mixed $value, bool $throws = true): ?object {}
+function parseVariant(string $family, mixed $value): object {}
+
+function parseHeld(string $class, mixed $value): object {}
 
 function withTag(string $family, string $tag): ?string {}
 

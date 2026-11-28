@@ -30,12 +30,12 @@ Map[Queued\Parcel(250, Queued\Speed.Express): 'small'] small
 Map[Queued\Courier(7): 'north'] north
 a bad key count: ValueError: A serialized Map must hold each key followed by its value
 a Set under named keys: ValueError: A serialized Set must hold a list of its elements
-a wrong type, a Set where a Map is declared: Sharp\InvalidFields: labels: expected Map<string, int>, got object Sharp.Set
-a wrong value in a class field: Sharp\InvalidFields: totals["packed"]: expected int, got string 'two'
-a wrong key in a struct field: Sharp\InvalidFields: labels[9]: key expected string, got int 9
-a wrong element in a Set field: Sharp\InvalidFields: speeds[0]: expected Queued.Speed, got int 5
-a wrong value inside a List<Map<string, int>> field: Sharp\InvalidFields: batches[0]["tea"]: expected int, got string 'x'
-a generic class field: Sharp\InvalidFields: held["tea"]: expected int, got string 'x'
+a wrong type, a Set where a Map is declared: ValueError: labels: expected Map<string, int>, got object Sharp.Set
+a wrong value in a class field: ValueError: totals["packed"]: expected int, got string 'two'
+a wrong key in a struct field: ValueError: labels[9]: key expected string, got int 9
+a wrong element in a Set field: ValueError: speeds[0]: expected Queued.Speed, got int 5
+a wrong value inside a List<Map<string, int>> field: ValueError: batches[0]["tea"]: expected int, got string 'x'
+a generic class field: ValueError: held["tea"]: expected int, got string 'x'
 Sharp.Encoding.Serialized, which allows no class by default: ['tea' => 2, 'jam' => 5] Sharp\Map
 Serialized allowing a class by its PHP# name: Queued\Crate([3 => 'c'], [Queued\Speed.Express], [['tea' => 1]]) Sharp\Map Sharp\Set array
 allowed_classes => false, which still checks each key's class: [Set['vip', 'new'], Map[__PHP_Incomplete_Class('Queued\\Parcel', 250, Queued\Speed.Express): 'small']]

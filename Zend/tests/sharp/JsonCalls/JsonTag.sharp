@@ -6,7 +6,8 @@ public struct JsonTag : string
 
     public string value => `#${this.name}`;
 
-    public static JsonTag parse(string value) => new JsonTag(value.removePrefix("#"));
+    public static Result<JsonTag, ParseError> parse(Any? value)
+        => value is string text ? Result.Ok(new JsonTag(text.removePrefix("#"))) : Result.Err(new ParseError(["": "expected string"]));
 
     public string toString() => this.value;
 }

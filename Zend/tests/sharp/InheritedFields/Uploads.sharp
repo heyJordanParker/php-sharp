@@ -4,7 +4,7 @@ import Sharp.Encoding.Json;
 
 public static class Uploads
 {
-    private static UploadTarget target() => Json.decode<UploadTarget>("{\"url\":{\"value\":\"  https://a.test \"}}");
+    private static UploadTarget target() => Json.parse<UploadTarget>("{\"url\":{\"value\":\"  https://a.test \"}}").unwrap();
 
     public static string decoded() => Uploads.target().url.value + "|";
 

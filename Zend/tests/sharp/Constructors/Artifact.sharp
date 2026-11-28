@@ -9,7 +9,7 @@ public class Artifact : Entity
     public override string describe() => "artifact " + this.name;
 
     [Retry(times: 2)]
-    public Artifact.fromJson(string json) : this(Manifest.parse(json))
+    public Artifact.fromJson(string json) : this(Manifest.parse(json).unwrap())
     {
         this.seen = super.describe();
     }

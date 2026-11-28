@@ -16,7 +16,7 @@ public class MathQueries
 
     public static List<int> saturating(int a, int b) => [a.saturatingAdd(b), a.saturatingSubtract(b), a.saturatingMultiply(b)];
 
-    public static int parse(string text, int radix) => Int.parse(text, radix);
+    public static int parsed(string text, int radix) => Int.parse(text, radix).unwrap();
 
-    public static int? tryParse(string text, int radix) => Int.tryParse(text, radix);
+    public static int? tryParse(string text, int radix) => Int.parse(text, radix).ok();
 }

@@ -1,6 +1,7 @@
 namespace Payloads;
 
 import Sharp.Encoding.Json;
+import Sharp.Encoding.JsonValue;
 import Sharp.Net.Ip;
 
 public static class Report
@@ -39,23 +40,23 @@ public static class Report
             Json.encode(payload, escapeSlashes: true, escapeUnicode: true, keepZeroFraction: false),
             Json.encode(payload, keepZeroFraction: false),
             Json.encode(payload, escapeSlashes: true),
-            Json.encode(Json.parse("{\"a\":[1,2.5,null]}")),
+            Json.encode(Json.parse<JsonValue>("{\"a\":[1,2.5,null]}").unwrap()),
         ];
     }
 
     public static List<bool> comparisons()
         => [
-            Json.parse("{\"a\":[1,2]}") == Json.parse("{ \"a\": [1, 2] }"),
-            Json.parse("{\"a\":1,\"b\":2}") == Json.parse("{\"b\":2,\"a\":1}"),
-            Json.parse("{\"a\":[1,2]}") == Json.parse("{\"a\":[2,1]}"),
-            Json.parse("1") == Json.parse("1.0"),
-            Json.parse("\"1\"") == Json.parse("1"),
-            Json.parse("null") == Json.parse("false"),
-            Json.parse("{\"a\":{\"b\":[true]}}") == Json.parse("{\"a\":{\"b\":[true]}}"),
-            Json.parse("{\"a\":{\"b\":[true]}}") == Json.parse("{\"a\":{\"b\":[false]}}"),
+            Json.parse<JsonValue>("{\"a\":[1,2]}").unwrap() == Json.parse<JsonValue>("{ \"a\": [1, 2] }").unwrap(),
+            Json.parse<JsonValue>("{\"a\":1,\"b\":2}").unwrap() == Json.parse<JsonValue>("{\"b\":2,\"a\":1}").unwrap(),
+            Json.parse<JsonValue>("{\"a\":[1,2]}").unwrap() == Json.parse<JsonValue>("{\"a\":[2,1]}").unwrap(),
+            Json.parse<JsonValue>("1").unwrap() == Json.parse<JsonValue>("1.0").unwrap(),
+            Json.parse<JsonValue>("\"1\"").unwrap() == Json.parse<JsonValue>("1").unwrap(),
+            Json.parse<JsonValue>("null").unwrap() == Json.parse<JsonValue>("false").unwrap(),
+            Json.parse<JsonValue>("{\"a\":{\"b\":[true]}}").unwrap() == Json.parse<JsonValue>("{\"a\":{\"b\":[true]}}").unwrap(),
+            Json.parse<JsonValue>("{\"a\":{\"b\":[true]}}").unwrap() == Json.parse<JsonValue>("{\"a\":{\"b\":[false]}}").unwrap(),
         ];
 
-    public static Any? value(string json) => Json.parse(json).value;
+    public static Any? value(string json) => Json.parse<JsonValue>(json).unwrap().value;
 
     public static string column(SortColumn column) => column.value;
 }

@@ -6,7 +6,7 @@ public class Pick
 {
     public static Iterable<Any?> of(bool list) => list ? [1] : ["a": 1];
 
-    public static Iterable<Any?> decoded(string json) => Json.decode<Map<string, Any?>>(json);
+    public static Iterable<Any?> decoded(string json) => Json.parse<Map<string, Any?>>(json).unwrap();
 
     public static List<string> looped(Iterable<Any?> value)
     {

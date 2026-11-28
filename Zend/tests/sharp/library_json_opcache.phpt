@@ -1,5 +1,5 @@
 --TEST--
-Under opcache, Json.decode<T> throws its InvalidFields for a bad field from the first request, whose shared memory holds no copy of the class's name yet, and the engine releases the name it looked the class up by. The file names no class the throw builds, so nothing it compiles puts that name in shared memory first
+Under opcache, Json.parse<T> gives its ParseError for a bad field from the first request, whose shared memory holds no copy of the class's name yet, and the engine releases the name it looked the class up by. The file names no class the throw builds, so nothing it compiles puts that name in shared memory first
 --EXTENSIONS--
 opcache
 --INI--
@@ -19,5 +19,5 @@ foreach (['{"x":"four"}', '{"other":1}'] as $json) {
 }
 ?>
 --EXPECT--
-Sharp\InvalidFields: x: expected int, got string 'four'
-Sharp\InvalidFields: x: missing
+LogicException: x: expected int, got string 'four'
+LogicException: x: missing

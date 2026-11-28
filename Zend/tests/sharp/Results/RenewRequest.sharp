@@ -1,0 +1,10 @@
+namespace Demo;
+
+// The request spec section 10's `parse` reads, with a key `[Key]` renames.
+public struct RenewRequest
+{
+    public RenewRequest(
+        public int customerId { get; },
+        [Key("plan_code")] public string plan { get; },
+    ) { }
+}

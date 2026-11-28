@@ -1,5 +1,5 @@
 --TEST--
-Json.decode<T> reads a value into a union through its members in the order the type argument writes them, spec section 10, through a generic wrapper's type argument too, and the written order never changes a type test
+Json.parse<T> reads a value into a union through its members in the order the type argument writes them, spec section 10, through a generic wrapper's type argument too, and the written order never changes a type test
 --FILE--
 <?php
 require __DIR__ . '/vendor/autoload.php';

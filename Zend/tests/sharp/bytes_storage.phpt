@@ -26,4 +26,4 @@ array(4) {
   int(97)
 }
 string(19) "{"data":"+/8AYQ=="}"
-ValueError: Bytes.parse: the text is not valid base64
+ValueError: Base64.decode: the text is not valid base64

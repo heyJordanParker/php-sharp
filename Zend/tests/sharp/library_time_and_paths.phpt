@@ -12,7 +12,7 @@ echo TimeAndPaths::written(21, 30, 0, 0), ' ', TimeAndPaths::written(9, 5, 7, 25
 foreach ([fn () => TimeAndPaths::written(24, 0, 0, 0), fn () => TimeAndPaths::written(1, 0, 0, 1000000000), fn () => TimeAndPaths::ordered('x', '08:00')] as $refused) {
     try {
         $refused();
-    } catch (ValueError $error) {
+    } catch (ValueError|LogicException $error) {
         echo get_class($error), ': ', $error->getMessage(), "\n";
     }
 }
@@ -46,7 +46,7 @@ rmdir($root);
 21:30:00 09:05:07.250 23:59:59.000000001 07:00:00
 ValueError: `TimeOfDay` takes a time of day, and 24:0:0 and 0 nanoseconds is not one.
 ValueError: `TimeOfDay` takes a time of day, and 1:0:0 and 1000000000 nanoseconds is not one.
-ValueError: `TimeOfDay.parse` reads an ISO-8601 time of day, such as "21:30:00", and "x" is not.
+LogicException: `TimeOfDay.parse` reads an ISO-8601 time of day, such as "21:30:00", and "x" is not.
 [-1,1,0] bool(true)
 string(12) "21:30:00.250"
 NULL

@@ -1,0 +1,6 @@
+namespace App;
+
+public struct RenewRequest
+{
+    public RenewRequest(public int customerId { get; }, [Key("plan_code")] public string plan { get; }) { }
+}

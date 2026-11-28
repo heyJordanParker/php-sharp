@@ -1,9 +1,12 @@
 name: Queue
 # GitHub's merge queue is offered only to repositories an organization owns, and this one is a user's, so this is the
 # queue in its shape (#843). It merges the pull requests ready to land onto master's tip and pushes the result to
-# staging, whose run runs every check, the Mac's among them, on that tree. That run's LAND moves master to its commit
-# and the same run publishes the release, so each landed tree crosses the Mac once: #828 crossed it twice, in pull
-# request run 45570037780 for 55 minutes, then in push run 45600915642 for 87. A pull request is ready once its
+# staging, whose run runs every check, the Mac's among them, on that tree. That run's LAND moves master to its commit,
+# so each landed tree crosses the Mac's tests once: #828 crossed them twice, in pull request run 45570037780 for 55
+# minutes, then in push run 45600915642 for 87. It then starts release.yml's release of master's tip when no pull
+# request waits to land, or once 3 landings are unreleased, as continuous deployment ships the newest commit: the one
+# Mac ran each landing's tests and its 33-minute release build in series, so batches landed 47 to 50 minutes apart
+# where their checks take about 26, and the queue's wait grew with each batch (#1023). A pull request is ready once its
 # auto-merge is on and its head passed every check master merge gate requires, which are the Linux checks of its own
 # run. The gate also requires QUEUE, a check no run reports, so GitHub never merges a pull request itself, and LAND,
 # pushing with the deploy key the gate lets past, is the only way onto master.
@@ -32,7 +35,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
-      actions: read
+      actions: write
       checks: read
       contents: read
       pull-requests: write
@@ -49,9 +52,9 @@ jobs:
           ssh-key: ${{ secrets.PHP_SHARP_DEPLOY_KEY }}
           ref: master
       # staging holds master's tip and the last batch merged onto it. While a staging run of it hasn't landed, the batch
-      # waits. A run has landed once its LAND job ended, which moved master and pushed the version's tag, or was skipped,
-      # as the run failed: the next batch's run then starts while this one's release builds, and takes the next version,
-      # as GitHub's merge queue starts the next group once a group's required checks pass (#1023). A batch master doesn't
+      # waits. A run has landed once its LAND job ended, which moved master, or was skipped, as the run failed: the next
+      # batch's run then starts, as GitHub's merge queue starts the next group once a group's required checks pass
+      # (#1023). A batch master doesn't
       # hold failed: one that held one pull request leaves that pull request out, with a
       # comment, until its head moves, and one that held more takes its oldest pull request alone, so one broken change
       # never holds the others, unless that pull request is no longer ready, as a draft or with auto-merge off, which
@@ -72,6 +75,37 @@ jobs:
             ended=$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$1/jobs?per_page=100" \
               | jq '[.[].jobs[] | select(.name == "LAND" and .status == "completed")] | length')
             ((ended > 0))
+          }
+          # Starts release.yml's run of master's tip once $1 landings since the newest tag are unreleased. A tip a tag
+          # names is released, and a run of it that hasn't ended releases it. Each staging run's commit that master
+          # holds past the newest tag is one landing, since only LAND moves master, to its staging run's commit. The
+          # release group keeps the run in progress, and the newest run waiting replaces an older one.
+          release() {
+            local tags newest commit landings
+            tags=$(git ls-remote --tags origin 'refs/tags/v*')
+            if grep -q "^$master" <<< "$tags"; then
+              echo "A tag names master's tip $master, so it is released."
+              return
+            fi
+            if (($(gh run list --workflow release.yml --commit "$master" --limit 5 --json status \
+              --jq '[.[] | select(.status != "completed")] | length') > 0)); then
+              echo "release.yml's run of master's tip $master hasn't ended, so it releases it."
+              return
+            fi
+            newest=$(sed -n 's#.*refs/tags/v\([0-9]*\.[0-9]*\.[0-9]*\)$#\1#p' <<< "$tags" \
+              | sort -t . -k 1,1n -k 2,2n -k 3,3n | tail -n 1)
+            commit=$(awk -v tag="refs/tags/v$newest" '$2 == tag || $2 == tag "^{}" { commit = $1 } END { print commit }' \
+              <<< "$tags")
+            landings=$(comm -12 \
+              <(gh api --paginate "repos/$GITHUB_REPOSITORY/compare/$commit...$master" --jq '.commits[].sha' | sort -u) \
+              <(gh run list --workflow sharp.yml --branch staging --event push --limit 100 --json headSha \
+                --jq '.[].headSha' | sort -u) | wc -l)
+            if ((landings < $1)); then
+              echo "master holds $landings landings since v$newest, fewer than $1, so its release waits."
+              return
+            fi
+            echo "master holds $landings landings since v$newest, so release.yml releases its tip $master."
+            gh workflow run release.yml --ref master
           }
           for run in $(gh run list --workflow sharp.yml --branch staging --event push --limit 20 --json databaseId,status \
             --jq '.[] | select(.status != "completed") | .databaseId'); do
@@ -198,7 +232,9 @@ jobs:
           done < ready.tsv
           if ((${#batch[@]} == 0)); then
             echo "No pull request is ready to land."
+            release 1
             exit 0
           fi
           git push --force origin HEAD:refs/heads/staging
           echo "staging is $(git rev-parse HEAD): master $master with pull requests ${batch[*]/#/#} merged onto it."
+          release 3

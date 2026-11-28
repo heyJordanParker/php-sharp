@@ -68,12 +68,12 @@ array(4) {
   [3]=>
   bool(true)
 }
-Sharp\InvalidFields: first: expected int, got string 'x'; second: expected string, got int 4 in Pair.sharp on line 5
+LogicException: first: expected int, got string 'x'; second: expected string, got int 4 in Result.sharp on line 17
 NULL
 int(1)
 string(23) "int string | string int"
 bool(true)
-Sharp\InvalidFields: inner.first: expected int, got string 'x' in Wrapped.sharp on line 3
+LogicException: inner.first: expected int, got string 'x' in Result.sharp on line 17
 Error: Cannot modify readonly property Demo\Stamp::$name in structs.inc on line 62
 Error: Cannot modify protected(set) property Demo\Stamp::$shown from global scope in structs.inc on line 63
 Error: Cannot modify protected(set) readonly property Demo\Stamp::$name from global scope in structs.inc on line 64
