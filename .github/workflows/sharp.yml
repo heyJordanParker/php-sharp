@@ -1010,10 +1010,28 @@ jobs:
           sparse-checkout: .github/actions
       # The checkout holds this commit alone, and git refuses to push over a ref whose commit it doesn't hold, with
       # "fetch first": run 45690564801's LAND failed so on #873's green batch. So the fetch reaches master's tip, as
-      # queue.yml's reach the merge base, and git sees the push is a fast-forward.
-      - name: Move master to this run's commit
+      # queue.yml's reach the merge base, and git sees the push is a fast-forward. A pull request that got a push after
+      # the queue merged it into this batch leaves the batch, as GitHub's merge queue takes a pushed pull request out of
+      # the queue and discards the group that held it: #1107 got a commit 93 s after its batch went to staging, master
+      # took it at the older head, and the new commit landed 18 minutes later as a second merge (#1116). So master
+      # moves only while each pull request the batch merges still has the head it merged, the merge's second parent,
+      # and otherwise queue.yml takes the ready pull requests again, at their heads.
+      - name: Move master to this run's commit, when each pull request it merges still has the head it merged
         run: |
-          ahead=$(gh api "repos/$GITHUB_REPOSITORY/compare/master...$GITHUB_SHA" --jq .ahead_by)
+          compare=$(gh api "repos/$GITHUB_REPOSITORY/compare/master...$GITHUB_SHA")
+          moved=0
+          while read -r number merged; do
+            head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq .head.sha)
+            if [[ $head != "$merged" ]]; then
+              moved=$((moved + 1))
+              echo "::warning::#$number's head is $head, past $merged, which this batch merged, so master stays where it is and queue.yml takes the ready pull requests again."
+            fi
+          done < <(jq -r '.commits[] | select((.parents | length) == 2 and (.commit.message | startswith("Merge pull request #")))
+            | [(.commit.message | capture("^Merge pull request #(?<n>[0-9]+)").n), .parents[1].sha] | @tsv' <<< "$compare")
+          if ((moved > 0)); then
+            exit 0
+          fi
+          ahead=$(jq .ahead_by <<< "$compare")
           git fetch --quiet --no-tags --depth=$((ahead + 1)) origin "$GITHUB_SHA"
           git push origin "$GITHUB_SHA:refs/heads/master"
       - name: Start queue.yml, as staging is free for the next batch
