@@ -91,10 +91,8 @@ jobs:
           cargo metadata --no-deps --format-version 1 | jq -r '
             .packages[] | select(.name == "mago") | "msrv=" + (.rust_version // "")
           ' | tee -a "$GITHUB_OUTPUT"
-      # Each pull request's ## Changelog section runs to its body's next ## heading, without the HTML comment in which
-      # .github/pull_request_template.md explains it. The notes hold every section's
-      # lines under its ### headings, one heading for all the pull requests, Upgrading first, since users act on it,
-      # and each item names its pull request.
+      # The notes are the ## Changelog sections of the pull requests the release merges, as sharp/bin/release-notes
+      # writes them, which queue.yml also reads to start no release whose notes would be empty (#1125).
       - name: The release notes are the ## Changelog sections of the pull requests it merges
         env:
           GH_TOKEN: ${{ github.token }}
@@ -102,37 +100,8 @@ jobs:
           PULLS: ${{ needs.VERSION.outputs.pulls }}
         run: |
           notes="$RUNNER_TEMP/release-notes.md"
-          for pull in $PULLS; do
-            gh pr view "$pull" --json body --jq .body | tr -d '\r' | awk -v pull="$pull" '
-              /<!--/ { comment = 1 }
-              comment { if (/-->/) { comment = 0 }; next }
-              /^## / { on = $0 == "## Changelog"; next }
-              on && /^- / { $0 = $0 " (#" pull ")" }
-              on { print }
-            '
-          done | awk '
-            /^### / { heading = $0; if (!(heading in seen)) { seen[heading] = 1; order[++headings] = heading }; next }
-            /[^[:space:]]/ { lines[heading] = lines[heading] $0 "\n" }
-            function section(heading) {
-              if (lines[heading] != "") {
-                printf "%s%s\n\n%s", printed ? "\n" : "", heading, lines[heading]
-                printed = 1
-              }
-            }
-            END {
-              printf "%s", lines[""]
-              printed = lines[""] != ""
-              section("### Upgrading")
-              for (i = 1; i <= headings; i++) {
-                if (order[i] != "### Upgrading") {
-                  section(order[i])
-                }
-              }
-            }
-          ' > "$notes"
-          if ! grep -q '[^[:space:]]' "$notes"; then
-            echo "This release changes nothing users see." > "$notes"
-          fi
+          # shellcheck disable=SC2086 # PULLS is a list of pull request numbers.
+          ../bin/release-notes $PULLS > "$notes"
           cat "$notes"
       # RELEASE publishes them with the assets.
       - name: "Artifact upload: release notes"
