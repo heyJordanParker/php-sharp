@@ -9,4 +9,6 @@ public static class Reports
     public static int recent() => Db.recent();
 
     public static int given() => Db.select("select * from plans where id = ?", [7, 8]).count();
+
+    public static Map<string, string> headers() => Db.headers();
 }

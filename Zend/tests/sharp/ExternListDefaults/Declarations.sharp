@@ -4,3 +4,4 @@ import Lib.Database.Db;
 
 extern List<Any?> Db.select(string query, List<Any?> bindings = []) uses none;
 extern int Db.recent(List<int> ids = []) uses none;
+extern Map<string, string> Db.headers(Map<string, string> headers = [:]) uses none;
